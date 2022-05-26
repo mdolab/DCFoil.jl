@@ -43,7 +43,7 @@ function 𝙲(k)
     return ans
 end
 
-function glauert_circ(semispan, chord, α₀, U_∞, neval)
+function glauert_circ(semispan, chord, α₀, U∞, neval)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -89,7 +89,16 @@ function glauert_circ(semispan, chord, α₀, U_∞, neval)
 
     chord11 = sin.(ỹn) .* (chord_ratio_mat + sinỹ_mat) #matrix-matrix multiplication to get the [A] matrix
 
-    ã =  
+    # --- Solve for the coefficients in Glauert's Fourier series ---
+    ã = chord11 \ b
+
+    γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise free vortex strength (Γ/semispan)
+
+    cl = (2 * γ) / (U∞ * chord) # sectional lift coefficient cl(y) = cl_α*α
+    clα = cl / (α₀ + 1e-12) # sectional lift slope cl_α but on parametric domain; safe check on α=0
+
+    # --- Interpolate lift slopes onto domain ---
+    # TODO:interpolate load now
 
     return cl_α
 end
