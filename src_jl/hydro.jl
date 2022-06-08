@@ -6,10 +6,10 @@
 # @Desc    :   Contains hydrodynamic routines
 # TODO: declare data types for performance improvements
 
-module hydro
+module Hydro
 
 # --- Public functions ---
-export 𝙲, glauert_circ
+export 𝙲, compute_glauert_circ
 
 using SpecialFunctions
 using LinearAlgebra
@@ -43,7 +43,7 @@ function 𝙲(k)
     return ans
 end
 
-function glauert_circ(semispan, chord, α₀, U∞, neval)
+function compute_glauert_circ(semispan, chord, α₀, U∞, neval)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -144,7 +144,7 @@ end
 using ForwardDiff, ReverseDiff, FiniteDifferences
 using Plots, LaTeXStrings
 
-hydro.glauert_circ(2.7, LinRange(0.81, 0.405, 250), 6, 1, 250)
+hydro.compute_glauert_circ(2.7, LinRange(0.81, 0.405, 250), 6, 1, 250)
 
 function unit_test(makePlots=false)
     """
