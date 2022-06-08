@@ -61,6 +61,10 @@ function glauert_circ(semispan, chord, α₀, U∞, neval)
 
     where z is out of the page (thickness dir.)
 
+    returns:
+        cl_α : array, shape (neval,)
+            sectional lift slopes for a 3D wing [rad⁻¹] 
+            sometimes denoted in literature as 'a₀'
     NOTE:
     This follows the formulation in 
     'Principles of Naval Architecture Series (PNA) - Propulsion 2010' 
@@ -95,16 +99,44 @@ function glauert_circ(semispan, chord, α₀, U∞, neval)
     γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise free vortex strength (Γ/semispan)
 
     cl = (2 * γ) / (U∞ * chord) # sectional lift coefficient cl(y) = cl_α*α
-    clα = cl / (α₀ + 1e-12) # sectional lift slope cl_α but on parametric domain; safe check on α=0
+    clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
 
     # --- Interpolate lift slopes onto domain ---
     # TODO:interpolate load now
+    cl_α = interp1(y, clα, ỹ)
 
     return cl_α
 end
 
 end
 
+# ==============================================================================
+# Grunt numerical methods
+# ==============================================================================
+using Interpolations
+
+function interp1(xpt, ypt, x; method="linear", extrapvalue=nothing)
+
+    if extrapvalue == nothing
+        y = zeros(x)
+        idx = trues(x)
+    else
+        y = extrapvalue * ones(x)
+        idx = (x .>= xpt[1]) .& (x .<= xpt[end])
+    end
+
+    if method == "linear"
+        intf = interpolate((xpt,), ypt, Gridded(Linear()))
+        y[idx] = intf[x[idx]]
+
+    elseif method == "cubic"
+        itp = interpolate(ypt, BSpline(Cubic(Natural())), OnGrid())
+        intf = scale(itp, xpt)
+        y[idx] = [intf[xi] for xi in x[idx]]
+    end
+
+    return y
+end
 # ==============================================================================
 # Tests for this module
 # ==============================================================================
