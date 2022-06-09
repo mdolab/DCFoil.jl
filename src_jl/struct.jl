@@ -2,16 +2,18 @@ module struct_prop
 
 mutable struct section_property
 
-    # Inputs:
-    # c: chord length
-    # t: thickness
-    # ab: 
-    # ρₛ: density
-    # E₁: Young's modulus in x direction
-    # E₂: Young's modulus in y direction
-    # G₁₂: In-plane Shear modulus 
-    # ν₁₂: Poisson ratio
-    # θ: global frame orientation
+    """
+    Inputs:
+    c: chord length
+    t: thickness
+    ab: 
+    ρₛ: density
+    E₁: Young's modulus in x direction
+    E₂: Young's modulus in y direction
+    G₁₂: In-plane Shear modulus 
+    ν₁₂: Poisson ratio
+    θ: global frame orientation
+    """
 
     c::Float64
     t::Float64
@@ -27,6 +29,20 @@ end
 
 
 function compute_section_property(section::section_property)
+
+    """
+    Classic laminate theory (CLT) for composite cross section property computation.
+    returns:
+        EIₛ: scalar, bending stiffness.
+        Kₛ: scalar, bend-twist coupling
+        GJₛ: scalar, torsion stiffness
+        Sₛ: scalar, warping resistance
+
+    NOTE:
+    This follows the formulation in 
+    'Steady and dynamic hydroelastic behavior of composite lifting surfaces' 
+    by Deniz Tolga Akcabaya & Yin Lu Young
+    """
 
     c = section.c
     t = section.t
