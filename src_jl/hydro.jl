@@ -11,8 +11,10 @@ module Hydro
 # --- Public functions ---
 export 𝙲, compute_glauert_circ
 
+using FLOWMath: linear
 using SpecialFunctions
 using LinearAlgebra
+using Plots
 
 function 𝙲(k)
     """
@@ -43,7 +45,7 @@ function 𝙲(k)
     return ans
 end
 
-function compute_glauert_circ(semispan, chord, α₀, U∞, neval)
+function compute_glauert_circ(; semispan, chord, α₀, U∞, neval)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -65,7 +67,10 @@ function compute_glauert_circ(semispan, chord, α₀, U∞, neval)
         cl_α : array, shape (neval,)
             sectional lift slopes for a 3D wing [rad⁻¹] 
             sometimes denoted in literature as 'a₀'
+
     NOTE:
+    We use keyword arguments (denoted by the ';' to be more explicit)
+
     This follows the formulation in 
     'Principles of Naval Architecture Series (PNA) - Propulsion 2010' 
     by Justin Kerwin & Jacques Hadler
@@ -98,103 +103,17 @@ function compute_glauert_circ(semispan, chord, α₀, U∞, neval)
 
     γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise free vortex strength (Γ/semispan)
 
-    cl = (2 * γ) / (U∞ * chord) # sectional lift coefficient cl(y) = cl_α*α
+    cl = (2 * γ) ./ (U∞ * chord) # sectional lift coefficient cl(y) = cl_α*α
     clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
 
     # --- Interpolate lift slopes onto domain ---
     # TODO:interpolate load now
-    cl_α = interp1(y, clα, ỹ)
+    pGlauert = plot(LinRange(0, 2.7, 250), clα)
+    cl_α = linear(y, clα, LinRange(-semispan, 0, neval)) # Use BYUFLOW lab math function
+
 
     return cl_α
 end
 
 end
 
-# ==============================================================================
-# Grunt numerical methods
-# ==============================================================================
-using Interpolations
-
-function interp1(xpt, ypt, x; method="linear", extrapvalue=nothing)
-
-    if extrapvalue == nothing
-        y = zeros(x)
-        idx = trues(x)
-    else
-        y = extrapvalue * ones(x)
-        idx = (x .>= xpt[1]) .& (x .<= xpt[end])
-    end
-
-    if method == "linear"
-        intf = interpolate((xpt,), ypt, Gridded(Linear()))
-        y[idx] = intf[x[idx]]
-
-    elseif method == "cubic"
-        itp = interpolate(ypt, BSpline(Cubic(Natural())), OnGrid())
-        intf = scale(itp, xpt)
-        y[idx] = [intf[xi] for xi in x[idx]]
-    end
-
-    return y
-end
-# ==============================================================================
-# Tests for this module
-# ==============================================================================
-# --- Unit tests ---
-using ForwardDiff, ReverseDiff, FiniteDifferences
-using Plots, LaTeXStrings
-
-hydro.compute_glauert_circ(2.7, LinRange(0.81, 0.405, 250), 6, 1, 250)
-
-function unit_test(makePlots=false)
-    """
-    Run unit tests on all the functions in this module file
-    """
-
-    # ---------------------------
-    #   Test 𝙲(k)
-    # ---------------------------
-    kSweep = 0.01:0.01:2
-
-    datar = []
-    datai = []
-    dADr = []
-    dADi = []
-    dFDr = []
-    dFDi = []
-    for k ∈ kSweep
-        datum = unsteadyHydro.𝙲(k)
-        push!(datar, datum[1])
-        push!(datai, datum[2])
-        derivAD = ForwardDiff.derivative(unsteadyHydro.𝙲, k)
-        derivFD = FiniteDifferences.forward_fdm(2, 1)(unsteadyHydro.𝙲, k)
-        push!(dADr, derivAD[1])
-        push!(dADi, derivAD[2])
-        push!(dFDr, derivFD[1])
-        push!(dFDi, derivFD[2])
-    end
-
-    # --- Derivatives ---
-    dADr
-    println("Forward AD:", ForwardDiff.derivative(unsteadyHydro.𝙲, 0.1))
-    println("Finite difference check:", FiniteDifferences.central_fdm(5, 1)(unsteadyHydro.𝙲, 0.1))
-
-    # --- Plot ---
-    if makePlots
-        p1 = plot(kSweep, datar, label="Real")
-        plot!(kSweep, datai, label="Imag")
-        plot!(title="Theodorsen function")
-        xlabel(L"k")
-        ylabel!(L"C(k)")
-        p2 = plot(kSweep, dADr, label="Real FAD")
-        plot!(kSweep, dFDr, label="Real FD", line=:dash)
-        plot!(kSweep, dADi, label="Imag FAD")
-        plot!(kSweep, dFDi, label="Imag FD", line=:dash)
-        plot!(title="Derivatives wrt k")
-        xlabel!(L"k")
-        ylabel!(L"\partial C(k)/ \partial k")
-
-        plot(p1, p2)
-    end
-
-end
