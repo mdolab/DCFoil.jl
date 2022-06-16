@@ -12,28 +12,29 @@ module SolveSteady
 Steady hydroelastic solver module
 """
 
+# --- Public functions ---
+export solve
+
 # --- Libraries ---
 using FLOWMath: linear
+include("InitModel.jl")
+include("Struct.jl")
+include("Hydro.jl")
 using .InitModel, .Hydro, .StructProp # use coded libraries from this project
 
-mutable struct foil
-    c::Float64
-    t::Float64
-    ab::Float64
-    mₛ::Float64 # sectional mass
-
-end
-
-function solve_system(neval::Int64)
+function solve(neval, DVDict)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
 
     """
     # --- Initialize ---
+    foil = InitModel.init_steady(neval, DVDict)
+
+    # --- Solve ---
 
 end
 
-function compute_residual()
+function compute_residual(stateVec)
 
 end
 

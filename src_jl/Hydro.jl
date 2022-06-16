@@ -66,6 +66,8 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
     (y=0 @ root)
 
     where z is out of the page (thickness dir.)
+    inputs:
+        α₀: float, angle of attack [rad]
 
     returns:
         cl_α : array, shape (neval,)
@@ -115,7 +117,6 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
     pGlauert = plot(LinRange(0, 2.7, 250), clα)
     cl_α = linear(y, clα, LinRange(-semispan, 0, neval)) # Use BYUFLOW lab math function
 
-
     return cl_α
 end
 
@@ -127,7 +128,7 @@ function compute_added_mass(; ρ_f, chordVec)
         added mass, Array
         added inertia, Array
     """
-    mₐ = π * ρ_f * chordVec .* chordVec / 4 # Fluid-added mass vector [kg-m⁻¹]
+    mₐ = π * ρ_f * chordVec .* chordVec / 4 # Fluid-added mass vector [kg/m]
     Iₐ = π * ρ_f * chordVec .^ 4 / 128 # Fluid-added inertia [kg-m]
 
     return mₐ, Iₐ
