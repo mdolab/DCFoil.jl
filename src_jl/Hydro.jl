@@ -7,16 +7,19 @@
 # TODO: declare data types for performance improvements
 
 module Hydro
-
+"""
+Hydrodynamics module
+"""
 # --- Public functions ---
-export 𝙲, compute_glauert_circ
+export compute_theodorsen, compute_glauert_circ, compute_added_mass
 
+# --- Libraries ---
 using FLOWMath: linear
 using SpecialFunctions
 using LinearAlgebra
 using Plots
 
-function 𝙲(k)
+function compute_theodorsen(k)
     """
     Theodorsen's transfer function for unsteady aero/hydrodynamics 
     w/ separate real and imaginary parts. This is potential flow theory.
@@ -24,7 +27,8 @@ function 𝙲(k)
     Inputs:
         k: float, reduced frequency of oscillation (a.k.a. Strouhal number)
 
-    Unicode character: \ttC 
+    return:
+        C(k)
 
     NOTE:
     Undefined for k = ωb/Ucos(Λ) = 0 (steady aero)
@@ -45,7 +49,7 @@ function 𝙲(k)
     return ans
 end
 
-function compute_glauert_circ(; semispan, chord, α₀, U∞, neval)
+function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -85,7 +89,7 @@ function compute_glauert_circ(; semispan, chord, α₀, U∞, neval)
     # # --- Rectangular ---
     # chordₚ = chord
     # --- Elliptical planform ---
-    chordₚ = chord .* sin.(ỹ) # parametrized chord goes from 0 to the original chord value from tip to root...corresponds to amount of downwash w(y)?
+    chordₚ = chordVec .* sin.(ỹ) # parametrized chord goes from 0 to the original chord value from tip to root...corresponds to amount of downwash w(y)?
 
     n = (1:1:neval) * 2 - ones(neval) # node numbers x2 (node multipliers)
 
@@ -103,7 +107,7 @@ function compute_glauert_circ(; semispan, chord, α₀, U∞, neval)
 
     γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise free vortex strength (Γ/semispan)
 
-    cl = (2 * γ) ./ (U∞ * chord) # sectional lift coefficient cl(y) = cl_α*α
+    cl = (2 * γ) ./ (U∞ * chordVec) # sectional lift coefficient cl(y) = cl_α*α
     clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
 
     # --- Interpolate lift slopes onto domain ---
@@ -115,5 +119,19 @@ function compute_glauert_circ(; semispan, chord, α₀, U∞, neval)
     return cl_α
 end
 
+function compute_added_mass(; ρ_f, chordVec)
+    """
+    Compute the added mass for a rectangular cross section
+
+    return:
+        added mass, Array
+        added inertia, Array
+    """
+    mₐ = π * ρ_f * chordVec .* chordVec / 4 # Fluid-added mass vector [kg-m⁻¹]
+    Iₐ = π * ρ_f * chordVec .^ 4 / 128 # Fluid-added inertia [kg-m]
+
+    return mₐ, Iₐ
 end
+
+end # end module
 

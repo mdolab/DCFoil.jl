@@ -1,4 +1,7 @@
-module struct_prop
+module StructProp
+
+# --- Public functions ---
+export compute_section_property
 
 mutable struct section_property
 
@@ -39,6 +42,8 @@ function compute_section_property(section::section_property)
         Sₛ: scalar, warping resistance
 
     NOTE:
+    Axes convention is 1 along fiber, 2 transverse in-plane, 3 transverse out-of-plane
+
     This follows the formulation in 
     'Steady and dynamic hydroelastic behavior of composite lifting surfaces' 
     by Deniz Tolga Akcabaya & Yin Lu Young
@@ -93,7 +98,7 @@ function compute_section_property(section::section_property)
         Kₛ = Kₛ + 1e-5
     end
 
-    return EIₛ, Kₛ, GJₛ, Sₛ
+    return EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ
 
 end
 

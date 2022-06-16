@@ -2,9 +2,9 @@
 # Check Fig 4.1 from
 # Deniz Tolga Akcabaya, Yin Lu Young "Steady and dynamic hydroelastic behavior of composite lifting surfaces" 
 
-include("struct.jl")
+include("Struct.jl")
 
-using .struct_prop
+using .StructProp
 using Plots
 
 # Inputs
@@ -27,8 +27,8 @@ Sₛₐ = zeros(Float64, N)
 
 for i in 1:N
     θₗ = θₐ[i]
-    section = struct_prop.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
-    EIₛ, Kₛ, GJₛ, Sₛ = struct_prop.compute_section_property(section)
+    section = StructProp.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
+    EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ = StructProp.compute_section_property(section)
 
     EIₛₐ[i] = EIₛ
     Kₛₐ[i] = Kₛ
