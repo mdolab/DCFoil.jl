@@ -55,7 +55,7 @@ function init_steady(neval::Int64, DVDict::Dict)
     foil: struct
   """
 
-  # --- First print to screen ---
+  # --- First print to screen in a box ---
   println("+", "-"^80, "+")
   println("This is your design variable setup...")
   for kv in DVDict
