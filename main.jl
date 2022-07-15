@@ -6,7 +6,7 @@
 # @Desc    :   Main executable for the project
 
 
-include("SolveSteady.jl")
+include("src_jl/SolveSteady.jl")
 
 using .SolveSteady
 
