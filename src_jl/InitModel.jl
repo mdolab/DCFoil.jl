@@ -49,7 +49,7 @@ function init_steady(neval::Int64, DVDict::Dict)
 
   Inputs:
       neval: Int64, number of evaluation points on span
-      DVDict: Dict, dictionary of model parameters, the design variables if you will
+      DVDict: Dict, dictionary of model parameters, the design variables
 
   returns:
     foil: struct

@@ -25,7 +25,7 @@ export ∂q∂y
 
 function ∂q∂y(q::Array, yⁿ::Float64, foil)
     """
-    Compute the derivative of the state vector q with respect to the spatial variable y and node yⁿ
+    Compute the derivative of the state vector q with respect to the spatial variable y and location of node yⁿ
     """
     # TODO: DEBUG ALL OF THIS
     # --- First interpolate all necessary values based on spanwise location ---

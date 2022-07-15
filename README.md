@@ -34,3 +34,7 @@ to keep the version of the package static.
 To update all dependencies (be careful with this in case it breaks tests TODO)
 `Pkg.update(level=UPDATELEVEL_PATCH)`
 NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last change (also see `help <your-command>`).
+
+### Tests
+
+Run the `run_tests.jl`. TODO: actually use the julia unittest package
