@@ -1,20 +1,16 @@
-# --- Julia ---
+"""
+Cheap unit test
+"""
 
-# @File    :   main.jl
-# @Time    :   2022/06/16
-# @Author  :   Galen Ng
-# @Desc    :   Main executable for the project
+include("InitModel.jl")
+include("GovDiffEqns.jl") # what we want to test
 
-
-include("SolveSteady.jl")
-
-using .SolveSteady
+using .Steady, .InitModel
 
 # ==============================================================================
-# Setup hydrofoil model
+# Setup the test problem
 # ==============================================================================
-# --- Model parameters ---
-neval = 3 # spatial nodes
+neval = 2
 DVDict = Dict(
     "neval" => neval,
     "α₀" => 6.0, # initial angle of attack [deg]
@@ -31,14 +27,10 @@ DVDict = Dict(
     "θ" => π / 6, # fiber angle global [rad]
 )
 
-# ==============================================================================
-# Steady solution
-# ==============================================================================
-# --- Run the problem ---
-SolveSteady.solve(DVDict["neval"], DVDict)
+foil = InitModel.init_steady(DVDict["neval"], DVDict)
 
-# --- Write out solution files ---
-SolveStead.write_sol()
-# ==============================================================================
-# Dynamic solution
-# ==============================================================================
+q⁰ = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0] # guess
+
+∂q∂y = Steady.compute_∂q∂y(q⁰, 0.0, foil)
+
+println(∂q∂y)

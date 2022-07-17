@@ -35,6 +35,7 @@ mutable struct foil
   Kₛ # bend-twist coupling vector
   Sₛ # warping resistance vector
   α₀ # rigid initial angle of attack [deg]
+  U∞ # flow speed [m/s]
   Λ # sweep angle [deg]
   g # structural damping percentage
   clα # lift slopes
@@ -110,7 +111,7 @@ function init_steady(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Build final model
   # ---------------------------
-  model = foil(c, t, DVDict["s"], ab, eb, x_α, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"])
+  model = foil(c, t, DVDict["s"], ab, eb, x_α, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"],DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"])
 
   return model
 
