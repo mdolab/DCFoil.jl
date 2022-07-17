@@ -26,3 +26,6 @@ docs/site/
 
 
 *.DS_Store
+
+# VS Code
+.vscode
