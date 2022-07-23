@@ -5,6 +5,6 @@
 # @Author  :   Galen Ng
 # @Desc    :   Run the test files (comment out what you want to test)
 
-# include("src_jl/test_hydro.jl")
-# include("src_jl/test_struct.jl")
-include("src_jl/test_GovDiffEqns.jl") # TODO:
+# include("src/test_hydro.jl")
+# include("src/test_struct.jl")
+include("src/test_GovDiffEqns.jl") # TODO:

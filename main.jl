@@ -6,7 +6,7 @@
 # @Desc    :   Main executable for the project
 
 
-include("src_jl/SolveSteady.jl")
+include("src/SolveSteady.jl")
 
 using .SolveSteady
 
@@ -37,7 +37,7 @@ DVDict = Dict(
 SolveSteady.solve(DVDict["neval"], DVDict)
 
 # --- Write out solution files ---
-SolveStead.write_sol()
+SolveSteady.write_sol()
 # ==============================================================================
 # Dynamic solution
 # ==============================================================================

@@ -33,4 +33,5 @@ q⁰ = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0] # guess
 
 ∂q∂y = Steady.compute_∂q∂y(q⁰, 0.0, foil)
 
+println("This is the ∂q∂y:")
 println(∂q∂y)

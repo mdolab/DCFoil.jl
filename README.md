@@ -7,7 +7,10 @@ You must be in this root directory. From the terminal you can type
 OR
 in the Julia REPL, type 
 `] activate .`
-and all the dependencies in the `Project.toml` should be queued to compiled at runtime. You can double check that all the right packages are present with `status` in the Pkg REPL.
+and all the dependencies in the `Project.toml` should be queued to compiled at runtime. 
+You can double check that all the right packages are present with `status` in the Pkg REPL.
+You may need to type into the Julia REPL
+`Pkg.instantiate()`
 
 Now you are ready to run the solver with 
 `include("main.jl")`
@@ -32,7 +35,7 @@ Add dependencies in the REPL with
 to keep the version of the package static.
 
 To update all dependencies (be careful with this in case it breaks tests TODO)
-`Pkg.update(level=UPDATELEVEL_PATCH)`
+`Pkg.update(level=UPLEVEL_PATCH)` 
 NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last change (also see `help <your-command>`).
 
 ### Tests
