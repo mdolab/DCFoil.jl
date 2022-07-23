@@ -21,6 +21,7 @@ All time derivative terms ∂/∂t() = 0 and C(k=0) = 1
 # --- Libraries ---
 using FLOWMath: linear
 using LinearAlgebra
+using DifferentialEquations
 
 export compute_∂q∂y
 
@@ -40,7 +41,7 @@ function compute_∂q∂y(q, yⁿ, foil)
     GJₛ = linear(y, foil.GJₛ, yⁿ)
     Kₛ = linear(y, foil.Kₛ, yⁿ)
     Sₛ = linear(y, foil.Sₛ, yⁿ)
-    q[2] += foil.α₀ * π / 360 # update the angle of attack to be total
+    q[2] += foil.α₀ * π / 180 # update the angle of attack to be total
     L = foil.s
 
     # --- Compute governing matrix equations ---
@@ -71,22 +72,22 @@ function compute_∂q∂y(q, yⁿ, foil)
     B = (1 / L^3) *
         [
         0 Kₛ
-        Kₛ 0
+        -Kₛ 0
     ]
     # 2nd deriv terms: w'', ψ''
     C = (1 / L^2) *
         [
         0 0
-        0 GJₛ
+        0 -GJₛ
     ]
     # 0th deriv terms: w, ψ
     D = K_f
     # 1st deriv terms: w', ψ'
     E = 1 / L * E_f
 
-    b = -(B * q[7:8] + C * q[5:6] + D * q[1:2] + E * q[3:4])
+    bVec = -(B * q[7:8] + C * q[5:6] + D * q[1:2] + E * q[3:4])
 
-    x = A \ b
+    x = A \ bVec
 
     # --- Solution ---
     ∂q∂y = zeros(Float64, 8)
@@ -97,6 +98,29 @@ function compute_∂q∂y(q, yⁿ, foil)
 
 end
 
+function compute_g(ya, yb, foil)
+    """
+    Boundary condition function
+    """
+    neqns = length(ya)
+    g = zeros(neqns)
+    idxTip = lastindex(foil.Kₛ)
+
+    EIₛ = foil.EIₛ[idxTip]
+    GJₛ = foil.GJₛ[idxTip]
+    Kₛ = foil.Kₛ[idxTip]
+    cTip = foil.c[idxTip]
+    abTip = foil.ab[idxTip]
+    L = foil.s
+
+    g[1:4] = ya[1:4]
+    g[5] = (yb[5] + Kₛ * L / (EIₛ) * yb[4])
+    g[6] = (yb[6])
+    g[7] = (yb[7] + 0.5 * abTip * (GJₛ - Kₛ^2 / EIₛ) * L^2 / (EIₛ * cTip^2 / 12.0) * yb[4])
+    g[8] = (yb[8] - (GJₛ - Kₛ^2 / EIₛ) * L^2 / (EIₛ * cTip^2 / 12.0) * yb[4])
+    return g
+end
+
 end # end module
 
 # module DynamicDiffEqns
@@ -104,3 +128,10 @@ end # end module
 # end # end module
 
 # using .DynamicDiffEqns
+
+# ==============================================================================
+#                         ODE Solver
+# ==============================================================================
+function solve_rk4(dudt, t0)
+
+end

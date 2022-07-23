@@ -105,13 +105,12 @@ function init_steady(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  # --- Compute the hydrodynamics properties for the foil ---
-  clα = Hydro.compute_glauert_circ(semispan=DVDict["s"], chordVec=c, α₀=DVDict["α₀"] * π / 360, U∞=DVDict["U∞"], neval=neval)
+  clα = Hydro.compute_glauert_circ(semispan=DVDict["s"], chordVec=c, α₀=DVDict["α₀"] * π / 180, U∞=DVDict["U∞"], neval=neval)
 
   # ---------------------------
   #   Build final model
   # ---------------------------
-  model = foil(c, t, DVDict["s"], ab, eb, x_α, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"],DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"])
+  model = foil(c, t, DVDict["s"], ab, eb, x_α, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"], DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"])
 
   return model
 
