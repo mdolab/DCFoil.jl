@@ -21,7 +21,7 @@ include("InitModel.jl")
 include("Struct.jl")
 include("Hydro.jl")
 include("GovDiffEqns.jl")
-using .InitModel, .Hydro, .StructProp, .Steady
+using .InitModel, .Hydro, .StructProp, .Steady, .Solver
 
 function solve(neval::Int64, DVDict)
     """
@@ -33,12 +33,18 @@ function solve(neval::Int64, DVDict)
     # ---------------------------
     foil = InitModel.init_steady(neval, DVDict)
     η = LinRange(0, 1, neval) # parametric spanwise variable
-    y⁰ = [0, 0, 0, 0, 1, 1, 1, 1] # initialize a BC vector at the root. We know first 4 are zero
-    
-    # ---------------------------
-    #   Solve Diff Eq
-    # ---------------------------
+    # initialize a BC vector at the root. We know first 4 are zero
+    q⁰ = zeros(8)
+    q⁰[5:end] .= 1.0 
 
+    # ---------------------------
+    #   Solve the Diff Eq
+    # ---------------------------
+    # --- Solves a 2PT BVP ---
+    ysol, qsol = Solver.solve_bvp(Steady.compute_∂q∂y, q⁰, 0, 1, 25, Steady.compute_g, foil)
+
+    # --- Compute hydro loads of deflected shape ---
+    # TODO:maybe use mutable struct to store the solution?
 
 end
 

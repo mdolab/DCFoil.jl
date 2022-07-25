@@ -63,6 +63,7 @@ tsol, ysol = Solver.solve_rk4(basicODE, zeros(8), 0.0, 5.0, 25)
 q⁰ = zeros(8)
 q⁰[5:end] .= 1.0
 tsol, usol = Solver.solve_bvp(Steady.compute_∂q∂y, q⁰, 0, 1, 25, Steady.compute_g, foil)
+println(usol[1,:])
 
 println(usol[:, begin])
 println("Tip bending and twist:")

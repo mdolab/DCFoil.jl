@@ -14,13 +14,13 @@ using .SolveSteady
 # Setup hydrofoil model
 # ==============================================================================
 # --- Model parameters ---
-neval = 3 # spatial nodes
+neval = 100 # spatial nodes
 DVDict = Dict(
     "neval" => neval,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 1.0, # free stream velocity [m/s]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
-    "ρ_f" => 1025, # fluid density [kg/m³]
+    "U∞" => 10.0, # free stream velocity [m/s]
+    "Λ" => 30.0 * π / 180, # sweep angle [rad]
+    "ρ_f" => 1000, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
     "c" => 0.81 * ones(neval), # chord length [m]
@@ -28,7 +28,7 @@ DVDict = Dict(
     "ab" => zeros(neval), # dist from midchord to EA [m]
     "toc" => 0.06, # thickness-to-chord ratio
     "x_α" => zeros(neval), # static imbalance [m]
-    "θ" => π / 6, # fiber angle global [rad]
+    "θ" => 0*π / 180, # fiber angle global [rad]
 )
 
 # ==============================================================================
