@@ -36,10 +36,10 @@ mutable struct foil
   Sₛ # warping resistance vector
   α₀ # rigid initial angle of attack [deg]
   U∞ # flow speed [m/s]
-  Λ # sweep angle [deg]
+  Λ # sweep angle [rad]
   g # structural damping percentage
   clα # lift slopes
-  ρ_f # fluid density [kg/m³]
+  ρ_f::Float64 # fluid density [kg/m³]
   neval::Int64 # number of evaluation points on span
 end
 

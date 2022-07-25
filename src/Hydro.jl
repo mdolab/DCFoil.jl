@@ -71,7 +71,7 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
 
     returns:
         cl_α : array, shape (neval,)
-            sectional lift slopes for a 3D wing [rad⁻¹] 
+            sectional lift slopes for a 3D wing [rad⁻¹] starting from the root
             sometimes denoted in literature as 'a₀'
 
     NOTE:
@@ -113,11 +113,10 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
     clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
 
     # --- Interpolate lift slopes onto domain ---
-    # TODO:interpolate load now
     pGlauert = plot(LinRange(0, 2.7, 250), clα)
     cl_α = linear(y, clα, LinRange(-semispan, 0, neval)) # Use BYUFLOW lab math function
-
-    return cl_α
+    
+    return reverse!(cl_α)
 end
 
 function compute_added_mass(; ρ_f, chordVec)
