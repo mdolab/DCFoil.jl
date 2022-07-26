@@ -2,8 +2,8 @@
 Cheap unit test
 """
 
-include("InitModel.jl")
-include("GovDiffEqns.jl") # what we want to test
+include("../src/InitModel.jl")
+include("../src/GovDiffEqns.jl") # what we want to test
 
 using .Steady, .InitModel, .Solver
 
