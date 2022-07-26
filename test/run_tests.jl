@@ -7,4 +7,12 @@
 
 # include("src/test_hydro.jl")
 # include("src/test_struct.jl")
-include("test_GovDiffEqns.jl") # TODO:
+
+using Test
+
+include("test_BVP.jl") # TODO:
+
+@testset "Test solver" begin
+    # Write your tests here.
+    @test test_BVP() <= 1e-3
+end
