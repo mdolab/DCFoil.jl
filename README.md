@@ -1,5 +1,5 @@
 # dcfoil-jl
-Dynamic Composite Foil (DCFoil) in Julia
+Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested). We test for macOS-latest and Ubuntu-latest.
 
 ## Get started
 You must be in this root directory. From the terminal you can type
@@ -29,7 +29,7 @@ SCREAMING_SNAKE_CASE - constants
 
 ### Dependencies
 
-Add dependencies in the REPL with
+Add package dependencies in the REPL with
 `Using Pkg`
 `Pkg.add("package-name", preserve=PRESERVE_DIRECT)`
 to keep the version of the package static.
@@ -40,4 +40,4 @@ NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last ch
 
 ### Tests
 
-Run the `run_tests.jl`. TODO: actually use the julia unittest package
+Under the `test` directory, run the `run_tests.jl`. 
