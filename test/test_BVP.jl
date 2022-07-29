@@ -36,7 +36,7 @@ function test_BVP()
     tsol, usol = Solver.solve_bvp(Steady.compute_∂q∂y, q⁰, 0, 1, 25, Steady.compute_g, foil)
 
     # Reference value
-    ref_sol = [0.0290, -0.00]
+    ref_sol = [0.0290, -0.0035]
 
     # Relative error
     rel_err = LinearAlgebra.norm(usol[1:2, end] - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
