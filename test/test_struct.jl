@@ -2,7 +2,7 @@
 # Check Fig 4.1 from
 # Deniz Tolga Akcabaya, Yin Lu Young "Steady and dynamic hydroelastic behavior of composite lifting surfaces" 
 
-include("Struct.jl")
+include("../src/Struct.jl")
 
 using .StructProp
 using Plots

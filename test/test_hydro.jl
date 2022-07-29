@@ -5,7 +5,7 @@
 using ForwardDiff, ReverseDiff, FiniteDifferences
 using Plots, LaTeXStrings
 
-include("Hydro.jl")
+include("../src/Hydro.jl")
 using .Hydro # Using the Hydro module
 
 neval = 3 # Number of spatial nodes
