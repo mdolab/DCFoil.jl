@@ -3,7 +3,7 @@
 # @File    :   GovDiffEqns.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
-# @Desc    :   Two module containing the governing differential equations recasting as a linear system
+# @Desc    :   Two modules containing the governing differential equations recasting as a linear system
 #              q' = f(q(y)) 
 #              where q = [w, ψ, w', ψ', w'', ψ'', w''', ψ''']ᵀ
 #              The functions in this module are the 'f' in the above equation
@@ -27,7 +27,8 @@ export compute_∂q∂y
 
 function compute_∂q∂y(qn, η, foil)
     """
-    Compute the derivative of the column state vector q with respect to the spatial variable y at parametric location η
+    Compute the derivative of the column state vector q 
+    with respect to the spatial variable y at parametric location η
     """
     # TODO: DEBUG ALL OF THIS
     # --- First interpolate all necessary values based on spanwise location ---
