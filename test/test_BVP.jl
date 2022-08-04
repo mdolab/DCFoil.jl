@@ -9,9 +9,12 @@ using LinearAlgebra
 using .Steady, .InitModel, .Solver
 
 function test_BVP()
-    # ==============================================================================
-    # Setup the test problem
-    # ==============================================================================
+    """
+    Tests the BVP solver against reference values from MATLAB
+    """
+    # ************************************************
+    #     Setup the test problem
+    # ************************************************
     neval = 250
     DVDict = Dict(
         "neval" => neval,
