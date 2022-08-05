@@ -60,8 +60,7 @@ end
 function compute_hydroLoads(foilPDESol, foil)
     """
     Computes the steady hydrodynamic vector loads 
-    given the solved hydrofoil shape
-
+    given the solved hydrofoil shape (strip theory)
 
     """
     # ---------------------------
@@ -72,6 +71,7 @@ function compute_hydroLoads(foilPDESol, foil)
     ψ = foilPDEsol[2, :]
     ∂w∂y = foilPDEsol[3, :]
     ∂ψ∂y = foilPDEsol[4, :]
+
     y = LinRange(0, foil.s, foil.neval) # real spanwise var
 
     qf = 0.5 * foil.ρ_f * foil.U∞^2 # fluid dynamic pressure
@@ -79,44 +79,79 @@ function compute_hydroLoads(foilPDESol, foil)
     K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
     E_f = copy(K_f)     # Sweep correction matrix
 
-    F = zeros(foil.neval)
-    M = copy(F)
+    F = zeros(foil.neval) # Hydro force vec
+    M = copy(F) # Hydro moment vec
 
     # ---------------------------
-    #   Main solver loop
+    #   Strip theory loop
     # ---------------------------
     jj = 1
-    for strip in y # loop over spanwise strips
+    for yⁿ in y
+        # --- Linearly interpolate values based on y loc ---
+        clα = linear(y, foil.clα, yⁿ)
+        c = linear(y, foil.c, yⁿ)
+        b = 0.5 * c # semichord for more readable code
+        ab = linear(y, foil.ab, yⁿ)
+        eb = linear(y, foil.eb, yⁿ)
 
-        K_f[1, 2] = -2 * b * clα
-        K_f[2, 2] = -2 * eb * b * clα
-        K_f *= qf * cos(foil.Λ)^2
+        # --- Generalized coord vec w/ 2DOF---
+        qGen = [w[jj], ψ[jj] + foil.α₀]
+        ∂qGen∂y = [∂w∂y[jj], ∂ψ∂y[jj]]
+
+        # --- Compute forces ---
+        K_f = qf * cos(foil.Λ)^2 *
+              [
+                  0.0 -2*b*clα
+                  0.0 -2*eb*b*clα
+              ]
 
         E_f = qf * sin(foil.Λ) * cos(foil.Λ) * b *
               [
                   2*clα -clα*b*(1-ab/b)
                   clα*b*(1+ab/b) π*b^2-0.5*clα*b^2*(1-(ab/b)^2)
               ]
-        # --- Compute forces ---
+
         # Force (+ve up)
-        FStrip = -K_f[1, 2] .* (ψ + foil.α₀)
-        -E_f[1, 1] .* w
-        -E_f[1, 1] * ∂ψ∂y
+        FStrip = -K_f[1, 2] .* qGen[2]
+        -E_f[1, 1] .* qGen[1]
+        -E_f[1, 1] * ∂qGen∂y[1]
 
         # Moment about mid-chord (+ve nose up)
-        MStrip = -K_f[2, 2] .* (ψ + foil.α₀)
-        -E_f[2, 1] .* ∂w∂y
-        -E_f[2, 2] .* ∂ψ∂y
+        MStrip = -K_f[2, 2] .* qGen[2]
+        -E_f[2, 1] .* ∂qGen∂y[1]
+        -E_f[2, 2] .* ∂qGen∂y[2]
 
         # Append to solution
         F[jj] = FStrip
         M[jj] = MStrip
+
+        jj += 1 # increment strip counter
     end
 
     return F, M
 end
 
-function compute_residual(stateVec)
+function compute_residual(stateVec, FHydro, MHydro)
+    """
+    Compute residual
+    """
+
+    # --- Unpack values ---
+    ∂⁴w∂y⁴ =  
+    ∂⁴ψ∂y⁴ =
+    ∂³w∂y³ = 
+    ∂³ψ∂y³ =
+    ∂²ψ∂y² = 
+
+    # --- Governing PDEs as residuals ---
+    r₁ = foil.EIₛ*∂⁴w∂y⁴ + foil.ab*foil.EIₛ*∂⁴ψ∂y⁴ + foil.Kₛ* ∂³ψ∂y³ - FHydro
+    r₂ = foil.ab*foil.EIₛ*∂⁴w∂y⁴ - foil.Kₛ* ∂³w∂y³ + foil.Sₛ*∂⁴ψ∂y⁴ - foil.GJₛ*∂²ψ∂y² - MHydro 
+
+    # --- Get 8 additional res from BCs ---
+    resBC = Steady.compute_g(ua, ub, foil)
+
+    # --- Stack them ---
+    resVec = 
 
 end
 
