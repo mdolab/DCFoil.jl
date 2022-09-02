@@ -3,7 +3,7 @@
 # @File    :   SolveSteady.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
-# @Desc    :   Solve the beam equations for a steady aero/hydrodynamics and compute gradients
+# @Desc    :   Solve the beam equations w/ steady aero/hydrodynamics and compute gradients
 
 
 module SolveSteady
@@ -41,19 +41,36 @@ function solve(neval::Int64, DVDict)
     #     Solve the diff eq
     # ************************************************
     foilPDESol = zeros(8, foil.neval)
+    nCompute = 200
     # --- Solves a 2PT BVP ---
-    ysol, qsol = Solver.solve_bvp(Steady.compute_∂q∂y, q⁰, 0, 1, 25, Steady.compute_g, foil)
-    foilPDESol[1, :] = akima(ysol, qsol[1, :], y)
-    w = foilPDEsol[1, :]
-    ψ = foilPDEsol[2, :]
-    ∂w∂y = foilPDEsol[3, :]
-    ∂ψ∂y = foilPDEsol[4, :]
+    ysol, qsol = Solver.solve_bvp(Steady.compute_∂q∂y, q⁰, 0, 1, nCompute, Steady.compute_g, foil)
+    yBaseSol = LinRange(0, foil.s, nCompute)
+    for ii ∈ 1:8 # spline the soln into the vector TODO: this is wrong
+        foilPDESol[ii, :] = akima(yBaseSol, qsol[ii, :], y)
+    end
 
     # ---------------------------
     #   Hydro loads
     # ---------------------------
     F₀, M₀ = compute_hydroLoads(foilPDESol, foil)
     # TODO:maybe use mutable struct to store the solution?
+
+    # ************************************************
+    #     Compute residuals
+    # ************************************************
+    # foilStates = zeros(10, foil.neval) # augmented state array to store up to the 4ᵗʰ spatial deriv
+    # foilStates[1:8, :] = foilPDESol
+    # for ii ∈ 1:foil.neval # get the 4ᵗʰ spatial derivs
+    #     q = Steady.compute_∂q∂y(foilStates[1:8, ii], η[ii], foil)
+    #     foilStates[9:10, ii] = q[7:8]
+    # end
+    resVec = Steady.compute_g(foilPDESol[:, 1], foilPDESol[:, end], foil)
+
+    # ************************************************
+    #     Compute sensitivities
+    # ************************************************
+
+
 
 end
 
@@ -67,10 +84,10 @@ function compute_hydroLoads(foilPDESol, foil)
     #   Initializations
     # ---------------------------
     # --- Unpack solution ---
-    w = foilPDEsol[1, :]
-    ψ = foilPDEsol[2, :]
-    ∂w∂y = foilPDEsol[3, :]
-    ∂ψ∂y = foilPDEsol[4, :]
+    w = foilPDESol[1, :]
+    ψ = foilPDESol[2, :]
+    ∂w∂y = foilPDESol[3, :]
+    ∂ψ∂y = foilPDESol[4, :]
 
     y = LinRange(0, foil.s, foil.neval) # real spanwise var
 
@@ -95,7 +112,7 @@ function compute_hydroLoads(foilPDESol, foil)
         eb = linear(y, foil.eb, yⁿ)
 
         # --- Generalized coord vec w/ 2DOF---
-        qGen = [w[jj], ψ[jj] + foil.α₀]
+        qGen = [w[jj], ψ[jj] + foil.α₀ * π / 180]
         ∂qGen∂y = [∂w∂y[jj], ∂ψ∂y[jj]]
 
         # --- Compute forces ---
@@ -131,47 +148,89 @@ function compute_hydroLoads(foilPDESol, foil)
     return F, M
 end
 
-function compute_residual(stateVec, FHydro, MHydro)
-    """
-    Compute residual
-    """
-
-    # --- Unpack values ---
-    ∂⁴w∂y⁴ =  
-    ∂⁴ψ∂y⁴ =
-    ∂³w∂y³ = 
-    ∂³ψ∂y³ =
-    ∂²ψ∂y² = 
-
-    # --- Governing PDEs as residuals ---
-    r₁ = foil.EIₛ*∂⁴w∂y⁴ + foil.ab*foil.EIₛ*∂⁴ψ∂y⁴ + foil.Kₛ* ∂³ψ∂y³ - FHydro
-    r₂ = foil.ab*foil.EIₛ*∂⁴w∂y⁴ - foil.Kₛ* ∂³w∂y³ + foil.Sₛ*∂⁴ψ∂y⁴ - foil.GJₛ*∂²ψ∂y² - MHydro 
-
-    # --- Get 8 additional res from BCs ---
-    resBC = Steady.compute_g(ua, ub, foil)
-
-    # --- Stack them ---
-    resVec = 
+function write_sol()
 
 end
 
-function compute_jacobian(stateVec)
+# ==============================================================================
+#                         Sensitivity routines
+# ==============================================================================
+function compute_∂f∂x(foilPDESol)
+
+end
+
+function compute_∂r∂x(foilPDESol)
+
+end
+
+function compute_∂f∂u(foilPDESol)
+
+end
+
+function compute_∂r∂u(foilPDESol)
+
+end
+
+# function compute_residual(stateVec, FHydro, MHydro, foil)
+#     """
+#     NOTE: This is actually all wrong, disregard this and do not use this code
+#     Compute residual
+
+#     Inputs
+#     ------
+#     stateVec : array
+#         State vector [w, ψ, ∂w∂y, ∂ψ∂y]
+#     """
+
+#     # --- Unpack values ---
+#     ∂⁴w∂y⁴ = stateVec[9, :]
+#     ∂⁴ψ∂y⁴ = stateVec[10, :]
+#     ∂³w∂y³ = stateVec[7, :]
+#     ∂³ψ∂y³ = stateVec[8, :]
+#     ∂²ψ∂y² = stateVec[6, :]
+
+#     # --- Governing PDEs as residuals ---
+#     # TODO: WHAT IS THE CAUSE OF THIS BEING HELLA WRONG? DO WE NEED TO DO FEM instead?
+#     r₁ = foil.EIₛ .* ∂⁴w∂y⁴ + foil.ab .* foil.EIₛ .* ∂⁴ψ∂y⁴ + foil.Kₛ .* ∂³ψ∂y³ - FHydro
+#     r₂ = foil.ab .* foil.EIₛ .* ∂⁴w∂y⁴ - foil.Kₛ .* ∂³w∂y³ + foil.Sₛ .* ∂⁴ψ∂y⁴ - foil.GJₛ .* ∂²ψ∂y² - MHydro
+#     #Something may be wrong here with dimensions
+
+#     # --- Get 8 additional res from BCs ---
+#     resBC = Steady.compute_g(stateVec[1:8, 1], stateVec[1:8, end], foil)
+
+#     # --- Stack them ---
+#     resVec = []
+
+# end
+
+function compute_direct()
     """
-    Compute the jacobian dr/du
+    Computes direct vector 
+    """    
+end
+
+function compute_adjoint()
+    
+end
+
+function compute_jacobian(stateVec, foil=nothing)
+    """
+    Compute the jacobian df/dx
 
     Inputs:
-        stateVec: array, shape (neval, 8), state vector for 'neval' spatial nodes
+        stateVec: array, shape (8), state vector
 
     returns:
-        array, shape (neval, neval), square jacobian matrix
+        array, shape (, 8), square jacobian matrix
 
     """
+    # ************************************************
+    #     Compute cost func gradients
+    # ************************************************
+
     # TODO:
 
 end
 
-function write_sol()
-
-end
 
 end # end module
