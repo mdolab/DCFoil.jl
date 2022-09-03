@@ -18,9 +18,11 @@ export solve
 using FLOWMath: linear, akima
 include("InitModel.jl")
 include("Struct.jl")
+include("struct/FiniteElements.jl")
 include("Hydro.jl")
 include("GovDiffEqns.jl")
 using .InitModel, .Hydro, .StructProp, .Steady, .Solver
+using .FEMMethods
 
 function solve(neval::Int64, DVDict)
     """
@@ -38,37 +40,57 @@ function solve(neval::Int64, DVDict)
     q⁰[5:end] .= 1.0
 
     # ************************************************
-    #     Solve the diff eq
+    #     Solve FEM
     # ************************************************
-    foilPDESol = zeros(8, foil.neval)
-    nCompute = 200
-    # --- Solves a 2PT BVP ---
-    ysol, qsol = Solver.solve_bvp(Steady.compute_∂q∂y, q⁰, 0, 1, nCompute, Steady.compute_g, foil)
-    yBaseSol = LinRange(0, foil.s, nCompute)
-    for ii ∈ 1:8 # spline the soln into the vector TODO: this is wrong
-        foilPDESol[ii, :] = akima(yBaseSol, qsol[ii, :], y)
-    end
+    nElem = neval - 1
+    elemType = "bend-twist"
+    constitutive = "isotropic"
+    globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
+    globalF = zeros(6) # DUMMY NOTE: FIX THIS LATER
 
-    # ---------------------------
-    #   Hydro loads
-    # ---------------------------
-    F₀, M₀ = compute_hydroLoads(foilPDESol, foil)
-    # TODO:maybe use mutable struct to store the solution?
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
+    globalK, globalM = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
 
-    # ************************************************
-    #     Compute residuals
-    # ************************************************
-    # foilStates = zeros(10, foil.neval) # augmented state array to store up to the 4ᵗʰ spatial deriv
-    # foilStates[1:8, :] = foilPDESol
-    # for ii ∈ 1:foil.neval # get the 4ᵗʰ spatial derivs
-    #     q = Steady.compute_∂q∂y(foilStates[1:8, ii], η[ii], foil)
-    #     foilStates[9:10, ii] = q[7:8]
+    # # --- Debug printout of matrices in human readable form ---
+    # println("Global stiffness matrix:")
+    # println("------------------------")
+    # show(stdout, "text/plain", globalK)
+    # println("")
+    # println("Global mass matrix:")
+    # println("-------------------")
+    # show(stdout, "text/plain", globalM)
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    # # --- Debug printout of matrices in human readable form ---
+    # println("Global stiffness matrix:")
+    # println("------------------------")
+    # show(stdout, "text/plain", K)
+    # println("")
+    # println("Global mass matrix:")
+    # println("-------------------")
+    # show(stdout, "text/plain", M)
+
+    # TODO: finish the verification and do some visualization 22/09/02
+
+    # yBaseSol = LinRange(0, foil.s, nElem)
+    # for ii ∈ 1:8 # spline the soln into the vector TODO: this is wrong
+    #     foilPDESol[ii, :] = akima(yBaseSol, qsol[ii, :], y)
     # end
-    resVec = Steady.compute_g(foilPDESol[:, 1], foilPDESol[:, end], foil)
 
-    # ************************************************
-    #     Compute sensitivities
-    # ************************************************
+    # # ---------------------------
+    # #   Hydro loads
+    # # ---------------------------
+    # F₀, M₀ = compute_hydroLoads(foilPDESol, foil)
+
+    # # ************************************************
+    # #     Compute residuals
+    # # ************************************************
+    # resVec = 
+
+    # # ************************************************
+    # #     Compute sensitivities
+    # # ************************************************
 
 
 
@@ -206,11 +228,11 @@ end
 function compute_direct()
     """
     Computes direct vector 
-    """    
+    """
 end
 
 function compute_adjoint()
-    
+
 end
 
 function compute_jacobian(stateVec, foil=nothing)
