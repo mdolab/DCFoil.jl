@@ -29,7 +29,7 @@ module LinearBeamElem
 
 """
 
-function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitutive="isotropic")
+function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
     """
     The internal strain energy of a beam is
         U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
@@ -38,7 +38,14 @@ function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitut
     """
 
     # --- Handy identities ---
-    kb = EIᵉ / lᵉ^3
+    if useTimoshenko
+        # NOTE: only used for the bending only elem. ATM
+        κ = 5 / 6 # for a rect section according to wikipedia
+        ϕ = 12 / lᵉ^2 * (EIᵉ / κ * GA) # don't know what GA is yet
+    else
+        ϕ = 0
+    end
+    kb = EIᵉ / (lᵉ^3 * (1 + ϕ))
     kt = GJᵉ / lᵉ
 
     # ************************************************
@@ -49,12 +56,12 @@ function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitut
         k12 = 6 * lᵉ
         k13 = -12
         k14 = 6 * lᵉ
-        k22 = 4 * lᵉ^2
+        k22 = (4 + ϕ) * lᵉ^2
         k23 = -6 * lᵉ
-        k24 = 2 * lᵉ
+        k24 = (2 - ϕ) * lᵉ^2
         k33 = 12
         k34 = -6 * lᵉ
-        k44 = 4 * lᵉ^2
+        k44 = (4 + ϕ) * lᵉ^2
         Kᵉ = kb * [
             k11 k12 k13 k14
             k12 k22 k23 k24
@@ -72,7 +79,7 @@ function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitut
             k15 = kb * 6 * lᵉ
             k22 = kb * 4 * lᵉ^2
             k24 = kb * -6 * lᵉ
-            k25 = kb * 2 * lᵉ
+            k25 = kb * 2 * lᵉ^2
             k44 = kb * 12
             k45 = kb * -6 * lᵉ
             k55 = kb * 4 * lᵉ^2
@@ -186,10 +193,10 @@ function make_mesh(nElem, foil)
     println("Right now only 1D mesh in y dir...")
 
     mesh = LinRange(0, foil.s, nElem + 1)
-    elemConn = Array{Int64}(undef, 2, nElem)
+    elemConn = Array{Int64}(undef, nElem, 2)
     for ii ∈ 1:nElem
-        elemConn[1, ii] = ii
-        elemConn[2, ii] = ii + 1
+        elemConn[ii, 1] = ii
+        elemConn[ii, 2] = ii + 1
     end
 
     return mesh, elemConn
@@ -204,14 +211,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     coordMat: 2D array of coordinates of nodes
     elemConn: 2D array of element connectivity
     """
-
-    # --- Debug printout for initialization ---
-    println("+---------------------------------------------------+")
-    println("|   Assembling global stiffness and mass matrices   |")
-    println("+---------------------------------------------------+")
-    println("Default 2 nodes per elem, nothing else will work")
-    println("Using ", constitutive, " constitutive relations...")
-
+    
     # --- Initialize the local DOF vector ---
     if elemType == "bend"
         nnd = 2
@@ -219,13 +219,21 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         nnd = 3
     end
     qLocal = zeros(nnd * 2)
-
+    
     # --- Initialize matrices ---
-    nElem = size(elemConn)[end]
+    nElem = size(elemConn)[1]
     nNodes = nElem + 1
     globalK = zeros(nnd * (nNodes), nnd * (nNodes))
     globalM = zeros(nnd * (nNodes), nnd * (nNodes))
     globalF = zeros(nnd * (nNodes))
+    
+    # --- Debug printout for initialization ---
+    println("+---------------------------------------------------+")
+    println("|   Assembling global stiffness and mass matrices   |")
+    println("+---------------------------------------------------+")
+    println("Default 2 nodes per elem, nothing else will work")
+    println("Using ", constitutive, " constitutive relations...")
+    println("There are ", nElem, " elements")
 
     # ************************************************
     #     Element loop
@@ -255,14 +263,16 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         mLocal = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, elemType)
         # mLocal = 420 * LinearBeamElem.compute_elem_mass(1, 1, 1, elemType) # test coefficients OK
 
+        # --- Print out local matrices ---
         println("Local stiffness")
         println("")
         show(stdout, "text/plain", kLocal)
         println("")
-        println("Local mass")
-        println("")
-        show(stdout, "text/plain", mLocal)
-        println("")
+        # println("Local mass")
+        # println("")
+        # show(stdout, "text/plain", mLocal)
+        # println("")
+
         # ---------------------------
         #   Local force vector
         # ---------------------------
@@ -310,6 +320,16 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     newF = F[setdiff(1:end, (globalDOFBlankingList))]
 
     return newK, newM, newF
+end
+
+function solve_structure(K, M, F)
+    """
+    Solve the structural system
+    """
+    
+    @time q = K \ F # TODO: should probably replace this with an iterative solver
+    
+    return q
 end
 
 end # end module

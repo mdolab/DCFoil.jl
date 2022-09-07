@@ -33,36 +33,40 @@ function solve(neval::Int64, DVDict)
     #   Initialize
     # ---------------------------
     foil = InitModel.init_steady(neval, DVDict)
-    η = LinRange(0, 1, foil.neval) # parametric spanwise var
-    y = LinRange(0, foil.s, foil.neval) # real spanwise var
-    # initialize a BC vector at the root. We know first 4 are zero
-    q⁰ = zeros(8)
-    q⁰[5:end] .= 1.0
+    # η = LinRange(0, 1, foil.neval) # parametric spanwise var
+    # y = LinRange(0, foil.s, foil.neval) # real spanwise var
+    # # initialize a BC vector at the root. We know first 4 are zero
+    # q⁰ = zeros(8)
+    # q⁰[5:end] .= 1.0
 
     # ************************************************
     #     Solve FEM
     # ************************************************
     nElem = neval - 1
-    elemType = "bend-twist"
     constitutive = "isotropic"
-    globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
-    globalF = zeros(6) # DUMMY NOTE: FIX THIS LATER
+    elemType = "bend"
+    globalDOFBlankingList = [1, 2] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
+    # elemType = "bend-twist"
+    # globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
-    globalK, globalM = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
+    # globalF[end-2] = 1.0 # 0 Newton tip moment NOTE: FIX LATER bend-twist
+    u = copy(globalF)
 
     # # --- Debug printout of matrices in human readable form ---
     # println("Global stiffness matrix:")
     # println("------------------------")
     # show(stdout, "text/plain", globalK)
     # println("")
-    # println("Global mass matrix:")
-    # println("-------------------")
-    # show(stdout, "text/plain", globalM)
+    # # println("Global mass matrix:")
+    # # println("-------------------")
+    # # show(stdout, "text/plain", globalM)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    # # --- Debug printout of matrices in human readable form ---
+    # # --- Debug printout of matrices in human readable form after BC application ---
     # println("Global stiffness matrix:")
     # println("------------------------")
     # show(stdout, "text/plain", K)
@@ -72,6 +76,13 @@ function solve(neval::Int64, DVDict)
     # show(stdout, "text/plain", M)
 
     # TODO: finish the verification and do some visualization 22/09/02
+    q = FEMMethods.solve_structure(K, M, F)
+    # --- Populate displacement vector ---
+    u[globalDOFBlankingList] .= 0.0
+    idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
+    u[idxNotBlanked] .= q
+
+    write_sol(u, elemType)
 
     # yBaseSol = LinRange(0, foil.s, nElem)
     # for ii ∈ 1:8 # spline the soln into the vector TODO: this is wrong
@@ -170,7 +181,44 @@ function compute_hydroLoads(foilPDESol, foil)
     return F, M
 end
 
-function write_sol()
+function write_sol(states, elemType="bend")
+    """
+    Inputs
+    ------
+        states: vector of structural states from the [K]{u} = {F}
+    """
+    if elemType == "bend"
+        nDOF = 2
+    elseif elemType == "bend-twist"
+        nDOF = 3
+        Ψ = states[nDOF:nDOF:end]
+    else
+        error("Invalid element type")
+    end
+
+    W = states[1:nDOF:end]
+
+
+    # --- Write bending ---
+    fname = "bending.dat"
+    outfile = open(fname, "w")
+    # write(outfile, "Bending\n")
+    for wⁿ ∈ W
+        write(outfile, string(wⁿ, "\n"))
+    end
+    close(outfile)
+
+    # --- Write twist ---
+    if @isdefined(Ψ)
+        fname = "twisting.dat"
+        outfile = open(fname, "w")
+        # write(outfile, "Twist\n")
+        for Ψⁿ ∈ Ψ
+            write(outfile, string(Ψⁿ, "\n"))
+        end
+        close(outfile)
+    end
+
 
 end
 

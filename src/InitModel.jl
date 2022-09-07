@@ -84,6 +84,12 @@ function init_steady(neval::Int64, DVDict::Dict)
     E₂ = 13.4e9
     G₁₂ = 3.9e9
     ν₁₂ = 0.25
+  elseif (DVDict["material"] == "test")
+    ρₛ = 1590.0
+    E₁ = 1
+    E₂ = 1
+    G₁₂ = 1
+    ν₁₂ = 0.25 
   end
   g = DVDict["g"]
   θ = DVDict["θ"]
