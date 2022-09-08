@@ -7,8 +7,11 @@ include("../src/struct/FiniteElements.jl")
 using LinearAlgebra
 
 
-function test_bend()
-    neval = 50
+function test_FiniteElement()
+    """
+    Test the finite elements with unit loads, thickness, length, and structural moduli
+    """
+    neval = 30
     DVDict = Dict(
         "neval" => neval,
         "α₀" => 6.0, # initial angle of attack [deg]
@@ -26,11 +29,11 @@ function test_bend()
     )
     foil = InitModel.init_steady(neval, DVDict)
 
-    # ************************************************
-    #     Solve FEM using bend element only
-    # ************************************************
     nElem = neval - 1
     constitutive = "isotropic"
+    # ************************************************
+    #     bend element
+    # ************************************************
     elemType = "bend"
     globalDOFBlankingList = [1, 2]
 
@@ -43,6 +46,12 @@ function test_bend()
 
     q1 = FEMMethods.solve_structure(K, M, F)
 
+    # ************************************************
+    #     Solve with bend-twist element
+    # ************************************************
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
     elemType = "bend-twist"
     globalDOFBlankingList = [1, 2, 3]
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
@@ -54,11 +63,25 @@ function test_bend()
 
     q2 = FEMMethods.solve_structure(K, M, F)
 
+    # ---------------------------
+    #   Tip torque only
+    # ---------------------------
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q3 = FEMMethods.solve_structure(K, M, F)
+
     # --- Reference value ---
-    ref_sol = [4, 4] # the tip 
+    # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
+    ref_sol = [4, 4, 3] 
 
     # --- Relative error ---
-    rel_err = LinearAlgebra.norm([q1[end-1], q2[end-3]] - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+    answers = [q1[end-1], q2[end-3], q3[end]] # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
     return rel_err
 end

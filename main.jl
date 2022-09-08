@@ -14,7 +14,7 @@ using .SolveSteady
 # Setup hydrofoil model
 # ==============================================================================
 # --- Model parameters ---
-neval = 50 # spatial nodes
+neval = 100 # spatial nodes
 DVDict = Dict(
     "neval" => neval,
     "α₀" => 6.0, # initial angle of attack [deg]

@@ -44,15 +44,16 @@ function solve(neval::Int64, DVDict)
     # ************************************************
     nElem = neval - 1
     constitutive = "isotropic"
-    elemType = "bend"
-    globalDOFBlankingList = [1, 2] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
-    # elemType = "bend-twist"
-    # globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
+    # elemType = "bend"
+    # globalDOFBlankingList = [1, 2] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
+    elemType = "bend-twist"
+    globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
-    globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
+    # globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
     # globalF[end-2] = 1.0 # 0 Newton tip moment NOTE: FIX LATER bend-twist
+    globalF[end] = 1.0 # 1 Newton tip torque NOTE: FIX LATER bend-twist
     u = copy(globalF)
 
     # # --- Debug printout of matrices in human readable form ---
@@ -181,7 +182,7 @@ function compute_hydroLoads(foilPDESol, foil)
     return F, M
 end
 
-function write_sol(states, elemType="bend")
+function write_sol(states, outputDir="./OUTPUT", elemType="bend")
     """
     Inputs
     ------
@@ -200,7 +201,7 @@ function write_sol(states, elemType="bend")
 
 
     # --- Write bending ---
-    fname = "bending.dat"
+    fname = outputDir * "bending.dat"
     outfile = open(fname, "w")
     # write(outfile, "Bending\n")
     for wⁿ ∈ W
@@ -210,7 +211,7 @@ function write_sol(states, elemType="bend")
 
     # --- Write twist ---
     if @isdefined(Ψ)
-        fname = "twisting.dat"
+        fname = outputDir * "twisting.dat"
         outfile = open(fname, "w")
         # write(outfile, "Twist\n")
         for Ψⁿ ∈ Ψ
