@@ -263,15 +263,15 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         mLocal = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, elemType)
         # mLocal = 420 * LinearBeamElem.compute_elem_mass(1, 1, 1, elemType) # test coefficients OK
 
-        # --- Print out local matrices ---
-        println("Local stiffness")
-        println("")
-        show(stdout, "text/plain", kLocal)
-        println("")
-        # println("Local mass")
+        # # --- Print out local matrices ---
+        # println("Local stiffness")
         # println("")
-        # show(stdout, "text/plain", mLocal)
+        # show(stdout, "text/plain", kLocal)
         # println("")
+        # # println("Local mass")
+        # # println("")
+        # # show(stdout, "text/plain", mLocal)
+        # # println("")
 
         # ---------------------------
         #   Local force vector

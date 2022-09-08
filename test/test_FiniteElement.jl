@@ -82,7 +82,7 @@ function test_FiniteElement()
     ref_sol = [4, 4, 3]
 
     # --- Relative error ---
-    answers = [q1[end-1], q2[end-3], q3[end]] # put computed solutions here
+    answers = [q1[end-1], q2[end-2], q3[end]] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
     return rel_err
