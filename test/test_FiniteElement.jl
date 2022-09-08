@@ -1,10 +1,12 @@
 """
 unit test to verify the beam bend and bend-twist element
 """
+
 include("../src/InitModel.jl")
 include("../src/struct/FiniteElements.jl")
 
 using LinearAlgebra
+using .FEMMethods, .InitModel
 
 
 function test_FiniteElement()
@@ -77,7 +79,7 @@ function test_FiniteElement()
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
-    ref_sol = [4, 4, 3] 
+    ref_sol = [4, 4, 3]
 
     # --- Relative error ---
     answers = [q1[end-1], q2[end-3], q3[end]] # put computed solutions here
