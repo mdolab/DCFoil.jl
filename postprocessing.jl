@@ -13,29 +13,56 @@ ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 # using PyPlot
 using Plots
 
-x = range(0, 1, 100)
-y = cos.(x)
+dataDir = "./OUTPUT/"
+outputDir = dataDir
 
-plot(x, y, title="Test Lines")
-
-
-bending = zeros(length(readlines("bending.dat")))
+# --- Read bending ---
+file = readlines(dataDir * "bending.dat")
+bending = zeros(length(file))
 nodes = 0:length(bending)-1
 
 counter = 1
-for line ∈ readlines("bending.dat")
+for line ∈ file
     bending[counter] = parse(Float64, line)
     counter += 1
 end
 
-twisting = zeros(length(readlines("twisting.dat")))
+# --- Read twisting ---
+file = readlines(dataDir * "twisting.dat")
+twisting = zeros(length(file))
 
 counter = 1
-for line ∈ readlines("twisting.dat")
+for line ∈ file
     twisting[counter] = parse(Float64, line)
     counter += 1
 end
 
+# --- Read lift ---
+file = readlines(dataDir * "lift.dat")
+lift = zeros(length(file))
+counter = 1
+for line ∈ file
+    lift[counter] = parse(Float64, line)
+    counter += 1
+end
 
-plot([nodes, nodes], [bending, twisting], layout=2, title=["Spanwise Bending" "Spanwise twist"], xlabel="node #", ylabel=["w [m]" "psi [rad]"])
-savefig("deformations.pdf")
+# --- Read moment ---
+file = readlines(dataDir * "moments.dat")
+moment = zeros(length(file))
+counter = 1
+for line ∈ file
+    moment[counter] = parse(Float64, line)
+    counter += 1
+end
+
+# --- Plot it all ---
+plot(
+    [nodes, nodes, nodes, nodes], [bending, twisting, lift, moment],
+    label=["" "" "" ""],
+    layout=(2, 2),
+    title=["Spanwise Bending" "Spanwise twist" "Lift" "Moment"],
+    xlabel="node #",
+    ylabel=["w [m]" "psi [rad]" "L [N/m]" "M [N-m/m]"],
+)
+
+savefig(outputDir * "spanwise_view.pdf")

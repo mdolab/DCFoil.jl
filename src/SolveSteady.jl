@@ -5,7 +5,6 @@
 # @Author  :   Galen Ng
 # @Desc    :   Solve the beam equations w/ steady aero/hydrodynamics and compute gradients
 
-
 module SolveSteady
 """
 Steady hydroelastic solver module
@@ -16,6 +15,9 @@ export solve
 
 # --- Libraries ---
 using FLOWMath: linear, akima
+using FiniteDifferences
+using ForwardDiff
+using ReverseDiff
 include("InitModel.jl")
 include("Struct.jl")
 include("struct/FiniteElements.jl")
@@ -32,35 +34,36 @@ function solve(neval::Int64, DVDict)
     # ---------------------------
     #   Initialize
     # ---------------------------
-    foil = InitModel.init_steady(neval, DVDict)
-    # η = LinRange(0, 1, foil.neval) # parametric spanwise var
-    # y = LinRange(0, foil.s, foil.neval) # real spanwise var
-    # # initialize a BC vector at the root. We know first 4 are zero
-    # q⁰ = zeros(8)
-    # q⁰[5:end] .= 1.0
+    global FOIL = InitModel.init_steady(neval, DVDict) # seems to only be global in this module
 
     # ************************************************
-    #     Solve FEM
+    #     Solve FEM first time
     # ************************************************
     nElem = neval - 1
-    constitutive = "isotropic"
+    constitutive = "orthotropic"
     # elemType = "bend"
     # globalDOFBlankingList = [1, 2] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
     elemType = "bend-twist"
     globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
 
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     # globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
-    # globalF[end-2] = 1.0 # 0 Newton tip moment NOTE: FIX LATER bend-twist
-    globalF[end] = 1.0 # 1 Newton tip torque NOTE: FIX LATER bend-twist
+    globalF[end-2] = 1.0 / 10 # 0 Newton tip moment or force NOTE: FIX LATER bend-twist
+    # globalF[end] = 1.0/10 # 1 Newton tip torque NOTE: FIX LATER bend-twist
     u = copy(globalF)
 
-    # # --- Debug printout of matrices in human readable form ---
-    # println("Global stiffness matrix:")
-    # println("------------------------")
-    # show(stdout, "text/plain", globalK)
-    # println("")
+    # ---------------------------
+    #   Get fluid tractions
+    # ---------------------------
+    fTractions = compute_hydroLoads(u, elemType)
+    globalF = fTractions
+
+    # --- Debug printout of matrices in human readable form ---
+    println("Global stiffness matrix:")
+    println("------------------------")
+    show(stdout, "text/plain", globalK)
+    println("")
     # # println("Global mass matrix:")
     # # println("-------------------")
     # # show(stdout, "text/plain", globalM)
@@ -76,39 +79,40 @@ function solve(neval::Int64, DVDict)
     # println("-------------------")
     # show(stdout, "text/plain", M)
 
-    # TODO: finish the verification and do some visualization 22/09/02
     q = FEMMethods.solve_structure(K, M, F)
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
     idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
-    write_sol(u, elemType)
+    # --- Assign constants ---
+    global CONSTANTS = InitModel.DCFoilConstants(K, elemType)
 
-    # yBaseSol = LinRange(0, foil.s, nElem)
-    # for ii ∈ 1:8 # spline the soln into the vector TODO: this is wrong
-    #     foilPDESol[ii, :] = akima(yBaseSol, qsol[ii, :], y)
-    # end
+    # ************************************************
+    #     Converge r(u) = 0
+    # ************************************************
+    # TODO:
 
-    # # ---------------------------
-    # #   Hydro loads
-    # # ---------------------------
-    # F₀, M₀ = compute_hydroLoads(foilPDESol, foil)
 
-    # # ************************************************
-    # #     Compute residuals
-    # # ************************************************
-    # resVec = 
 
-    # # ************************************************
-    # #     Compute sensitivities
-    # # ************************************************
+    # ************************************************
+    #     Compute residuals
+    # ************************************************
+    resVec = compute_residuals(u)
 
+    # ************************************************
+    #     Compute sensitivities
+    # ************************************************
+    ∂r∂u = compute_∂r∂u(u)
+
+
+    # --- Write solution to .dat file ---
+    write_sol(u, globalF, elemType)
 
 
 end
 
-function compute_hydroLoads(foilPDESol, foil)
+function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
     """
     Computes the steady hydrodynamic vector loads 
     given the solved hydrofoil shape (strip theory)
@@ -117,46 +121,53 @@ function compute_hydroLoads(foilPDESol, foil)
     # ---------------------------
     #   Initializations
     # ---------------------------
+    if elemType == "bend"
+        error("Only bend-twist element type is supported for load computation")
+    elseif elemType == "bend-twist"
+        nDOF = 3
+    end
     # --- Unpack solution ---
-    w = foilPDESol[1, :]
-    ψ = foilPDESol[2, :]
-    ∂w∂y = foilPDESol[3, :]
-    ∂ψ∂y = foilPDESol[4, :]
+    w = foilStructuralStates[1:nDOF:end]
+    ψ = foilStructuralStates[nDOF:nDOF:end]
 
-    y = LinRange(0, foil.s, foil.neval) # real spanwise var
+    ∂w∂y = 0 * w # foilPDESol[3, :] # approximate derivatives
+    ∂ψ∂y = 0 * w # foilPDESol[4, :] # approximate derivatives
 
-    qf = 0.5 * foil.ρ_f * foil.U∞^2 # fluid dynamic pressure
+    y = LinRange(0, FOIL.s, FOIL.neval) # real spanwise var
+
+    qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2 # fluid dynamic pressure
 
     K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
     E_f = copy(K_f)     # Sweep correction matrix
 
-    F = zeros(foil.neval) # Hydro force vec
+    F = zeros(FOIL.neval) # Hydro force vec
     M = copy(F) # Hydro moment vec
+    fTractions = zeros(FOIL.neval * nDOF)
 
     # ---------------------------
     #   Strip theory loop
     # ---------------------------
-    jj = 1
+    jj = 1 # node index
     for yⁿ in y
         # --- Linearly interpolate values based on y loc ---
-        clα = linear(y, foil.clα, yⁿ)
-        c = linear(y, foil.c, yⁿ)
+        clα = linear(y, FOIL.clα, yⁿ)
+        c = linear(y, FOIL.c, yⁿ)
         b = 0.5 * c # semichord for more readable code
-        ab = linear(y, foil.ab, yⁿ)
-        eb = linear(y, foil.eb, yⁿ)
+        ab = linear(y, FOIL.ab, yⁿ)
+        eb = linear(y, FOIL.eb, yⁿ)
 
         # --- Generalized coord vec w/ 2DOF---
-        qGen = [w[jj], ψ[jj] + foil.α₀ * π / 180]
+        qGen = [w[jj], ψ[jj] + FOIL.α₀ * π / 180]
         ∂qGen∂y = [∂w∂y[jj], ∂ψ∂y[jj]]
 
         # --- Compute forces ---
-        K_f = qf * cos(foil.Λ)^2 *
+        K_f = qf * cos(FOIL.Λ)^2 *
               [
                   0.0 -2*b*clα
                   0.0 -2*eb*b*clα
               ]
 
-        E_f = qf * sin(foil.Λ) * cos(foil.Λ) * b *
+        E_f = qf * sin(FOIL.Λ) * cos(FOIL.Λ) * b *
               [
                   2*clα -clα*b*(1-ab/b)
                   clα*b*(1+ab/b) π*b^2-0.5*clα*b^2*(1-(ab/b)^2)
@@ -176,13 +187,18 @@ function compute_hydroLoads(foilPDESol, foil)
         F[jj] = FStrip
         M[jj] = MStrip
 
+        globalDOFIdx = nDOF * (jj - 1) + 1
+        fTractions[globalDOFIdx] = FStrip
+        fTractions[globalDOFIdx+1] = 0 # no traction applying bending
+        fTractions[globalDOFIdx+2] = MStrip
+
         jj += 1 # increment strip counter
     end
 
-    return F, M
+    return fTractions
 end
 
-function write_sol(states, outputDir="./OUTPUT", elemType="bend")
+function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
     """
     Inputs
     ------
@@ -193,12 +209,13 @@ function write_sol(states, outputDir="./OUTPUT", elemType="bend")
     elseif elemType == "bend-twist"
         nDOF = 3
         Ψ = states[nDOF:nDOF:end]
+        Moments = forces[nDOF:nDOF:end]
     else
         error("Invalid element type")
     end
 
     W = states[1:nDOF:end]
-
+    Lift = forces[1:nDOF:end]
 
     # --- Write bending ---
     fname = outputDir * "bending.dat"
@@ -220,6 +237,20 @@ function write_sol(states, outputDir="./OUTPUT", elemType="bend")
         close(outfile)
     end
 
+    # --- Write lift and moments ---
+    fname = outputDir * "lift.dat"
+    outfile = open(fname, "w")
+    for Fⁿ in Lift
+        write(outfile, string(Fⁿ, "\n"))
+    end
+    close(outfile)
+    fname = outputDir * "moments.dat"
+    outfile = open(fname, "w")
+    for Mⁿ in Moments
+        write(outfile, string(Mⁿ, "\n"))
+    end
+    close(outfile)
+
 
 end
 
@@ -238,41 +269,61 @@ function compute_∂f∂u(foilPDESol)
 
 end
 
-function compute_∂r∂u(foilPDESol)
+function compute_∂r∂u(structuralStates, mode="FiDi", elemType="bend-twist")
+    """
+    Jacobian of residuals with respect to structural states
+    """
 
+    if elemType == "bend-twist" # knock of the first 3 nodes for BC condition
+        structuralStates = structuralStates[4:end]
+    end
+
+    if mode == "FiDi" # Finite difference
+        # First derivative using 3 stencil points
+        @time ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
+
+    elseif mode == "FAD" # Forward automatic differentiation
+        @time ∂r∂u = ForwardDiff.jacobian(compute_residuals, structuralStates)
+
+    elseif mode == "RAD" # Reverse automatic differentiation
+        @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
+
+    else
+        error("Invalid mode")
+    end
+
+    return ∂r∂u
 end
 
-# function compute_residual(stateVec, FHydro, MHydro, foil)
-#     """
-#     NOTE: This is actually all wrong, disregard this and do not use this code
-#     Compute residual
+function compute_residuals(structuralStates)
+    """
+    Compute residual for every node that is not the clamped root node
 
-#     Inputs
-#     ------
-#     stateVec : array
-#         State vector [w, ψ, ∂w∂y, ∂ψ∂y]
-#     """
+    r(u) = [K]{u} - {f(u)}
 
-#     # --- Unpack values ---
-#     ∂⁴w∂y⁴ = stateVec[9, :]
-#     ∂⁴ψ∂y⁴ = stateVec[10, :]
-#     ∂³w∂y³ = stateVec[7, :]
-#     ∂³ψ∂y³ = stateVec[8, :]
-#     ∂²ψ∂y² = stateVec[6, :]
+    where f(u) is the force vector from the current solution
 
-#     # --- Governing PDEs as residuals ---
-#     # TODO: WHAT IS THE CAUSE OF THIS BEING HELLA WRONG? DO WE NEED TO DO FEM instead?
-#     r₁ = foil.EIₛ .* ∂⁴w∂y⁴ + foil.ab .* foil.EIₛ .* ∂⁴ψ∂y⁴ + foil.Kₛ .* ∂³ψ∂y³ - FHydro
-#     r₂ = foil.ab .* foil.EIₛ .* ∂⁴w∂y⁴ - foil.Kₛ .* ∂³w∂y³ + foil.Sₛ .* ∂⁴ψ∂y⁴ - foil.GJₛ .* ∂²ψ∂y² - MHydro
-#     #Something may be wrong here with dimensions
+    Inputs
+    ------
+    structuralStates : array
+        State vector with nodal DOFs and deformations
+    """
 
-#     # --- Get 8 additional res from BCs ---
-#     resBC = Steady.compute_g(stateVec[1:8, 1], stateVec[1:8, end], foil)
+    F = compute_hydroLoads(structuralStates, CONSTANTS.elemType)
 
-#     # --- Stack them ---
-#     resVec = []
+    if CONSTANTS.elemType == "bend-twist" # knock off the root element
+        F = F[4:end]
+        structuralStates = structuralStates[4:end]
+    else
+        println("Invalid element type")
+    end
 
-# end
+
+    # --- Stack them ---
+    resVec = CONSTANTS.Kmat * structuralStates - F
+
+    return resVec
+end
 
 function compute_direct()
     """
@@ -284,7 +335,7 @@ function compute_adjoint()
 
 end
 
-function compute_jacobian(stateVec, foil=nothing)
+function compute_jacobian(stateVec, FOIL=nothing)
     """
     Compute the jacobian df/dx
 

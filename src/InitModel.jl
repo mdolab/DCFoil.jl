@@ -43,6 +43,16 @@ mutable struct foil
   neval::Int64 # number of evaluation points on span
 end
 
+mutable struct DCFoilConstants
+  """
+  This is a catch all mutable struct to store variables that we do not 
+  want in function calls like r(u) or f(u)
+
+    TODO: there's probably a better place to put this call
+  """
+  Kmat
+  elemType::String
+end
 
 function init_steady(neval::Int64, DVDict::Dict)
   """
@@ -89,7 +99,7 @@ function init_steady(neval::Int64, DVDict::Dict)
     E₁ = 1
     E₂ = 1
     G₁₂ = 1
-    ν₁₂ = 0.25 
+    ν₁₂ = 0.25
   end
   g = DVDict["g"]
   θ = DVDict["θ"]

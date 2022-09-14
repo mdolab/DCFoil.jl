@@ -94,9 +94,9 @@ function compute_section_property(section::section_property)
     GJₛ = 4 * (d₆₆ - d₂₆^2 / d₂₂) * c * t^3
     Sₛ = EIₛ * ((0.5 * ab)^2 + (c^2 / 12.0))
 
-    if (Kₛ < 1e-5)
-        Kₛ = Kₛ + 1e-5
-    end
+    # if (Kₛ < 1e-5)
+    #     Kₛ = Kₛ + 1e-5
+    # end
 
     return EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ
 

@@ -29,7 +29,7 @@ module LinearBeamElem
 
 """
 
-function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
+function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, BTᵉ=nothing, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
     """
     The internal strain energy of a beam is
         U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
@@ -71,37 +71,46 @@ function compute_elem_stiff(EIᵉ, GJᵉ, lᵉ, elemType="bend-twist", constitut
 
     elseif elemType == "bend-twist"
         # 6x6 elem stiffness matrix
+        # Beam bending element terms
+        k11 = kb * 12
+        k12 = kb * 6 * lᵉ
+        k14 = kb * -12
+        k15 = kb * 6 * lᵉ
+        k22 = kb * 4 * lᵉ^2
+        k24 = kb * -6 * lᵉ
+        k25 = kb * 2 * lᵉ^2
+        k44 = kb * 12
+        k45 = kb * -6 * lᵉ
+        k55 = kb * 4 * lᵉ^2
+        # Torsion element terms
+        k33 = kt
+        k36 = -kt
+        k66 = kt
         if constitutive == "isotropic"
-            # Beam bending element terms
-            k11 = kb * 12
-            k12 = kb * 6 * lᵉ
-            k14 = kb * -12
-            k15 = kb * 6 * lᵉ
-            k22 = kb * 4 * lᵉ^2
-            k24 = kb * -6 * lᵉ
-            k25 = kb * 2 * lᵉ^2
-            k44 = kb * 12
-            k45 = kb * -6 * lᵉ
-            k55 = kb * 4 * lᵉ^2
-            # Torsion element terms
-            k33 = kt
-            k36 = -kt
-            k66 = kt
+            # bend-twist coupling
+            k23 = 0.0
+            k26 = 0.0
+            k35 = 0.0
+            k56 = 0.0
         elseif constitutive == "orthotropic"
-            println("Not implemented")
+            kBT = BTᵉ / lᵉ
+            k23 = -kBT
+            k26 = kBT
+            k35 = kBT
+            k56 = -kBT
         end
 
         Kᵉ = [
-            k11 k12 0.0 k14 k15 0.0
-            k12 k22 0.0 k24 k25 0.0
-            0.0 0.0 k33 0.0 0.0 k36
+            k11 k12 0.0 k14 k15 0.0 # w₁
+            k12 k22 k23 k24 k25 k26 # ϕ₁
+            0.0 k23 k33 0.0 k35 k36 # ψ₁
             k14 k24 0.0 k44 k45 0.0
-            k15 k25 0.0 k45 k55 0.0
-            0.0 0.0 k36 0.0 0.0 k66
+            k15 k25 0.0 k45 k55 k56
+            0.0 k26 k36 0.0 k56 k66
         ]
 
     elseif elemType == "bend-twist-axial"
-
+        # TODO: can do this but only interesting if composite propeller looking at extension-twist coupling
         println("Axial elements not implemented")
     end
 
@@ -211,7 +220,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     coordMat: 2D array of coordinates of nodes
     elemConn: 2D array of element connectivity
     """
-    
+
     # --- Initialize the local DOF vector ---
     if elemType == "bend"
         nnd = 2
@@ -219,14 +228,14 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         nnd = 3
     end
     qLocal = zeros(nnd * 2)
-    
+
     # --- Initialize matrices ---
     nElem = size(elemConn)[1]
     nNodes = nElem + 1
     globalK = zeros(nnd * (nNodes), nnd * (nNodes))
     globalM = zeros(nnd * (nNodes), nnd * (nNodes))
     globalF = zeros(nnd * (nNodes))
-    
+
     # --- Debug printout for initialization ---
     println("+---------------------------------------------------+")
     println("|   Assembling global stiffness and mass matrices   |")
@@ -254,7 +263,12 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, lᵉ, elemType, constitutive)
+        # TODO: get structural warping too
+        if constitutive == "isotropic"
+            kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, lᵉ, elemType, constitutive)
+        elseif constitutive == "orthotropic"
+            kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, lᵉ, Kₛ, elemType, constitutive) 
+        end
         # kLocal = LinearBeamElem.compute_elem_stiff(1, 1, 1, elemType, constitutive) # test coefficients OK
 
         # ---------------------------
@@ -326,9 +340,9 @@ function solve_structure(K, M, F)
     """
     Solve the structural system
     """
-    
+
     @time q = K \ F # TODO: should probably replace this with an iterative solver
-    
+
     return q
 end
 
