@@ -49,7 +49,7 @@ function test_FiniteElement()
     q1 = FEMMethods.solve_structure(K, M, F)
 
     # ************************************************
-    #     Solve with bend-twist element
+    #     bend-twist 
     # ************************************************
     # ---------------------------
     #   Tip force only

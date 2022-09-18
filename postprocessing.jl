@@ -9,13 +9,19 @@ NOTE: Sometimes the python it calls is the wrong version so check with:
 ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 """
 
-
+# --- Import libs ---
 # using PyPlot
 using Plots
 
+# ************************************************
+#     I/O 
+# ************************************************
 dataDir = "./OUTPUT/"
 outputDir = dataDir
 
+# ************************************************
+#     Read in results
+# ************************************************
 # --- Read bending ---
 file = readlines(dataDir * "bending.dat")
 bending = zeros(length(file))
@@ -55,7 +61,9 @@ for line ∈ file
     counter += 1
 end
 
-# --- Plot it all ---
+# ************************************************
+#     Plot results
+# ************************************************
 plot(
     [nodes, nodes, nodes, nodes], [bending, twisting, lift, moment],
     label=["" "" "" ""],

@@ -265,7 +265,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         # ---------------------------
         # TODO: get structural warping too
         if constitutive == "isotropic"
-            kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, lᵉ, elemType, constitutive)
+            kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, lᵉ, nothing, elemType, constitutive)
         elseif constitutive == "orthotropic"
             kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, lᵉ, Kₛ, elemType, constitutive) 
         end

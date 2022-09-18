@@ -117,6 +117,8 @@ function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
     Computes the steady hydrodynamic vector loads 
     given the solved hydrofoil shape (strip theory)
 
+    TODO: no sweep effects right now
+
     """
     # ---------------------------
     #   Initializations
@@ -130,8 +132,8 @@ function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
     w = foilStructuralStates[1:nDOF:end]
     ψ = foilStructuralStates[nDOF:nDOF:end]
 
-    ∂w∂y = 0 * w # foilPDESol[3, :] # approximate derivatives
-    ∂ψ∂y = 0 * w # foilPDESol[4, :] # approximate derivatives
+    ∂w∂y = 0 * w # foilPDESol[3, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
+    ∂ψ∂y = 0 * w # foilPDESol[4, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
 
     y = LinRange(0, FOIL.s, FOIL.neval) # real spanwise var
 
