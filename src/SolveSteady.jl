@@ -16,6 +16,7 @@ export solve
 # --- Libraries ---
 using FLOWMath: linear, akima
 using FiniteDifferences
+using LinearAlgebra
 # using ForwardDiff
 # using ReverseDiff
 using Zygote
@@ -92,20 +93,14 @@ function solve(neval::Int64, DVDict)
     # ************************************************
     #     Converge r(u) = 0
     # ************************************************
-    # TODO:
+    uSol, resVec = converge_r(q)
 
-
-
-    # ************************************************
-    #     Compute residuals
-    # ************************************************
-    resVec = compute_residuals(u)
 
     # ************************************************
     #     Compute sensitivities
     # ************************************************
     mode = "FAD"
-    ∂r∂u = compute_∂r∂u(u, mode)
+    ∂r∂u = compute_∂r∂u(q, mode)
 
 
     # --- Write solution to .dat file ---
@@ -282,6 +277,74 @@ function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
 end
 
 # ==============================================================================
+#                         Solver routine
+# ==============================================================================
+function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true)
+    """
+    Simple Newton-Rhapson solver
+    """
+
+    mode = "FAD"
+
+    for ii in 1:maxIters
+
+        res = compute_residuals(u)
+        ∂r∂u = compute_∂r∂u(u, mode)
+        jac = ∂r∂u[1]
+
+        # --- Newton step ---
+        Δu = -jac \ res
+
+        # --- Update ---
+        u = u + Δu
+
+        resNorm = norm(res, 2)
+
+        # --- Printout ---
+        if verbose
+            if ii == 1
+                println("resNorm | stepNorm ")
+            end
+            println(resNorm, "|", norm(Δu, 2))
+        end
+
+        # --- Check norm ---
+        # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
+        if resNorm < tol
+            println("Converged in ", ii, " iterations")
+            global converged_u = copy(u)
+            global converged_r = copy(res)
+            break
+        elseif ii == maxIters
+            println("Failed to converge. res norm is", resNorm)
+            global converged_u = copy(u)
+            global converged_r = copy(res)
+        else
+            global converged_u = copy(u)
+            global converged_r = copy(res)
+        end
+    end
+    print(converged_u)
+
+    return converged_u, converged_r
+end
+
+
+function converge_r(u, maxIters=200, tol=1e-6)
+    """
+    Given input u, solve the system r(u) = 0
+    """
+
+    # ************************************************
+    #     Main solver loop
+    # ************************************************
+    converged_u, converged_r = do_newton_rhapson(u, maxIters, tol)
+
+    return converged_u, converged_r
+
+end
+
+# ==============================================================================
 #                         Sensitivity routines
 # ==============================================================================
 function compute_∂f∂x(foilPDESol)
@@ -298,7 +361,7 @@ end
 
 function compute_∂r∂u(structuralStates, mode="FiDi")
     """
-    Jacobian of residuals with respect to structural states
+    Jacobian of residuals with respect to structural states EXCLUDING BC
     """
 
     if mode == "FiDi" # Finite difference
@@ -329,22 +392,20 @@ function compute_residuals(structuralStates)
     Inputs
     ------
     structuralStates : array
-        State vector with nodal DOFs and deformations
+        State vector with nodal DOFs and deformations EXCLUDING BCs
     """
-
-    F = compute_hydroLoads(structuralStates, CONSTANTS.mesh, CONSTANTS.elemType)
 
     # NOTE THAT WE ONLY DO THIS CALL HERE
     if CONSTANTS.elemType == "bend-twist" # knock off the root element
+        F = compute_hydroLoads(vcat([0.0, 0.0, 0.0], structuralStates), CONSTANTS.mesh, CONSTANTS.elemType)
         FOut = F[4:end]
-        structuralStatesOut = structuralStates[4:end]
     else
         println("Invalid element type")
     end
 
 
     # --- Stack them ---
-    resVec = CONSTANTS.Kmat * structuralStatesOut - FOut
+    resVec = CONSTANTS.Kmat * structuralStates - FOut
 
     return resVec
 end
