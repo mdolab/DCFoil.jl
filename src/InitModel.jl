@@ -52,6 +52,7 @@ mutable struct DCFoilConstants
   """
   Kmat
   elemType::String
+  mesh
 end
 
 function init_steady(neval::Int64, DVDict::Dict)

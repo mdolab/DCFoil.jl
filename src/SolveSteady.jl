@@ -16,8 +16,9 @@ export solve
 # --- Libraries ---
 using FLOWMath: linear, akima
 using FiniteDifferences
-using ForwardDiff
-using ReverseDiff
+# using ForwardDiff
+# using ReverseDiff
+using Zygote
 include("InitModel.jl")
 include("Struct.jl")
 include("struct/FiniteElements.jl")
@@ -56,14 +57,14 @@ function solve(neval::Int64, DVDict)
     # ---------------------------
     #   Get fluid tractions
     # ---------------------------
-    fTractions = compute_hydroLoads(u, elemType)
+    fTractions = compute_hydroLoads(u, structMesh, elemType)
     globalF = fTractions
 
-    # --- Debug printout of matrices in human readable form ---
-    println("Global stiffness matrix:")
-    println("------------------------")
-    show(stdout, "text/plain", globalK)
-    println("")
+    # # --- Debug printout of matrices in human readable form ---
+    # println("Global stiffness matrix:")
+    # println("------------------------")
+    # show(stdout, "text/plain", globalK)
+    # println("")
     # # println("Global mass matrix:")
     # # println("-------------------")
     # # show(stdout, "text/plain", globalM)
@@ -86,7 +87,7 @@ function solve(neval::Int64, DVDict)
     u[idxNotBlanked] .= q
 
     # --- Assign constants ---
-    global CONSTANTS = InitModel.DCFoilConstants(K, elemType)
+    global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh)
 
     # ************************************************
     #     Converge r(u) = 0
@@ -103,7 +104,8 @@ function solve(neval::Int64, DVDict)
     # ************************************************
     #     Compute sensitivities
     # ************************************************
-    ∂r∂u = compute_∂r∂u(u)
+    mode = "FAD"
+    ∂r∂u = compute_∂r∂u(u, mode)
 
 
     # --- Write solution to .dat file ---
@@ -112,7 +114,7 @@ function solve(neval::Int64, DVDict)
 
 end
 
-function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
+function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     """
     Computes the steady hydrodynamic vector loads 
     given the solved hydrofoil shape (strip theory)
@@ -123,19 +125,23 @@ function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
     # ---------------------------
     #   Initializations
     # ---------------------------
+    alfaRad = FOIL.α₀ * π / 180 # TODO: idk why this multiplication was not working
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
     elseif elemType == "bend-twist"
         nDOF = 3
+        staticOffset = [0, 0, alfaRad] #TODO: pretwist will change this
     end
     # --- Unpack solution ---
     w = foilStructuralStates[1:nDOF:end]
     ψ = foilStructuralStates[nDOF:nDOF:end]
 
-    ∂w∂y = 0 * w # foilPDESol[3, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
-    ∂ψ∂y = 0 * w # foilPDESol[4, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
+    foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
 
-    y = LinRange(0, FOIL.s, FOIL.neval) # real spanwise var
+    # ∂w∂y = 0 * w # foilPDESol[3, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
+    # ∂ψ∂y = 0 * w # foilPDESol[4, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
+
+    y = mesh # real spanwise var
 
     qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2 # fluid dynamic pressure
 
@@ -144,11 +150,14 @@ function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
 
     F = zeros(FOIL.neval) # Hydro force vec
     M = copy(F) # Hydro moment vec
-    fTractions = zeros(FOIL.neval * nDOF)
+    fTractions = Vector{Float64}(undef, FOIL.neval * nDOF)
+
 
     # ---------------------------
     #   Strip theory loop
     # ---------------------------
+    dummyAIC = zeros(FOIL.neval * nDOF, FOIL.neval * nDOF)
+    bufferAIC = Zygote.Buffer(dummyAIC) # AIC matrix
     jj = 1 # node index
     for yⁿ in y
         # --- Linearly interpolate values based on y loc ---
@@ -158,9 +167,9 @@ function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
         ab = linear(y, FOIL.ab, yⁿ)
         eb = linear(y, FOIL.eb, yⁿ)
 
-        # --- Generalized coord vec w/ 2DOF---
-        qGen = [w[jj], ψ[jj] + FOIL.α₀ * π / 180]
-        ∂qGen∂y = [∂w∂y[jj], ∂ψ∂y[jj]]
+        # # --- Generalized coord vec w/ 2DOF---
+        # qGen = [w[jj], ψ[jj] + FOIL.α₀ * π / 180]
+        # ∂qGen∂y = [∂w∂y[jj], ∂ψ∂y[jj]]
 
         # --- Compute forces ---
         K_f = qf * cos(FOIL.Λ)^2 *
@@ -175,27 +184,43 @@ function compute_hydroLoads(foilStructuralStates, elemType="bend-twist")
                   clα*b*(1+ab/b) π*b^2-0.5*clα*b^2*(1-(ab/b)^2)
               ]
 
-        # Force (+ve up)
-        FStrip = -K_f[1, 2] .* qGen[2]
-        -E_f[1, 1] .* qGen[1]
-        -E_f[1, 1] * ∂qGen∂y[1]
+        # --- Compute Compute local AIC matrix for this element ---
+        if elemType == "bend-twist"
+            AICLocal = [
+                -K_f[1, 2] 0.0 0.00000000
+                0.00000000 0.0 0.00000000
+                0.00000000 0.0 -K_f[2, 2]
+            ]
+        else
+            println("nothing else works")
+        end
 
-        # Moment about mid-chord (+ve nose up)
-        MStrip = -K_f[2, 2] .* qGen[2]
-        -E_f[2, 1] .* ∂qGen∂y[1]
-        -E_f[2, 2] .* ∂qGen∂y[2]
+        # # Force (+ve up)
+        # FStrip = -K_f[1, 2] .* qGen[2]
+        # -E_f[1, 1] .* ∂qGen∂y[1]
+        # -E_f[1, 2] * ∂qGen∂y[2]
 
-        # Append to solution
-        F[jj] = FStrip
-        M[jj] = MStrip
+        # # Moment about mid-chord (+ve nose up)
+        # MStrip = -K_f[2, 2] .* qGen[2]
+        # -E_f[2, 1] .* ∂qGen∂y[1]
+        # -E_f[2, 2] .* ∂qGen∂y[2]
+
+        # # Append to solution
+        # F[jj] = FStrip
+        # M[jj] = MStrip
 
         globalDOFIdx = nDOF * (jj - 1) + 1
-        fTractions[globalDOFIdx] = FStrip
-        fTractions[globalDOFIdx+1] = 0 # no traction applying bending
-        fTractions[globalDOFIdx+2] = MStrip
+
+        bufferAIC[globalDOFIdx:globalDOFIdx+nDOF-1, globalDOFIdx:globalDOFIdx+nDOF-1] = AICLocal
+        # fTractions[globalDOFIdx] = FStrip
+        # fTractions[globalDOFIdx+1] = 0 # no traction applying bending
+        # fTractions[globalDOFIdx+2] = MStrip
 
         jj += 1 # increment strip counter
     end
+    AIC = copy(bufferAIC)
+
+    fTractions = AIC * foilStructuralStates
 
     return fTractions
 end
@@ -271,24 +296,20 @@ function compute_∂f∂u(foilPDESol)
 
 end
 
-function compute_∂r∂u(structuralStates, mode="FiDi", elemType="bend-twist")
+function compute_∂r∂u(structuralStates, mode="FiDi")
     """
     Jacobian of residuals with respect to structural states
     """
-
-    if elemType == "bend-twist" # knock of the first 3 nodes for BC condition
-        structuralStates = structuralStates[4:end]
-    end
 
     if mode == "FiDi" # Finite difference
         # First derivative using 3 stencil points
         @time ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
     elseif mode == "FAD" # Forward automatic differentiation
-        @time ∂r∂u = ForwardDiff.jacobian(compute_residuals, structuralStates)
+        @time ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
-    elseif mode == "RAD" # Reverse automatic differentiation
-        @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
+        # elseif mode == "RAD" # Reverse automatic differentiation
+        #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
     else
         error("Invalid mode")
@@ -311,18 +332,19 @@ function compute_residuals(structuralStates)
         State vector with nodal DOFs and deformations
     """
 
-    F = compute_hydroLoads(structuralStates, CONSTANTS.elemType)
+    F = compute_hydroLoads(structuralStates, CONSTANTS.mesh, CONSTANTS.elemType)
 
+    # NOTE THAT WE ONLY DO THIS CALL HERE
     if CONSTANTS.elemType == "bend-twist" # knock off the root element
-        F = F[4:end]
-        structuralStates = structuralStates[4:end]
+        FOut = F[4:end]
+        structuralStatesOut = structuralStates[4:end]
     else
         println("Invalid element type")
     end
 
 
     # --- Stack them ---
-    resVec = CONSTANTS.Kmat * structuralStates - F
+    resVec = CONSTANTS.Kmat * structuralStatesOut - FOut
 
     return resVec
 end
