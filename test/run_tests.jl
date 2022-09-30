@@ -15,9 +15,11 @@ include("test_FiniteElement.jl")
 
 @testset "Test solver" begin
     # Write your tests here.
-    @test test_BVP() <= 1e-3
+    # @test test_BVP() <= 1e-3
     @test test_struct() <= 1e-5
     
     # --- FiniteElement tests ---
     @test test_FiniteElement() <= 1e-4
-en d
+    @test test_BT2_stiff() <= 1e-5
+    @test test_BT2_mass() <= 1e-4
+end

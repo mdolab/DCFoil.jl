@@ -42,11 +42,10 @@ function solve(neval::Int64, DVDict)
     #     Solve FEM first time
     # ************************************************
     nElem = neval - 1
-    constitutive = "orthotropic"
+    constitutive = FOIL.constitutive
     # elemType = "bend"
-    # globalDOFBlankingList = [1, 2] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
     elemType = "bend-twist"
-    globalDOFBlankingList = [1, 2, 3] # NOTE: THIS BLANKS THE ROOT NODE AND SHOULD BE A COMMAND-LINE INPUT
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
