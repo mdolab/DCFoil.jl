@@ -13,10 +13,13 @@ using .SolveSteady
 # ==============================================================================
 # Setup hydrofoil model
 # ==============================================================================
+
+outputDir = "./OUTPUT/test30/"
+
 # ************************************************
 #     Model parameters
 # ************************************************
-neval = 3 # spatial nodes
+neval = 30 # spatial nodes
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
@@ -35,13 +38,13 @@ DVDict = Dict(
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => 00 * π / 180, # fiber angle global [rad]
+    "θ" => 10 * π / 180, # fiber angle global [rad]
 )
 
 # ==============================================================================
 # Steady solution
 # ==============================================================================
-SolveSteady.solve(DVDict["neval"], DVDict)
+SolveSteady.solve(DVDict["neval"], DVDict, outputDir)
 
 
 # # --- Write out solution files ---

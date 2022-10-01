@@ -28,7 +28,7 @@ include("GovDiffEqns.jl")
 using .InitModel, .Hydro, .StructProp, .Steady, .Solver
 using .FEMMethods
 
-function solve(neval::Int64, DVDict)
+function solve(neval::Int64, DVDict, outputDir::String)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
 
@@ -46,13 +46,12 @@ function solve(neval::Int64, DVDict)
     # elemType = "bend"
     # elemType = "bend-twist"
     elemType = "BT2"
+    loadType = "force"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
-    # globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
-    globalF[end-3] = 10.0 # 0 Newton tip moment or force
-    # globalF[end] = 1.0/10 # 1 Newton tip torque NOTE: FIX LATER bend-twist
+    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
     u = copy(globalF)
 
     # # ---------------------------
@@ -61,11 +60,11 @@ function solve(neval::Int64, DVDict)
     # fTractions = compute_hydroLoads(u, structMesh, elemType)
     # globalF = fTractions
 
-    # --- Debug printout of matrices in human readable form ---
-    println("Global stiffness matrix:")
-    println("------------------------")
-    show(stdout, "text/plain", globalK)
-    println("")
+    # # --- Debug printout of matrices in human readable form ---
+    # println("Global stiffness matrix:")
+    # println("------------------------")
+    # show(stdout, "text/plain", globalK)
+    # println("")
     # # println("Global mass matrix:")
     # # println("-------------------")
     # # show(stdout, "text/plain", globalM)
@@ -104,7 +103,7 @@ function solve(neval::Int64, DVDict)
 
 
     # --- Write solution to .dat file ---
-    write_sol(u, globalF, elemType)
+    write_sol(u, globalF, elemType, outputDir)
 
 
 end
@@ -219,6 +218,9 @@ function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
     ------
         states: vector of structural states from the [K]{u} = {F}
     """
+
+    mkpath(outputDir)
+
     if elemType == "bend"
         nDOF = 2
     elseif elemType == "bend-twist"
