@@ -16,7 +16,7 @@ using .SolveSteady
 # ************************************************
 #     Model parameters
 # ************************************************
-neval = 4 # spatial nodes
+neval = 3 # spatial nodes
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
@@ -35,7 +35,7 @@ DVDict = Dict(
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => 15 * π / 180, # fiber angle global [rad]
+    "θ" => 00 * π / 180, # fiber angle global [rad]
 )
 
 # ==============================================================================

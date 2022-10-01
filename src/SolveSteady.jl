@@ -44,27 +44,28 @@ function solve(neval::Int64, DVDict)
     nElem = neval - 1
     constitutive = FOIL.constitutive
     # elemType = "bend"
-    elemType = "bend-twist"
+    # elemType = "bend-twist"
+    elemType = "BT2"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     # globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
-    globalF[end-2] = 1.0 / 10 # 0 Newton tip moment or force NOTE: FIX LATER bend-twist
+    globalF[end-3] = 10.0 # 0 Newton tip moment or force
     # globalF[end] = 1.0/10 # 1 Newton tip torque NOTE: FIX LATER bend-twist
     u = copy(globalF)
 
-    # ---------------------------
-    #   Get fluid tractions
-    # ---------------------------
-    fTractions = compute_hydroLoads(u, structMesh, elemType)
-    globalF = fTractions
+    # # ---------------------------
+    # #   Get fluid tractions
+    # # ---------------------------
+    # fTractions = compute_hydroLoads(u, structMesh, elemType)
+    # globalF = fTractions
 
-    # # --- Debug printout of matrices in human readable form ---
-    # println("Global stiffness matrix:")
-    # println("------------------------")
-    # show(stdout, "text/plain", globalK)
-    # println("")
+    # --- Debug printout of matrices in human readable form ---
+    println("Global stiffness matrix:")
+    println("------------------------")
+    show(stdout, "text/plain", globalK)
+    println("")
     # # println("Global mass matrix:")
     # # println("-------------------")
     # # show(stdout, "text/plain", globalM)
@@ -89,17 +90,17 @@ function solve(neval::Int64, DVDict)
     # --- Assign constants ---
     global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh)
 
-    # ************************************************
-    #     Converge r(u) = 0
-    # ************************************************
-    uSol, resVec = converge_r(q)
+    # # ************************************************
+    # #     Converge r(u) = 0
+    # # ************************************************
+    # uSol, resVec = converge_r(q, 1)
 
 
-    # ************************************************
-    #     Compute sensitivities
-    # ************************************************
-    mode = "FAD"
-    ∂r∂u = compute_∂r∂u(q, mode)
+    # # ************************************************
+    # #     Compute sensitivities
+    # # ************************************************
+    # mode = "FAD"
+    # ∂r∂u = compute_∂r∂u(q, mode)
 
 
     # --- Write solution to .dat file ---
@@ -113,34 +114,32 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     Computes the steady hydrodynamic vector loads 
     given the solved hydrofoil shape (strip theory)
 
-    TODO: no sweep effects right now
+    TODO: I THINK THE BUG IS HERE
 
     """
     # ---------------------------
     #   Initializations
     # ---------------------------
-    alfaRad = FOIL.α₀ * π / 180 # TODO: idk why this multiplication was not working
+    alfaRad = FOIL.α₀ * π / 180
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
     elseif elemType == "bend-twist"
         nDOF = 3
         staticOffset = [0, 0, alfaRad] #TODO: pretwist will change this
+    elseif elemType == "BT2"
+        nDOF = 4
+        staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
     end
-    # --- Unpack solution ---
-    w = foilStructuralStates[1:nDOF:end]
-    ψ = foilStructuralStates[nDOF:nDOF:end]
 
+    # Add static angle of attack to deflected foil
+    w = foilStructuralStates[1:nDOF:end]
     foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
 
-    # ∂w∂y = 0 * w # foilPDESol[3, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
-    # ∂ψ∂y = 0 * w # foilPDESol[4, :] # approximate derivatives NO SWEEP EFFECT RIGHT NOW
-
-    y = mesh # real spanwise var
-
-    qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2 # fluid dynamic pressure
+    # fluid dynamic pressure    
+    qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2
 
     K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
-    E_f = copy(K_f)     # Sweep correction matrix
+    E_f = copy(K_f)  # Sweep correction matrix
 
     F = zeros(FOIL.neval) # Hydro force vec
     M = copy(F) # Hydro moment vec
@@ -153,62 +152,57 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     dummyAIC = zeros(FOIL.neval * nDOF, FOIL.neval * nDOF)
     bufferAIC = Zygote.Buffer(dummyAIC) # AIC matrix
     jj = 1 # node index
-    for yⁿ in y
+    for yⁿ in mesh
         # --- Linearly interpolate values based on y loc ---
-        clα = linear(y, FOIL.clα, yⁿ)
-        c = linear(y, FOIL.c, yⁿ)
+        clα = linear(mesh, FOIL.clα, yⁿ)
+        c = linear(mesh, FOIL.c, yⁿ)
         b = 0.5 * c # semichord for more readable code
-        ab = linear(y, FOIL.ab, yⁿ)
-        eb = linear(y, FOIL.eb, yⁿ)
-
-        # # --- Generalized coord vec w/ 2DOF---
-        # qGen = [w[jj], ψ[jj] + FOIL.α₀ * π / 180]
-        # ∂qGen∂y = [∂w∂y[jj], ∂ψ∂y[jj]]
+        ab = linear(mesh, FOIL.ab, yⁿ)
+        eb = linear(mesh, FOIL.eb, yⁿ)
 
         # --- Compute forces ---
+        # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
+        k_hα = -2 * b * clα # lift due to angle of attack
+        k_αα = -2 * eb * b * clα # moment due to angle of attack
         K_f = qf * cos(FOIL.Λ)^2 *
               [
-                  0.0 -2*b*clα
-                  0.0 -2*eb*b*clα
+                  0.0 k_hα
+                  0.0 k_αα
               ]
-
+        # Sweep correction to aerodynamic stiffness
+        e_hh = 2 * clα # lift due to w'
+        e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
+        e_αh = clα * b * (1 + ab / b) # moment due to w'
+        e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
         E_f = qf * sin(FOIL.Λ) * cos(FOIL.Λ) * b *
               [
-                  2*clα -clα*b*(1-ab/b)
-                  clα*b*(1+ab/b) π*b^2-0.5*clα*b^2*(1-(ab/b)^2)
+                  e_hh e_hα
+                  e_αh e_αα
               ]
 
         # --- Compute Compute local AIC matrix for this element ---
         if elemType == "bend-twist"
-            AICLocal = [
-                -K_f[1, 2] 0.0 0.00000000
+            println("These aerodynamics are all wrong BTW...")
+            AICLocal = -1 * [
+                0.00000000 0.0 K_f[1, 2] # Lift
                 0.00000000 0.0 0.00000000
-                0.00000000 0.0 -K_f[2, 2]
+                0.00000000 0.0 K_f[2, 2] # Pitching moment
+            ]
+        elseif elemType == "BT2"
+            AICLocal = [
+                0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
+                0.0 0.0 0.0 0.0
+                0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
+                0.0 0.0 0.0 0.0
             ]
         else
             println("nothing else works")
         end
 
-        # # Force (+ve up)
-        # FStrip = -K_f[1, 2] .* qGen[2]
-        # -E_f[1, 1] .* ∂qGen∂y[1]
-        # -E_f[1, 2] * ∂qGen∂y[2]
-
-        # # Moment about mid-chord (+ve nose up)
-        # MStrip = -K_f[2, 2] .* qGen[2]
-        # -E_f[2, 1] .* ∂qGen∂y[1]
-        # -E_f[2, 2] .* ∂qGen∂y[2]
-
-        # # Append to solution
-        # F[jj] = FStrip
-        # M[jj] = MStrip
 
         globalDOFIdx = nDOF * (jj - 1) + 1
 
         bufferAIC[globalDOFIdx:globalDOFIdx+nDOF-1, globalDOFIdx:globalDOFIdx+nDOF-1] = AICLocal
-        # fTractions[globalDOFIdx] = FStrip
-        # fTractions[globalDOFIdx+1] = 0 # no traction applying bending
-        # fTractions[globalDOFIdx+2] = MStrip
 
         jj += 1 # increment strip counter
     end
@@ -231,6 +225,10 @@ function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
         nDOF = 3
         Ψ = states[nDOF:nDOF:end]
         Moments = forces[nDOF:nDOF:end]
+    elseif elemType == "BT2"
+        nDOF = 4
+        Ψ = states[3:nDOF:end]
+        Moments = forces[3:nDOF:end]
     else
         error("Invalid element type")
     end
@@ -398,7 +396,11 @@ function compute_residuals(structuralStates)
     if CONSTANTS.elemType == "bend-twist" # knock off the root element
         F = compute_hydroLoads(vcat([0.0, 0.0, 0.0], structuralStates), CONSTANTS.mesh, CONSTANTS.elemType)
         FOut = F[4:end]
+    elseif CONSTANTS.elemType == "BT2" # knock off root element
+        F = compute_hydroLoads(vcat([0.0, 0.0, 0.0, 0.0], structuralStates), CONSTANTS.mesh, CONSTANTS.elemType)
+        FOut = F[5:end]
     else
+        println(CONSTANTS.elemType)
         println("Invalid element type")
     end
 
