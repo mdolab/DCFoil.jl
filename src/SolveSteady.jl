@@ -37,28 +37,30 @@ function solve(neval::Int64, DVDict, outputDir::String)
     #   Initialize
     # ---------------------------
     global FOIL = InitModel.init_steady(neval, DVDict) # seems to only be global in this module
+    nElem = neval - 1
+    constitutive = FOIL.constitutive
 
     # ************************************************
     #     Solve FEM first time
     # ************************************************
-    nElem = neval - 1
-    constitutive = FOIL.constitutive
     # elemType = "bend"
     # elemType = "bend-twist"
     elemType = "BT2"
     loadType = "force"
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+
+    # --- Initialize states ---
     u = copy(globalF)
 
-    # # ---------------------------
-    # #   Get fluid tractions
-    # # ---------------------------
-    # fTractions = compute_hydroLoads(u, structMesh, elemType)
-    # globalF = fTractions
+    # ---------------------------
+    #   Get fluid tractions
+    # ---------------------------
+    fTractions = compute_hydroLoads(u, structMesh, elemType)
+    globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
     # println("Global stiffness matrix:")
@@ -69,6 +71,10 @@ function solve(neval::Int64, DVDict, outputDir::String)
     # # println("-------------------")
     # # show(stdout, "text/plain", globalM)
 
+    # ---------------------------
+    #   Apply BC blanking
+    # ---------------------------
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---
@@ -80,13 +86,19 @@ function solve(neval::Int64, DVDict, outputDir::String)
     # println("-------------------")
     # show(stdout, "text/plain", M)
 
+
+    # ---------------------------
+    #   Solve system
+    # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
+
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
     idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
-    # --- Assign constants ---
+    # --- Assign constants accessible in this module ---
+    # This is needed for derivatives!
     global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh)
 
     # # ************************************************
@@ -102,7 +114,10 @@ function solve(neval::Int64, DVDict, outputDir::String)
     # ∂r∂u = compute_∂r∂u(q, mode)
 
 
-    # --- Write solution to .dat file ---
+    # ************************************************
+    #     Write solution out to files
+    # ************************************************
+    # Write solution to .dat file
     write_sol(u, globalF, elemType, outputDir)
 
 

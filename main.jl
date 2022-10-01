@@ -14,7 +14,7 @@ using .SolveSteady
 # Setup hydrofoil model
 # ==============================================================================
 
-outputDir = "./OUTPUT/test30/"
+outputDir = "./OUTPUT/testAero/"
 
 # ************************************************
 #     Model parameters
