@@ -3,7 +3,7 @@
 # @File    :   GovDiffEqns.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
-# @Desc    :   Two module containing the governing differential equations recasting as a linear system
+# @Desc    :   Two modules containing the governing differential equations recasting as a linear system
 #              q' = f(q(y)) 
 #              where q = [w, ψ, w', ψ', w'', ψ'', w''', ψ''']ᵀ
 #              The functions in this module are the 'f' in the above equation
@@ -27,7 +27,8 @@ export compute_∂q∂y
 
 function compute_∂q∂y(qn, η, foil)
     """
-    Compute the derivative of the column state vector q with respect to the spatial variable y at parametric location η
+    Compute the derivative of the column state vector q 
+    with respect to the spatial variable y at parametric location η
     """
     # TODO: DEBUG ALL OF THIS
     # --- First interpolate all necessary values based on spanwise location ---
@@ -105,6 +106,8 @@ end
 function compute_g(ya, yb, foil)
     """
     Boundary condition function at a and b
+    
+    This is also the residual
     """
     neqns = length(ya)
     g = zeros(neqns)
@@ -113,15 +116,26 @@ function compute_g(ya, yb, foil)
     EIₛ = foil.EIₛ[idxTip]
     GJₛ = foil.GJₛ[idxTip]
     Kₛ = foil.Kₛ[idxTip]
+    Sₛ = foil.Sₛ[idxTip]
     cTip = foil.c[idxTip]
     abTip = foil.ab[idxTip]
     L = foil.s
 
     g[1:4] .= ya[1:4]
-    g[5] = (yb[5] + Kₛ * L / (EIₛ) * yb[4])
+    # These are the original BC equations from Deniz that I don't fully understand their origin but they seem to work
+    g[5] = (yb[5] + Kₛ * L / (EIₛ) * yb[4]) # mom due to bending --> 0
     g[6] = (yb[6])
-    g[7] = (yb[7] + 0.5 * abTip * (GJₛ - Kₛ^2 / EIₛ) * L^2 / (EIₛ * cTip^2 / 12.0) * yb[4])
+    g[7] = (yb[7] + 0.5 * abTip * (GJₛ - Kₛ^2 / EIₛ) * L^2 / (EIₛ * cTip^2 / 12.0) * yb[4]) # mom due to torsion --> 0
     g[8] = (yb[8] - (GJₛ - Kₛ^2 / EIₛ) * L^2 / (EIₛ * cTip^2 / 12.0) * yb[4])
+
+    # # --- New BC func ---
+    # # NOTE: I'm not convinced about the formulation of the original BC func b/c it's not explained well in the paper...
+    # # Also, the units are completely in disagreement...
+    # # These BCs follow the draft manuscript w/ Sicheng
+    # g[5] = EIₛ * yb[5] + Kₛ * yb[4] + abTip * EIₛ * yb[6] # mom due to bending --> 0
+    # g[6] = EIₛ * yb[7] + Kₛ * yb[6] + abTip * EIₛ * yb[8] # shear due to bending --> 0
+    # g[7] = GJₛ * yb[4] + Kₛ * yb[5] - abTip * EIₛ * yb[7] - Sₛ * yb[8] # mom due to torsion --> 0
+    # g[8] = abTip * Kₛ * yb[4] + abTip * EIₛ * yb[5] + Sₛ * yb[6] # moment's mom due to torsion (some weird coupling thing) --> 0
     return g
 end
 
@@ -233,7 +247,7 @@ function solve_bvp(dudt, u0, t0, tf, nnode, compute_g, foil=nothing)
     jac = zeros(m, m)
     u = u0
     du = 1e-8
-    tol = 1e-14
+    tol = 1e-12
     maxIter = 20
     iter = 1
 
@@ -267,6 +281,7 @@ function solve_bvp(dudt, u0, t0, tf, nnode, compute_g, foil=nothing)
         iter += 1
         if iter > maxIter
             println("No solution in max iters")
+            println("Residual: ", norm(res))
             break
         end
 
