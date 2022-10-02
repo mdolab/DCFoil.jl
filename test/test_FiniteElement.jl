@@ -100,7 +100,7 @@ function test_BT2_stiff()
     elemType = "BT2"
 
     Ktest = LinearBeamElem.compute_elem_stiff(2, 8, 4, 8 / 3, 2, 1, elemType, constitutive)
-    # show(stdout, "text/plain", Ktest[5:end, 5:end])
+    # show(stdout, "text/plain", Ktest[1:end, 1:end])
 
     # --- Reference value ---
     # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
@@ -119,7 +119,7 @@ function test_BT2_stiff()
     answers = vec(Ktest) # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
-    if det(Ktest) != 0
+    if det(Ktest) >= 1e-16
         print("Your stiffness matrix is not singular...it's wrong")
         rel_err += 1 # make test fail
     end
@@ -161,7 +161,7 @@ function test_BT2_mass()
     answers = vec(Mtest) # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
-    if minimum(eigvals(Mtest)) < 0
+    if minimum(eigvals(Mtest)) < 0.0
         print("Your stiffness matrix is not positive definite...it's wrong")
         rel_err += 1 # make test fail
     end

@@ -28,7 +28,7 @@ include("GovDiffEqns.jl")
 using .InitModel, .Hydro, .StructProp, .Steady, .Solver
 using .FEMMethods
 
-function solve(neval::Int64, DVDict)
+function solve(neval::Int64, DVDict, outputDir::String)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
 
@@ -37,39 +37,44 @@ function solve(neval::Int64, DVDict)
     #   Initialize
     # ---------------------------
     global FOIL = InitModel.init_steady(neval, DVDict) # seems to only be global in this module
+    nElem = neval - 1
+    constitutive = FOIL.constitutive
 
     # ************************************************
     #     Solve FEM first time
     # ************************************************
-    nElem = neval - 1
-    constitutive = FOIL.constitutive
     # elemType = "bend"
     # elemType = "bend-twist"
     elemType = "BT2"
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+    loadType = "force"
 
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
-    # globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
-    globalF[end-3] = 10.0 # 0 Newton tip moment or force
-    # globalF[end] = 1.0/10 # 1 Newton tip torque NOTE: FIX LATER bend-twist
+    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+
+    # --- Initialize states ---
     u = copy(globalF)
 
-    # # ---------------------------
-    # #   Get fluid tractions
-    # # ---------------------------
-    # fTractions = compute_hydroLoads(u, structMesh, elemType)
-    # globalF = fTractions
+    # ---------------------------
+    #   Get fluid tractions
+    # ---------------------------
+    fTractions = compute_hydroLoads(u, structMesh, elemType)
+    globalF = fTractions
 
-    # --- Debug printout of matrices in human readable form ---
-    println("Global stiffness matrix:")
-    println("------------------------")
-    show(stdout, "text/plain", globalK)
-    println("")
+    # # --- Debug printout of matrices in human readable form ---
+    # println("Global stiffness matrix:")
+    # println("------------------------")
+    # show(stdout, "text/plain", globalK)
+    # println("")
     # # println("Global mass matrix:")
     # # println("-------------------")
     # # show(stdout, "text/plain", globalM)
 
+    # ---------------------------
+    #   Apply BC blanking
+    # ---------------------------
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---
@@ -81,13 +86,19 @@ function solve(neval::Int64, DVDict)
     # println("-------------------")
     # show(stdout, "text/plain", M)
 
+
+    # ---------------------------
+    #   Solve system
+    # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
+
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
     idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
-    # --- Assign constants ---
+    # --- Assign constants accessible in this module ---
+    # This is needed for derivatives!
     global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh)
 
     # # ************************************************
@@ -103,8 +114,11 @@ function solve(neval::Int64, DVDict)
     # ∂r∂u = compute_∂r∂u(q, mode)
 
 
-    # --- Write solution to .dat file ---
-    write_sol(u, globalF, elemType)
+    # ************************************************
+    #     Write solution out to files
+    # ************************************************
+    # Write solution to .dat file
+    write_sol(u, globalF, elemType, outputDir)
 
 
 end
@@ -219,6 +233,9 @@ function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
     ------
         states: vector of structural states from the [K]{u} = {F}
     """
+
+    mkpath(outputDir)
+
     if elemType == "bend"
         nDOF = 2
     elseif elemType == "bend-twist"
