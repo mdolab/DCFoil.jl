@@ -217,12 +217,16 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
         globalDOFIdx = nDOF * (jj - 1) + 1
 
         bufferAIC[globalDOFIdx:globalDOFIdx+nDOF-1, globalDOFIdx:globalDOFIdx+nDOF-1] = AICLocal
+        bufferAIC[globalDOFIdx:globalDOFIdx+nDOF-1, globalDOFIdx:globalDOFIdx+nDOF:end] .= 0.0
 
         jj += 1 # increment strip counter
     end
     AIC = copy(bufferAIC)
 
-    fTractions = AIC * foilStructuralStates
+    println("AIC")
+    show(stdout, "text/plain", AIC)
+
+    fTractions = -1 * AIC * foilStructuralStates # aerodynamic forces are on the RHS so we negate
 
     return fTractions
 end
