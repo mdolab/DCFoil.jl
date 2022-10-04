@@ -8,6 +8,7 @@
 
 include("src/SolveSteady.jl")
 
+using JSON
 using .SolveSteady
 
 # ==============================================================================
@@ -15,11 +16,12 @@ using .SolveSteady
 # ==============================================================================
 
 outputDir = "./OUTPUT/testAero/"
+mkpath(outputDir)
 
 # ************************************************
 #     Model parameters
 # ************************************************
-neval = 3 # spatial nodes
+neval = 30 # spatial nodes
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
@@ -28,7 +30,7 @@ neval = 3 # spatial nodes
 DVDict = Dict(
     "neval" => neval,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 5.0, # free stream velocity [m/s]
+    "U∞" => 8.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
@@ -38,8 +40,14 @@ DVDict = Dict(
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => 10 * π / 180, # fiber angle global [rad]
+    "θ" => 5 * π / 180, # fiber angle global [rad]
 )
+
+# --- Write the init dict to output folder ---
+stringData = JSON.json(DVDict)
+open(outputDir * "init_DVDict.json", "w") do io
+    write(io, stringData)
+end
 
 # ==============================================================================
 # Steady solution

@@ -16,7 +16,8 @@ export solve
 # --- Libraries ---
 using FLOWMath: linear, akima
 using FiniteDifferences
-using LinearAlgebra
+using LinearAlgebra, Statistics
+using JSON
 # using ForwardDiff
 # using ReverseDiff
 using Zygote
@@ -57,9 +58,9 @@ function solve(neval::Int64, DVDict, outputDir::String)
     u = copy(globalF)
 
     # ---------------------------
-    #   Get fluid tractions
+    #   Get initial fluid tracts
     # ---------------------------
-    fTractions = compute_hydroLoads(u, structMesh, elemType)
+    fTractions, AIC, planformArea = compute_hydroLoads(u, structMesh, elemType)
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -88,7 +89,7 @@ function solve(neval::Int64, DVDict, outputDir::String)
 
 
     # ---------------------------
-    #   Solve system
+    #   Pre-solve system
     # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
 
@@ -97,14 +98,22 @@ function solve(neval::Int64, DVDict, outputDir::String)
     idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
+
+    # ************************************************
+    #     Converge r(u) = 0
+    # ************************************************
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
-    global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh)
+    derivMode = "FAD"
+    global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh, AIC, derivMode, planformArea)
 
-    # # ************************************************
-    # #     Converge r(u) = 0
-    # # ************************************************
-    # uSol, resVec = converge_r(q, 1)
+    qSol, resVec = converge_r(q)
+    if CONSTANTS.elemType == "BT2"
+        uSol = vcat([0, 0, 0, 0], qSol)
+    end
+
+    # --- Get hydroLoads again on solution ---
+    fTractions, AIC, _ = compute_hydroLoads(uSol, structMesh, elemType)
 
 
     # # ************************************************
@@ -118,28 +127,27 @@ function solve(neval::Int64, DVDict, outputDir::String)
     #     Write solution out to files
     # ************************************************
     # Write solution to .dat file
-    write_sol(u, globalF, elemType, outputDir)
+    TotalLift, TotalMoment, CL, CM = write_sol(uSol, globalF, elemType, outputDir)
 
+    println("TotalLift = ", TotalLift, " N")
+    println("TotalMoment (about midchord) = ", TotalMoment, " N-m")
+    println("CL = ", CL)
+    println("CM = ", CM)
 
 end
 
-function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
+function return_totalStates(foilStructuralStates, elemType="BT2")
     """
-    Computes the steady hydrodynamic vector loads 
-    given the solved hydrofoil shape (strip theory)
-
-    TODO: I THINK THE BUG IS HERE
-
+    Returns the deflected + rigid shape of the foil
     """
-    # ---------------------------
-    #   Initializations
-    # ---------------------------
+
     alfaRad = FOIL.α₀ * π / 180
+
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
     elseif elemType == "bend-twist"
         nDOF = 3
-        staticOffset = [0, 0, alfaRad] #TODO: pretwist will change this
+        staticOffset = [0, 0, alfaRad]
     elseif elemType == "BT2"
         nDOF = 4
         staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
@@ -149,24 +157,61 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     w = foilStructuralStates[1:nDOF:end]
     foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
 
+    return foilTotalStates, nDOF
+end
+
+function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
+    """
+    Computes the steady hydrodynamic vector loads 
+    given the solved hydrofoil shape (strip theory)
+    """
+    # ---------------------------
+    #   Initializations
+    # ---------------------------
+    foilTotalStates, nDOF = return_totalStates(foilStructuralStates, elemType)
+    nGDOF = FOIL.neval * nDOF
+
+    # ---------------------------
+    #   Strip theory
+    # ---------------------------
+    AIC = zeros(nGDOF, nGDOF)
+    _, planformArea = compute_AIC!(AIC, mesh, elemType)
+
+    # --- Compute fluid tractions ---
+    fTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
+
+    # # --- Debug printout ---
+    # println("AIC")
+    # show(stdout, "text/plain", AIC)
+    # println("")
+    # println("Aero loads")
+    # println(fTractions)
+
+    return fTractions, AIC, planformArea
+end
+
+function compute_AIC!(AIC, mesh, elemType="BT2")
+
+    if elemType == "bend"
+        error("Only bend-twist element type is supported for load computation")
+    elseif elemType == "bend-twist"
+        nDOF = 3
+    elseif elemType == "BT2"
+        nDOF = 4
+    end
+
     # fluid dynamic pressure    
     qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2
 
-    K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
-    E_f = copy(K_f)  # Sweep correction matrix
+    # strip width
+    dy = FOIL.s / (FOIL.neval)
+    planformArea = 0.0
 
-    F = zeros(FOIL.neval) # Hydro force vec
-    M = copy(F) # Hydro moment vec
-    fTractions = Vector{Float64}(undef, FOIL.neval * nDOF)
-
-
-    # ---------------------------
-    #   Strip theory loop
-    # ---------------------------
-    dummyAIC = zeros(FOIL.neval * nDOF, FOIL.neval * nDOF)
-    bufferAIC = Zygote.Buffer(dummyAIC) # AIC matrix
     jj = 1 # node index
     for yⁿ in mesh
+        K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
+        E_f = copy(K_f)  # Sweep correction matrix
+
         # --- Linearly interpolate values based on y loc ---
         clα = linear(mesh, FOIL.clα, yⁿ)
         c = linear(mesh, FOIL.c, yⁿ)
@@ -214,21 +259,17 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
         end
 
 
-        globalDOFIdx = nDOF * (jj - 1) + 1
+        GDOFIdx = nDOF * (jj - 1) + 1
 
-        bufferAIC[globalDOFIdx:globalDOFIdx+nDOF-1, globalDOFIdx:globalDOFIdx+nDOF-1] = AICLocal
-        bufferAIC[globalDOFIdx:globalDOFIdx+nDOF-1, globalDOFIdx:globalDOFIdx+nDOF:end] .= 0.0
+        AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal
+
+        # Add rectangle to planform area
+        planformArea += c * dy
 
         jj += 1 # increment strip counter
     end
-    AIC = copy(bufferAIC)
 
-    println("AIC")
-    show(stdout, "text/plain", AIC)
-
-    fTractions = -1 * AIC * foilStructuralStates # aerodynamic forces are on the RHS so we negate
-
-    return fTractions
+    return AIC, planformArea
 end
 
 function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
@@ -291,26 +332,45 @@ function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
     end
     close(outfile)
 
+    # --- Total hydro force calcs ---
+    TotalLift = sum(Lift) * FOIL.s / FOIL.neval
+    TotalMoment = sum(Moments) * FOIL.s / FOIL.neval
+    # CL and CM
+    CL = TotalLift / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea)
+    CM = TotalMoment / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea * mean(FOIL.c))
 
+    funcs = Dict(
+        "StaticLift" => TotalLift,
+        "StaticMoment" => TotalMoment,
+        "CL" => CL,
+        "CM" => CM,
+    )
+
+    fname = outputDir * "funcs.json"
+    stringData = JSON.json(funcs)
+    open(fname, "w") do io
+        write(io, stringData)
+    end
+
+    return TotalLift, TotalMoment, CL, CM
 end
 
 # ==============================================================================
 #                         Solver routine
 # ==============================================================================
-function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true)
+function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
     """
     Simple Newton-Rhapson solver
     """
 
-    mode = "FAD"
-
     for ii in 1:maxIters
-
+        # println(u)
         res = compute_residuals(u)
         ∂r∂u = compute_∂r∂u(u, mode)
         jac = ∂r∂u[1]
 
         # --- Newton step ---
+        # show(stdout, "text/plain", jac)
         Δu = -jac \ res
 
         # --- Update ---
@@ -335,6 +395,7 @@ function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true)
             break
         elseif ii == maxIters
             println("Failed to converge. res norm is", resNorm)
+            println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
             global converged_u = copy(u)
             global converged_r = copy(res)
         else
@@ -342,13 +403,15 @@ function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true)
             global converged_r = copy(res)
         end
     end
-    print(converged_u)
+
+    # println("Size of state vector")
+    # print(size(converged_u))
 
     return converged_u, converged_r
 end
 
 
-function converge_r(u, maxIters=200, tol=1e-6)
+function converge_r(u, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
     """
     Given input u, solve the system r(u) = 0
     """
@@ -356,7 +419,7 @@ function converge_r(u, maxIters=200, tol=1e-6)
     # ************************************************
     #     Main solver loop
     # ************************************************
-    converged_u, converged_r = do_newton_rhapson(u, maxIters, tol)
+    converged_u, converged_r = do_newton_rhapson(u, maxIters, tol, verbose, mode)
 
     return converged_u, converged_r
 
@@ -384,10 +447,10 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
 
     if mode == "FiDi" # Finite difference
         # First derivative using 3 stencil points
-        @time ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
+        ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
     elseif mode == "FAD" # Forward automatic differentiation
-        @time ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
+        ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif mode == "RAD" # Reverse automatic differentiation
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
@@ -415,10 +478,10 @@ function compute_residuals(structuralStates)
 
     # NOTE THAT WE ONLY DO THIS CALL HERE
     if CONSTANTS.elemType == "bend-twist" # knock off the root element
-        F = compute_hydroLoads(vcat([0.0, 0.0, 0.0], structuralStates), CONSTANTS.mesh, CONSTANTS.elemType)
-        FOut = F[4:end]
+        exit()
     elseif CONSTANTS.elemType == "BT2" # knock off root element
-        F = compute_hydroLoads(vcat([0.0, 0.0, 0.0, 0.0], structuralStates), CONSTANTS.mesh, CONSTANTS.elemType)
+        foilTotalStates, nDOF = return_totalStates(vcat([0.0, 0.0, 0.0, 0.0], structuralStates), CONSTANTS.elemType)
+        F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     else
         println(CONSTANTS.elemType)

@@ -366,7 +366,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     println("+---------------------------------------------------+")
     println("Default 2 nodes per elem, nothing else will work")
     println("Using ", constitutive, " constitutive relations...")
-    println("There are ", nElem, " elements")
+    println("There are ", nElem, " elements and ", nNodes, " nodes")
 
     # ************************************************
     #     Element loop

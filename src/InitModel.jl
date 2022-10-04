@@ -54,6 +54,9 @@ mutable struct DCFoilConstants
   Kmat
   elemType::String
   mesh
+  AICmat # Aero influence coeff matrix
+  mode::String # type of derivative for drdu
+  planformArea
 end
 
 function init_steady(neval::Int64, DVDict::Dict)
