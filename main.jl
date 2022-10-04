@@ -19,7 +19,7 @@ outputDir = "./OUTPUT/testAero/"
 # ************************************************
 #     Model parameters
 # ************************************************
-neval = 30 # spatial nodes
+neval = 3 # spatial nodes
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
