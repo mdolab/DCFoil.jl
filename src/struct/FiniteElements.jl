@@ -366,7 +366,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     println("+---------------------------------------------------+")
     println("Default 2 nodes per elem, nothing else will work")
     println("Using ", constitutive, " constitutive relations...")
-    println("There are ", nElem, " elements")
+    println("There are ", nElem, " elements and ", nNodes, " nodes")
 
     # ************************************************
     #     Element loop
@@ -448,6 +448,23 @@ function get_fixed_nodes(elemType, BCCond="clamped")
     return fixedNodes
 end
 
+function apply_tip_load!(F, elemType, loadType="force")
+
+    if loadType == "force"
+        if elemType == "bend-twist"
+            F[end-2] = 1.0
+        elseif elemType == "BT2"
+            F[end-3] = 1.0
+        end
+    elseif loadType == "torque"
+        if elemType == "bend-twist"
+            F[end] = 1.0
+        elseif elemType == "BT2"
+            F[end-1] = 1.0
+        end
+    end
+end
+
 function apply_BCs(K, M, F, globalDOFBlankingList)
     """
     Applies BCs for nodal displacements
@@ -469,6 +486,7 @@ function solve_structure(K, M, F)
     Solve the structural system
     """
 
+    println("FEM solve took")
     @time q = K \ F # TODO: should probably replace this with an iterative solver
 
     return q

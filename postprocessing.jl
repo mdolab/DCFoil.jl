@@ -12,20 +12,34 @@ ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 # --- Import libs ---
 # using PyPlot
 using Plots
-
+using JSON
+using Printf
 # ************************************************
 #     I/O 
 # ************************************************
-dataDir = "./OUTPUT/"
+dataDir = "./OUTPUT/testAero/"
 outputDir = dataDir
 
 # ************************************************
 #     Read in results
 # ************************************************
+# --- Read in DVDict ---
+DVDict = Dict()
+open(dataDir * "init_DVDict.json", "r") do f
+    global DVDict
+    DVDict = JSON.parse(f)
+end
+# --- Read in funcs ---
+funcs = Dict()
+open(dataDir * "funcs.json", "r") do f
+    global funcs
+    funcs = JSON.parse(f)
+end
+
 # --- Read bending ---
 file = readlines(dataDir * "bending.dat")
 bending = zeros(length(file))
-nodes = 0:length(bending)-1
+nodes = LinRange(0, DVDict["s"], length(bending))
 
 counter = 1
 for line ∈ file
@@ -64,13 +78,19 @@ end
 # ************************************************
 #     Plot results
 # ************************************************
-plot(
-    [nodes, nodes, nodes, nodes], [bending, twisting, lift, moment],
+liftTitle = @sprintf("Lift (%.1fN, CL=%.2f)", (funcs["StaticLift"]), funcs["CL"])
+momTitle = @sprintf("Mom. (%.1fN-m, CM=%.2f)", (funcs["StaticMoment"]), funcs["CM"])
+visuals = plot(
+    [nodes, nodes, nodes, nodes], [bending, twisting * 180 / π, lift, moment],
     label=["" "" "" ""],
     layout=(2, 2),
-    title=["Spanwise Bending" "Spanwise twist" "Lift" "Moment"],
-    xlabel="node #",
-    ylabel=["w [m]" "psi [rad]" "L [N/m]" "M [N-m/m]"],
+    title=["Spanwise Bending" "Spanwise twist" liftTitle momTitle],
+    xlabel="y [m]",
+    ylabel=["w [m]" "psi [deg]" "L [N/m]" "M [N-m/m]"],
 )
+
+titleTxt = "V =" * string(DVDict["U∞"]) * "m/s, α₀ = " * string(DVDict["α₀"]) * "deg, Λ = " * string(DVDict["Λ"] * 180 / π) * " deg, θ_f = " * string(DVDict["θ"] * 180 / π) * " deg"
+title = plot(title=titleTxt, grid=false, xticks=false, yticks=false, showaxis=false, bottom_margin=-50Plots.px)
+plot(title, visuals, layout=@layout([A{0.1h}; B]))
 
 savefig(outputDir * "spanwise_view.pdf")
