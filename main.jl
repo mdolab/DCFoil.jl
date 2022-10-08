@@ -30,7 +30,7 @@ neval = 30 # spatial nodes
 DVDict = Dict(
     "neval" => neval,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 8.0, # free stream velocity [m/s]
+    "U∞" => 15.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
@@ -40,7 +40,7 @@ DVDict = Dict(
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => 5 * π / 180, # fiber angle global [rad]
+    "θ" => 0 * π / 180, # fiber angle global [rad]
 )
 
 # --- Write the init dict to output folder ---
