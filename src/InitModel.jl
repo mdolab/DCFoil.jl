@@ -59,6 +59,9 @@ mutable struct DCFoilConstants
   planformArea
 end
 
+# ==============================================================================
+#                        Initialization functions
+# ==============================================================================
 function init_steady(neval::Int64, DVDict::Dict)
   """
   Initialize a steady hydrofoil model
@@ -144,6 +147,15 @@ function init_steady(neval::Int64, DVDict::Dict)
 
   return model
 
+end
+
+function init_dynamic(DVDict::Dict)
+  """
+  Perform much of the same initializations as init_steady() except with other features
+  """
+  model = init_steady(DVDict["neval"], DVDict)
+
+  return model
 end
 
 end # end module
