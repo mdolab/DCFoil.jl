@@ -7,25 +7,61 @@
 
 
 include("src/SolveSteady.jl")
+include("src/SolveDynamic.jl")
 
 using JSON
 using .SolveSteady
+# using .SolveDynamic
 
 # ==============================================================================
-# Setup hydrofoil model
+# Setup hydrofoil model and solver settings
 # ==============================================================================
 
+# ************************************************
+#     I/O
+# ************************************************
 outputDir = "./OUTPUT/testAero/"
 mkpath(outputDir)
 
 # ************************************************
-#     Model parameters
+#     Task type
 # ************************************************
-neval = 30 # spatial nodes
+# --- Set task you want to true ---
+run = true # run the solver for a single point
+α_sweep = true # sweep angle of attack
+U_sweep = true # sweep flow speed
+θ_sweep = true # sweep fiber angle
+
+# --- Fill out task details ---
+# RUN
+if run
+    α₀ = 6.0
+    U∞ = 10.0
+    θ₀ = 0.0
+end
+# SWEEP AOA
+if α_sweep
+    α₀ = 0.0:0.5:10.0
+    U∞ = 10.0
+    θ₀ = 0.0
+end
+# SWEEP FLOW SPEED
+if U_sweep
+    α₀ = 6.0
+    U∞ = 0.0:0.5:10.0
+    θ₀ = 0.0
+end
+# SWEEP FIBER ANGLE
+if θ_sweep
+    α₀ = 6.0
+    U∞ = 10.0
+    θ₀ = 0.0:0.5:10.0
+end
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
+neval = 30 # spatial nodes
 # --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
     "neval" => neval,
@@ -55,9 +91,11 @@ end
 SolveSteady.solve(DVDict["neval"], DVDict, outputDir)
 
 
+# This call is already made in the solve() function
 # # --- Write out solution files ---
 # SolveSteady.write_sol() # intention here is to get pretty plottable data to visualize in paraview or tecplot
 
 # ==============================================================================
 # Dynamic solution
 # ==============================================================================
+# SolveDynamic.solve()

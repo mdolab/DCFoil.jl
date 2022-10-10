@@ -7,7 +7,7 @@
 
 module SolveSteady
 """
-Steady hydroelastic solver module
+Steady hydroelastic solver
 """
 
 # --- Public functions ---
@@ -21,12 +21,15 @@ using JSON
 # using ForwardDiff
 # using ReverseDiff
 using Zygote
+
+# --- DCFoil modules ---
+# First include them
 include("InitModel.jl")
 include("Struct.jl")
 include("struct/FiniteElements.jl")
 include("Hydro.jl")
-include("GovDiffEqns.jl")
-using .InitModel, .Hydro, .StructProp, .Steady, .Solver
+# then use them
+using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 
 function solve(neval::Int64, DVDict, outputDir::String)
