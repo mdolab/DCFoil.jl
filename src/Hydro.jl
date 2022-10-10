@@ -162,7 +162,7 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f)
         2 * π * b * im * ω
     e_hα =
     # lift due to ψ'
-        U∞ * cos(Λ) * -clα * b * (1 - ab / b) * Ck +
+        U∞ * cos(Λ) * (-clα) * b * (1 - ab / b) * Ck +
         # lift due to ∂²ψ/∂t∂y
         2 * π * ab * b * im * ω
     e_αh =
@@ -197,10 +197,10 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f)
 
     # Aerodynamic quasi-steady damping
     # (1st row is lift, 2nd row is pitching moment)
-    c_hh = 2 * clα * Ck
-    c_hα = -b * (2 * π + clα * (1 - 2 * ab / b) * Ck)
-    c_αh = 2 * eb * clα * Ck
-    c_αα = 0.5 * b * (1 - 2 * ab / b) * (2 * π * b - 2 * clα * eb * Ck)
+    c_hh = 2 * clα * Ck * im * ω
+    c_hα = -b * (2 * π + clα * (1 - 2 * ab / b) * Ck) * im * ω
+    c_αh = 2 * eb * clα * Ck * im * ω
+    c_αα = 0.5 * b * (1 - 2 * ab / b) * (2 * π * b - 2 * clα * eb * Ck) * im * ω
     C_f = qf / U∞ * cos(Λ) * b *
           [
               c_hh c_hα
@@ -212,10 +212,10 @@ function compute_node_mass(b, ab, ω, rho_f)
     """
     Fluid-added mass matrix
     """
-    m_hh = 1
-    m_hα = ab
-    m_αh = ab
-    m_αα = b^2 * (0.125 + (ab / b)^2)
+    m_hh = 1 * -1 * ω^2
+    m_hα = ab * -1 * ω^2
+    m_αh = ab * -1 * ω^2
+    m_αα = b^2 * (0.125 + (ab / b)^2) * -1 * ω^2
     M_f = π * rho_f * b^2 *
           [
               m_hh m_hα
