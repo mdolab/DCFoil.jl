@@ -37,11 +37,27 @@ module SolveDynamic
         # ---------------------------
         #   Initialize
         # ---------------------------
-        global FOIL = InitModel.init_steady()
+        global FOIL = InitModel.init_dynamic(fSweep, DVDict)
+        nElem = FOIL.neval - 1
+        constitutive = FOIL.constitutive
+
+        # ************************************************
+        #     Assemble structural matrices
+        # ************************************************
+        elemType = "BT2"
         
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+        globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+
+        # --- Initialize states ---
+        u = copy(globalF)
+
+        # ************************************************
+        #     Assemble hydrodynamic matrices
+        # ************************************************
     end
 
-
+    
 
 
 end # end module

@@ -124,7 +124,7 @@ function solve(neval::Int64, DVDict, outputDir::String)
     # ************************************************
     mode = "FAD"
     ∂r∂u = compute_∂r∂u(qSol, mode)
-    # TODO:I'm not really sure how to do these
+    # TODO:I'm not really sure how to do these yet
     ∂r∂x = compute_∂r∂x(qSol, mode)
     ∂f∂u = compute_∂f∂u(qSol, mode) 
     ∂f∂x = compute_∂f∂x(qSol, mode)

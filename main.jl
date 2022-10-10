@@ -62,6 +62,8 @@ end
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
 neval = 30 # spatial nodes
+df = 1
+fSweep = 0.1:df:100.0 # forcing frequency sweep
 # --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
     "neval" => neval,
@@ -98,4 +100,4 @@ SolveSteady.solve(DVDict["neval"], DVDict, outputDir)
 # ==============================================================================
 # Dynamic solution
 # ==============================================================================
-# SolveDynamic.solve()
+SolveDynamic.solve()

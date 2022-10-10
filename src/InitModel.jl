@@ -44,6 +44,34 @@ mutable struct foil
   constitutive::String # constitutive model
 end
 
+mutable struct dynamicFoil
+  """
+  Dynamic foil object that inherits initially form the steady foil mutable struct
+  """
+  c # chord length vector
+  t # thickness vector
+  s # semispan [m]
+  ab # dist from midchord to EA vector (+ve for EA aft) [m]
+  eb # dist from CP to EA (+ve for EA aft) [m]
+  x_αb # static imbalance (+ve for CG aft) [m]
+  mₛ # structural mass vector [kg/m]
+  Iₛ # structural moment of inertia vector [kg-m]
+  EIₛ # bending stiffness vector [N-m²]
+  GJₛ # torsion stiffness vector [N-m²]
+  Kₛ # bend-twist coupling vector [N-m²]
+  Sₛ # warping resistance vector [N-m⁴]
+  α₀ # rigid initial angle of attack [deg]
+  U∞ # flow speed [m/s]
+  Λ # sweep angle [rad]
+  g # structural damping percentage
+  fSweep # forcing frequency sweep [Hz]
+  clα # lift slopes [1/rad]
+  ρ_f::Float64 # fluid density [kg/m³]
+  neval::Int64 # number of evaluation points on span
+  constitutive::String # constitutive model
+
+end
+
 mutable struct DCFoilConstants
   """
   This is a catch all mutable struct to store variables that we do not 
@@ -57,6 +85,13 @@ mutable struct DCFoilConstants
   AICmat # Aero influence coeff matrix
   mode::String # type of derivative for drdu
   planformArea
+end
+
+mutable struct DCFoilDynamicConstants
+  """
+  """
+  elemType::String
+  mesh
 end
 
 # ==============================================================================
@@ -149,11 +184,13 @@ function init_steady(neval::Int64, DVDict::Dict)
 
 end
 
-function init_dynamic(DVDict::Dict)
+function init_dynamic(fSweep, DVDict::Dict)
   """
   Perform much of the same initializations as init_steady() except with other features
   """
-  model = init_steady(DVDict["neval"], DVDict)
+  steadyModel = init_steady(DVDict["neval"], DVDict)
+
+  model = dynamicFoil(steadyModel.c, steadyModel.t, steadyModel.s, steadyModel.ab, steadyModel.eb, steadyModel.x_αb, steadyModel.mₛ, steadyModel.Iₛ, steadyModel.EIₛ, steadyModel.GJₛ, steadyModel.Kₛ, steadyModel.Sₛ, steadyModel.α₀, steadyModel.U∞, steadyModel.Λ, steadyModel.g, fSweep, steadyModel.clα, steadyModel.ρ_f, steadyModel.neval, steadyModel.constitutive)
 
   return model
 end

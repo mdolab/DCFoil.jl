@@ -115,22 +115,114 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
     # --- Interpolate lift slopes onto domain ---
     pGlauert = plot(LinRange(0, 2.7, 250), clα)
     cl_α = linear(y, clα, LinRange(-semispan, 0, neval)) # Use BYUFLOW lab math function
-    
+
     return reverse!(cl_α)
 end
 
-function compute_added_mass(; ρ_f, chordVec)
-    """
-    Compute the added mass for a rectangular cross section
+# function compute_added_mass(ρ_f, chordVec)
+#     """
+#     Compute the added mass for a rectangular cross section
 
-    return:
-        added mass, Array
-        added inertia, Array
-    """
-    mₐ = π * ρ_f * chordVec .* chordVec / 4 # Fluid-added mass vector [kg/m]
-    Iₐ = π * ρ_f * chordVec .^ 4 / 128 # Fluid-added inertia [kg-m]
+#     return:
+#         added mass, Array
+#         added inertia, Array
+#     """
+#     mₐ = π * ρ_f * chordVec .* chordVec / 4 # Fluid-added mass vector [kg/m]
+#     Iₐ = π * ρ_f * chordVec .^ 4 / 128 # Fluid-added inertia [kg-m]
 
-    return mₐ, Iₐ
+#     return mₐ, Iₐ
+# end
+
+# ************************************************
+#     Hydrodynamic strip forces
+# ************************************************
+function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f)
+    qf = 0.5 * rho_f * U∞^2 # Dynamic pressure
+    k = ω * b / (U∞ * cos(Λ)) # reduced frequency
+
+    # Do computation once for efficiency
+    CK = compute_theodorsen(k)
+    Ck = CK[1] + 1im * CK[2] # TODO: for now, put it back together so solve is easy to debug
+
+    # Aerodynamic quasi-steady stiffness 
+    # (1st row is lift, 2nd row is pitching moment)
+
+    k_hα = -2 * b * clα * Ck # lift due to angle of attack
+    k_αα = -2 * eb * b * clα * Ck # moment due to angle of attack
+    K_f = qf * cos(Λ)^2 *
+          [
+              0.0 k_hα
+              0.0 k_αα
+          ]
+    # Sweep correction to aerodynamic quasi-steady stiffness (THERE ARE TIME DERIV TERMS)
+    e_hh =
+    # lift due to w'
+        U∞ * cos(Λ) * 2 * clα * Ck +
+        # lift due to ∂²w/∂t∂y
+        2 * π * b * im * ω
+    e_hα =
+    # lift due to ψ'
+        U∞ * cos(Λ) * -clα * b * (1 - ab / b) * Ck +
+        # lift due to ∂²ψ/∂t∂y
+        2 * π * ab * b * im * ω
+    e_αh =
+    # moment due to w'
+        U∞ * cos(Λ) * clα * b * (1 + ab / b) * Ck +
+        # moment due to ∂²w/∂t∂y
+        2 * π * ab * b * im * ω
+    e_αα =
+    # moment due to ψ'
+        U∞ * cos(Λ) * π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) * Ck +
+        # moment due to ∂²ψ/∂t∂y
+        2 * π * b^3 * (0.125 + (ab / b)^2) * im * ω
+    E_f = qf / U∞ * sin(Λ) * b *
+          [
+              e_hh e_hα
+              e_αh e_αα
+          ]
+    return K_f, E_f
+end
+
+
+function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f)
+    """
+    Fluid-added damping matrix
+    """
+    qf = 0.5 * rho_f * U∞^2 # Dynamic pressure
+    k = ω * b / (U∞ * cos(Λ)) # reduced frequency
+
+    # Do computation once for efficiency
+    CK = compute_theodorsen(k)
+    Ck = CK[1] + 1im * CK[2] # TODO: for now, put it back together so solve is easy to debug
+
+    # Aerodynamic quasi-steady damping
+    # (1st row is lift, 2nd row is pitching moment)
+    c_hh = 2 * clα * Ck
+    c_hα = -b * (2 * π + clα * (1 - 2 * ab / b) * Ck)
+    c_αh = 2 * eb * clα * Ck
+    c_αα = 0.5 * b * (1 - 2 * ab / b) * (2 * π * b - 2 * clα * eb * Ck)
+    C_f = qf / U∞ * cos(Λ) * b *
+          [
+              c_hh c_hα
+              c_αh c_αα
+          ]
+    return C_f
+end
+function compute_node_mass(b, ab, ω, rho_f)
+    """
+    Fluid-added mass matrix
+    """
+    m_hh = 1
+    m_hα = ab
+    m_αh = ab
+    m_αα = b^2 * (0.125 + (ab / b)^2)
+    M_f = π * rho_f * b^2 *
+          [
+              m_hh m_hα
+              m_αh m_αα
+          ]
+
+    return M_f
 end
 
 end # end module
