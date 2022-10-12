@@ -314,4 +314,12 @@ function compute_residuals(structuralStates)
     return resVec
 end
 
+function compute_∂r∂u(structuralStates, mode="FiDi")
+    """
+    Jacobian of residuals with respect to dynamic structural states 
+    EXCLUDING BC NODES
+    """
+    
+end
+
 end # end module
