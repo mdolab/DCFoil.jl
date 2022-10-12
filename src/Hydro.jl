@@ -11,7 +11,9 @@ module Hydro
 Hydrodynamics module
 """
 # --- Public functions ---
-export compute_theodorsen, compute_glauert_circ, compute_added_mass
+export compute_theodorsen, compute_glauert_circ
+export compute_node_mass, compute_node_damp, compute_node_stiff
+export compute_AICs!, apply_BCs
 
 # --- Libraries ---
 using FLOWMath: linear
@@ -154,33 +156,19 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f)
               0.0 k_hα
               0.0 k_αα
           ]
-    # Sweep correction to aerodynamic quasi-steady stiffness (THERE ARE TIME DERIV TERMS)
-    e_hh =
-    # lift due to w'
-        U∞ * cos(Λ) * 2 * clα * Ck +
-        # lift due to ∂²w/∂t∂y
-        2 * π * b * im * ω
-    e_hα =
-    # lift due to ψ'
-        U∞ * cos(Λ) * (-clα) * b * (1 - ab / b) * Ck +
-        # lift due to ∂²ψ/∂t∂y
-        2 * π * ab * b * im * ω
-    e_αh =
-    # moment due to w'
-        U∞ * cos(Λ) * clα * b * (1 + ab / b) * Ck +
-        # moment due to ∂²w/∂t∂y
-        2 * π * ab * b * im * ω
-    e_αα =
-    # moment due to ψ'
-        U∞ * cos(Λ) * π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) * Ck +
-        # moment due to ∂²ψ/∂t∂y
-        2 * π * b^3 * (0.125 + (ab / b)^2) * im * ω
-    E_f = qf / U∞ * sin(Λ) * b *
-          [
-              e_hh e_hα
-              e_αh e_αα
-          ]
-    return K_f, E_f
+
+    # Sweep correction to aerodynamic quasi-steady stiffness
+    e_hh = U∞ * cos(Λ) * 2 * clα * Ck
+    e_hα = U∞ * cos(Λ) * (-clα) * b * (1 - ab / b) * Ck
+    e_αh = U∞ * cos(Λ) * clα * b * (1 + ab / b) * Ck
+    e_αα = U∞ * cos(Λ) * π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) * Ck
+    K̂_f = qf / U∞ * sin(Λ) * b *
+           [
+               e_hh e_hα
+               e_αh e_αα
+           ]
+
+    return K_f, K̂_f
 end
 
 
@@ -197,25 +185,38 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f)
 
     # Aerodynamic quasi-steady damping
     # (1st row is lift, 2nd row is pitching moment)
-    c_hh = 2 * clα * Ck * im * ω
-    c_hα = -b * (2 * π + clα * (1 - 2 * ab / b) * Ck) * im * ω
-    c_αh = 2 * eb * clα * Ck * im * ω
-    c_αα = 0.5 * b * (1 - 2 * ab / b) * (2 * π * b - 2 * clα * eb * Ck) * im * ω
+    c_hh = 2 * clα * Ck
+    c_hα = -b * (2 * π + clα * (1 - 2 * ab / b) * Ck)
+    c_αh = 2 * eb * clα * Ck
+    c_αα = 0.5 * b * (1 - 2 * ab / b) * (2π * b - 2 * clα * eb * Ck)
     C_f = qf / U∞ * cos(Λ) * b *
           [
               c_hh c_hα
               c_αh c_αα
           ]
-    return C_f
+
+    # Sweep correction to aerodynamic quasi-steady damping
+    e_hh = 2π * ab * b
+    e_hα = 2π * ab * b
+    e_αh = 2π * ab * b
+    e_αα = 2π * b^3 * (0.125 + (ab / b)^2)
+    Ĉ_f = qf / U∞ * sin(Λ) * b *
+           [
+               e_hh e_hα
+               e_αh e_αα
+           ]
+
+    return C_f, Ĉ_f
 end
-function compute_node_mass(b, ab, ω, rho_f)
+
+function compute_node_mass(b, ab, rho_f)
     """
     Fluid-added mass matrix
     """
-    m_hh = 1 * -1 * ω^2
-    m_hα = ab * -1 * ω^2
-    m_αh = ab * -1 * ω^2
-    m_αα = b^2 * (0.125 + (ab / b)^2) * -1 * ω^2
+    m_hh = 1
+    m_hα = ab
+    m_αh = ab
+    m_αα = b^2 * (0.125 + (ab / b)^2)
     M_f = π * rho_f * b^2 *
           [
               m_hh m_hα
@@ -223,6 +224,101 @@ function compute_node_mass(b, ab, ω, rho_f)
           ]
 
     return M_f
+end
+
+function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, FOIL, U∞, ω, elemType="BT2")
+    """
+    Compute the AIC matrix for a given mesh
+    """
+
+    if elemType == "bend"
+        error("Only bend-twist element type is supported for load computation")
+    elseif elemType == "bend-twist"
+        nDOF = 3
+    elseif elemType == "BT2"
+        nDOF = 4
+    end
+
+    # strip width
+    dy = FOIL.s / (FOIL.neval)
+    planformArea = 0.0
+
+    jj = 1 # node index
+    for yⁿ in mesh
+        # --- Linearly interpolate values based on y loc ---
+        clα = linear(mesh, FOIL.clα, yⁿ)
+        c = linear(mesh, FOIL.c, yⁿ)
+        b = 0.5 * c # semichord for more readable code
+        ab = linear(mesh, FOIL.ab, yⁿ)
+        eb = linear(mesh, FOIL.eb, yⁿ)
+
+        K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, FOIL.Λ, ω, FOIL.ρ_f)
+        C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, FOIL.Λ, ω, FOIL.ρ_f)
+        M_f = compute_node_mass(b, ab, FOIL.ρ_f)
+
+        # --- Compute Compute local AIC matrix for this element ---
+        if elemType == "bend-twist"
+            println("These aerodynamics are all wrong BTW...")
+            KLocal = -1 * [
+                0.00000000 0.0 K_f[1, 2] # Lift
+                0.00000000 0.0 0.00000000
+                0.00000000 0.0 K_f[2, 2] # Pitching moment
+            ]
+        elseif elemType == "BT2"
+            KLocal = [
+                0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
+                0.0 0.0 0.0 0.0
+                0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
+                0.0 0.0 0.0 0.0
+            ]
+            CLocal = [
+                C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
+                0.0 0.0 0.0 0.0
+                C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
+                0.0 0.0 0.0 0.0
+            ]
+            MLocal = [
+                M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
+                0.0 0.0 0.0 0.0
+                M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
+                0.0 0.0 0.0 0.0
+            ]
+        else
+            println("nothing else works")
+        end
+
+        GDOFIdx = nDOF * (jj - 1) + 1
+
+        globalKf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal)
+        globalKf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal)
+        globalCf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal)
+        globalCf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal)
+        globalMf[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal
+
+        # Add rectangle to planform area
+        planformArea += c * dy
+
+        jj += 1 # increment strip counter
+    end
+
+    return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea
+end
+
+function apply_BCs(K, C, M, globalDOFBlankingList)
+    """
+    Applies BCs for nodal displacements
+    """
+
+    newK = K[
+        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    ]
+    newM = M[
+        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    ]
+    newC = C[
+        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    ]
+    return newK, newC, newM
 end
 
 end # end module

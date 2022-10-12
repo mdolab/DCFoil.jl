@@ -11,7 +11,7 @@ Steady hydroelastic solver
 """
 
 # --- Public functions ---
-export solve
+export solve, do_newton_rhapson
 
 # --- Libraries ---
 using FLOWMath: linear, akima
@@ -124,16 +124,16 @@ function solve(neval::Int64, DVDict, outputDir::String)
     # ************************************************
     mode = "FAD"
     ∂r∂u = compute_∂r∂u(qSol, mode)
-    # TODO:I'm not really sure how to do these yet
-    ∂r∂x = compute_∂r∂x(qSol, mode)
-    ∂f∂u = compute_∂f∂u(qSol, mode) 
-    ∂f∂x = compute_∂f∂x(qSol, mode)
+    # # TODO:I'm not really sure how to do these yet
+    # ∂r∂x = compute_∂r∂x(qSol, mode)
+    # ∂f∂u = compute_∂f∂u(qSol, mode)
+    # ∂f∂x = compute_∂f∂x(qSol, mode)
 
     # ************************************************
     #     Write solution out to files
     # ************************************************
     # Write solution to .dat file
-    TotalLift, TotalMoment, CL, CM = write_sol(uSol, globalF, elemType, outputDir)
+    TotalLift, TotalMoment, CL, CM = write_sol(uSol, fTractions, elemType, outputDir)
 
     println("TotalLift = ", TotalLift, " N")
     println("TotalMoment (about midchord) = ", TotalMoment, " N-m")
@@ -263,7 +263,6 @@ function compute_AIC!(AIC, mesh, elemType="BT2")
         else
             println("nothing else works")
         end
-
 
         GDOFIdx = nDOF * (jj - 1) + 1
 

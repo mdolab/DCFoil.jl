@@ -17,8 +17,8 @@ function test_stiffness()
     ω = 0.1
     ρ = 1000
     Matrix = Hydro.compute_node_stiff(clα, b, eb, ab, U, Λ, ω, ρ)
-    show(stdout, "text/plain", real(Matrix))
-    show(stdout, "text/plain", imag(Matrix))
+    show(stdout, "text/plain", Matrix)
+    # show(stdout, "text/plain", imag(Matrix))
 end
 
 function test_damping()
