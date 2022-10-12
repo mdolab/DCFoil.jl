@@ -28,8 +28,11 @@ mkpath(outputDir)
 # ************************************************
 # --- Set task you want to true ---
 run = true # run the solver for a single point
-dynamic = false
-static = true
+# dynamic = false
+# static = true
+dynamic = true
+static = false
+
 α_sweep = true # sweep angle of attack
 U_sweep = true # sweep flow speed
 θ_sweep = true # sweep fiber angle
@@ -67,6 +70,7 @@ neval = 30 # spatial nodes
 df = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.1:df:100.0 # frequency search range [Hz] for flutter
+tipForceMag = 0.5*0.5*1000*100*0.03 # tip harmonic forcing
 # --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
     "neval" => neval,
@@ -81,7 +85,7 @@ DVDict = Dict(
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => -15 * π / 180, # fiber angle global [rad]
+    "θ" => 15 * π / 180, # fiber angle global [rad]
 )
 
 # --- Write the init dict to output folder ---
@@ -101,7 +105,7 @@ end
 # Dynamic solution
 # ==============================================================================
 if dynamic
-    SolveDynamic.solve(DVDict, outputDir, fSweep)
+    SolveDynamic.solve(DVDict, outputDir, fSweep, tipForceMag)
 
     # TODO:
     # SolveFlutter.solve(DVDict, outputDir, fSearch)

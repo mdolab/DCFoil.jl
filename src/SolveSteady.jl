@@ -111,6 +111,7 @@ function solve(neval::Int64, DVDict, outputDir::String)
     global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh, AIC, derivMode, planformArea)
 
     qSol, _ = converge_r(q)
+    # qSol = q # just use pre-solve solution
     if CONSTANTS.elemType == "BT2"
         uSol = vcat([0, 0, 0, 0], qSol)
     end
@@ -139,6 +140,7 @@ function solve(neval::Int64, DVDict, outputDir::String)
     println("TotalMoment (about midchord) = ", TotalMoment, " N-m")
     println("CL = ", CL)
     println("CM = ", CM)
+    println("Planform area = ", planformArea, " m^2")
 
 end
 

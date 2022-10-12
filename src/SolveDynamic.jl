@@ -66,6 +66,8 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     globalKf_r = copy(globalKs) * 0
     globalKf_i = copy(globalKs) * 0
     globalCf_i = copy(globalKs) * 0
+    extForceVec = copy(F) * 0 # this is a vector excluded the BC nodes
+    extForceVec[end] = tipForceMag
     LiftDyn = zeros(length(fSweep))
     MomDyn = zeros(length(fSweep))
     TipBendDyn = zeros(length(fSweep))
@@ -223,7 +225,7 @@ function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode=
     """
     Simple Newton-Rhapson solver
     """
-
+    # TODO:
     for ii in 1:maxIters
         # println(u)
         res = compute_residuals(u)

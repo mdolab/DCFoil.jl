@@ -92,9 +92,9 @@ mutable struct DCFoilDynamicConstants
   """
   elemType::String
   mesh
-  Dmat
+  Dmat # dynamic matrix
   AICmat
-  extForceVec
+  extForceVec # external force vector excluding BC nodes
 end
 
 # ==============================================================================
