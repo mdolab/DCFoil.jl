@@ -78,6 +78,10 @@ DVDict = Dict(
     "x_αb" => 0 * ones(neval), # static imbalance [m]
     "θ" => 0 * π / 180, # fiber angle global [rad]
 )
+# ************************************************
+#     Cost functions
+# ************************************************
+evalFuncs = ["cl", "cmy", "lift", "moment"]
 
 # --- Write the init dict to output folder ---
 stringData = JSON.json(DVDict)
@@ -88,7 +92,7 @@ end
 # ==============================================================================
 # Steady solution
 # ==============================================================================
-SolveSteady.solve(DVDict["neval"], DVDict, outputDir)
+SolveSteady.solve(DVDict, evalFuncs, outputDir)
 
 
 # This call is already made in the solve() function

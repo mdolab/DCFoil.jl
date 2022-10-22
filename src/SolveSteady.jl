@@ -32,20 +32,27 @@ include("Hydro.jl")
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 
-function solve(neval::Int64, DVDict, outputDir::String)
+function solve(DVDict, evalFuncs, outputDir::String)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
 
     """
-    # ---------------------------
-    #   Initialize
-    # ---------------------------
+    # ************************************************
+    #     INITIALIZE
+    # ************************************************
+    # --- Write the init dict to output folder ---
+    stringData = JSON.json(DVDict)
+    open(outputDir * "init_DVDict.json", "w") do io
+        write(io, stringData)
+    end
+    
+    neval = DVDict["neval"]
     global FOIL = InitModel.init_steady(neval, DVDict) # seems to only be global in this module
     nElem = neval - 1
     constitutive = FOIL.constitutive
 
     # ************************************************
-    #     Solve FEM first time
+    #     SOLVE FEM FIRST TIME
     # ************************************************
     # elemType = "bend"
     # elemType = "bend-twist"
@@ -103,7 +110,7 @@ function solve(neval::Int64, DVDict, outputDir::String)
 
 
     # ************************************************
-    #     Converge r(u) = 0
+    #     CONVERGE r(u) = 0
     # ************************************************
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
@@ -118,24 +125,22 @@ function solve(neval::Int64, DVDict, outputDir::String)
     # --- Get hydroLoads again on solution ---
     fTractions, AIC, _ = compute_hydroLoads(uSol, structMesh, elemType)
 
+    # ************************************************
+    #     COMPUTE FUNCTIONS OF INTEREST
+    # ************************************************
+    costFuncs = compute_cost_func(uSol, globalF, evalFuncs)
 
     # # ************************************************
-    # #     Compute sensitivities
+    # #     COMPUTE SENSITIVITIES
     # # ************************************************
     # mode = "FAD"
     # ∂r∂u = compute_∂r∂u(q, mode)
 
 
     # ************************************************
-    #     Write solution out to files
+    #     WRITE SOLUTION OUT TO FILES
     # ************************************************
-    # Write solution to .dat file
-    TotalLift, TotalMoment, CL, CM = write_sol(uSol, globalF, elemType, outputDir)
-
-    println("TotalLift = ", TotalLift, " N")
-    println("TotalMoment (about midchord) = ", TotalMoment, " N-m")
-    println("CL = ", CL)
-    println("CM = ", CM)
+    write_sol(uSol, globalF, costFuncs, elemType, outputDir)
 
 end
 
@@ -275,14 +280,67 @@ function compute_AIC!(AIC, mesh, elemType="BT2")
     return AIC, planformArea
 end
 
-function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
+function compute_cost_func(states, forces, evalFuncs)
+    """
+    Given {u} and the forces, compute the cost functions
+    """
+
+    if CONSTANTS.elemType == "BT2"
+        nDOF = 4
+        Ψ = states[3:nDOF:end]
+        Moments = forces[3:nDOF:end]
+        W = states[1:nDOF:end]
+        Lift = forces[1:nDOF:end]
+    else
+        println("Invalid element type")
+    end
+
+    # ************************************************
+    #     COMPUTE COST FUNCS
+    # ************************************************
+    costFuncs = Dict() # initialize empty costFunc dictionary
+    if "lift" in evalFuncs
+        TotalLift = sum(Lift) * FOIL.s / FOIL.neval
+        costFuncs["lift"] = TotalLift
+    end
+    if "moment" in evalFuncs
+        TotalMoment = sum(Moments) * FOIL.s / FOIL.neval
+        costFuncs["moment"] = TotalMoment
+    end
+    if "cl" in evalFuncs
+        CL = TotalLift / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea)
+        costFuncs["cl"] = CL
+    end
+    if "cmy" in evalFuncs
+        CM = TotalMoment / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea * mean(FOIL.c))
+        costFuncs["cmy"] = CM
+    end
+
+    return costFuncs
+end
+
+function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/")
     """
     Inputs
     ------
-        states: vector of structural states from the [K]{u} = {F}
+    states: vector of structural states from the [K]{u} = {f}
     """
-
+    
     mkpath(outputDir)
+    
+    # --- First print costFuncs to screen in a box ---
+    println("+", "-"^80, "+")
+    println("This is your costFunc dict...")
+    for kv in funcs
+        println(kv)
+    end
+    println("+", "-"^80, "+")
+    
+    fname = outputDir * "funcs.json"
+    stringData = JSON.json(funcs)
+    open(fname, "w") do io
+        write(io, stringData)
+    end
 
     if elemType == "bend"
         nDOF = 2
@@ -335,27 +393,7 @@ function write_sol(states, forces, elemType="bend", outputDir="./OUTPUT/")
     end
     close(outfile)
 
-    # --- Total hydro force calcs ---
-    TotalLift = sum(Lift) * FOIL.s / FOIL.neval
-    TotalMoment = sum(Moments) * FOIL.s / FOIL.neval
-    # CL and CM
-    CL = TotalLift / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea)
-    CM = TotalMoment / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea * mean(FOIL.c))
 
-    funcs = Dict(
-        "StaticLift" => TotalLift,
-        "StaticMoment" => TotalMoment,
-        "CL" => CL,
-        "CM" => CM,
-    )
-
-    fname = outputDir * "funcs.json"
-    stringData = JSON.json(funcs)
-    open(fname, "w") do io
-        write(io, stringData)
-    end
-
-    return TotalLift, TotalMoment, CL, CM
 end
 
 # ==============================================================================
@@ -384,9 +422,9 @@ function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
         # --- Printout ---
         if verbose
             if ii == 1
-                println("resNorm | stepNorm ")
+                println("iter | resNorm | stepNorm ")
             end
-            println(resNorm, "|", norm(Δu, 2))
+            println(ii, "|" , resNorm, "|", norm(Δu, 2))
         end
 
         # --- Check norm ---
@@ -395,22 +433,25 @@ function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
             println("Converged in ", ii, " iterations")
             global converged_u = copy(u)
             global converged_r = copy(res)
+            global iters = copy(ii)
             break
         elseif ii == maxIters
             println("Failed to converge. res norm is", resNorm)
             println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
             global converged_u = copy(u)
             global converged_r = copy(res)
+            global iters = copy(ii)
         else
             global converged_u = copy(u)
             global converged_r = copy(res)
+            global iters = copy(ii)
         end
     end
 
     # println("Size of state vector")
     # print(size(converged_u))
 
-    return converged_u, converged_r
+    return converged_u, converged_r, iters
 end
 
 
@@ -422,7 +463,8 @@ function converge_r(u, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
     # ************************************************
     #     Main solver loop
     # ************************************************
-    converged_u, converged_r = do_newton_rhapson(u, maxIters, tol, verbose, mode)
+    println("Beginning NL solve")
+    converged_u, converged_r, iters = do_newton_rhapson(u, maxIters, tol, verbose, mode)
 
     return converged_u, converged_r
 
