@@ -11,7 +11,7 @@ Steady hydroelastic solver
 """
 
 # --- Public functions ---
-export solve
+export solve, do_newton_rhapson
 
 # --- Libraries ---
 using FLOWMath: linear, akima
@@ -117,7 +117,8 @@ function solve(DVDict, evalFuncs, outputDir::String)
     derivMode = "FAD"
     global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh, AIC, derivMode, planformArea)
 
-    qSol, resVec = converge_r(q)
+    qSol, _ = converge_r(q)
+    # qSol = q # just use pre-solve solution
     if CONSTANTS.elemType == "BT2"
         uSol = vcat([0, 0, 0, 0], qSol)
     end
@@ -130,12 +131,15 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ************************************************
     costFuncs = compute_cost_func(uSol, globalF, evalFuncs)
 
-    # # ************************************************
-    # #     COMPUTE SENSITIVITIES
-    # # ************************************************
-    # mode = "FAD"
-    # ∂r∂u = compute_∂r∂u(q, mode)
-
+    # ************************************************
+    #     COMPUTE SENSITIVITIES
+    # ************************************************
+    mode = "FAD"
+    ∂r∂u = compute_∂r∂u(qSol, mode)
+    # # TODO:I'm not really sure how to do these yet
+    # ∂r∂x = compute_∂r∂x(qSol, mode)
+    # ∂f∂u = compute_∂f∂u(qSol, mode)
+    # ∂f∂x = compute_∂f∂x(qSol, mode)
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -265,7 +269,6 @@ function compute_AIC!(AIC, mesh, elemType="BT2")
         else
             println("nothing else works")
         end
-
 
         GDOFIdx = nDOF * (jj - 1) + 1
 
@@ -487,7 +490,8 @@ end
 
 function compute_∂r∂u(structuralStates, mode="FiDi")
     """
-    Jacobian of residuals with respect to structural states EXCLUDING BC
+    Jacobian of residuals with respect to structural states 
+    EXCLUDING BC NODES
     """
 
     if mode == "FiDi" # Finite difference
@@ -550,15 +554,15 @@ function compute_adjoint()
 
 end
 
-function compute_jacobian(stateVec, FOIL=nothing)
+function compute_jacobian(stateVec)
     """
     Compute the jacobian df/dx
 
     Inputs:
-        stateVec: array, shape (8), state vector
+        stateVec: 
 
     returns:
-        array, shape (, 8), square jacobian matrix
+        
 
     """
     # ************************************************

@@ -22,4 +22,8 @@ include("test_FiniteElement.jl")
     @test test_FiniteElement() <= 1e-4
     @test test_BT2_stiff() <= 1e-5
     @test test_BT2_mass() <= 1e-4
+
+    # --- Cheap solves ---
+    # Really just looking to see if the solver works
+    # @test test_SolveSteady() TODO:
 end

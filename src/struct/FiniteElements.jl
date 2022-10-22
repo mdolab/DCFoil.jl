@@ -454,7 +454,7 @@ function apply_tip_load!(F, elemType, loadType="force")
         if elemType == "bend-twist"
             F[end-2] = 1.0
         elseif elemType == "BT2"
-            F[end-3] = 1.0
+            F[end-3] = 3000.0/2
         end
     elseif loadType == "torque"
         if elemType == "bend-twist"
