@@ -24,13 +24,19 @@ using Zygote
 
 # --- DCFoil modules ---
 # First include them
-include("InitModel.jl")
-include("Struct.jl")
-include("struct/FiniteElements.jl")
-include("Hydro.jl")
+include("../InitModel.jl")
+include("../struct/BeamProperties.jl")
+include("../struct/FiniteElements.jl")
+include("../hydro/Hydro.jl")
+include("../constants/SolutionConstants.jl")
+include("./SolverRoutines.jl")
+include("./NewtonRhapson.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
+using .SolutionConstants
+using .SolverRoutines
+using .NewtonRhapson
 
 function solve(DVDict, evalFuncs, outputDir::String)
     """
@@ -45,11 +51,15 @@ function solve(DVDict, evalFuncs, outputDir::String)
     open(outputDir * "init_DVDict.json", "w") do io
         write(io, stringData)
     end
-    
+
     neval = DVDict["neval"]
     global FOIL = InitModel.init_steady(neval, DVDict) # seems to only be global in this module
     nElem = neval - 1
     constitutive = FOIL.constitutive
+
+    println("====================================================================================")
+    println("          BEGINNING STEADY HYDROELASTIC SOLUTION              ")
+    println("====================================================================================")
 
     # ************************************************
     #     SOLVE FEM FIRST TIME
@@ -115,21 +125,19 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
     derivMode = "FAD"
-    global CONSTANTS = InitModel.DCFoilConstants(K, elemType, structMesh, AIC, derivMode, planformArea)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(K, elemType, structMesh, AIC, derivMode, planformArea)
 
-    qSol, _ = converge_r(q)
+    qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
     # qSol = q # just use pre-solve solution
-    if CONSTANTS.elemType == "BT2"
-        uSol = vcat([0, 0, 0, 0], qSol)
-    end
+    uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
     # --- Get hydroLoads again on solution ---
-    fTractions, AIC, _ = compute_hydroLoads(uSol, structMesh, elemType)
+    fHydro, AIC, _ = compute_hydroLoads(uSol, structMesh, elemType)
 
     # ************************************************
     #     COMPUTE FUNCTIONS OF INTEREST
     # ************************************************
-    costFuncs = compute_cost_func(uSol, globalF, evalFuncs)
+    costFuncs = compute_cost_func(uSol, fHydro, evalFuncs)
 
     # ************************************************
     #     COMPUTE SENSITIVITIES
@@ -144,11 +152,11 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
     # ************************************************
-    write_sol(uSol, globalF, costFuncs, elemType, outputDir)
+    write_sol(uSol, fHydro, costFuncs, elemType, outputDir)
 
 end
 
-function return_totalStates(foilStructuralStates, elemType="BT2")
+function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
     """
     Returns the deflected + rigid shape of the foil
     """
@@ -180,7 +188,7 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     # ---------------------------
     #   Initializations
     # ---------------------------
-    foilTotalStates, nDOF = return_totalStates(foilStructuralStates, elemType)
+    foilTotalStates, nDOF = return_totalStates(foilStructuralStates, FOIL, elemType)
     nGDOF = FOIL.neval * nDOF
 
     # ---------------------------
@@ -328,9 +336,9 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
     ------
     states: vector of structural states from the [K]{u} = {f}
     """
-    
+
     mkpath(outputDir)
-    
+
     # --- First print costFuncs to screen in a box ---
     println("+", "-"^80, "+")
     println("This is your costFunc dict...")
@@ -338,7 +346,7 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
         println(kv)
     end
     println("+", "-"^80, "+")
-    
+
     fname = outputDir * "funcs.json"
     stringData = JSON.json(funcs)
     open(fname, "w") do io
@@ -400,80 +408,6 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
 end
 
 # ==============================================================================
-#                         Solver routine
-# ==============================================================================
-function do_newton_rhapson(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
-    """
-    Simple Newton-Rhapson solver
-    """
-
-    for ii in 1:maxIters
-        # println(u)
-        res = compute_residuals(u)
-        ∂r∂u = compute_∂r∂u(u, mode)
-        jac = ∂r∂u[1]
-
-        # --- Newton step ---
-        # show(stdout, "text/plain", jac)
-        Δu = -jac \ res
-
-        # --- Update ---
-        u = u + Δu
-
-        resNorm = norm(res, 2)
-
-        # --- Printout ---
-        if verbose
-            if ii == 1
-                println("iter | resNorm | stepNorm ")
-            end
-            println(ii, "|" , resNorm, "|", norm(Δu, 2))
-        end
-
-        # --- Check norm ---
-        # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
-        if resNorm < tol
-            println("Converged in ", ii, " iterations")
-            global converged_u = copy(u)
-            global converged_r = copy(res)
-            global iters = copy(ii)
-            break
-        elseif ii == maxIters
-            println("Failed to converge. res norm is", resNorm)
-            println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
-            global converged_u = copy(u)
-            global converged_r = copy(res)
-            global iters = copy(ii)
-        else
-            global converged_u = copy(u)
-            global converged_r = copy(res)
-            global iters = copy(ii)
-        end
-    end
-
-    # println("Size of state vector")
-    # print(size(converged_u))
-
-    return converged_u, converged_r, iters
-end
-
-
-function converge_r(u, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
-    """
-    Given input u, solve the system r(u) = 0
-    """
-
-    # ************************************************
-    #     Main solver loop
-    # ************************************************
-    println("Beginning NL solve")
-    converged_u, converged_r, iters = do_newton_rhapson(u, maxIters, tol, verbose, mode)
-
-    return converged_u, converged_r
-
-end
-
-# ==============================================================================
 #                         Sensitivity routines
 # ==============================================================================
 function compute_∂f∂x(foilPDESol)
@@ -529,7 +463,8 @@ function compute_residuals(structuralStates)
     if CONSTANTS.elemType == "bend-twist" # knock off the root element
         exit()
     elseif CONSTANTS.elemType == "BT2" # knock off root element
-        foilTotalStates, nDOF = return_totalStates(vcat([0.0, 0.0, 0.0, 0.0], structuralStates), CONSTANTS.elemType)
+        completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
+        foilTotalStates, nDOF = return_totalStates(completeStates, FOIL, CONSTANTS.elemType)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     else

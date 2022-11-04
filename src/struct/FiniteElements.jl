@@ -7,7 +7,7 @@
 """
 
 # ==============================================================================
-#                         Methods for element matrices
+#                         METHODS FOR ELEMENT MATRICES
 # ==============================================================================
 module LinearBeamElem
 """
@@ -300,6 +300,9 @@ end
 
 end # end module
 
+# ==============================================================================
+#                         GENERIC FEM METHODS
+# ==============================================================================
 module FEMMethods
 """
 Module with generic FEM methods
@@ -454,7 +457,7 @@ function apply_tip_load!(F, elemType, loadType="force")
         if elemType == "bend-twist"
             F[end-2] = 1.0
         elseif elemType == "BT2"
-            F[end-3] = 3000.0/2
+            F[end-3] = 3000.0 / 2
         end
     elseif loadType == "torque"
         if elemType == "bend-twist"
@@ -467,7 +470,7 @@ end
 
 function apply_BCs(K, M, F, globalDOFBlankingList)
     """
-    Applies BCs for nodal displacements
+    Applies BCs for nodal displacements and blanks them
     """
 
     newK = K[
@@ -479,6 +482,25 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     newF = F[setdiff(1:end, (globalDOFBlankingList))]
 
     return newK, newM, newF
+end
+
+function put_BC_back(q, elemType, BCType="clamped")
+    """
+    appends the BCs back into the solution
+    """
+
+    if BCType == "clamped"
+        if elemType == "BT2"
+            uSol = vcat([0, 0, 0, 0], q)
+        else
+            println("Not working")
+            exit()
+        end
+    else
+        println("Not working")
+    end
+
+    return uSol, length(uSol)
 end
 
 function solve_structure(K, M, F)

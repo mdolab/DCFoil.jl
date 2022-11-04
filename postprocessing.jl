@@ -78,8 +78,8 @@ end
 # ************************************************
 #     Plot results
 # ************************************************
-liftTitle = @sprintf("Lift (%.1fN, CL=%.2f)", (funcs["StaticLift"]), funcs["CL"])
-momTitle = @sprintf("Mom. (%.1fN-m, CM=%.2f)", (funcs["StaticMoment"]), funcs["CM"])
+liftTitle = @sprintf("Lift (%.1fN, CL=%.2f)", (funcs["lift"]), funcs["cl"])
+momTitle = @sprintf("Mom. (%.1fN-m, CM=%.2f)", (funcs["moment"]), funcs["cmy"])
 visuals = plot(
     [nodes, nodes, nodes, nodes], [bending, twisting * 180 / π, lift, moment],
     label=["" "" "" ""],

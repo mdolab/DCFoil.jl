@@ -22,15 +22,17 @@ using Zygote
 
 # --- DCFoil modules ---
 # First include them
-include("InitModel.jl")
-include("Struct.jl")
-include("struct/FiniteElements.jl")
-include("Hydro.jl")
+include("../InitModel.jl")
+include("../struct/BeamProperties.jl")
+include("../struct/FiniteElements.jl")
+include("../hydro/Hydro.jl")
 include("SolveSteady.jl")
+include("../constants/SolutionConstants.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 using .SolveSteady
+using .SolutionConstants
 
 function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     """
@@ -42,6 +44,10 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     global FOIL = InitModel.init_dynamic(fSweep, DVDict)
     nElem = FOIL.neval - 1
     constitutive = FOIL.constitutive
+
+    println("====================================================================================")
+    println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION       ")
+    println("====================================================================================")
 
     # ************************************************
     #     Assemble structural matrices
@@ -68,10 +74,10 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     globalCf_i = copy(globalKs) * 0
     extForceVec = copy(F) * 0 # this is a vector excluded the BC nodes
     extForceVec[end] = tipForceMag
-    LiftDyn = zeros(length(fSweep))
-    MomDyn = zeros(length(fSweep))
-    TipBendDyn = zeros(length(fSweep))
-    TipTwistDyn = zeros(length(fSweep))
+    LiftDyn = zeros(length(fSweep)) * 0im
+    MomDyn = zeros(length(fSweep)) * 0im
+    TipBendDyn = zeros(length(fSweep)) * 0im
+    TipTwistDyn = zeros(length(fSweep)) * 0im
 
     # ---------------------------
     #   Pre-solve system
@@ -90,7 +96,6 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     for f in fSweep
 
         ω = 2π * f # circular frequency
-
         # ---------------------------
         #   Assemble hydro matrices
         # ---------------------------
@@ -102,27 +107,27 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         Cf = Cf_r + 1im * Cf_i
         Kf = Kf_r + 1im * Kf_i
 
-        #   Dynamic matrix
+        #  Dynamic matrix
         D = -1 * ω^2 * (Ms + Mf) + im * ω * Cf + (Ks + Kf)
 
         # Complex AIC 
         AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)
 
         # Store constants
-        global CONSTANTS = InitModel.DCFoilDynamicConstants(elemType, structMesh, D, AIC, extForceVec)
+        global CONSTANTS = SolutionConstants.DCFoilDynamicConstants(elemType, structMesh, D, AIC, extForceVec)
+        global DFOIL = FOIL
 
         # ---------------------------
         #   Solve for dynamic states
         # ---------------------------
         qSol, _ = converge_r(q)
-        if CONSTANTS.elemType == "BT2"
-            uSol = vcat([0, 0, 0, 0], qSol)
-        end
+        uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
         # ---------------------------
         #   Get hydroloads at freq
         # ---------------------------
-        fDynamic, DynLift, DynMoment = compute_hydroLoads(uSol)
+        fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
+        fDynamic, DynLift, DynMoment = compute_hydroLoads(uSol, fullAIC)
 
         # --- Store tip values ---
         LiftDyn[f_ctr] = DynLift[end]
@@ -133,7 +138,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         end
 
         # DEBUG QUIT ON FIRST FREQ
-        exit()
+        break
 
     end
 
@@ -145,22 +150,22 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
 
 end
 
-function compute_hydroLoads(foilDynamicStructuralStates)
+function compute_hydroLoads(foilDynamicStructuralStates, fullAIC)
     """
     Compute the lift and moment vectors (and totals) for the fluctating loads
         f_hydro,dyn
     """
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
-    foilTotalDynStates, nDOF = SolveSteady.return_totalStates(foilDynamicStructuralStates, CONSTANTS.elemType)
-    nGDOF = FOIL.neval * nDOF
+    foilTotalDynStates, nDOF = SolveSteady.return_totalStates(foilDynamicStructuralStates, DFOIL, CONSTANTS.elemType)
+    nGDOF = DFOIL.neval * nDOF
 
     # --- Strip theory ---
-    fDynamic = CONSTANTS.AICmat * foilTotalDynStates
+    fDynamic = fullAIC * foilTotalDynStates
 
-    if elemType == "bend-twist"
+    if CONSTANTS.elemType == "bend-twist"
         Moments = fDynamic[nDOF:nDOF:end]
-    elseif elemType == "BT2"
+    elseif CONSTANTS.elemType == "BT2"
         Moments = fDynamic[3:nDOF:end]
     else
         error("Invalid element type")
@@ -223,13 +228,27 @@ end
 # ==============================================================================
 function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
     """
-    Simple Newton-Rhapson solver
+    Simple complex data type Newton-Rhapson solver
+
+    Inputs
+    ------
+    u : complex vector
+        Initial guess
+    Outputs
+    -------
+    converged_u : complex vector
+        Converged solution
+    converged_r : complex vector
+        Converged residual
     """
-    # TODO:
+
+    uUnfolded = [real(u); imag(u)]
     for ii in 1:maxIters
         # println(u)
-        res = compute_residuals(u)
-        ∂r∂u = compute_∂r∂u(u, mode)
+        # NOTE: these functions handle a complex input but return the unfolded output 
+        # (i.e., concatenation of real and imag)
+        res = compute_residuals(uUnfolded)
+        ∂r∂u = compute_∂r∂u(uUnfolded, mode)
         jac = ∂r∂u[1]
 
         # --- Newton step ---
@@ -237,7 +256,7 @@ function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode=
         Δu = -jac \ res
 
         # --- Update ---
-        u = u + Δu
+        uUnfolded = uUnfolded + Δu
 
         resNorm = norm(res, 2)
 
@@ -253,17 +272,17 @@ function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode=
         # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
         if resNorm < tol
             println("Converged in ", ii, " iterations")
-            global converged_u = copy(u)
-            global converged_r = copy(res)
+            global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
+            global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
             break
         elseif ii == maxIters
             println("Failed to converge. res norm is", resNorm)
             println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
-            global converged_u = copy(u)
-            global converged_r = copy(res)
+            global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
+            global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
         else
-            global converged_u = copy(u)
-            global converged_r = copy(res)
+            global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
+            global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
         end
     end
 
@@ -288,7 +307,7 @@ end
 # ==============================================================================
 #                         Sensitivity routines
 # ==============================================================================
-function compute_residuals(structuralStates)
+function compute_residuals(unfoldedStructuralStates)
     """
     Compute residual for every node that is not the clamped root node
 
@@ -299,17 +318,29 @@ function compute_residuals(structuralStates)
     Inputs
     ------
     structuralStates : array
-        State vector with nodal DOFs and deformations EXCLUDING BCs
-    """
-    if CONSTANTS.elemType == "BT2"
+        Unfolded residual state vector with nodal DOFs and deformations EXCLUDING BCs (concatenation of real and imag)
 
-        foilDynamicStates = vcat([0, 0, 0, 0], structuralStates)
+    Outputs
+    -------
+    resVec : array
+        Unfolded residual vector of real data type (concatenation of real and imag parts)
+    """
+
+    # --- Fold them ---
+    structuralStates = unfoldedStructuralStates[1:end÷2] + 1im * unfoldedStructuralStates[end÷2+1:end]
+
+    if CONSTANTS.elemType == "BT2"
+        foilDynamicStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
     else
         println("Invalid element type")
     end
 
     # --- Stack them ---
-    resVec = CONSTANTS.Dmat * structuralStates - CONSTANTS.extForceVec
+    cmplxResVec = CONSTANTS.Dmat * structuralStates - CONSTANTS.extForceVec
+
+    # --- Unfold them ---
+    resVec = [real(cmplxResVec); imag(cmplxResVec)]
+
 
     return resVec
 end
@@ -319,7 +350,25 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
     Jacobian of residuals with respect to dynamic structural states 
     EXCLUDING BC NODES
     """
-    
+
+    # --- Convert to real data-type ---
+    unfolded = vcat(real(structuralStates), imag(structuralStates))
+
+    if mode == "FiDi" # Finite difference
+        # First derivative using 3 stencil points
+        ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
+
+    elseif mode == "FAD" # Forward automatic differentiation
+        ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
+
+        # elseif mode == "RAD" # Reverse automatic differentiation
+        #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
+    else
+        error("Invalid mode")
+    end
+
+    return ∂r∂u
+
 end
 
 end # end module

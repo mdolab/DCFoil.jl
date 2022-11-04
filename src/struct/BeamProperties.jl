@@ -1,3 +1,6 @@
+"""
+Computes the sectional properties of composite beams
+"""
 module StructProp
 
 # --- Public functions ---

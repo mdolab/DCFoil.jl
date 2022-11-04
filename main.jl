@@ -6,17 +6,13 @@
 # @Desc    :   Main executable for the project
 
 
-include("src/SolveSteady.jl")
-include("src/SolveDynamic.jl")
+include("src/DCFoil.jl")
 
-using JSON
-using .SolveSteady
-# using .SolveDynamic
+using .DCFoil
 
 # ==============================================================================
 # Setup hydrofoil model and solver settings
 # ==============================================================================
-
 # ************************************************
 #     I/O
 # ************************************************
@@ -29,9 +25,9 @@ mkpath(outputDir)
 # --- Set task you want to true ---
 run = true # run the solver for a single point
 # dynamic = false
-# static = true
+static = true
 dynamic = true
-static = false
+# static = false
 
 α_sweep = true # sweep angle of attack
 U_sweep = true # sweep flow speed
@@ -70,7 +66,7 @@ neval = 30 # spatial nodes
 df = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.1:df:100.0 # frequency search range [Hz] for flutter
-tipForceMag = 0.5*0.5*1000*100*0.03 # tip harmonic forcing
+tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
     "neval" => neval,
@@ -92,25 +88,7 @@ DVDict = Dict(
 # ************************************************
 evalFuncs = ["cl", "cmy", "lift", "moment"]
 
-# --- Write the init dict to output folder ---
-stringData = JSON.json(DVDict)
-open(outputDir * "init_DVDict.json", "w") do io
-    write(io, stringData)
-end
-
 # ==============================================================================
-# Steady solution
+#                         Call DCFoil
 # ==============================================================================
-if static
-    SolveSteady.solve(DVDict, evalFuncs, outputDir)
-end
-
-# ==============================================================================
-# Dynamic solution
-# ==============================================================================
-if dynamic
-    SolveDynamic.solve(DVDict, outputDir, fSweep, tipForceMag)
-
-    # TODO:
-    # SolveFlutter.solve(DVDict, outputDir, fSearch)
-end
+DCFoil.run_model(DVDict, evalFuncs, static, dynamic, fSweep, tipForceMag, outputDir)

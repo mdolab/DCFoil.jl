@@ -8,20 +8,27 @@
 
 using Test
 
-include("test_BVP.jl") # TODO:
+# include("test_BVP.jl") # TODO:
 include("test_struct.jl")
-# include("src/test_hydro.jl")
-include("test_FiniteElement.jl")
+include("test_hydro.jl")
+include("test_solvers.jl")
 
 @testset "Test solver" begin
     # Write your tests here.
     # @test test_BVP() <= 1e-3
-    @test test_struct() <= 1e-5
+    # ************************************************
+    #     Structural tests
+    # ************************************************
+    @test test_struct() <= 1e-5 # constitutive
     
     # --- FiniteElement tests ---
     @test test_FiniteElement() <= 1e-4
     @test test_BT2_stiff() <= 1e-5
     @test test_BT2_mass() <= 1e-4
+
+    # ************************************************
+    #     Hydrodynamic tests
+    # ************************************************
 
     # --- Cheap solves ---
     # Really just looking to see if the solver works
