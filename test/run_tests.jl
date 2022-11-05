@@ -29,8 +29,14 @@ include("test_solvers.jl")
     # ************************************************
     #     Hydrodynamic tests
     # ************************************************
+    # TODO: all three of these are not properly tested
+    @test test_stiffness() <= 1e-5
+    @test test_damping() <= 1e-5
+    @test test_mass() <= 1e-5
 
-    # --- Cheap solves ---
+    # ************************************************
+    #     Solver tests
+    # ************************************************
     # Really just looking to see if the solver works
     # @test test_SolveSteady() TODO:
 end

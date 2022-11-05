@@ -14,6 +14,7 @@ ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 using Plots
 using JSON
 using Printf
+using LaTeXStrings
 # ************************************************
 #     I/O 
 # ************************************************
@@ -86,10 +87,10 @@ visuals = plot(
     layout=(2, 2),
     title=["Spanwise Bending" "Spanwise twist" liftTitle momTitle],
     xlabel="y [m]",
-    ylabel=["w [m]" "psi [deg]" "L [N/m]" "M [N-m/m]"],
+    ylabel=[L"w" * " [m]" L"\psi" * " " * L"[\circ]" L"L" * " [N/m]" L"M" * " [N-m/m]"],
 )
 
-titleTxt = "V =" * string(DVDict["U∞"]) * "m/s, α₀ = " * string(DVDict["α₀"]) * "deg, Λ = " * string(DVDict["Λ"] * 180 / π) * " deg, θ_f = " * string(DVDict["θ"] * 180 / π) * " deg"
+titleTxt = L"V =" * string(DVDict["U∞"]) * "m/s, α₀ = " * string(DVDict["α₀"]) * "deg, Λ = " * string(DVDict["Λ"] * 180 / π) * L" \circ, θ_f = " * string(DVDict["θ"] * 180 / π) * L"\circ"
 title = plot(title=titleTxt, grid=false, xticks=false, yticks=false, showaxis=false, bottom_margin=-50Plots.px)
 plot(title, visuals, layout=@layout([A{0.1h}; B]))
 

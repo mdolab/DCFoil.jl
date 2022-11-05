@@ -17,9 +17,12 @@ function test_stiffness()
     Λ = 0
     ω = 0.1
     ρ = 1000
-    Matrix = Hydro.compute_node_stiff(clα, b, eb, ab, U, Λ, ω, ρ)
-    show(stdout, "text/plain", Matrix)
-    # show(stdout, "text/plain", imag(Matrix))
+    Matrix, SweepMatrix = Hydro.compute_node_stiff(clα, b, eb, ab, U, Λ, ω, ρ)
+    show(stdout, "text/plain", real(Matrix))
+    show(stdout, "text/plain", imag(Matrix))
+    show(stdout, "text/plain", real(SweepMatrix))
+    show(stdout, "text/plain", imag(SweepMatrix))
+    return 0
 end
 
 function test_damping()
@@ -31,9 +34,12 @@ function test_damping()
     Λ = 0
     ω = 0.1
     ρ = 1000
-    Matrix = Hydro.compute_node_damp(clα, b, eb, ab, U, Λ, ω, ρ)
+    Matrix, SweepMatrix = Hydro.compute_node_damp(clα, b, eb, ab, U, Λ, ω, ρ)
     show(stdout, "text/plain", real(Matrix))
     show(stdout, "text/plain", imag(Matrix))
+    show(stdout, "text/plain", real(SweepMatrix))
+    show(stdout, "text/plain", imag(SweepMatrix))
+    return 0
 end
 
 function test_mass()
@@ -45,9 +51,10 @@ function test_mass()
     Λ = 0
     ω = 0.1
     ρ = 1000
-    Matrix = Hydro.compute_node_mass(b, ab, ω, ρ)
+    Matrix = Hydro.compute_node_mass(b, ab, ρ)
     show(stdout, "text/plain", real(Matrix))
     show(stdout, "text/plain", imag(Matrix))
+    return 0
 end
 
 
