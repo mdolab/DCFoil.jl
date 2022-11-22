@@ -38,7 +38,9 @@ using .SolverRoutines
 
 function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     """
-    Solve (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
+    Solve 
+        (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
+    using the 'tipForceMag' as the harmonic forcing on the RHS
     """
     # ---------------------------
     #   Initialize
@@ -75,7 +77,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     globalKf_i = copy(globalKs) * 0
     globalCf_i = copy(globalKs) * 0
     extForceVec = copy(F) * 0 # this is a vector excluded the BC nodes
-    extForceVec[end] = tipForceMag
+    extForceVec[end-1] = tipForceMag # this is applying a tip twist
     LiftDyn = zeros(length(fSweep)) # * 0im
     MomDyn = zeros(length(fSweep)) # * 0im
     TipBendDyn = zeros(length(fSweep)) # * 0im
@@ -190,7 +192,7 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     mkpath(outputDir)
 
     # --- Write frequency sweep ---
-    fname = outputDir * "fSweep.dat"
+    fname = outputDir * "FreqSweep.dat"
     outfile = open(fname, "w")
     for f ∈ fSweep
         write(outfile, string(f) * "\n")
@@ -214,7 +216,7 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     close(outfile)
 
     # --- Write dynamic lift ---
-    fname = outputDir * "LiftDyn.dat"
+    fname = outputDir * "TipLiftDyn.dat"
     outfile = open(fname, "w")
     for L ∈ LiftDyn
         write(outfile, string(L) * "\n")
@@ -222,7 +224,7 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     close(outfile)
 
     # --- Write dynamic moment ---
-    fname = outputDir * "MomentDyn.dat"
+    fname = outputDir * "TipMomentDyn.dat"
     outfile = open(fname, "w")
     for M ∈ MomDyn
         write(outfile, string(M) * "\n")

@@ -61,7 +61,8 @@ mutable struct dynamicFoil
     U∞ # flow speed [m/s]
     Λ # sweep angle [rad]
     g # structural damping percentage
-    fSweep # forcing frequency sweep [Hz]
+    fSweep # forcing frequency sweep [Hz] (for harmonically forced solution)
+    uSweep # forward speed sweep [m/s] (for flutter solution)
     clα # lift slopes [1/rad]
     ρ_f::Float64 # fluid density [kg/m³]
     neval::Int64 # number of evaluation points on span

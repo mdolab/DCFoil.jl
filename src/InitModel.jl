@@ -105,13 +105,13 @@ function init_steady(neval::Int64, DVDict::Dict)
 
 end
 
-function init_dynamic(fSweep, DVDict::Dict)
+function init_dynamic(fSweep, DVDict::Dict; uSweep=nothing)
   """
   Perform much of the same initializations as init_steady() except with other features
   """
   steadyModel = init_steady(DVDict["neval"], DVDict)
 
-  model = DesignConstants.dynamicFoil(steadyModel.c, steadyModel.t, steadyModel.s, steadyModel.ab, steadyModel.eb, steadyModel.x_αb, steadyModel.mₛ, steadyModel.Iₛ, steadyModel.EIₛ, steadyModel.GJₛ, steadyModel.Kₛ, steadyModel.Sₛ, steadyModel.α₀, steadyModel.U∞, steadyModel.Λ, steadyModel.g, fSweep, steadyModel.clα, steadyModel.ρ_f, steadyModel.neval, steadyModel.constitutive)
+  model = DesignConstants.dynamicFoil(steadyModel.c, steadyModel.t, steadyModel.s, steadyModel.ab, steadyModel.eb, steadyModel.x_αb, steadyModel.mₛ, steadyModel.Iₛ, steadyModel.EIₛ, steadyModel.GJₛ, steadyModel.Kₛ, steadyModel.Sₛ, steadyModel.α₀, steadyModel.U∞, steadyModel.Λ, steadyModel.g, fSweep, uSweep, steadyModel.clα, steadyModel.ρ_f, steadyModel.neval, steadyModel.constitutive)
 
   return model
 end
