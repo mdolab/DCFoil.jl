@@ -19,7 +19,6 @@ mutable struct DCFoilConstants
     This is a catch all mutable struct to store variables that we do not 
     want in function calls like r(u) or f(u)
 
-      TODO: there's probably a better place to put this call
     """
     Kmat
     elemType::String

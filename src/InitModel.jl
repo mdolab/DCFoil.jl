@@ -31,12 +31,12 @@ function init_steady(neval::Int64, DVDict::Dict)
   """
 
   # --- First print to screen in a box ---
-  println("+", "-"^80, "+")
-  println("This is your design variable setup...")
+  println("+","-"^50, "+")
+  println("|            Design variable dictionary:           |")
+  println("+","-"^50, "+")
   for kv in DVDict
     println(kv)
   end
-  println("+", "-"^80, "+")
 
   # ---------------------------
   #   Geometry

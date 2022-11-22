@@ -20,6 +20,8 @@ using FLOWMath: linear
 using SpecialFunctions
 using LinearAlgebra
 using Plots
+include("../solvers/SolverRoutines.jl")
+using .SolverRoutines
 
 function compute_theodorsen(k)
     """
@@ -226,6 +228,87 @@ function compute_node_mass(b, ab, rho_f)
     return M_f
 end
 
+function compute_static_AICs!(AIC, mesh, FOIL, elemType="BT2")
+
+        if elemType == "bend"
+            error("Only bend-twist element type is supported for load computation")
+        elseif elemType == "bend-twist"
+            nDOF = 3
+        elseif elemType == "BT2"
+            nDOF = 4
+        end
+    
+        # fluid dynamic pressure    
+        qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2
+    
+        # strip width
+        dy = FOIL.s / (FOIL.neval)
+        planformArea = 0.0
+    
+        jj = 1 # node index
+        for yⁿ in mesh
+            K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
+            E_f = copy(K_f)  # Sweep correction matrix
+    
+            # --- Linearly interpolate values based on y loc ---
+            clα = linear(mesh, FOIL.clα, yⁿ)
+            c = linear(mesh, FOIL.c, yⁿ)
+            b = 0.5 * c # semichord for more readable code
+            ab = linear(mesh, FOIL.ab, yⁿ)
+            eb = linear(mesh, FOIL.eb, yⁿ)
+    
+            # --- Compute forces ---
+            # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
+            k_hα = -2 * b * clα # lift due to angle of attack
+            k_αα = -2 * eb * b * clα # moment due to angle of attack
+            K_f = qf * cos(FOIL.Λ)^2 *
+                  [
+                      0.0 k_hα
+                      0.0 k_αα
+                  ]
+            # Sweep correction to aerodynamic stiffness
+            e_hh = 2 * clα # lift due to w'
+            e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
+            e_αh = clα * b * (1 + ab / b) # moment due to w'
+            e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
+            E_f = qf * sin(FOIL.Λ) * cos(FOIL.Λ) * b *
+                  [
+                      e_hh e_hα
+                      e_αh e_αα
+                  ]
+    
+            # --- Compute Compute local AIC matrix for this element ---
+            if elemType == "bend-twist"
+                println("These aerodynamics are all wrong BTW...")
+                AICLocal = -1 * [
+                    0.00000000 0.0 K_f[1, 2] # Lift
+                    0.00000000 0.0 0.00000000
+                    0.00000000 0.0 K_f[2, 2] # Pitching moment
+                ]
+            elseif elemType == "BT2"
+                AICLocal = [
+                    0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+            else
+                println("nothing else works")
+            end
+    
+            GDOFIdx = nDOF * (jj - 1) + 1
+    
+            AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal
+    
+            # Add rectangle to planform area
+            planformArea += c * dy
+    
+            jj += 1 # increment strip counter
+        end
+    
+        return AIC, planformArea
+    end
+
 function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, FOIL, U∞, ω, elemType="BT2")
     """
     Compute the AIC matrix for a given mesh
@@ -302,6 +385,38 @@ function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i,
     end
 
     return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea
+end
+
+
+
+function compute_static_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="bend-twist")
+    """
+    Computes the steady hydrodynamic vector loads 
+    given the solved hydrofoil shape (strip theory)
+    """
+    # ---------------------------
+    #   Initializations
+    # ---------------------------
+    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, FOIL, elemType)
+    nGDOF = FOIL.neval * nDOF
+
+    # ---------------------------
+    #   Strip theory
+    # ---------------------------
+    AIC = zeros(nGDOF, nGDOF)
+    _, planformArea = compute_static_AICs!(AIC, mesh, FOIL, elemType)
+
+    # --- Compute fluid tractions ---
+    fTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
+
+    # # --- Debug printout ---
+    # println("AIC")
+    # show(stdout, "text/plain", AIC)
+    # println("")
+    # println("Aero loads")
+    # println(fTractions)
+
+    return fTractions, AIC, planformArea
 end
 
 function apply_BCs(K, C, M, globalDOFBlankingList)

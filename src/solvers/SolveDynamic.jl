@@ -28,11 +28,13 @@ include("../struct/FiniteElements.jl")
 include("../hydro/Hydro.jl")
 include("SolveSteady.jl")
 include("../constants/SolutionConstants.jl")
+include("./SolverRoutines.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 using .SolveSteady
 using .SolutionConstants
+using .SolverRoutines
 
 function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     """
@@ -46,7 +48,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     constitutive = FOIL.constitutive
 
     println("====================================================================================")
-    println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION       ")
+    println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
     println("====================================================================================")
 
     # ************************************************
@@ -120,7 +122,8 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         # ---------------------------
         #   Solve for dynamic states
         # ---------------------------
-        qSol, _ = converge_r(q)
+        # qSol, _ = converge_r(q)
+        qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true)
         uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
         # ---------------------------
@@ -223,86 +226,87 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     end
 
 end
-# ==============================================================================
-#                         Solver routines
-# ==============================================================================
-function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
-    """
-    Simple complex data type Newton-Rhapson solver
 
-    Inputs
-    ------
-    u : complex vector
-        Initial guess
-    Outputs
-    -------
-    converged_u : complex vector
-        Converged solution
-    converged_r : complex vector
-        Converged residual
-    """
+# # ==============================================================================
+# #                         Solver routines
+# # ==============================================================================
+# function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
+#     """
+#     Simple complex data type Newton-Rhapson solver
 
-    uUnfolded = [real(u); imag(u)]
-    for ii in 1:maxIters
-        # println(u)
-        # NOTE: these functions handle a complex input but return the unfolded output 
-        # (i.e., concatenation of real and imag)
-        res = compute_residuals(uUnfolded)
-        ∂r∂u = compute_∂r∂u(uUnfolded, mode)
-        jac = ∂r∂u[1]
+#     Inputs
+#     ------
+#     u : complex vector
+#         Initial guess
+#     Outputs
+#     -------
+#     converged_u : complex vector
+#         Converged solution
+#     converged_r : complex vector
+#         Converged residual
+#     """
 
-        # --- Newton step ---
-        # show(stdout, "text/plain", jac)
-        Δu = -jac \ res
+#     uUnfolded = [real(u); imag(u)]
+#     for ii in 1:maxIters
+#         # println(u)
+#         # NOTE: these functions handle a complex input but return the unfolded output 
+#         # (i.e., concatenation of real and imag)
+#         res = compute_residuals(uUnfolded)
+#         ∂r∂u = compute_∂r∂u(uUnfolded, mode)
+#         jac = ∂r∂u[1]
 
-        # --- Update ---
-        uUnfolded = uUnfolded + Δu
+#         # --- Newton step ---
+#         # show(stdout, "text/plain", jac)
+#         Δu = -jac \ res
 
-        resNorm = norm(res, 2)
+#         # --- Update ---
+#         uUnfolded = uUnfolded + Δu
 
-        # --- Printout ---
-        if verbose
-            if ii == 1
-                println("resNorm | stepNorm ")
-            end
-            println(resNorm, "|", norm(Δu, 2))
-        end
+#         resNorm = norm(res, 2)
 
-        # --- Check norm ---
-        # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
-        if resNorm < tol
-            println("Converged in ", ii, " iterations")
-            global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
-            global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
-            break
-        elseif ii == maxIters
-            println("Failed to converge. res norm is", resNorm)
-            println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
-            global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
-            global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
-        else
-            global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
-            global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
-        end
-    end
+#         # --- Printout ---
+#         if verbose
+#             if ii == 1
+#                 println("resNorm | stepNorm ")
+#             end
+#             println(resNorm, "|", norm(Δu, 2))
+#         end
 
-    # println("Size of state vector")
-    # print(size(converged_u))
+#         # --- Check norm ---
+#         # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
+#         if resNorm < tol
+#             println("Converged in ", ii, " iterations")
+#             global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
+#             global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
+#             break
+#         elseif ii == maxIters
+#             println("Failed to converge. res norm is", resNorm)
+#             println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
+#             global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
+#             global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
+#         else
+#             global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
+#             global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
+#         end
+#     end
 
-    return converged_u, converged_r
-end
+#     # println("Size of state vector")
+#     # print(size(converged_u))
 
-function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
-    """
-    Given initial input u0, solve system r(u) = 0 with complex Newton
-    """
-    # ************************************************
-    #     Main solver loop
-    # ************************************************
-    converged_u, converged_r = do_newton_rhapson_cmplx(u0, maxIters, tol, verbose, mode)
+#     return converged_u, converged_r
+# end
 
-    return converged_u, converged_r
-end
+# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
+#     """
+#     Given initial input u0, solve system r(u) = 0 with complex Newton
+#     """
+#     # ************************************************
+#     #     Main solver loop
+#     # ************************************************
+#     converged_u, converged_r = do_newton_rhapson_cmplx(u0, maxIters, tol, verbose, mode)
+
+#     return converged_u, converged_r
+# end
 
 # ==============================================================================
 #                         Sensitivity routines

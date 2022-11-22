@@ -30,13 +30,11 @@ include("../struct/FiniteElements.jl")
 include("../hydro/Hydro.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
-include("./NewtonRhapson.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 using .SolutionConstants
 using .SolverRoutines
-using .NewtonRhapson
 
 function solve(DVDict, evalFuncs, outputDir::String)
     """
@@ -80,7 +78,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
-    fTractions, AIC, planformArea = compute_hydroLoads(u, structMesh, elemType)
+    fTractions, AIC, planformArea = Hydro.compute_static_hydroLoads(u, structMesh, FOIL, elemType)
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -195,7 +193,7 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     #   Strip theory
     # ---------------------------
     AIC = zeros(nGDOF, nGDOF)
-    _, planformArea = compute_AIC!(AIC, mesh, elemType)
+    _, planformArea = Hydro.compute_static_AICs!(AIC, mesh, FOIL, elemType)
 
     # --- Compute fluid tractions ---
     fTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
@@ -208,87 +206,6 @@ function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
     # println(fTractions)
 
     return fTractions, AIC, planformArea
-end
-
-function compute_AIC!(AIC, mesh, elemType="BT2")
-
-    if elemType == "bend"
-        error("Only bend-twist element type is supported for load computation")
-    elseif elemType == "bend-twist"
-        nDOF = 3
-    elseif elemType == "BT2"
-        nDOF = 4
-    end
-
-    # fluid dynamic pressure    
-    qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2
-
-    # strip width
-    dy = FOIL.s / (FOIL.neval)
-    planformArea = 0.0
-
-    jj = 1 # node index
-    for yⁿ in mesh
-        K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
-        E_f = copy(K_f)  # Sweep correction matrix
-
-        # --- Linearly interpolate values based on y loc ---
-        clα = linear(mesh, FOIL.clα, yⁿ)
-        c = linear(mesh, FOIL.c, yⁿ)
-        b = 0.5 * c # semichord for more readable code
-        ab = linear(mesh, FOIL.ab, yⁿ)
-        eb = linear(mesh, FOIL.eb, yⁿ)
-
-        # --- Compute forces ---
-        # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
-        k_hα = -2 * b * clα # lift due to angle of attack
-        k_αα = -2 * eb * b * clα # moment due to angle of attack
-        K_f = qf * cos(FOIL.Λ)^2 *
-              [
-                  0.0 k_hα
-                  0.0 k_αα
-              ]
-        # Sweep correction to aerodynamic stiffness
-        e_hh = 2 * clα # lift due to w'
-        e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
-        e_αh = clα * b * (1 + ab / b) # moment due to w'
-        e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
-        E_f = qf * sin(FOIL.Λ) * cos(FOIL.Λ) * b *
-              [
-                  e_hh e_hα
-                  e_αh e_αα
-              ]
-
-        # --- Compute Compute local AIC matrix for this element ---
-        if elemType == "bend-twist"
-            println("These aerodynamics are all wrong BTW...")
-            AICLocal = -1 * [
-                0.00000000 0.0 K_f[1, 2] # Lift
-                0.00000000 0.0 0.00000000
-                0.00000000 0.0 K_f[2, 2] # Pitching moment
-            ]
-        elseif elemType == "BT2"
-            AICLocal = [
-                0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
-                0.0 0.0 0.0 0.0
-                0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
-                0.0 0.0 0.0 0.0
-            ]
-        else
-            println("nothing else works")
-        end
-
-        GDOFIdx = nDOF * (jj - 1) + 1
-
-        AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal
-
-        # Add rectangle to planform area
-        planformArea += c * dy
-
-        jj += 1 # increment strip counter
-    end
-
-    return AIC, planformArea
 end
 
 function compute_cost_func(states, forces, evalFuncs)
@@ -340,12 +257,12 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
     mkpath(outputDir)
 
     # --- First print costFuncs to screen in a box ---
-    println("+", "-"^80, "+")
-    println("This is your costFunc dict...")
+    println("+", "-"^50, "+")
+    println("|                costFunc dictionary:              |")
+    println("+", "-"^50, "+")
     for kv in funcs
-        println(kv)
+        println("| ", kv)
     end
-    println("+", "-"^80, "+")
 
     fname = outputDir * "funcs.json"
     stringData = JSON.json(funcs)

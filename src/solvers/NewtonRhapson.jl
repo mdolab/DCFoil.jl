@@ -7,6 +7,17 @@ export do_newton_rhapson
 
 # --- Libraries ---
 using LinearAlgebra, Statistics
+using Printf
+
+function print_solver_history(iterNum, resNorm, stepNorm)
+    if iterNum == 1
+        println("+-------+------------------------+----------+")
+        println("|  Iter |         resNorm        | stepNorm |")
+        println("+-------+------------------------+----------+")
+    end
+    @printf("   %03d    %.16e   %.2e  ", iterNum, resNorm, stepNorm)
+    println()
+end
 
 function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200, tol=1e-12, verbose=true, mode="FAD", is_cmplx=false)
     """
@@ -54,10 +65,7 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
 
             # --- Printout ---
             if verbose
-                if ii == 1
-                    println("iter | resNorm | stepNorm ")
-                end
-                println(ii, "|", resNorm, "|", norm(Δu, 2))
+                print_solver_history(ii, resNorm, norm(Δu, 2))
             end
 
             # ************************************************
@@ -65,12 +73,14 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
             # ************************************************
             # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
             if resNorm < tol
+                println("+--------------------------------------------")
                 println("Converged in ", ii, " iterations")
                 global converged_u = copy(u)
                 global converged_r = copy(res)
                 global iters = copy(ii)
                 break
             elseif ii == maxIters
+                println("+--------------------------------------------")
                 println("Failed to converge. res norm is", resNorm)
                 println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
                 global converged_u = copy(u)
@@ -82,6 +92,7 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
                 global iters = copy(ii)
             end
         end
+        
     elseif is_cmplx
         uUnfolded = [real(u0); imag(u0)]
         for ii in 1:maxIters
@@ -101,21 +112,20 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
 
             # --- Printout ---
             if verbose
-                if ii == 1
-                    println("resNorm | stepNorm ")
-                end
-                println(resNorm, "|", norm(Δu, 2))
+                print_solver_history(ii, resNorm, norm(Δu, 2))
             end
 
             # --- Check norm ---
             # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
             if resNorm < tol
+                println("+--------------------------------------------")
                 println("Converged in ", ii, " iterations")
                 global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
                 global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
                 global iters = copy(ii)
                 break
             elseif ii == maxIters
+                println("+--------------------------------------------")
                 println("Failed to converge. res norm is", resNorm)
                 println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
                 global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]

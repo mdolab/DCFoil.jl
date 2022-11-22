@@ -364,12 +364,14 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     globalF = zeros(nnd * (nNodes))
 
     # --- Debug printout for initialization ---
-    println("+---------------------------------------------------+")
-    println("|   Assembling global stiffness and mass matrices   |")
-    println("+---------------------------------------------------+")
+    # TODO: probabl a better way to pretty print this
+    println("+","-"^50,"+")
+    println("|   Assembling global stiffness and mass matrices  |")
+    println("+","-"^50,"+")
     println("Default 2 nodes per elem, nothing else will work")
     println("Using ", constitutive, " constitutive relations...")
-    println("There are ", nElem, " elements and ", nNodes, " nodes")
+    println(nElem, " elements")
+    println(nNodes, " nodes")
 
     # ************************************************
     #     Element loop
