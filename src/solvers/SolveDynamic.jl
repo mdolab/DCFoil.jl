@@ -76,10 +76,10 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     globalCf_i = copy(globalKs) * 0
     extForceVec = copy(F) * 0 # this is a vector excluded the BC nodes
     extForceVec[end] = tipForceMag
-    LiftDyn = zeros(length(fSweep)) * 0im
-    MomDyn = zeros(length(fSweep)) * 0im
-    TipBendDyn = zeros(length(fSweep)) * 0im
-    TipTwistDyn = zeros(length(fSweep)) * 0im
+    LiftDyn = zeros(length(fSweep)) # * 0im
+    MomDyn = zeros(length(fSweep)) # * 0im
+    TipBendDyn = zeros(length(fSweep)) # * 0im
+    TipTwistDyn = zeros(length(fSweep)) # * 0im
 
     # ---------------------------
     #   Pre-solve system
@@ -96,7 +96,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     # ************************************************
     f_ctr = 1
     for f in fSweep
-
+        println("Solving for frequency: ", f, "Hz")
         ω = 2π * f # circular frequency
         # ---------------------------
         #   Assemble hydro matrices
@@ -123,7 +123,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         #   Solve for dynamic states
         # ---------------------------
         # qSol, _ = converge_r(q)
-        qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true)
+        qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
         uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
         # ---------------------------
@@ -133,16 +133,17 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         fDynamic, DynLift, DynMoment = compute_hydroLoads(uSol, fullAIC)
 
         # --- Store tip values ---
-        LiftDyn[f_ctr] = DynLift[end]
-        MomDyn[f_ctr] = DynMoment[end]
+        global LiftDyn[f_ctr] = abs(DynLift[end])
+        global MomDyn[f_ctr] = abs(DynMoment[end])
         if elemType == "BT2"
-            TipBendDyn[f_ctr] = uSol[end-3]
-            TipTwistDyn[f_ctr] = uSol[end-1]
+            global TipBendDyn[f_ctr] = abs(uSol[end-3])
+            global TipTwistDyn[f_ctr] = abs(uSol[end-1])
+            phaseAngle = angle(uSol[end-3])
         end
 
-        # DEBUG QUIT ON FIRST FREQ
-        break
-
+        # # DEBUG QUIT ON FIRST FREQ
+        # break
+        f_ctr += 1
     end
 
 
@@ -194,6 +195,7 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     for f ∈ fSweep
         write(outfile, string(f) * "\n")
     end
+    close(outfile)
 
     # --- Write tip bending ---
     fname = outputDir * "TipBendDyn.dat"
@@ -217,6 +219,7 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     for L ∈ LiftDyn
         write(outfile, string(L) * "\n")
     end
+    close(outfile)
 
     # --- Write dynamic moment ---
     fname = outputDir * "MomentDyn.dat"
@@ -224,6 +227,7 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     for M ∈ MomDyn
         write(outfile, string(M) * "\n")
     end
+    close(outfile)
 
 end
 

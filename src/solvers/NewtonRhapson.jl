@@ -19,7 +19,7 @@ function print_solver_history(iterNum, resNorm, stepNorm)
     println()
 end
 
-function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200, tol=1e-12, verbose=true, mode="FAD", is_cmplx=false)
+function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200, tol=1e-12, is_verbose=true, mode="FAD", is_cmplx=false)
     """
     Simple Newton-Rhapson solver
 
@@ -35,7 +35,7 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
         Maximum number of iterations
     tol : float
         Tolerance for convergence on norm of residual vector
-    verbose : bool
+    is_verbose : bool
         Print out the residual norm at each iteration
     mode : string
         Compute Jacobian using finite differences or automatic differentiation
@@ -64,7 +64,7 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
             resNorm = norm(res, 2)
 
             # --- Printout ---
-            if verbose
+            if is_verbose
                 print_solver_history(ii, resNorm, norm(Δu, 2))
             end
 
@@ -111,7 +111,7 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
             resNorm = norm(res, 2)
 
             # --- Printout ---
-            if verbose
+            if is_verbose
                 print_solver_history(ii, resNorm, norm(Δu, 2))
             end
 

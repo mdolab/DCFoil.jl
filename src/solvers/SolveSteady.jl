@@ -56,7 +56,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     constitutive = FOIL.constitutive
 
     println("====================================================================================")
-    println("          BEGINNING STEADY HYDROELASTIC SOLUTION              ")
+    println("          BEGINNING STATIC HYDROELASTIC SOLUTION              ")
     println("====================================================================================")
 
     # ************************************************

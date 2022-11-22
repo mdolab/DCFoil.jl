@@ -37,6 +37,9 @@ open(dataDir * "funcs.json", "r") do f
     funcs = JSON.parse(f)
 end
 
+# ==============================================================================
+#                         Static hydroelastic
+# ==============================================================================
 # --- Read bending ---
 file = readlines(dataDir * "bending.dat")
 bending = zeros(length(file))
@@ -75,7 +78,31 @@ for line ∈ file
     moment[counter] = parse(Float64, line)
     counter += 1
 end
+# ==============================================================================
+#                         Dynamic hydroelastic
+# ==============================================================================
+is_dynamic = true
+if is_dynamic
+    # --- Read tip bending ---
+    file = readlines(dataDir * "TipBendDyn.dat")
+    dynTipBending = zeros(length(file))
+    counter = 1
+    for line ∈ file
+        dynTipBending[counter] = parse(Float64, line)
+        counter += 1
+    end
 
+    # --- Read tip twisting ---
+    file = readlines(dataDir * "TipTwistDyn.dat")
+    dynTipTwisting = zeros(length(file))
+    counter = 1
+    for line ∈ file
+        dynTipTwisting[counter] = parse(Float64, line)
+        counter += 1
+    end
+
+    # --- Read tip lift ---
+end
 # ************************************************
 #     Plot results
 # ************************************************

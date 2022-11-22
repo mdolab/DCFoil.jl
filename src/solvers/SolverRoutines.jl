@@ -8,7 +8,7 @@ module SolverRoutines
 include("./NewtonRhapson.jl")
 using .NewtonRhapson
 
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, verbose=true, mode="FAD", is_cmplx=false)
+function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="FAD", is_cmplx=false)
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
@@ -17,13 +17,15 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
     # ************************************************
     #     Main solver loop
     # ************************************************
-    # TODO: probably a better way to pretty print this
-    println("+","-"^50,"+")
-    println("|              Beginning NL solve                  |")
-    println("+","-"^50,"+")
+    if is_verbose
+        # TODO: probably a better way to pretty print this
+        println("+","-"^50,"+")
+        println("|              Beginning NL solve                  |")
+        println("+","-"^50,"+")
+    end
 
     # Somewhere here, you could do something besides Newton-Rhapson if you want
-    converged_u, converged_r, iters = NewtonRhapson.do_newton_rhapson(compute_residuals, compute_∂r∂u, u, maxIters, tol, verbose, mode, is_cmplx)
+    converged_u, converged_r, iters = NewtonRhapson.do_newton_rhapson(compute_residuals, compute_∂r∂u, u, maxIters, tol, is_verbose, mode, is_cmplx)
 
     return converged_u, converged_r
 

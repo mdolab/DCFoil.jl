@@ -67,6 +67,7 @@ df = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.1:df:100.0 # frequency search range [Hz] for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
+
 # --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
     "neval" => neval,
