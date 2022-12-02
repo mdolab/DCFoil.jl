@@ -1,13 +1,13 @@
 # --- Julia ---
 
-# @File    :   SolveSteady.jl
+# @File    :   SolveStatic.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
 # @Desc    :   Solve the beam equations w/ steady aero/hydrodynamics and compute gradients
 
-module SolveSteady
+module SolveStatic
 """
-Steady hydroelastic solver
+Static hydroelastic solver
 """
 
 # --- Public functions ---

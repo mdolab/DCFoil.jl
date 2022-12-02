@@ -10,7 +10,7 @@
 module InitModel
 
 # --- Public functions ---
-export init_steady, init_dynamic
+export init_static, init_dynamic
 
 include("./hydro/Hydro.jl")
 include("./struct/BeamProperties.jl")
@@ -18,9 +18,9 @@ include("./constants/DesignConstants.jl")
 using .Hydro, .StructProp
 using .DesignConstants
 
-function init_steady(neval::Int64, DVDict::Dict)
+function init_static(neval::Int64, DVDict::Dict)
   """
-  Initialize a steady hydrofoil model
+  Initialize a static hydrofoil model
 
   Inputs:
       neval: Int64, number of evaluation points on span
@@ -107,11 +107,11 @@ end
 
 function init_dynamic(fSweep, DVDict::Dict; uSweep=nothing)
   """
-  Perform much of the same initializations as init_steady() except with other features
+  Perform much of the same initializations as init_static() except with other features
   """
-  steadyModel = init_steady(DVDict["neval"], DVDict)
+  staticModel = init_static(DVDict["neval"], DVDict)
 
-  model = DesignConstants.dynamicFoil(steadyModel.c, steadyModel.t, steadyModel.s, steadyModel.ab, steadyModel.eb, steadyModel.x_αb, steadyModel.mₛ, steadyModel.Iₛ, steadyModel.EIₛ, steadyModel.GJₛ, steadyModel.Kₛ, steadyModel.Sₛ, steadyModel.α₀, steadyModel.U∞, steadyModel.Λ, steadyModel.g, fSweep, uSweep, steadyModel.clα, steadyModel.ρ_f, steadyModel.neval, steadyModel.constitutive)
+  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, fSweep, uSweep, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive)
 
   return model
 end

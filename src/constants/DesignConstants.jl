@@ -43,7 +43,7 @@ end
 
 mutable struct dynamicFoil
     """
-    Dynamic foil object that inherits initially form the steady foil mutable struct
+    Dynamic foil object that inherits initially form the static foil mutable struct
     """
     c # chord length vector
     t # thickness vector

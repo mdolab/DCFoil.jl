@@ -1,9 +1,9 @@
 """
-Test to verify that the steady solve works without failing
+Test to verify that the static solve works without failing
 """
 
-include("../src/solvers/SolveSteady.jl")
+include("../src/solvers/SolveStatic.jl")
 
-function test_SolveSteady()
+function test_SolveStatic()
     
 end

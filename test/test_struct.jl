@@ -98,7 +98,7 @@ function test_FiniteElement()
         "x_αb" => zeros(neval), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
     )
-    foil = InitModel.init_steady(neval, DVDict)
+    foil = InitModel.init_static(neval, DVDict)
 
     nElem = neval - 1
     constitutive = "isotropic"

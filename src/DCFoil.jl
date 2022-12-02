@@ -12,17 +12,19 @@ module DCFoil
 export run_model
 
 # --- Libraries ---
-include("./solvers/SolveSteady.jl")
-include("./solvers/SolveDynamic.jl")
+include("./solvers/SolveStatic.jl")
+include("./solvers/SolveForced.jl")
 include("./solvers/SolveFlutter.jl")
 using JSON
-using .SolveSteady
-using .SolveDynamic
+using .SolveStatic
+using .SolveForced
+using .SolveFlutter
 
-function run_model(DVDict, evalFuncs, static=true, dynamic=true, fSweep=nothing, tipForceMag=nothing, outputDir="./OUTPUT/")
+function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_flutter=false, fSweep=nothing, tipForceMag=nothing, uSweep=nothing; outputDir="./OUTPUT/")
     """
-    Here is the interface into the src code
+    The interface into the src code
     """
+
     # --- Write the init dict to output folder ---
     stringData = JSON.json(DVDict)
     open(outputDir * "init_DVDict.json", "w") do io
@@ -30,21 +32,26 @@ function run_model(DVDict, evalFuncs, static=true, dynamic=true, fSweep=nothing,
     end
 
     # ==============================================================================
-    # Steady solution
+    #                         Static hydroelastic solution
     # ==============================================================================
-    if static
-        SolveSteady.solve(DVDict, evalFuncs, outputDir)
+    if run_static
+        SolveStatic.solve(DVDict, evalFuncs, outputDir)
     end
 
     # ==============================================================================
-    # Dynamic solution
+    #                         Forced vibration solution
     # ==============================================================================
-    if dynamic
-        SolveDynamic.solve(DVDict, outputDir, fSweep, tipForceMag)
-
-        # TODO:
-        # SolveFlutter.solve(DVDict, outputDir, fSearch)
+    if run_forced
+        SolveForced.solve(DVDict, outputDir, fSweep, tipForceMag)
     end
+
+    # ==============================================================================
+    #                         Flutter solution
+    # ==============================================================================
+    if run_flutter
+        SolveFlutter.solve(DVDict, outputDir, uSweep)
+    end
+
 end
 
 end

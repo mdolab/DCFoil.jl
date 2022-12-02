@@ -38,5 +38,5 @@ include("test_solvers.jl")
     #     Solver tests
     # ************************************************
     # Really just looking to see if the solver works
-    # @test test_SolveSteady() TODO:
+    # @test test_SolveStatic() TODO:
 end

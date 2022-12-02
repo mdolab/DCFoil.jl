@@ -25,9 +25,9 @@ mkpath(outputDir)
 # --- Set task you want to true ---
 run = true # run the solver for a single point
 # dynamic = false
-static = true
-dynamic = true
-# static = false
+run_static = true
+run_forced = true
+run_flutter = true
 
 α_sweep = true # sweep angle of attack
 U_sweep = true # sweep flow speed
@@ -64,8 +64,10 @@ end
 # ************************************************
 neval = 30 # spatial nodes
 df = 1
+dU = 0.25
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.1:df:100.0 # frequency search range [Hz] for flutter
+uSweep = 0.1:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # --- Foil from Deniz Akcabay's 2020 paper ---
@@ -92,4 +94,5 @@ evalFuncs = ["cl", "cmy", "lift", "moment"]
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.run_model(DVDict, evalFuncs, static, dynamic, fSweep, tipForceMag, outputDir)
+DCFoil.run_model(DVDict, evalFuncs, run_static, run_forced, run_flutter, fSweep, tipForceMag, uSweep, outputDir=outputDir)
+

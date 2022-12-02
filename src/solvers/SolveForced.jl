@@ -1,12 +1,12 @@
 # --- Julia---
 """
-@File    :   SolveDynamic.jl
+@File    :   SolveForced.jl
 @Time    :   2022/10/07
 @Author  :   Galen Ng
-@Desc    :   Similar to SolveSteady.jl but now it is a second order dynamical system!
+@Desc    :   Similar to SolveStatic.jl but now it is a second order dynamical system!
 """
 
-module SolveDynamic
+module SolveForced
 """
 Frequency domain hydroelastic solver
 """
@@ -26,13 +26,13 @@ include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
 include("../struct/FiniteElements.jl")
 include("../hydro/Hydro.jl")
-include("SolveSteady.jl")
+include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
-using .SolveSteady
+using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 
@@ -163,7 +163,7 @@ function compute_hydroLoads(foilDynamicStructuralStates, fullAIC)
     """
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
-    foilTotalDynStates, nDOF = SolveSteady.return_totalStates(foilDynamicStructuralStates, DFOIL, CONSTANTS.elemType)
+    foilTotalDynStates, nDOF = SolveStatic.return_totalStates(foilDynamicStructuralStates, DFOIL, CONSTANTS.elemType)
     nGDOF = DFOIL.neval * nDOF
 
     # --- Strip theory ---
