@@ -23,7 +23,7 @@ function test_struct()
     E₂ = 13.4e9
     G₁₂ = 3.9e9
     ν₁₂ = 0.25
-    θ = pi / 6
+    # θ = pi / 6
 
     N = 100
     θₐ = range(-pi / 2, stop=pi / 2, length=N)
@@ -88,11 +88,11 @@ function test_FiniteElement()
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 30.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000, # fluid density [kg/m³]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "test", # preselect from material library
         "g" => 0.04, # structural damping percentage
         "c" => 1 * ones(neval), # chord length [m]
-        "s" => 1, # semispan [m]
+        "s" => 1.0, # semispan [m]
         "ab" => zeros(neval), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(neval), # static imbalance [m]

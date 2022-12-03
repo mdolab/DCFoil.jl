@@ -23,7 +23,7 @@ using Plots
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
 
-function compute_theodorsen(k::Float64)
+function compute_theodorsen(k)
     """
     Theodorsen's transfer function for unsteady aero/hydrodynamics 
     w/ separate real and imaginary parts. This is potential flow theory.
@@ -38,15 +38,15 @@ function compute_theodorsen(k::Float64)
     Undefined for k = ωb/Ucos(Λ) = 0 (steady aero)
     """
     # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
-    H₀²ᵣ::Float64 = besselj0(k)
-    H₀²ᵢ::Float64 = -bessely0(k)
-    H₁²ᵣ::Float64 = besselj1(k)
-    H₁²ᵢ::Float64 = -bessely1(k)
+    H₀²ᵣ = besselj0(k)
+    H₀²ᵢ = -bessely0(k)
+    H₁²ᵣ = besselj1(k)
+    H₁²ᵢ = -bessely1(k)
 
-    denom::Float64 = ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
+    denom = ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
 
-    𝙲ᵣ::Float64 = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) / denom
-    𝙲ᵢ::Float64 = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) / denom
+    𝙲ᵣ = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) / denom
+    𝙲ᵢ = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) / denom
 
     ans = [𝙲ᵣ, 𝙲ᵢ]
 

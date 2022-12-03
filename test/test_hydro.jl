@@ -16,8 +16,11 @@ function test_stiffness()
     U = 5
     Λ = 0
     ω = 0.1
-    ρ = 1000
-    Matrix, SweepMatrix = Hydro.compute_node_stiff(clα, b, eb, ab, U, Λ, ω, ρ)
+    ρ = 1000.0
+    k = ω * b / (U * cos(Λ))
+    CKVec = Hydro.compute_theodorsen(k)
+    Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2] # TODO: for now, put it back together so solve is easy to debug
+    Matrix, SweepMatrix = Hydro.compute_node_stiff(clα, b, eb, ab, U, Λ, ω, ρ, Ck)
     show(stdout, "text/plain", real(Matrix))
     show(stdout, "text/plain", imag(Matrix))
     show(stdout, "text/plain", real(SweepMatrix))
@@ -33,8 +36,11 @@ function test_damping()
     U = 5
     Λ = 0
     ω = 0.1
-    ρ = 1000
-    Matrix, SweepMatrix = Hydro.compute_node_damp(clα, b, eb, ab, U, Λ, ω, ρ)
+    ρ = 1000.0
+    k = ω * b / (U * cos(Λ))
+    CKVec = Hydro.compute_theodorsen(k)
+    Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2] # TODO: for now, put it back together so solve is easy to debug
+    Matrix, SweepMatrix = Hydro.compute_node_damp(clα, b, eb, ab, U, Λ, ω, ρ, Ck)
     show(stdout, "text/plain", real(Matrix))
     show(stdout, "text/plain", imag(Matrix))
     show(stdout, "text/plain", real(SweepMatrix))
