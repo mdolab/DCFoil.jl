@@ -160,11 +160,12 @@ function compute_hydroLoads(foilDynamicStructuralStates, fullAIC)
     """
     Compute the lift and moment vectors (and totals) for the fluctating loads
         f_hydro,dyn
+    TODO: refactor this into the Hydro.jl file
     """
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
-    foilTotalDynStates, nDOF = SolveStatic.return_totalStates(foilDynamicStructuralStates, DFOIL, CONSTANTS.elemType)
-    nGDOF = DFOIL.neval * nDOF
+    foilTotalDynStates, nDOF = SolverRoutines.return_totalStates(foilDynamicStructuralStates, DFOIL, CONSTANTS.elemType)
+    # nGDOF = DFOIL.neval * nDOF
 
     # --- Strip theory ---
     fDynamic = fullAIC * foilTotalDynStates

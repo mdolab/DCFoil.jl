@@ -51,7 +51,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     end
 
     neval = DVDict["neval"]
-    global FOIL = InitModel.init_steady(neval, DVDict) # seems to only be global in this module
+    global FOIL = InitModel.init_static(neval, DVDict) # seems to only be global in this module
     nElem = neval - 1
     constitutive = FOIL.constitutive
 
@@ -78,7 +78,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
-    fTractions, AIC, planformArea = Hydro.compute_static_hydroLoads(u, structMesh, FOIL, elemType)
+    fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -130,7 +130,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
     # --- Get hydroLoads again on solution ---
-    fHydro, AIC, _ = compute_hydroLoads(uSol, structMesh, elemType)
+    fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
 
     # ************************************************
     #     COMPUTE FUNCTIONS OF INTEREST
@@ -152,60 +152,6 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ************************************************
     write_sol(uSol, fHydro, costFuncs, elemType, outputDir)
 
-end
-
-function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
-    """
-    Returns the deflected + rigid shape of the foil
-    """
-
-    alfaRad = FOIL.α₀ * π / 180
-
-    if elemType == "bend"
-        error("Only bend-twist element type is supported for load computation")
-    elseif elemType == "bend-twist"
-        nDOF = 3
-        staticOffset = [0, 0, alfaRad]
-    elseif elemType == "BT2"
-        nDOF = 4
-        staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
-    end
-
-    # Add static angle of attack to deflected foil
-    w = foilStructuralStates[1:nDOF:end]
-    foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
-
-    return foilTotalStates, nDOF
-end
-
-function compute_hydroLoads(foilStructuralStates, mesh, elemType="bend-twist")
-    """
-    Computes the steady hydrodynamic vector loads 
-    given the solved hydrofoil shape (strip theory)
-    """
-    # ---------------------------
-    #   Initializations
-    # ---------------------------
-    foilTotalStates, nDOF = return_totalStates(foilStructuralStates, FOIL, elemType)
-    nGDOF = FOIL.neval * nDOF
-
-    # ---------------------------
-    #   Strip theory
-    # ---------------------------
-    AIC = zeros(nGDOF, nGDOF)
-    _, planformArea = Hydro.compute_static_AICs!(AIC, mesh, FOIL, elemType)
-
-    # --- Compute fluid tractions ---
-    fTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
-
-    # # --- Debug printout ---
-    # println("AIC")
-    # show(stdout, "text/plain", AIC)
-    # println("")
-    # println("Aero loads")
-    # println(fTractions)
-
-    return fTractions, AIC, planformArea
 end
 
 function compute_cost_func(states, forces, evalFuncs)
@@ -381,7 +327,7 @@ function compute_residuals(structuralStates)
         exit()
     elseif CONSTANTS.elemType == "BT2" # knock off root element
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
-        foilTotalStates, nDOF = return_totalStates(completeStates, FOIL, CONSTANTS.elemType)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL, CONSTANTS.elemType)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     else
@@ -421,7 +367,6 @@ function compute_jacobian(stateVec)
     #     Compute cost func gradients
     # ************************************************
 
-    # TODO:
 
 end
 

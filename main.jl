@@ -24,9 +24,11 @@ mkpath(outputDir)
 # ************************************************
 # --- Set task you want to true ---
 run = true # run the solver for a single point
-# dynamic = false
-run_static = true
-run_forced = true
+run_static = false
+run_forced = false
+
+# run_static = true
+# run_forced = true
 run_flutter = true
 
 α_sweep = true # sweep angle of attack
@@ -64,9 +66,9 @@ end
 # ************************************************
 neval = 30 # spatial nodes
 df = 1
-dU = 0.25
+dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
-fSearch = 0.1:df:100.0 # frequency search range [Hz] for flutter
+fSearch = 0.0:df:20.0 # frequency search range [Hz] for flutter modes
 uSweep = 0.1:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -76,7 +78,7 @@ DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 10.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
-    "ρ_f" => 1000, # fluid density [kg/m³]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
     "c" => 0.1 * ones(neval), # chord length [m]
@@ -94,5 +96,5 @@ evalFuncs = ["cl", "cmy", "lift", "moment"]
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.run_model(DVDict, evalFuncs, run_static, run_forced, run_flutter, fSweep, tipForceMag, uSweep, outputDir=outputDir)
+DCFoil.run_model(DVDict, evalFuncs, run_static, run_forced, run_flutter, fSweep, tipForceMag, uSweep, fSearch, outputDir=outputDir)
 

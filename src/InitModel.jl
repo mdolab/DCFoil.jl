@@ -31,9 +31,9 @@ function init_static(neval::Int64, DVDict::Dict)
   """
 
   # --- First print to screen in a box ---
-  println("+","-"^50, "+")
+  println("+", "-"^50, "+")
   println("|            Design variable dictionary:           |")
-  println("+","-"^50, "+")
+  println("+", "-"^50, "+")
   for kv in DVDict
     println(kv)
   end
@@ -41,11 +41,11 @@ function init_static(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Geometry
   # ---------------------------
-  c = DVDict["c"]
-  t = DVDict["toc"] * c
-  ab = DVDict["ab"]
-  eb = 0.25 * c + ab
-  x_αb = DVDict["x_αb"]
+  c::Vector{Float64} = DVDict["c"]
+  t::Vector{Float64} = DVDict["toc"] * c
+  ab::Vector{Float64} = DVDict["ab"]
+  eb::Vector{Float64} = 0.25 * c + ab
+  x_αb::Vector{Float64} = DVDict["x_αb"]
 
   # ---------------------------
   #   Structure
@@ -74,8 +74,8 @@ function init_static(neval::Int64, DVDict::Dict)
     ν₁₂ = 0.25
     constitutive = "isotropic"
   end
-  g = DVDict["g"]
-  θ = DVDict["θ"]
+  g::Float64 = DVDict["g"]
+  θ::Float64 = DVDict["θ"]
 
   # --- Compute the structural properties for the foil ---
   EIₛ = zeros(Float64, neval)
@@ -105,13 +105,15 @@ function init_static(neval::Int64, DVDict::Dict)
 
 end
 
-function init_dynamic(fSweep, DVDict::Dict; uSweep=nothing)
+function init_dynamic(fSweep, DVDict::Dict; uSweep=0:0.1:1)
   """
   Perform much of the same initializations as init_static() except with other features
+
+  the default uSweep is a dummy array so type declaration works
   """
   staticModel = init_static(DVDict["neval"], DVDict)
 
-  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, fSweep, uSweep, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive)
+  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive, fSweep, uSweep)
 
   return model
 end

@@ -1,8 +1,7 @@
-"""
-Generic routines every solver needs
-"""
-
 module SolverRoutines
+"""
+Generic solver routines every solver needs
+"""
 
 # --- Libraries ---
 include("./NewtonRhapson.jl")
@@ -18,7 +17,6 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
     #     Main solver loop
     # ************************************************
     if is_verbose
-        # TODO: probably a better way to pretty print this
         println("+","-"^50,"+")
         println("|              Beginning NL solve                  |")
         println("+","-"^50,"+")
@@ -53,6 +51,10 @@ function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
     foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
 
     return foilTotalStates, nDOF
+end
+
+function compute_cost_func(foilStructuralStates)
+    # TODO
 end
 
 end

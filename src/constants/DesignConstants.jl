@@ -13,61 +13,60 @@ include("../hydro/Hydro.jl")
 include("../struct/BeamProperties.jl")
 using .Hydro, .StructProp
 
-mutable struct foil
+struct foil{T<:Float64}
     """
     Foil object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
     TODO: More design vars
     """
-    c # chord length vector
-    t # thickness vector
-    s # semispan [m]
-    ab # dist from midchord to EA vector (+ve for EA aft) [m]
-    eb # dist from CP to EA (+ve for EA aft) [m]
-    x_αb # static imbalance (+ve for CG aft) [m]
-    mₛ # structural mass vector [kg/m]
-    Iₛ # structural moment of inertia vector [kg-m]
-    EIₛ # bending stiffness vector [N-m²]
-    GJₛ # torsion stiffness vector [N-m²]
-    Kₛ # bend-twist coupling vector [N-m²]
-    Sₛ # warping resistance vector [N-m⁴]
-    α₀ # rigid initial angle of attack [deg]
-    U∞ # flow speed [m/s]
-    Λ # sweep angle [rad]
-    g # structural damping percentage
-    clα # lift slopes [1/rad]
-    ρ_f::Float64 # fluid density [kg/m³]
+    c::Vector{T} # chord length vector
+    t::Vector{T} # thickness vector
+    s::T # semispan [m]
+    ab::Vector{T} # dist from midchord to EA vector (+ve for EA aft) [m]
+    eb::Vector{T} # dist from CP to EA (+ve for EA aft) [m]
+    x_αb::Vector{T} # static imbalance (+ve for CG aft) [m]
+    mₛ::Vector{T} # structural mass vector [kg/m]
+    Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
+    EIₛ::Vector{T} # bending stiffness vector [N-m²]
+    GJₛ::Vector{T} # torsion stiffness vector [N-m²]
+    Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
+    Sₛ::Vector{T} # warping resistance vector [N-m⁴]
+    α₀::T # rigid initial angle of attack [deg]
+    U∞::T # flow speed [m/s]
+    Λ::T # sweep angle [rad]
+    g::T # structural damping percentage
+    clα::Vector{T} # lift slopes [1/rad]
+    ρ_f::T # fluid density [kg/m³]
     neval::Int64 # number of evaluation points on span
     constitutive::String # constitutive model
 end
 
-mutable struct dynamicFoil
+struct dynamicFoil{T<:Float64}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
-    c # chord length vector
-    t # thickness vector
-    s # semispan [m]
-    ab # dist from midchord to EA vector (+ve for EA aft) [m]
-    eb # dist from CP to EA (+ve for EA aft) [m]
-    x_αb # static imbalance (+ve for CG aft) [m]
-    mₛ # structural mass vector [kg/m]
-    Iₛ # structural moment of inertia vector [kg-m]
-    EIₛ # bending stiffness vector [N-m²]
-    GJₛ # torsion stiffness vector [N-m²]
-    Kₛ # bend-twist coupling vector [N-m²]
-    Sₛ # warping resistance vector [N-m⁴]
-    α₀ # rigid initial angle of attack [deg]
-    U∞ # flow speed [m/s]
-    Λ # sweep angle [rad]
-    g # structural damping percentage
-    fSweep # forcing frequency sweep [Hz] (for harmonically forced solution)
-    uSweep # forward speed sweep [m/s] (for flutter solution)
-    clα # lift slopes [1/rad]
-    ρ_f::Float64 # fluid density [kg/m³]
+    c::Vector{T} # chord length vector
+    t::Vector{T} # thickness vector
+    s::T # semispan [m]
+    ab::Vector{T} # dist from midchord to EA vector (+ve for EA aft) [m]
+    eb::Vector{T} # dist from CP to EA (+ve for EA aft) [m]
+    x_αb::Vector{T} # static imbalance (+ve for CG aft) [m]
+    mₛ::Vector{T} # structural mass vector [kg/m]
+    Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
+    EIₛ::Vector{T} # bending stiffness vector [N-m²]
+    GJₛ::Vector{T} # torsion stiffness vector [N-m²]
+    Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
+    Sₛ::Vector{T} # warping resistance vector [N-m⁴]
+    α₀::T # rigid initial angle of attack [deg]
+    U∞::T # flow speed [m/s]
+    Λ::T # sweep angle [rad]
+    g::T # structural damping percentage
+    clα::Vector{T} # lift slopes [1/rad]
+    ρ_f::T # fluid density [kg/m³]
     neval::Int64 # number of evaluation points on span
     constitutive::String # constitutive model
-
+    fSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forcing frequency sweep [Hz] (for harmonically forced solution)
+    uSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forward speed sweep [m/s] (for flutter solution)
 end
 
 end # end module

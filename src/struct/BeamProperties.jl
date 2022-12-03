@@ -6,7 +6,7 @@ module StructProp
 # --- Public functions ---
 export compute_section_property
 
-mutable struct section_property
+struct section_property{T<:Float64}
 
     """
     Inputs:
@@ -21,15 +21,15 @@ mutable struct section_property
     θ: global frame orientation
     """
 
-    c::Float64
-    t::Float64
-    ab::Float64
-    ρₛ::Float64
-    E₁::Float64
-    E₂::Float64
-    G₁₂::Float64
-    ν₁₂::Float64
-    θ::Float64
+    c::T
+    t::T
+    ab::T
+    ρₛ::T
+    E₁::T
+    E₂::T
+    G₁₂::T
+    ν₁₂::T
+    θ::T
 
 end
 

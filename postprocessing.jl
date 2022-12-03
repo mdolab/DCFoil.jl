@@ -25,13 +25,13 @@ outputDir = dataDir
 #     Read in results
 # ************************************************
 # --- Read in DVDict ---
-DVDict = Dict()
+DVDict::Dict = Dict()
 open(dataDir * "init_DVDict.json", "r") do f
     global DVDict
     DVDict = JSON.parse(f)
 end
 # --- Read in funcs ---
-funcs = Dict()
+funcs::Dict = Dict()
 open(dataDir * "funcs.json", "r") do f
     global funcs
     funcs = JSON.parse(f)

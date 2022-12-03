@@ -20,7 +20,7 @@ using .SolveStatic
 using .SolveForced
 using .SolveFlutter
 
-function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_flutter=false, fSweep=nothing, tipForceMag=nothing, uSweep=nothing; outputDir="./OUTPUT/")
+function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_flutter=false, fSweep=nothing, tipForceMag=nothing, uSweep=nothing, fSearch=nothing; outputDir="./OUTPUT/")
     """
     The interface into the src code
     """
@@ -49,7 +49,7 @@ function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_fl
     #                         Flutter solution
     # ==============================================================================
     if run_flutter
-        SolveFlutter.solve(DVDict, outputDir, uSweep)
+        SolveFlutter.solve(DVDict, outputDir, uSweep, fSearch)
     end
 
 end

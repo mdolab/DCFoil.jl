@@ -14,28 +14,29 @@ include("../struct/BeamProperties.jl")
 using .Hydro, .StructProp
 
 
-mutable struct DCFoilConstants
+mutable struct DCFoilConstants{T<:Float64}
     """
     This is a catch all mutable struct to store variables that we do not 
     want in function calls like r(u) or f(u)
 
     """
-    Kmat
+    Kmat::Matrix{T}
     elemType::String
-    mesh
-    AICmat # Aero influence coeff matrix
+    mesh::LinRange{T,Int64}
+    AICmat::Matrix{T} # Aero influence coeff matrix
     mode::String # type of derivative for drdu
-    planformArea
+    planformArea::T
 end
 
-mutable struct DCFoilDynamicConstants
+mutable struct DCFoilDynamicConstants{T<:Float64}
     """
+    For the dynamic hydroelastic solve, there are more constants to store
     """
     elemType::String
-    mesh
-    Dmat # dynamic matrix
-    AICmat # just the aero part of Dmat
-    extForceVec # external force vector excluding BC nodes
+    mesh::LinRange{T,Int64}
+    Dmat::Matrix{ComplexF64} # dynamic matrix # TODO: these might change
+    AICmat::Matrix{ComplexF64} # just the aero part of Dmat # TODO: these might change
+    extForceVec::Vector{T} # external force vector excluding BC nodes
 end
 
 end # end module
