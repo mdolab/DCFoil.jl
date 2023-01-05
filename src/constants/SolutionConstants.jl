@@ -20,7 +20,8 @@ mutable struct DCFoilConstants{T<:Float64}
     want in function calls like r(u) or f(u)
 
     """
-    Kmat::Matrix{T}
+    Kmat::Matrix{T} # structural stiffness matrix
+    Mmat::Matrix{T} # structural mass matrix
     elemType::String
     mesh::LinRange{T,Int64}
     AICmat::Matrix{T} # Aero influence coeff matrix

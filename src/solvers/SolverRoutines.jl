@@ -4,8 +4,10 @@ Generic solver routines every solver needs
 """
 
 # --- Libraries ---
+using LinearAlgebra
 include("./NewtonRhapson.jl")
-using .NewtonRhapson
+include("./EigenvalueProblem.jl")
+using .NewtonRhapson, .EigenvalueProblem
 
 function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="FAD", is_cmplx=false)
     """
@@ -17,9 +19,9 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
     #     Main solver loop
     # ************************************************
     if is_verbose
-        println("+","-"^50,"+")
+        println("+", "-"^50, "+")
         println("|              Beginning NL solve                  |")
-        println("+","-"^50,"+")
+        println("+", "-"^50, "+")
     end
 
     # Somewhere here, you could do something besides Newton-Rhapson if you want
@@ -55,6 +57,129 @@ end
 
 function compute_cost_func(foilStructuralStates)
     # TODO
+end
+
+
+# ==============================================================================
+#                         Linear algebra routines
+# ==============================================================================
+function compute_eigsolve(K, M, nEigs; issym=true)
+    """
+    Compute eigenvalues and eigenvectors of a system the julia way
+    """
+
+    # ************************************************
+    #     Compute eigenvalues and eigenvectors
+    # ************************************************
+    eVals, eVecs = EigenvalueProblem.compute_eigsolve(K, M, nEigs; issym=issym)
+
+    return eVals, eVecs
+end
+
+function cmplxInverse(A_r, A_i, n)
+    """
+    Compute inverse of a complex square matrix
+
+    Inputs
+    ------
+        A_r - real part of A matrix
+        A_i - imag part of A matrix
+        n - dimension of A matrix
+    Outputs
+    -------
+        Ainv_r - real part of inv(A)
+        Ainv_i - imag part of inv(A)
+    """
+
+    # --- Assemble auxiliary matrix ---
+    firstRow = hcat(A_r, -A_i)
+    secondRow = hcat(A_i, A_r)
+    Acopy = vcat(firstRow, secondRow)
+
+    # --- First compute LU factorization ---
+    luA = lu(Acopy)
+    # RHS identity matrix for inverse
+    RHS = Matrix{Float64}(I, 2 * n, 2 * n)
+
+    # --- Then solve linear system with multiple RHS's ---
+    Ainvcopy = luA \ RHS
+
+    # --- Extract solution ---
+    Ainv_r = Ainvcopy[1:n, 1:n]
+
+    # TODO: you could add the option for transpose here like Eirikur
+    Ainv_i = Ainvcopy[n+1:end, 1:n]
+
+    return Ainv_r, Ainv_i
+end
+
+function cmplxMatmult(A_r, A_i, B_r, B_i)
+    """
+    Complex multiplication of matrices using real arithmetic
+    """
+
+    # Real
+    C_r = A_r * B_r - A_i * B_i
+    # Imag
+    C_i = A_r * B_i + A_i * B_r
+
+    return C_r, C_i
+end
+
+function cmplxStdEigValProb(A_r, A_i, n)
+    """
+    Inputs
+    ------
+        A_r
+        A_i
+        n
+
+    Outputs
+    -------
+        w_r - real part of eigenvalues
+        w_i - imag part of eigenvalues
+        VL_r - left eigenvectors
+        VL_i - left eigenvectors
+        VR_r - right eigenvectors
+        VR_i - right eigenvectors
+        We mostly care about the right eigenvectors (occuring on right of A matrix)
+    """
+
+    # --- Initialize matrices ---
+    A = A_r + 1im * A_i
+
+
+    # --- Solve standard eigenvalue problem (Ax = λx) ---
+    # This method uses the julia built-in eigendecomposition
+    w, Vr = eigen(A)
+
+    # Eigenvalues
+    w_r = real(w)
+    w_i = imag(w)
+    # Eigenvectors
+    VR_r = real(Vr)
+    VR_i = imag(Vr)
+    # and some dummy values that aren't actually right
+    VL_r = real(Vr)
+    VL_i = imag(Vr)
+
+    return w_r, w_i, VL_r, VL_i, VR_r, VR_i
+end
+
+function argmax2d(A)
+    """
+    Find the indices of maximum value for each column of 2d array A
+    """
+    ncol = size(A)[2]
+
+    locs = zeros(Int64, ncol)
+
+    for col in 1:ncol
+        locs[col] = argmax(A[:, col])
+    end
+
+    return locs
+
 end
 
 end

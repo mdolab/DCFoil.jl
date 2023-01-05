@@ -30,7 +30,7 @@ SCREAMING_SNAKE_CASE - constants
 ### Dependencies
 
 Add package dependencies in the REPL with
-`Using Pkg`
+`using Pkg`
 `Pkg.add("package-name", preserve=PRESERVE_DIRECT)`
 to keep the version of the package static.
 

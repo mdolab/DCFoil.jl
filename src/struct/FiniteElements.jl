@@ -311,6 +311,8 @@ Module with generic FEM methods
 # --- Libraries ---
 using LinearAlgebra
 using ..LinearBeamElem
+include("../solvers/SolverRoutines.jl")
+using .SolverRoutines
 
 function make_mesh(nElem::Int64, foil)
     """
@@ -516,8 +518,22 @@ function solve_structure(K, M, F)
     return q
 end
 
-end # end module
+function compute_modal(K, M, nEig::Int64)
+    """
+    Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
+    i.e., this is structural dynamics, not hydroelastics.
+    """
 
+    # use krylov method to get first few smallest eigenvalues
+    # Solve [K]{x} = λ[M]{x} where λ = ω²
+    eVals, eVecs = SolverRoutines.compute_eigsolve(K, M, nEig)
+
+    naturalFreqs = sqrt.(eVals) / (2π)
+
+    return naturalFreqs, eVecs
+end
+
+end # end module
 
 # module BrickElem
 # # TODO: maybe never

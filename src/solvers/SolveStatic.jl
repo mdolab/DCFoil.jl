@@ -123,7 +123,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
     derivMode = "FAD"
-    global CONSTANTS = SolutionConstants.DCFoilConstants(K, elemType, structMesh, AIC, derivMode, planformArea)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
 
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
     # qSol = q # just use pre-solve solution

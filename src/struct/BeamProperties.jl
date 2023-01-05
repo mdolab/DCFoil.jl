@@ -20,7 +20,6 @@ struct section_property
     ν₁₂: Poisson ratio
     θ: global frame orientation
     """
-
     c
     t
     ab

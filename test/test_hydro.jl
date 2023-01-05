@@ -3,7 +3,7 @@ Run tests on hydro module file
 """
 
 using ForwardDiff, ReverseDiff, FiniteDifferences
-using Plots, LaTeXStrings
+using Plots, LaTeXStrings, Printf
 
 include("../src/hydro/Hydro.jl")
 using .Hydro # Using the Hydro module
@@ -64,12 +64,82 @@ function test_mass()
 end
 
 
+function test_FSeffect()
+    """
+    Test the high-speed FS asymptotic effect
+    """
+
+    neval = 3
+    # Fnh = 6
+    depth = 0.5 #[m]
+    chordVec = vcat(LinRange(0.12, 0.12, neval))
+
+    Usweep = 1:1:20
+    FnhVec = zeros(length(Usweep))
+    cl_rc_FS = zeros(length(Usweep))
+    cl_rc = zeros(length(Usweep))
+    uCtr = 1
+    for U∞ in Usweep
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=true)
+        cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=false)
+        cl_rc[uCtr] = cl_α[1] * deg2rad(6)
+
+        FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
+
+        uCtr += 1
+    end
+    label = @sprintf("h/c =%.2f", (depth / 0.09))
+    p1 = plot(FnhVec, cl_rc_FS ./ cl_rc, label=label)
+    plot!(title="High Fn_h free surface effect")
+
+    depth = 0.1 #[m]
+    uCtr = 1
+    for U∞ in Usweep
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=true)
+        cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=false)
+        cl_rc[uCtr] = cl_α[1] * deg2rad(6)
+
+        FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
+
+        uCtr += 1
+    end
+    label = @sprintf("h/c =%.2f", (depth / 0.09))
+    plot!(FnhVec, cl_rc_FS ./ cl_rc, label=label,line=:dash)
+
+
+    depth = 0.05 #[m]
+    uCtr = 1
+    for U∞ in Usweep
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=true)
+        cl_rc_FS[uCtr] = cl_α[1] * 1 # rad
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=false)
+        cl_rc[uCtr] = cl_α[1] * 1 # rad
+
+        FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
+
+        uCtr += 1
+    end
+    label = @sprintf("h/c =%.2f", (depth / 0.09))
+    p1 = plot!(FnhVec, [cl_rc_FS ./ cl_rc cl_rc_FS / π], label=label, layout=(2, 1))
+    # plot!(
+    #     title=["High Fn_h free surface effect" "2D CL"],
+    #     # ylabel=["C_L/C_L(h/c-->inf)" "c_l_alpha/pi"]
+    # )
+
+
+    xlabel!("Fn_h")
+    xlims!(0, 20)
+    ylims!(0, 1)
+end
+
 neval = 3 # Number of spatial nodes
 chordVec = vcat(LinRange(0.81, 0.405, neval))
 # ---------------------------
 #   Test glauert lift distribution
 # ---------------------------
-cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6, U∞=1.0, neval=neval)
+cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, neval=neval)
 pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
 plot!(title="lift slope")
 

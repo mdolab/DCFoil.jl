@@ -64,11 +64,11 @@ end
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-neval = 30 # spatial nodes
+neval = 2 # spatial nodes
 df = 1
 dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
-fSearch = 0.0:df:20.0 # frequency search range [Hz] for flutter modes
+fSearch = 0.01:df:1500.0 # frequency search range [Hz] for flutter modes
 uSweep = 0.1:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -86,8 +86,26 @@ DVDict = Dict(
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => 15 * π / 180, # fiber angle global [rad]
+    "θ" => 0 * π / 180, # fiber angle global [rad]
 )
+
+# --- Yingqian's Viscous FSI Paper (2019) ---
+DVDict = Dict(
+    "neval" => neval,
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "material" => "cfrp", # preselect from material library
+    "g" => 0.04, # structural damping percentage
+    "c" => 0.0925 * ones(neval), # chord length [m]
+    "s" => 0.2438, # semispan [m]
+    "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+    "toc" => 0.03459, # thickness-to-chord ratio
+    "x_αb" => 0 * ones(neval), # static imbalance [m]
+    "θ" => 0 * π / 180, # fiber angle global [rad]
+)
+
 # ************************************************
 #     Cost functions
 # ************************************************

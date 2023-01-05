@@ -33,6 +33,7 @@ include("test_solvers.jl")
     @test test_stiffness() <= 1e-5
     @test test_damping() <= 1e-5
     @test test_mass() <= 1e-5
+    @test test_FSeffect()
 
     # ************************************************
     #     Solver tests

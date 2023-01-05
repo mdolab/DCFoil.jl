@@ -19,6 +19,7 @@ export compute_AICs!, apply_BCs
 using FLOWMath: linear
 using SpecialFunctions
 using LinearAlgebra
+using Statistics
 using Plots
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
@@ -50,10 +51,14 @@ function compute_theodorsen(k)
 
     ans = [𝙲ᵣ, 𝙲ᵢ]
 
+    if k == 0
+        println("You can't use the Theodorsen function for k = 0!")
+    end
+
     return ans
 end
 
-function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
+function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothing, useFS=false)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -111,7 +116,11 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
     # --- Solve for the coefficients in Glauert's Fourier series ---
     ã = chord11 \ b
 
-    γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise free vortex strength (Γ/semispan)
+    γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise distribution of free vortex strength (Γ(y) in textbook)
+
+    if useFS
+        γ = use_free_surface(γ, α₀, U∞, chordVec, h)
+    end
 
     cl = (2 * γ) ./ (U∞ * chordVec) # sectional lift coefficient cl(y) = cl_α*α
     clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
@@ -122,6 +131,45 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval)
 
     return reverse!(cl_α)
 end
+
+function use_free_surface(γ, α₀, U∞, chordVec, h)
+    """
+    Modify hydro loads based on the free-surface condition that is Fn independent
+
+    Inputs
+    ------
+        γ spanwise vortex strength m^2/s
+        NOTE: with the current form, this is the negative of what some textbooks do so for example
+        Typically L = - ρ U int( Γ(y))dy
+        but Kerwin and Hadler do 
+        C_L = 2Γ/(Uc)
+    Returns:
+    --------
+        γ_FS modified vortex strength using the high-speed, free-surface BC
+    """
+
+    Fnh = U∞ / (sqrt(9.81 * h))
+    # Find limiting case
+    if Fnh < 10 / sqrt(h / mean(chordVec))
+        println("Violating high-speed free-surface BC with Fnh*sqrt(h/c) of")
+        println(Fnh * sqrt(h / mean(chordVec)))
+        println("Fnh is")
+        println(Fnh)
+    end
+
+    # Circulation with no FS effect
+    γ_2DnoFS = -U∞ * chordVec * π * α₀
+
+    # Circulation with high-speed FS effect
+    correctionVector = (1.0 .+ 16.0 .* (h ./ chordVec) .^ 2) ./ (2.0 .+ 16.0 .* (h ./ chordVec) .^ 2)
+    γ_2DFS = -U∞ * chordVec * π * α₀ .* correctionVector
+
+    # Corrected circulation
+    γ_FS = γ + γ_2DnoFS - γ_2DFS
+
+    return γ_FS
+end
+
 
 # function compute_added_mass(ρ_f, chordVec)
 #     """
@@ -147,7 +195,7 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     # (1st row is lift, 2nd row is pitching moment)
 
     k_hα = -2 * b * clα * Ck # lift due to angle of attack
-    k_αα = -2 * eb * b * clα * Ck # moment due to angle of attack
+    k_αα = -2 * eb * b * clα * Ck # moment due to angle of attack (disturbing)
     K_f = qf * cos(Λ)^2 *
           [
               0.0 k_hα
@@ -301,7 +349,8 @@ end
 
 function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, globalCf_i::Matrix{Float64}, globalKf_r::Matrix{Float64}, globalKf_i::Matrix{Float64}, mesh, FOIL, U∞, ω, elemType="BT2")
     """
-    Compute the AIC matrix for a given mesh
+    Compute the AIC matrix for a given mesh using LHS convention
+        (i.e., -ve force is disturbing, not restoring)
     """
 
     if elemType == "bend"
