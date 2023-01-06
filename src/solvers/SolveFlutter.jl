@@ -180,8 +180,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     globalKf_i::Matrix{Float64} = zeros(Float64, dim, dim)
     globalCf_i::Matrix{Float64} = zeros(Float64, dim, dim)
     initialSigns = zeros(Int64, nModes)
-    ξVec = zeros(Float64, nModes)
-    kVec = zeros(Float64, nModes)
+    ξVec::Matrix{Float64} = zeros(Float64, size(vel), nModes)
+    kVec::Matrix{Float64} = zeros(Float64, size(vel), nModes)
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
     ωSweep = 2π * FOIL.fSweep
 
@@ -193,7 +193,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     nFlow = 1
     for U∞ in vel
 
-        println("Running nFlow = ", nFlow, " dynP ", round(U∞^2 * 0.5 * FOIL.ρ_f, digits=3), "[Pa]", " rho_f ", FOIL.ρ_f, " vel ", U∞, "[m/s])")
+        println("Running nFlow = ", nFlow, " dynP ", round(U∞^2 * 0.5 * FOIL.ρ_f, digits=3), "[Pa]", " rho_f ", FOIL.ρ_f, "[kg/m^3] vel ", U∞, " [m/s])")
 
         # --- Sweep k and find crossings ---
         kSweep = ωSweep * b_ref / ((U∞ * cos(FOIL.Λ)))
@@ -208,8 +208,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
 
         end
 
-        ξVec[ii] = p_cross_r
-        kVec[ii] = p_cross_i
+        ξVec[nFlow, :] = p_cross_r
+        kVec[nFlow, :] = p_cross_i
 
         nFlow += 1
     end
@@ -237,10 +237,10 @@ function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, glob
     k_ctr = 0 # reduced freq (k) counter
 
     # --- Loop over reduced frequency search range ---
-    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history = sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
     # --- Extract valid solutions through interpolation ---
-    p_cross_r, p_cross_i, R_cross_r, R_cross_i = extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history)
+    p_cross_r, p_cross_i, R_cross_r, R_cross_i = extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik, N_MAX_K_ITER)
 
 
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i
@@ -254,8 +254,8 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
         dim - size of problem (nDOF w/o BC)
         kSweep - sweep of reduced frequencies
         b - semichord
-        MM
-        KK
+        MM - structural mass matrix
+        KK - structural stiffness matrix
     Outputs
     -------
 
@@ -278,17 +278,28 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
 
     p_diff_max = 0.2 # maximum allowed change in poles btwn two steps
 
+    # --- Determine Δk to step ---
+    # based on maximum in-vacuum natural frequency
+    # Δk = maximum(sqrt.(inv(MM) * KK)) * b / (U∞ * 100.0)
+    omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM, size(KK)[1])
+    Δk = maximum(sqrt.(omegaSquared) * b / (U∞ * 100.0))
+
     # ************************************************
     #     Perform k sweep
     # ************************************************
     failed = false
+    keepLooping = true
+    k = 0.001 # first guess of zero
+    maxK = kSweep[end]
     ik = 1 # k counter
-    for k in kSweep # TODO: CHANGE THIS TO A WHILE LOOP THAT ALLOWS NEW K CHOICES
+    pkEqnType = "Hassig"
+    while keepLooping
 
+        # ---------------------------
+        #   Compute hydrodynamics
+        # ---------------------------
+        # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
         ω = k * U∞ / b
-        # ---------------------------
-        #   Set the hydrodynamics
-        # ---------------------------
         globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, U∞, ω, CONSTANTS.elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
@@ -300,7 +311,6 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
         # # TODO: The wet natural frequencies are off so there might be a bug with the added mass since air is good
 
         # --- Solve eigenvalue problem ---
-        pkEqnType = "Hassig"
         p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
 
         # --- Sort eigenvalues from small to large ---
@@ -343,7 +353,9 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
         #   Check solution
         # ---------------------------
         if failed
+            # We need to try some new k guesses
             println("failed, need to adjust k")
+            k = 0.5 * (k - k_history[ik-1]) + k_history[ik-1]
         else
             # Success so store solution
             p_eigs_r[:, ik] = p_r
@@ -352,21 +364,55 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
             R_eigs_i[:, :, ik] = R_aa_i
             k_history[ik] = k
 
-            ik += 1 # increment freq search counter
+            # increment for next k
+            ik += 1
+            k += Δk
 
+            # Check if we solved the matched Im(p) = k problem
+            maxImP = maximum(p_i)
             if (maxImP < k_history[ik-1]) || (k > maxK)
-                
-                keep_looping = false
-            else
+                # Assumes highest mode does NOT cross Im(p) = k line from below later
+                # i.e. continue looping until the highest mode crosses the line or we reach maxK
+                keepLooping = false
+            end
 
         end
 
-        ik = ik -1 # Reduce counter b/c it was incremented in the last iteration
-    end
+        ik = ik - 1 # Reduce counter b/c it was incremented in the last iteration
+    end # end while
 
-    return p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history
+    return p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik
 end
 
+function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik, N_MAX_K_ITER)
+    """
+    Find where solutions intersect Im(p) = k line and interpolate value
+
+    Outputs
+    -------
+        p_cross_r - 
+        p_cross_i - 
+        R_cross_r - 
+        R_cross_i - 
+    """
+    # --- Initialize outputs ---
+    p_cross_r = zeros(Float64, 2 * dim * 5)
+    p_cross_i = zeros(Float64, 2 * dim * 5)
+    R_cross_r = zeros(Float64, 2 * dim, 2 * dim * 5)
+    R_cross_i = zeros(Float64, 2 * dim, 2 * dim * 5)
+
+    # --- Look for crossing of diagonal line Im(p) = k ---
+    ctr = 1
+    for ii in 1:2*dim # loop over flutter modes (lines)
+        for jj in 1:ik # loop over all reduced frequencies (tracing the mode line)
+            # TODO: PICKUP HERE
+        end
+    end
+
+
+    return p_cross_r, p_cross_i, R_cross_r, R_cross_i
+
+end
 function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
     # """
     # This routine solves the following eigenvalue problem.
