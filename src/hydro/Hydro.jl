@@ -206,7 +206,8 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     e_hh = U∞ * cos(Λ) * 2 * clα * Ck
     e_hα = U∞ * cos(Λ) * (-clα) * b * (1 - ab / b) * Ck
     e_αh = U∞ * cos(Λ) * clα * b * (1 + ab / b) * Ck
-    e_αα = U∞ * cos(Λ) * π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) * Ck
+    e_αα = U∞ * cos(Λ) *
+           (π * b^2 - clα * eb * b * (1 - 2 * (ab / b)) * Ck)
     K̂_f = qf / U∞ * sin(Λ) * b *
            [
                e_hh e_hα
@@ -226,7 +227,7 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     # Aerodynamic quasi-steady damping
     # (1st row is lift, 2nd row is pitching moment)
     c_hh = 2 * clα * Ck
-    c_hα = -b * (2 * π + clα * (1 - 2 * ab / b) * Ck)
+    c_hα = -b * (2π + clα * (1 - 2 * ab / b) * Ck)
     c_αh = 2 * eb * clα * Ck
     c_αα = 0.5 * b * (1 - 2 * ab / b) * (2π * b - 2 * clα * eb * Ck)
     C_f = qf / U∞ * cos(Λ) * b *
@@ -236,7 +237,7 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
           ]
 
     # Sweep correction to aerodynamic quasi-steady damping
-    e_hh = 2π * ab * b
+    e_hh = 2π * b
     e_hα = 2π * ab * b
     e_αh = 2π * ab * b
     e_αα = 2π * b^3 * (0.125 + (ab / b)^2)

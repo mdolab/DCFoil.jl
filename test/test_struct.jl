@@ -12,6 +12,9 @@ using Plots
 #                         BEAM PROPERTIES
 # ==============================================================================
 function test_struct()
+    """
+    Test the constitutive relations
+    """
     # ************************************************
     #     Setup the test problem
     # ************************************************
@@ -78,85 +81,9 @@ include("../src/struct/FiniteElements.jl")
 using .FEMMethods, .InitModel
 using .LinearBeamElem
 
-function test_FiniteElement()
-    """
-    Test the finite elements with unit loads, thickness, length, and structural moduli
-    """
-    neval = 30
-    DVDict = Dict(
-        "neval" => neval,
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "Λ" => 30.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "test", # preselect from material library
-        "g" => 0.04, # structural damping percentage
-        "c" => 1 * ones(neval), # chord length [m]
-        "s" => 1.0, # semispan [m]
-        "ab" => zeros(neval), # dist from midchord to EA [m]
-        "toc" => 1, # thickness-to-chord ratio
-        "x_αb" => zeros(neval), # static imbalance [m]
-        "θ" => 0 * π / 180, # fiber angle global [rad]
-    )
-    foil = InitModel.init_static(neval, DVDict)
-
-    nElem = neval - 1
-    constitutive = "isotropic"
-    # ************************************************
-    #     bend element
-    # ************************************************
-    elemType = "bend"
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
-    globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
-    u = copy(globalF)
-
-    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    q1 = FEMMethods.solve_structure(K, M, F)
-
-    # ************************************************
-    #     bend-twist 
-    # ************************************************
-    # ---------------------------
-    #   Tip force only
-    # ---------------------------
-    elemType = "bend-twist"
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
-    globalF[end-2] = 1.0 # 0 Newton tip force
-    u = copy(globalF)
-
-
-    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    q2 = FEMMethods.solve_structure(K, M, F)
-
-    # ---------------------------
-    #   Tip torque only
-    # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
-    globalF[end] = 1.0 # 0 Newton tip force
-    u = copy(globalF)
-
-
-    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    q3 = FEMMethods.solve_structure(K, M, F)
-
-    # --- Reference value ---
-    # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
-    ref_sol = [4, 4, 3]
-
-    # --- Relative error ---
-    answers = [q1[end-1], q2[end-2], q3[end]] # put computed solutions here
-    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-
-    return rel_err
-end
-
+# ==============================================================================
+#                         Test elemental matrices
+# ==============================================================================
 function test_BT2_stiff()
     """
     Test the second order beam matrix with unit values
@@ -233,6 +160,197 @@ function test_BT2_mass()
         print("Your stiffness matrix is not positive definite...it's wrong")
         rel_err += 1 # make test fail
     end
+
+    return rel_err
+end
+
+# ==============================================================================
+#                         Test finite element solver with unit loads
+# ==============================================================================
+function test_FiniteElementIso()
+    """
+    Test the finite elements with unit loads, thickness, length, and structural moduli
+    """
+    neval = 30
+    DVDict = Dict(
+        "neval" => neval,
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "Λ" => 30.0 * π / 180, # sweep angle [rad]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "material" => "test-iso", # preselect from material library
+        "g" => 0.04, # structural damping percentage
+        "c" => 1 * ones(neval), # chord length [m]
+        "s" => 1.0, # semispan [m]
+        "ab" => zeros(neval), # dist from midchord to EA [m]
+        "toc" => 1, # thickness-to-chord ratio
+        "x_αb" => zeros(neval), # static imbalance [m]
+        "θ" => 0 * π / 180, # fiber angle global [rad]
+    )
+    foil = InitModel.init_static(neval, DVDict)
+
+    nElem = neval - 1
+    constitutive = "isotropic"
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
+    # ************************************************
+    #     bend element
+    # ************************************************
+    elemType = "bend"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
+    u = copy(globalF)
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q1 = FEMMethods.solve_structure(K, M, F)
+
+    # ************************************************
+    #     bend-twist 
+    # ************************************************
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "bend-twist"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end-2] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q2 = FEMMethods.solve_structure(K, M, F)
+
+    # ---------------------------
+    #   Tip torque only
+    # ---------------------------
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q3 = FEMMethods.solve_structure(K, M, F)
+
+    # --- Reference value ---
+    # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
+    ref_sol = [4, 4, 3]
+
+    # --- Relative error ---
+    answers = [q1[end-1], q2[end-2], q3[end]] # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    return rel_err
+end
+
+function test_FiniteElementComp()
+    """
+    Test the finite elements with unit loads, thickness, length, and structural moduli
+    """
+    neval = 100
+    DVDict = Dict(
+        "neval" => neval,
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "Λ" => 30.0 * π / 180, # sweep angle [rad]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "material" => "test-comp", # preselect from material library
+        "g" => 0.04, # structural damping percentage
+        "c" => 1 * ones(neval), # chord length [m]
+        "s" => 1.0, # semispan [m]
+        "ab" => zeros(neval), # dist from midchord to EA [m]
+        "toc" => 1, # thickness-to-chord ratio
+        "x_αb" => zeros(neval), # static imbalance [m]
+        "θ" => 0 * π / 180, # fiber angle global [rad]
+    )
+    foil = InitModel.init_static(neval, DVDict)
+
+    nElem = neval - 1
+    constitutive = foil.constitutive
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
+    # ************************************************
+    #     bend-twist 
+    # ************************************************
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "bend-twist"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end-2] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q1 = FEMMethods.solve_structure(K, M, F)
+    bt_Ftip_wtip = q1[end-2]
+    bt_Ftip_psitip = q1[end]
+
+    # ---------------------------
+    #   Tip torque only
+    # ---------------------------
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q2 = FEMMethods.solve_structure(K, M, F)
+    bt_Ttip_wtip = q2[end-2]
+    bt_Ttip_psitip = q2[end]
+
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "BT2"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end-3] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q3 = FEMMethods.solve_structure(K, M, F)
+    BT2_Ftip_wtip = q3[end-3]
+    BT2_Ftip_psitip = q3[end-1]
+
+    # ---------------------------
+    #   Tip torque only
+    # ---------------------------
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalF[end-1] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q4 = FEMMethods.solve_structure(K, M, F)
+    BT2_Ttip_wtip = q4[end-3]
+    BT2_Ttip_psitip = q4[end-1]
+
+    println("bt_Ftip_wtip = ", bt_Ftip_wtip, " [m]")
+    println("bt_Ftip_psitip = ", bt_Ftip_psitip, " [rad]")
+    println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
+    println("bt_Ttip_psitip = ", bt_Ttip_psitip, " [rad]")
+    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
+    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+
+    # --- Reference value ---
+    # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
+    # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
+    ref_sol = [4, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 2.56699]
+
+    # --- Relative error ---
+    answers = [bt_Ftip_wtip, bt_Ftip_psitip, bt_Ttip_wtip, bt_Ttip_psitip, BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
     return rel_err
 end

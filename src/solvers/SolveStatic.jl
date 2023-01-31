@@ -56,7 +56,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     constitutive = FOIL.constitutive
 
     println("====================================================================================")
-    println("          BEGINNING STATIC HYDROELASTIC SOLUTION              ")
+    println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
     println("====================================================================================")
 
     # ************************************************
@@ -152,6 +152,7 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ************************************************
     write_sol(uSol, fHydro, costFuncs, elemType, outputDir)
 
+    return costFuncs
 end
 
 function compute_cost_func(states, forces, evalFuncs)
@@ -173,6 +174,14 @@ function compute_cost_func(states, forces, evalFuncs)
     #     COMPUTE COST FUNCS
     # ************************************************
     costFuncs = Dict() # initialize empty costFunc dictionary
+    if "w_tip" in evalFuncs
+        w_tip = W[end]
+        costFuncs["w_tip"] = w_tip
+    end
+    if "psi_tip" in evalFuncs
+        psi_tip = Ψ[end]
+        costFuncs["psi_tip"] = psi_tip
+    end
     if "lift" in evalFuncs
         TotalLift = sum(Lift) * FOIL.s / FOIL.neval
         costFuncs["lift"] = TotalLift

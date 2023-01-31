@@ -169,6 +169,10 @@ end
 function argmax2d(A)
     """
     Find the indices of maximum value for each column of 2d array A
+
+    Outputs
+    -------
+        locs - array of indices
     """
     ncol = size(A)[2]
 
@@ -182,4 +186,31 @@ function argmax2d(A)
 
 end
 
+function maxLocArr2d(A)
+    """
+    Find the maximum location for 2d array A
+
+    Outputs
+    -------
+        locs - array of indices
+    """
+    ncol = size(A)[2]
+    maxI = 1
+    maxJ = 1
+    maxVal = A[maxI, maxJ]
+
+    for jj in 1:ncol
+        for ii in 1:size(A)[1]
+            if A[ii, jj] > maxVal
+                maxI = ii
+                maxJ = jj
+                maxVal = A[ii, jj]
+            end
+        end
+    end
+
+    return maxI, maxJ, maxVal
+
 end
+    
+end # end module

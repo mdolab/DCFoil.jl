@@ -40,43 +40,50 @@ end
 # ==============================================================================
 #                         Static hydroelastic
 # ==============================================================================
-# --- Read bending ---
-file = readlines(dataDir * "bending.dat")
-bending = zeros(length(file))
-nodes = LinRange(0, DVDict["s"], length(bending))
+is_static = true
+if is_static
+    # ************************************************
+    #     Read in data
+    # ************************************************
+    # --- Read bending ---
+    file = readlines(dataDir * "bending.dat")
+    bending = zeros(length(file))
+    nodes = LinRange(0, DVDict["s"], length(bending))
 
-counter = 1
-for line ∈ file
-    bending[counter] = parse(Float64, line)
-    counter += 1
-end
+    counter = 1
+    for line ∈ file
+        bending[counter] = parse(Float64, line)
+        counter += 1
+    end
 
-# --- Read twisting ---
-file = readlines(dataDir * "twisting.dat")
-twisting = zeros(length(file))
+    # --- Read twisting ---
+    file = readlines(dataDir * "twisting.dat")
+    twisting = zeros(length(file))
 
-counter = 1
-for line ∈ file
-    twisting[counter] = parse(Float64, line)
-    counter += 1
-end
+    counter = 1
+    for line ∈ file
+        twisting[counter] = parse(Float64, line)
+        counter += 1
+    end
 
-# --- Read lift ---
-file = readlines(dataDir * "lift.dat")
-lift = zeros(length(file))
-counter = 1
-for line ∈ file
-    lift[counter] = parse(Float64, line)
-    counter += 1
-end
+    # --- Read lift ---
+    file = readlines(dataDir * "lift.dat")
+    lift = zeros(length(file))
+    counter = 1
+    for line ∈ file
+        lift[counter] = parse(Float64, line)
+        counter += 1
+    end
 
-# --- Read moment ---
-file = readlines(dataDir * "moments.dat")
-moment = zeros(length(file))
-counter = 1
-for line ∈ file
-    moment[counter] = parse(Float64, line)
-    counter += 1
+    # --- Read moment ---
+    file = readlines(dataDir * "moments.dat")
+    moment = zeros(length(file))
+    counter = 1
+    for line ∈ file
+        moment[counter] = parse(Float64, line)
+        counter += 1
+    end
+
 end
 # ==============================================================================
 #                         Dynamic hydroelastic
@@ -128,30 +135,43 @@ if is_dynamic
         counter += 1
     end
 end
-# ************************************************
-#     Plot results
-# ************************************************
-liftTitle = @sprintf("Lift (%.1fN, CL=%.2f)", (funcs["lift"]), funcs["cl"])
-momTitle = @sprintf("Mom. (%.1fN-m, CM=%.2f)", (funcs["moment"]), funcs["cmy"])
-visuals = plot(
-    [nodes, nodes, nodes, nodes], [bending, twisting * 180 / π, lift, moment],
-    label=["" "" "" ""],
-    layout=(2, 2),
-    title=["Spanwise Bending" "Spanwise twist" liftTitle momTitle],
-    xlabel="y [m]",
-    ylabel=[L"w" * " [m]" L"\psi" * " " * L"[\circ]" L"L" * " [N/m]" L"M" * " [N-m/m]"],
-)
 
-fiberAngle = round(DVDict["θ"] * 180 / π; digits=2)
-flowSpeed = round(DVDict["U∞"]; digits=2)
-AOA = round(DVDict["α₀"]; digits=2)
-sweepAngle = round(DVDict["Λ"] * 180 / π; digits=2)
 
-titleTxt = L"U_{\infty} = %$flowSpeed \textrm{\,m/s}, α_0 = %$AOA^{\circ}, \Lambda = %$sweepAngle^{\circ}, θ_f = %$fiberAngle^{\circ}"
-title = plot(title=titleTxt, grid=false, xticks=false, yticks=false, showaxis=false, bottom_margin=-50Plots.px)
-plot(title, visuals, layout=@layout([A{0.1h}; B]))
+# ==============================================================================
+#                         Flutter solution
+# ==============================================================================
+is_flutter = true
+if is_flutter
+    # --- Read in data ---
+end
 
-savefig(outputDir * "spanwise_view.pdf")
+
+# ==============================================================================
+#                         Plot results
+# ==============================================================================
+if is_static
+    liftTitle = @sprintf("Lift (%.1fN, CL=%.2f)", (funcs["lift"]), funcs["cl"])
+    momTitle = @sprintf("Mom. (%.1fN-m, CM=%.2f)", (funcs["moment"]), funcs["cmy"])
+    visuals = plot(
+        [nodes, nodes, nodes, nodes], [bending, twisting * 180 / π, lift, moment],
+        label=["" "" "" ""],
+        layout=(2, 2),
+        title=["Spanwise Bending" "Spanwise twist" liftTitle momTitle],
+        xlabel="y [m]",
+        ylabel=[L"w" * " [m]" L"\psi" * " " * L"[\circ]" L"L" * " [N/m]" L"M" * " [N-m/m]"],
+    )
+
+    fiberAngle = round(DVDict["θ"] * 180 / π; digits=2)
+    flowSpeed = round(DVDict["U∞"]; digits=2)
+    AOA = round(DVDict["α₀"]; digits=2)
+    sweepAngle = round(DVDict["Λ"] * 180 / π; digits=2)
+
+    titleTxt = L"U_{\infty} = %$flowSpeed \textrm{\,m/s}, α_0 = %$AOA^{\circ}, \Lambda = %$sweepAngle^{\circ}, θ_f = %$fiberAngle^{\circ}"
+    title = plot(title=titleTxt, grid=false, xticks=false, yticks=false, showaxis=false, bottom_margin=-50Plots.px)
+    plot(title, visuals, layout=@layout([A{0.1h}; B]))
+
+    savefig(outputDir * "spanwise_view.pdf")
+end
 
 if is_dynamic
     visuals = plot(

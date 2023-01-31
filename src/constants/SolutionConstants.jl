@@ -13,7 +13,9 @@ include("../hydro/Hydro.jl")
 include("../struct/BeamProperties.jl")
 using .Hydro, .StructProp
 
-
+# ==============================================================================
+#                         STRUCTS
+# ==============================================================================
 mutable struct DCFoilConstants{T<:Float64}
     """
     This is a catch all mutable struct to store variables that we do not 
@@ -39,5 +41,10 @@ mutable struct DCFoilDynamicConstants{T<:Float64}
     AICmat::Matrix{ComplexF64} # just the aero part of Dmat # TODO: these might change
     extForceVec::Vector{T} # external force vector excluding BC nodes
 end
+
+# ==============================================================================
+#                         CONSTANTS
+# ==============================================================================
+const mepsLarge = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it is a more robust value for solving
 
 end # end module

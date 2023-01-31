@@ -66,13 +66,28 @@ function init_static(neval::Int64, DVDict::Dict)
     G₁₂ = 77.2
     ν₁₂ = 0.3
     constitutive = "isotropic"
-  elseif (DVDict["material"] == "test")
+  elseif (DVDict["material"] == "rigid") # unrealistic rigid material
+    ρₛ = 7900
+    E₁ = 193e12
+    E₂ = 193e12
+    G₁₂ = 77.2e12
+    ν₁₂ = 0.3
+    constitutive = "isotropic"
+  elseif (DVDict["material"] == "test-iso")
     ρₛ = 1590.0
     E₁ = 1
     E₂ = 1
     G₁₂ = 1
     ν₁₂ = 0.25
     constitutive = "isotropic"
+  elseif (DVDict["material"] == "test-comp")
+    ρₛ = 1590.0
+    E₁ = 1
+    E₂ = 1
+    G₁₂ = 1
+    ν₁₂ = 0.25
+    constitutive = "orthotropic"
+
   end
   g::Float64 = DVDict["g"]
   θ::Float64 = DVDict["θ"]
