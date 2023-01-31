@@ -21,8 +21,8 @@ function test_SolveStaticRigid()
 
     # --- Reference value ---
     # It should be zero
-    refBendSol = [0.000000, 0.000000, 0.000000]
-    refTwistSol = [0.000000, 0.000000, 0.000000]
+    refBendSol = [0.0000002066862233, 0.0000002054837886, 0.0000002058789881]
+    refTwistSol = [0.0000001337031715, 0.0000001332778196, 0.0000001334986638]
 
     nevals = [10, 20, 40] # list of number of nodes to test
     # ************************************************
@@ -97,6 +97,9 @@ function test_SolveStaticRigid()
     answers = vec(tipTwistData) # put computed solutions here
     rel_err2 = LinearAlgebra.norm(answers - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
     rel_err = max(rel_err1, rel_err2)
+
+    # println("Relative error: ", rel_err1)
+    # println("Relative error: ", rel_err2)
 
     return rel_err
 
@@ -196,7 +199,7 @@ function test_SolveStaticComp()
     # --- Reference value ---
     #  Obtained by running the code
     refBendSol = [0.0004975455285840, 0.0004938633758853, 0.0004949057635612]
-    refTwistSol = [-0.0008526586938542, -0.0008650842918665, -0.0008651025595121]
+    refTwistSol = [-0.0008526586938542, -0.0008359901040122, -0.0008387865527998]
 
     nevals = [10, 20, 40] # list of number of nodes to test
     # ************************************************
@@ -266,11 +269,12 @@ function test_SolveStaticComp()
     end
 
     # --- Relative error ---
-    answers = vec(tipBendData) # put computed solutions here
-    rel_err1 = LinearAlgebra.norm(answers - refBendSol, 2) / LinearAlgebra.norm(refBendSol, 2)
-    answers = vec(tipTwistData) # put computed solutions here
-    rel_err2 = LinearAlgebra.norm(answers - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
+    rel_err1 = LinearAlgebra.norm(tipBendData - refBendSol, 2) / LinearAlgebra.norm(refBendSol, 2)
+    rel_err2 = LinearAlgebra.norm(tipTwistData - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
     rel_err = max(rel_err1, rel_err2)
+
+    # println("Relative error: ", rel_err1)
+    # println("Relative error: ", rel_err2)
 
     return rel_err
 

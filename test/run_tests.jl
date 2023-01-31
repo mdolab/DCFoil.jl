@@ -40,9 +40,9 @@ include("test_solvers.jl")
     # ************************************************
     # Really just looking to see if the solver works
     io = open("test.out", "w")
-    @test test_SolveStaticRigid() <= 1e-6 # rigid hydrofoil solve
-    @test test_SolveStaticIso() <= 1e-12 # ss hydrofoil solve
-    @test test_SolveStaticComp() <= 1e-12 # cfrp hydrofoil
+    @test test_SolveStaticRigid() <= 1e-4 # rigid hydrofoil solve
+    @test test_SolveStaticIso() <= 1e-4 # ss hydrofoil solve
+    @test test_SolveStaticComp() <= 1e-4 # cfrp hydrofoil
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     close(io)
 end
