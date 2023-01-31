@@ -30,8 +30,8 @@ run_forced = false
 run_flutter = false
 
 # Uncomment here
-run_static = true
-# run_forced = true
+# run_static = true
+run_forced = true
 # run_flutter = true
 
 α_sweep = true # sweep angle of attack

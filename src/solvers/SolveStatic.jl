@@ -183,11 +183,11 @@ function compute_cost_func(states, forces, evalFuncs)
         costFuncs["psi_tip"] = psi_tip
     end
     if "lift" in evalFuncs
-        TotalLift = sum(Lift) * FOIL.s / FOIL.neval
+        TotalLift = sum(Lift)
         costFuncs["lift"] = TotalLift
     end
     if "moment" in evalFuncs
-        TotalMoment = sum(Moments) * FOIL.s / FOIL.neval
+        TotalMoment = sum(Moments)
         costFuncs["moment"] = TotalMoment
     end
     if "cl" in evalFuncs

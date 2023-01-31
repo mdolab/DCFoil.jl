@@ -9,6 +9,14 @@ using LinearAlgebra
 include("../src/hydro/Hydro.jl")
 using .Hydro # Using the Hydro module
 
+include("../src/struct/FiniteElements.jl")
+include("../src/InitModel.jl")
+using .FEMMethods # Using the FEMMethods module just for some mesh gen methods
+using .InitModel # Using the InitModel module
+
+# ==============================================================================
+#                         Nodal hydrodynamic forces
+# ==============================================================================
 function test_stiffness()
     """
     Compare strip forces to a hand calculated reference solution
@@ -133,6 +141,83 @@ function test_mass()
     return rel_err
 end
 
+# ==============================================================================
+#                         Larger scale tests
+# ==============================================================================
+function test_hydroLoads()
+    """
+    Need to test mesh independance of hydro loads on a rigid hydrofoil
+    """
+
+    # --- Reference value ---
+    # These were obtained from hand calcs
+    ref_sol = vec([])
+
+    elemType = "BT2"
+
+    nevals = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120]
+    liftData = zeros(length(nevals))
+    momData = zeros(length(nevals))
+    meshlvl = 1
+
+    for neval in nevals
+
+        DVDict = Dict(
+            "neval" => neval,
+            "α₀" => 6.0, # initial angle of attack [deg]
+            "U∞" => 5.0, # free stream velocity [m/s]
+            "Λ" => 30.0 * π / 180, # sweep angle [rad]
+            "ρ_f" => 1000.0, # fluid density [kg/m³]
+            "material" => "test-comp", # preselect from material library
+            "g" => 0.04, # structural damping percentage
+            "c" => 1 * ones(neval), # chord length [m]
+            "s" => 1.0, # semispan [m]
+            "ab" => zeros(neval), # dist from midchord to EA [m]
+            "toc" => 1, # thickness-to-chord ratio
+            "x_αb" => zeros(neval), # static imbalance [m]
+            "θ" => 0 * π / 180, # fiber angle global [rad]
+        )
+        FOIL = InitModel.init_static(neval, DVDict)
+
+        nElem = neval - 1
+        constitutive = FOIL.constitutive
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+
+        _, _, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+
+        # --- Initialize states ---
+        u = copy(globalF)
+        u .= 0.0 # NOTE: Because we don't actually do the FEMSolve, this is a rigid hydrofoil
+
+        # ---------------------------
+        #   Get initial fluid tracts
+        # ---------------------------
+        fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
+        forces = fTractions
+
+        # ---------------------------
+        #   Force integration
+        # ---------------------------
+        if elemType == "BT2"
+            nDOF = 4
+            Moments = forces[3:nDOF:end]
+            Lift = forces[1:nDOF:end]
+        else
+            println("Invalid element type")
+        end
+        TotalLift = sum(Lift)
+        TotalMoment = sum(Moments)
+
+        liftData[meshlvl] = TotalLift
+        momData[meshlvl] = TotalMoment
+
+        meshlvl += 1
+    end
+
+    # # --- Print hydro loads ---
+    # println("Lift: ", liftData)
+    # println("Moment: ", momData)
+end
 
 function test_FSeffect()
     """

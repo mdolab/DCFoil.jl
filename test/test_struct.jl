@@ -250,7 +250,7 @@ function test_FiniteElementComp()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
-    neval = 100
+    neval = 30
     DVDict = Dict(
         "neval" => neval,
         "α₀" => 6.0, # initial angle of attack [deg]
@@ -334,14 +334,15 @@ function test_FiniteElementComp()
     BT2_Ttip_wtip = q4[end-3]
     BT2_Ttip_psitip = q4[end-1]
 
-    println("bt_Ftip_wtip = ", bt_Ftip_wtip, " [m]")
-    println("bt_Ftip_psitip = ", bt_Ftip_psitip, " [rad]")
-    println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
-    println("bt_Ttip_psitip = ", bt_Ttip_psitip, " [rad]")
-    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
-    println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
-    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
-    println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+    # --- Print these out if something does not make sense ---
+    # println("bt_Ftip_wtip = ", bt_Ftip_wtip, " [m]")
+    # println("bt_Ftip_psitip = ", bt_Ftip_psitip, " [rad]")
+    # println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
+    # println("bt_Ttip_psitip = ", bt_Ttip_psitip, " [rad]")
+    # println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    # println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
+    # println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    # println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque

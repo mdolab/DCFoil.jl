@@ -268,6 +268,25 @@ function compute_node_mass(b, ab, rho_f)
 end
 
 function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
+    """
+    Compute the steady aerodynamic influence coefficients (AICs) for a given mesh
+    This is different from the general AIC method because there is no frequency dependence
+    Inputs
+    ------
+    AIC: Matrix
+        Aerodynamic influence coefficient matrix
+    mesh: Array
+        Mesh of the foil
+    FOIL: struct
+        Struct containing the foil parameters
+    elemType: String
+        Element type
+
+    Returns
+    -------
+    AIC: Matrix
+        Aerodynamic influence coefficient matrix (now filled out)
+    """
 
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
@@ -280,21 +299,33 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     # fluid dynamic pressure    
     qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2
 
-    # strip width
-    dy = FOIL.s / (FOIL.neval)
+    # --- Initialize planform area counter ---
     planformArea = 0.0
 
     jj = 1 # node index
+
+    # ---------------------------
+    #   Loop over strips (nodes)
+    # ---------------------------
     for yⁿ ∈ mesh
+        # --- compute strip width ---
+        if jj < FOIL.neval
+            Δy = mesh[jj+1] - mesh[jj]
+        else
+            Δy = mesh[jj] - mesh[jj-1]
+        end
+
+        # --- Initialize aero-force matrices ---
         K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
         E_f = copy(K_f)  # Sweep correction matrix
+
 
         # --- Linearly interpolate values based on y loc ---
         clα = linear(mesh, FOIL.clα, yⁿ)
         c = linear(mesh, FOIL.c, yⁿ)
-        b = 0.5 * c # semichord for more readable code
         ab = linear(mesh, FOIL.ab, yⁿ)
         eb = linear(mesh, FOIL.eb, yⁿ)
+        b = 0.5 * c # semichord for more readable code
 
         # --- Compute forces ---
         # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
@@ -337,10 +368,11 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
 
         GDOFIdx = nDOF * (jj - 1) + 1
 
-        AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal
+        # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+        AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal * Δy
 
         # Add rectangle to planform area
-        planformArea += c * dy
+        planformArea += c * Δy
 
         jj += 1 # increment strip counter
     end
@@ -352,6 +384,21 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
     """
     Compute the AIC matrix for a given mesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
+    Inputs
+    ------
+    AIC: Matrix
+        Aerodynamic influence coefficient matrix broken up into added mass, damping, and stiffness
+    mesh: Array
+        Mesh of the foil
+    FOIL: struct
+        Struct containing the foil parameters
+    elemType: String
+        Element type
+
+    Returns
+    -------
+    AIC: Matrix
+        Aerodynamic influence coefficient matrix (now filled out)
     """
 
     if elemType == "bend"
@@ -362,12 +409,21 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
         nDOF = 4
     end
 
-    # strip width
-    dy = FOIL.s / (FOIL.neval)
+    # --- Initialize planform area counter ---
     planformArea = 0.0
 
     jj = 1 # node index
+    # ---------------------------
+    #   Loop over strips (nodes)
+    # ---------------------------
     for yⁿ in mesh
+        # --- compute strip width ---
+        if jj < FOIL.neval
+            Δy = mesh[jj+1] - mesh[jj]
+        else
+            Δy = mesh[jj] - mesh[jj-1]
+        end
+
         # --- Linearly interpolate values based on y loc ---
         clα::Float64 = linear(mesh, FOIL.clα, yⁿ)
         c::Float64 = linear(mesh, FOIL.c, yⁿ)
@@ -379,7 +435,7 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
 
         # Do computation once for efficiency
         CKVec = compute_theodorsen(k)
-        Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2] # TODO: for now, put it back together so solve is easy to debug
+        Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
 
         K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, FOIL.Λ, ω, FOIL.ρ_f, Ck)
         C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, FOIL.Λ, ω, FOIL.ρ_f, Ck)
@@ -418,14 +474,15 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
 
         GDOFIdx::Int64 = nDOF * (jj - 1) + 1
 
-        globalKf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal)
-        globalKf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal)
-        globalCf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal)
-        globalCf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal)
-        globalMf[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal
+        # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+        globalKf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal) * Δy
+        globalKf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal) * Δy
+        globalCf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal) * Δy
+        globalCf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal) * Δy
+        globalMf[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal * Δy
 
         # Add rectangle to planform area
-        planformArea += c * dy
+        planformArea += c * Δy
 
         jj += 1 # increment strip counter
     end
@@ -465,31 +522,46 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="b
     return hydroTractions, AIC, planformArea
 end
 
-function integrate_hydro_forces(nDOF, hydroTractions, FOIL, elemType="BT2")
+function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT2")
     """
     Inputs
     ------
-        nDOF: number of degrees of freedom per node
-        hydroTractions: 1D array of hydrodynamic forces
+        fullAIC: AIC matrix
+        FOIL: FOIL struct
+        elemType: element type
     Returns
     -------
-        total lift and moment
+        force vector and total lift and moment
+
+    TODO: have steady solver call this too
     """
 
+    # --- Initializations ---
+    # This is dynamic deflection + rigid shape of foil
+    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, DFOIL, elemType)
+    # nGDOF = DFOIL.neval * nDOF
+
+    # --- Strip theory ---
+    # This is the hydro force traction vector
+    ForceVector = fullAIC * foilTotalStates
+
+
     if elemType == "bend-twist"
-        Moments = hydroTractions[nDOF:nDOF:end]
+        nDOF = 3
+        Moments = ForceVector[nDOF:nDOF:end]
     elseif elemType == "BT2"
-        Moments = hydroTractions[3:nDOF:end]
+        nDOF = 4
+        Moments = ForceVector[3:nDOF:end]
     else
         error("Invalid element type")
     end
-    Lift = hydroTractions[1:nDOF:end]
+    Lift = ForceVector[1:nDOF:end]
 
     # --- Total dynamic hydro force calcs ---
-    TotalLift = sum(Lift) * FOIL.s / FOIL.neval
-    TotalMoment = sum(Moments) * FOIL.s / FOIL.neval
+    TotalLift = sum(Lift)
+    TotalMoment = sum(Moments)
 
-    return TotalLift, TotalMoment
+    return ForceVector, TotalLift, TotalMoment
 end
 
 function apply_BCs(K::Matrix{Float64}, C::Matrix{Float64}, M::Matrix{Float64}, globalDOFBlankingList::Vector{Int64})

@@ -35,13 +35,14 @@ include("test_solvers.jl")
     @test test_mass() <= 1e-10
     # @test test_FSeffect() <= 1e-5 # not ready yet
 
-    # # ************************************************
-    # #     Solver tests
-    # # ************************************************
-    # # Really just looking to see if the solver works
-    # io = open("test.out", "w")
-    # @test test_SolveStaticRigid() <= 1e-5 # rigid hydrofoil solve
-    # @test test_SolveStaticIso() <= 1e-5 # ss hydrofoil solve
-    # @test test_SolveStaticComp() <= 1e-5 # not ready yet
-    # close(io)
+    # ************************************************
+    #     Solver tests
+    # ************************************************
+    # Really just looking to see if the solver works
+    io = open("test.out", "w")
+    @test test_SolveStaticRigid() <= 1e-6 # rigid hydrofoil solve
+    @test test_SolveStaticIso() <= 1e-12 # ss hydrofoil solve
+    @test test_SolveStaticComp() <= 1e-12 # cfrp hydrofoil
+    # @test test_SolveForcedComp() <= 1e-12 # not ready yet
+    close(io)
 end

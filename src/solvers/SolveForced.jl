@@ -132,7 +132,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         #   Get hydroloads at freq
         # ---------------------------
         fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-        fDynamic, DynLift, DynMoment = compute_hydroLoads(uSol, fullAIC)
+        fDynamic, DynLift, DynMoment = Hydro.integrate_hydroLoads(uSol, fullAIC, DFOIL, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
 
         # --- Store tip values ---
         global LiftDyn[f_ctr] = abs(DynLift[end])
@@ -154,36 +154,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     # ************************************************
     write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir)
 
-end
-
-function compute_hydroLoads(foilDynamicStructuralStates, fullAIC)
-    """
-    Compute the lift and moment vectors (and totals) for the fluctating loads
-        f_hydro,dyn
-    TODO: refactor this into the Hydro.jl file
-    """
-    # --- Initializations ---
-    # This is dynamic deflection + rigid shape of foil
-    foilTotalDynStates, nDOF = SolverRoutines.return_totalStates(foilDynamicStructuralStates, DFOIL, CONSTANTS.elemType)
-    # nGDOF = DFOIL.neval * nDOF
-
-    # --- Strip theory ---
-    fDynamic = fullAIC * foilTotalDynStates
-
-    if CONSTANTS.elemType == "bend-twist"
-        Moments = fDynamic[nDOF:nDOF:end]
-    elseif CONSTANTS.elemType == "BT2"
-        Moments = fDynamic[3:nDOF:end]
-    else
-        error("Invalid element type")
-    end
-    Lift = fDynamic[1:nDOF:end]
-
-    # --- Total dynamic hydro force calcs ---
-    TotalLift = sum(Lift) * FOIL.s / FOIL.neval
-    TotalMoment = sum(Moments) * FOIL.s / FOIL.neval
-
-    return fDynamic, TotalLift, TotalMoment
+    return TipBendDyn, TipTwistDyn, LiftDyn, MomDyn
 end
 
 function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="./OUTPUT/")
