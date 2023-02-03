@@ -20,7 +20,7 @@ using .SolveStatic
 using .SolveForced
 using .SolveFlutter
 
-function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_flutter=false, fSweep=nothing, tipForceMag=nothing, uSweep=nothing, fSearch=nothing; outputDir="./OUTPUT/")
+function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_modal=false, run_flutter=false, fSweep=nothing, tipForceMag=nothing, nModes=1, uSweep=nothing, fSearch=nothing; outputDir="./OUTPUT/")
     """
     The interface into the src code
     """
@@ -45,6 +45,9 @@ function run_model(DVDict, evalFuncs, run_static=false, run_forced=false, run_fl
         SolveForced.solve(DVDict, outputDir, fSweep, tipForceMag)
     end
 
+    if run_modal
+        SolveFlutter.solve_frequencies(DVDict, nModes, outputDir)
+    end
     # ==============================================================================
     #                         Flutter solution
     # ==============================================================================

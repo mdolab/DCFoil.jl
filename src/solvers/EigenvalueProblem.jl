@@ -26,7 +26,7 @@ function compute_eigsolve(K, M, nEig; issym=true)
         eVecs = eVecsAll[:, indices]
     end
 
-    return eVals[1:nEig], eVecs[1:nEig]
+    return eVals[1:nEig], eVecs[:, 1:nEig]
 end
 
 end # end module

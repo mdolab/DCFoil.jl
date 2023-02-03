@@ -65,6 +65,7 @@ struct dynamicFoil{T<:Float64}
     ρ_f::T # fluid density [kg/m³]
     neval::Int64 # number of evaluation points on span
     constitutive::String # constitutive model
+    # --- Only things different for the dynamic foil ---
     fSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forcing frequency sweep [Hz] (for harmonically forced solution)
     uSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forward speed sweep [m/s] (for flutter solution)
 end

@@ -6,7 +6,7 @@
 @Desc    :   Plotting script used to visualize data
 
 NOTE: Sometimes the python it calls is the wrong version so check with:
-ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
+ENV["PYCALL_JL_RUNTIME_PYTHON"] = sys.which("python")
 """
 
 # --- Import libs ---
@@ -15,32 +15,40 @@ using Plots
 using JSON
 using Printf
 using LaTeXStrings
+using JLD # julia data format
 # ************************************************
 #     I/O 
 # ************************************************
-dataDir = "./OUTPUT/testAero/"
+dataDir = "../OUTPUT/testModal/"
 outputDir = dataDir
 
 # ************************************************
 #     Read in results
 # ************************************************
 # --- Read in DVDict ---
-DVDict::Dict = Dict()
 open(dataDir * "init_DVDict.json", "r") do f
     global DVDict
     DVDict = JSON.parse(f)
 end
 # --- Read in funcs ---
-funcs::Dict = Dict()
 open(dataDir * "funcs.json", "r") do f
     global funcs
     funcs = JSON.parse(f)
 end
 
+# --- Default post processes ---
+is_static = false
+is_dynamic = false
+is_flutter = false
+is_modal = false
+
+# is_static = true
+# is_dynamic = true
+# is_flutter = true
+is_modal = true
 # ==============================================================================
 #                         Static hydroelastic
 # ==============================================================================
-is_static = true
 if is_static
     # ************************************************
     #     Read in data
@@ -88,7 +96,6 @@ end
 # ==============================================================================
 #                         Dynamic hydroelastic
 # ==============================================================================
-is_dynamic = true
 if is_dynamic
     # --- Read frequencies ---
     file = readlines(dataDir * "FreqSweep.dat")
@@ -138,9 +145,14 @@ end
 
 
 # ==============================================================================
-#                         Flutter solution
+#                         Flutter and modal solutions
 # ==============================================================================
-is_flutter = true
+if is_modal
+    # --- Read in data ---
+    structData = load(dataDir * "modal/structModal.jld")
+    wetData = load(dataDir * "modal/wetModal.jld")
+end
+
 if is_flutter
     # --- Read in data ---
 end
@@ -187,4 +199,9 @@ if is_dynamic
     plot(title, visuals, layout=@layout([A{0.1h}; B]))
 
     savefig(outputDir * "tip_dynamics.pdf")
+end
+
+if is_modal
+    # --- Plot results ---
+    # TODO: Add modal plots
 end

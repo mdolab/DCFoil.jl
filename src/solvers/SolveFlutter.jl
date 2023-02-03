@@ -47,6 +47,11 @@ function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Bas
     # ************************************************
     #     Initialize
     # ************************************************
+    # --- Write the init dict to output folder ---
+    stringData = JSON.json(DVDict)
+    open(outputDir * "init_DVDict.json", "w") do io
+        write(io, stringData)
+    end
     global FOIL = InitModel.init_dynamic(fSearch, DVDict, uSweep=uSweep)
     nElem = FOIL.neval - 1
 
@@ -117,6 +122,7 @@ function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Bas
     end
     println("+------------------------------------+")
     return # my manual breakpoint
+    # TODO: PICKUP HERE
 
     # ---------------------------
     #   Pre-solve system
@@ -136,11 +142,105 @@ function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Bas
     N_MAX_Q_ITER = 1000 # TEST VALUE
     true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(uSweep, structMesh, FOIL, b_ref, dim, elemType, globalDOFBlankingList, N_MAX_Q_ITER)
 
-
+    uSol, _ = FEMMethods.put_BC_back(u, CONSTANTS.elemType)
     # ************************************************
     #     Write solution out to files
     # ************************************************
     write_sol(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, outputDir)
+
+end # end function
+
+function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; use_freeSurface=false, cavitation=nothing)
+    """
+    Use p-k method to find roots (p) to the equation
+        (-p²[M]-p[C]+[K]){ũ} = {0}
+    """
+
+    # ************************************************
+    #     Initialize
+    # ************************************************
+    # --- Write the init dict to output folder ---
+    stringData = JSON.json(DVDict)
+    open(outputDir * "init_DVDict.json", "w") do io
+        write(io, stringData)
+    end
+    global FOIL = InitModel.init_static(DVDict["neval"], DVDict)
+    nElem = FOIL.neval - 1
+
+    println("====================================================================================")
+    println("        BEGINNING FLUTTER SOLUTION")
+    println("====================================================================================")
+    # ---------------------------
+    #   Assemble structure
+    # ---------------------------
+    elemType = "BT2"
+    loadType = "force"
+
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
+    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+
+    # ---------------------------
+    #   Apply BC blanking
+    # ---------------------------
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+
+    # ---------------------------
+    #   Initialize stuff
+    # ---------------------------
+    u = copy(globalF)
+    wetModeShapes_sol = zeros(size(globalF, 1), nModes)
+    structModeShapes_sol = zeros(size(globalF, 1), nModes)
+    globalMf = copy(globalMs) * 0
+    globalCf_r = copy(globalKs) * 0
+    globalKf_r = copy(globalKs) * 0
+    globalKf_i = copy(globalKs) * 0
+    globalCf_i = copy(globalKs) * 0
+    derivMode = "FAD"
+    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
+
+    # ---------------------------
+    #   Test eigensolver
+    # ---------------------------
+    # --- Dry solve ---
+    omegaSquared, structModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms, nModes)
+    structNatFreqs = sqrt.(omegaSquared) / (2π)
+    println("+------------------------------------+")
+    println("Structural natural frequencies [Hz]:")
+    println("+------------------------------------+")
+    ctr = 1
+    for natFreq in structNatFreqs
+        println(@sprintf("mode %i: %.3f", ctr, natFreq))
+        ctr += 1
+    end
+    println("+------------------------------------+")
+    # --- Wetted solve ---
+    # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
+    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, 0.1, 0.1, CONSTANTS.elemType)
+    _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+    wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
+    wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
+    println("Wetted natural frequencies [Hz]:")
+    println("+------------------------------------+")
+    ctr = 1
+    for natFreq in wetNatFreqs
+        println(@sprintf("mode %i: %.3f", ctr, natFreq))
+        ctr += 1
+    end
+    println("+------------------------------------+")
+
+    # println("Eigenvector length", length(structModeShapes))
+
+    # --- Put BCs back ---
+    for ii in 1:nModes
+        structModeShapes_sol[:,ii], _ = FEMMethods.put_BC_back(structModeShapes[:,ii], CONSTANTS.elemType)
+        wetModeShapes_sol[:,ii], _ = FEMMethods.put_BC_back(wetModeShapes[:,ii], CONSTANTS.elemType)
+    end
+    # ************************************************
+    #     Write solution out to files
+    # ************************************************
+    write_modalsol(structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, outputDir)
 
 end # end function
 
@@ -172,6 +272,26 @@ function write_sol(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHis
     # --- Store flow history ---
     fname = workingOutput * "flowHistory.jld"
     save(fname, "data", flowHistory)
+end # end function
+
+
+function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, outputDir="./OUTPUT/")
+    """
+    Write out the p-k flutter results
+    """
+
+    # Store solutions here
+    workingOutput = outputDir * "modal/"
+    mkpath(workingOutput)
+
+    # --- Store structural dynamics analysis ---
+    fname = workingOutput * "structModal.jld"
+    save(fname, "structNatFreqs", structNatFreqs, "structModeShapes", structModeShapes)
+
+    # --- Store wetted modal analysis ---
+    fname = workingOutput * "wetModal.jld"
+    save(fname, "wetNatFreqs", wetNatFreqs, "wetModeShapes", wetModeShapes)
+
 end # end function
 
 function compute_correlationMatrix(old_r, old_i, new_r, new_i)

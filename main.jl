@@ -16,7 +16,7 @@ using .DCFoil
 # ************************************************
 #     I/O
 # ************************************************
-outputDir = "./OUTPUT/testAero/"
+outputDir = "./OUTPUT/testModal/"
 mkpath(outputDir)
 
 # ************************************************
@@ -27,12 +27,14 @@ mkpath(outputDir)
 run = true # run the solver for a single point
 run_static = false
 run_forced = false
+run_modal = false
 run_flutter = false
 
 # Uncomment here
-# run_static = true
+run_static = true
 # run_forced = true
-run_flutter = true
+run_modal = true
+# run_flutter = true
 
 α_sweep = true # sweep angle of attack
 U_sweep = true # sweep flow speed
@@ -68,6 +70,7 @@ end
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
 neval = 10 # spatial nodes
+nModes = 5 # number of flutter and system modes to solve for
 df = 1
 dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
@@ -112,10 +115,10 @@ DVDict = Dict(
 # ************************************************
 #     Cost functions
 # ************************************************
-evalFuncs = ["w_tip","psi_tip","cl", "cmy", "lift", "moment"]
+evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
 
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.run_model(DVDict, evalFuncs, run_static, run_forced, run_flutter, fSweep, tipForceMag, uSweep, fSearch, outputDir=outputDir)
+DCFoil.run_model(DVDict, evalFuncs, run_static, run_forced, run_modal, run_flutter, fSweep, tipForceMag, nModes, uSweep, fSearch, outputDir=outputDir)
 

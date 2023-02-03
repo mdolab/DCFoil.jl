@@ -209,7 +209,9 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
     states: vector of structural states from the [K]{u} = {f}
     """
 
-    mkpath(outputDir)
+    # --- Make output directory ---
+    workingOutputDir = outputDir * "static/"
+    mkpath(workingOutputDir)
 
     # --- First print costFuncs to screen in a box ---
     println("+", "-"^50, "+")
@@ -219,7 +221,7 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
         println("| ", kv)
     end
 
-    fname = outputDir * "funcs.json"
+    fname = workingOutputDir * "funcs.json"
     stringData = JSON.json(funcs)
     open(fname, "w") do io
         write(io, stringData)
@@ -243,7 +245,7 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
     Lift = forces[1:nDOF:end]
 
     # --- Write bending ---
-    fname = outputDir * "bending.dat"
+    fname = workingOutputDir * "bending.dat"
     outfile = open(fname, "w")
     # write(outfile, "Bending\n")
     for wⁿ ∈ W
@@ -263,13 +265,13 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
     end
 
     # --- Write lift and moments ---
-    fname = outputDir * "lift.dat"
+    fname = workingOutputDir * "lift.dat"
     outfile = open(fname, "w")
     for Fⁿ in Lift
         write(outfile, string(Fⁿ, "\n"))
     end
     close(outfile)
-    fname = outputDir * "moments.dat"
+    fname = workingOutputDir * "moments.dat"
     outfile = open(fname, "w")
     for Mⁿ in Moments
         write(outfile, string(Mⁿ, "\n"))

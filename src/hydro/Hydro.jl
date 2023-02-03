@@ -418,6 +418,7 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
     # ---------------------------
     for yⁿ in mesh
         # --- compute strip width ---
+        # TODO: the first and last strip have half width
         if jj < FOIL.neval
             Δy = mesh[jj+1] - mesh[jj]
         else
