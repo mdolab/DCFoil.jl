@@ -1,3 +1,11 @@
+# --- Python 3.9 ---
+"""
+@File    :   helperFuncs.py
+@Time    :   2023/02/03
+@Author  :   Galen Ng
+@Desc    :   Convenience functions for postprocessing
+"""
+
 # ==============================================================================
 #                         Imports
 # ==============================================================================
@@ -24,8 +32,8 @@ def get_bendingtwisting(states, nDOF=4):
     """
     Takes the structural 'u' vector and parses it into bending and twisting
     """
-    w = states[0::nDOF]
-    psi = states[2::nDOF]
+    w = states[::nDOF]
+    psi = states[2::nDOF] #  * 180 / np.pi
 
     return w, psi
 

@@ -31,10 +31,12 @@ run_modal = false
 run_flutter = false
 
 # Uncomment here
-run_static = true
+# run_static = true
 # run_forced = true
 run_modal = true
-# run_flutter = true
+run_flutter = true
+
+debug = true
 
 α_sweep = true # sweep angle of attack
 U_sweep = true # sweep flow speed
@@ -74,7 +76,7 @@ nModes = 5 # number of flutter and system modes to solve for
 df = 1
 dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
-fSearch = 0.01:df:1500.0 # frequency search range [Hz] for flutter modes
+fSearch = 0.01:df:1000.0 # frequency search range [Hz] for flutter modes
 uSweep = 5:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -120,5 +122,20 @@ evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.run_model(DVDict, evalFuncs, run_static, run_forced, run_modal, run_flutter, fSweep, tipForceMag, nModes, uSweep, fSearch, outputDir=outputDir)
+DCFoil.run_model(
+    DVDict,
+    evalFuncs;
+    # --- Optional args ---
+    run_static=run_static,
+    run_forced=run_forced,
+    run_modal=run_modal,
+    run_flutter=run_flutter,
+    fSweep=fSweep,
+    tipForceMag=tipForceMag,
+    nModes=nModes,
+    uSweep=uSweep,
+    fSearch=fSearch,
+    outputDir=outputDir,
+    debug=debug
+)
 

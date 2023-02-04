@@ -23,17 +23,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tabulate import tabulate
-import h5py
 
 # ==============================================================================
 # Extension modules
 # ==============================================================================
+import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting
-
-try:
-    import niceplots
-except ImportError:
-    print("niceplots not found. Install it with pip")
+from divAndFlutterPlots import plotModeShapes, plotVgVf, plotRL
 
 # ==============================================================================
 #                         Main driver
@@ -46,6 +42,7 @@ if __name__ == "__main__":
     parser.add_argument("--is_forced", action="store_true", default=False)
     parser.add_argument("--is_modal", action="store_true", default=False)
     parser.add_argument("--is_flutter", action="store_true", default=False)
+    parser.add_argument("--debug_plots", action="store_true", default=False)
     args = parser.parse_args()
     # Echo the args
     print(30 * "-")
@@ -97,7 +94,7 @@ if __name__ == "__main__":
     plt.rcParams.update(myOptions)
 
     # Colormaps
-    cm = ["k", "b", "r", "g", "m"]
+    cm = ["k", "b", "r", "g", "m", "c", "y"]
     # Linestyles
     ls = ["-", "--", "-.", ":"]
     # ==============================================================================
@@ -179,7 +176,39 @@ if __name__ == "__main__":
 
     if args.is_flutter:
         # --- Read in data ---
-        print("Reading in flutter data")
+        print("Reading in flutter data...")
+
+        fname = f"{outputDir}/vg_vf_plot.pdf"
+        # ************************************************
+        #     Debug code
+        # ************************************************
+        if args.debug_plots:
+            debugDir = "../DebugOutput/"
+            testlines = readlines(f"{debugDir}/eigenvalues-001.dat")
+            nModes = len(testlines) - 2
+            nFlows = 300
+            vSweep = []
+            fSweep = np.zeros((nModes, nFlows))
+            gSweep = np.zeros((nModes, nFlows))
+
+            flowIter = 1
+            for ii in range(nFlows):
+                lines = readlines(f"{debugDir}/eigenvalues-%03i.dat" % (flowIter))
+
+                nModes = len(lines) - 2
+
+                speed = lines[0].split(":")[1].rstrip("\n")
+
+                vSweep.append(float(speed))
+                for jj in range(nModes):
+                    line = lines[jj + 2]
+                    line = line.split()
+                    gSweep[jj, ii] = float(line[0])
+                    fSweep[jj, ii] = float(line[1])
+
+                flowIter += 1
+
+            plotVgVf(vSweep, fSweep, gSweep, ls=ls, fname=fname)
 
     # ==============================================================================
     #                         Plot results
@@ -257,42 +286,28 @@ if __name__ == "__main__":
     # end
 
     if args.is_modal:
+        # --- File name ---
         fname = f"{outputDir}/modal-struct.pdf"
-        dosave = not not fname
 
-        # Create figure object
-        fig, axes = plt.subplots(nrows=nModes, ncols=2, sharex=True, constrained_layout=False, figsize=(14, 10))
+        # --- Pack up data to plot ---
+        modeShapeData = {
+            "structBM": structBendModes,
+            "structTM": structTwistModes,
+            "wetBM": wetBendModes,
+            "wetTM": wetTwistModes,
+        }
+        modeFreqData = {
+            "structNatFreqs": structNatFreqs,
+            "wetNatFreqs": wetNatFreqs,
+        }
 
-        # --- Structural modes ---
-        # First normalize the modes by max
-        for ii in range(nModes):
-            ax = axes[ii]
-            maxVal = np.max([abs(structBendModes[ii, :]), abs(structTwistModes[ii, :])])
-            structBendModes[ii, :] /= maxVal
-            structTwistModes[ii, :] /= maxVal
-            breakpoint()
-            # TODO:
-            ax.plot(nodes, structBendModes[ii, :], label=f"Bending", ls=ls[0])
-            ax.plot(nodes, structTwistModes[ii, :], label=f"Twisting", ls=ls[1])
-            ax.set_ylabel(f"Mode {ii+1}", rotation=0, labelpad=20)
-        ax.set_xlabel("$y$ [m]")
-
-        # --- Wet modes ---
-        # First normalize the modes by max
-        for ii in range(nModes):
-            ax = axes[ii]
-            maxVal = np.max([abs(wetBendModes[ii, :]), abs(wetTwistModes[ii, :])])
-            wetBendModes[ii, :] /= maxVal
-            wetTwistModes[ii, :] /= maxVal
-            ax.plot(nodes, wetBendModes[ii, :], label=f"Bending", ls=ls[ii])
-            ax.plot(nodes, wetTwistModes[ii, :], label=f"Twisting", ls=ls[ii])
-            ax.set_ylabel(f"Mode {ii+1}", rotation=0, labelpad=20)
-
-        plt.show(block=(not dosave))
-        # niceplots.all()
-        for ax in axes:
-            niceplots.adjust_spines(ax, outward=True)
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+        # --- Plot ---
+        fig, axes = plotModeShapes(
+            y=nodes,
+            nModes=nModes,
+            modeShapes=modeShapeData,
+            modeFreqs=modeFreqData,
+            ls=ls,
+            cm=cm,
+            fname=fname,
+        )

@@ -38,7 +38,17 @@ using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 
-function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Base.TwicePrecision{Float64}}, fSearch::StepRangeLen{Float64,Base.TwicePrecision{Float64}}; use_freeSurface=false, cavitation=nothing)
+function solve(
+    DVDict::Dict,
+    outputDir::String,
+    uSweep::StepRangeLen{Float64,Base.TwicePrecision{Float64}},
+    fSearch::StepRangeLen{Float64,Base.TwicePrecision{Float64}},
+    nModes::Int64;
+    # --- Optional args ---
+    use_freeSurface=false,
+    cavitation=nothing,
+    debug=false
+)
     """
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
@@ -55,9 +65,15 @@ function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Bas
     global FOIL = InitModel.init_dynamic(fSearch, DVDict, uSweep=uSweep)
     nElem = FOIL.neval - 1
 
+    if debug
+        mkpath("DebugOutput/")
+    end
+
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
     println("====================================================================================")
+    println("USweep: ", uSweep)
+    println("freqSearch: ", fSearch)
     # ---------------------------
     #   Assemble structure
     # ---------------------------
@@ -92,37 +108,18 @@ function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Bas
     derivMode = "FAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
-    # ---------------------------
-    #   Test eigensolver
-    # ---------------------------
-    # --- Dry solve ---
-    omegaSquared, structModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms, 3)
-    structNatFreqs = sqrt.(omegaSquared) / (2π)
-    println("+------------------------------------+")
-    println("Structural natural frequencies [Hz]:")
-    println("+------------------------------------+")
-    ctr = 1
-    for natFreq in structNatFreqs
-        println(@sprintf("mode %i: %.3f", ctr, natFreq))
-        ctr += 1
-    end
-    println("+------------------------------------+")
-    # --- Wetted solve ---
-    # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, 0.1, 0.1, CONSTANTS.elemType)
-    _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
-    omegaSquared, _ = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, 3)
-    wetNatFreqs = sqrt.(omegaSquared) / (2π)
-    println("Wetted natural frequencies [Hz]:")
-    println("+------------------------------------+")
-    ctr = 1
-    for natFreq in wetNatFreqs
-        println(@sprintf("mode %i: %.3f", ctr, natFreq))
-        ctr += 1
-    end
-    println("+------------------------------------+")
-    return # my manual breakpoint
-    # TODO: PICKUP HERE
+    # # ---------------------------
+    # #   Test eigensolver
+    # # ---------------------------
+    # # --- Dry solve ---
+    # omegaSquared, structModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms, 3)
+    # structNatFreqs = sqrt.(omegaSquared) / (2π)
+    # # --- Wetted solve ---
+    # # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
+    # globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, 0.1, 0.1, CONSTANTS.elemType)
+    # _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+    # omegaSquared, _ = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, 3)
+    # wetNatFreqs = sqrt.(omegaSquared) / (2π)
 
     # ---------------------------
     #   Pre-solve system
@@ -140,7 +137,20 @@ function solve(DVDict::Dict, outputDir::String, uSweep::StepRangeLen{Float64,Bas
 
     # --- Apply the flutter solution method ---
     N_MAX_Q_ITER = 1000 # TEST VALUE
-    true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(uSweep, structMesh, FOIL, b_ref, dim, elemType, globalDOFBlankingList, N_MAX_Q_ITER)
+    true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(
+        uSweep,
+        structMesh,
+        FOIL,
+        b_ref,
+        dim,
+        elemType,
+        globalDOFBlankingList,
+        N_MAX_Q_ITER;
+        # --- Optional args ---
+        nModes=nModes,
+        ΔdynP=80,
+        debug=debug
+    )
 
     uSol, _ = FEMMethods.put_BC_back(u, CONSTANTS.elemType)
     # ************************************************
@@ -152,8 +162,7 @@ end # end function
 
 function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; use_freeSurface=false, cavitation=nothing)
     """
-    Use p-k method to find roots (p) to the equation
-        (-p²[M]-p[C]+[K]){ũ} = {0}
+        System natural frequencies
     """
 
     # ************************************************
@@ -234,8 +243,8 @@ function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; use_f
 
     # --- Put BCs back ---
     for ii in 1:nModes
-        structModeShapes_sol[:,ii], _ = FEMMethods.put_BC_back(structModeShapes[:,ii], CONSTANTS.elemType)
-        wetModeShapes_sol[:,ii], _ = FEMMethods.put_BC_back(wetModeShapes[:,ii], CONSTANTS.elemType)
+        structModeShapes_sol[:, ii], _ = FEMMethods.put_BC_back(structModeShapes[:, ii], CONSTANTS.elemType)
+        wetModeShapes_sol[:, ii], _ = FEMMethods.put_BC_back(wetModeShapes[:, ii], CONSTANTS.elemType)
     end
     # ************************************************
     #     Write solution out to files
@@ -441,7 +450,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     return corr, m, newModesIdx, nCorrelatedModes, nNewModes
 end # end function
 
-function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, globalDOFBlankingList, N_MAX_Q_ITER, nModes=10, ΔdynP=10.0, debug=false)
+function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, globalDOFBlankingList, N_MAX_Q_ITER; nModes=10, ΔdynP=10.0, debug=false)
     """
     Non-iterative flutter solution following van Zyl https://arc.aiaa.org/doi/abs/10.2514/2.2806
     Everything from here on is based on the FORTRAN code written by Eirikur Jonsson
@@ -471,7 +480,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     Outputs
     -------
     true_eigs_r, true_eigs_i: array, size(3*nModes, N_MAX_Q_ITER)
-        real and imaginary parts of eigenvalues of flutter modes
+        real and imaginary parts of eigenvalues of flutter modes, unitless
     R_eigs_r_tmp, R_eigs_i_tmp: array, size(2*dimwithBC, 3*nModes, N_MAX_Q_ITER)
         real and imaginary parts of eigenvectors of flutter modes
     iblank: array, size(3*nModes, N_MAX_Q_ITER)
@@ -490,8 +499,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     # The first column stores indices of old m[:,1] and
     # the second column stores indices of the newly found modes m[:,2]
     # --- Outputs ---
-    # ξVec::Matrix{Float64} = zeros(Float64, length(vel), nModes)
-    # kVec::Matrix{Float64} = zeros(Float64, length(vel), nModes)
     p_r::Matrix{Float64} = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
     p_i::Matrix{Float64} = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
     true_eigs_r::Matrix{Float64} = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
@@ -505,9 +512,13 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     flowHistory = zeros(Float64, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
     tmp = zeros(Float64, 3 * dim)
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
-    ωSweep = 2π * FOIL.fSweep
+    ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
     p_diff_max = 0.1 # max allowed change in roots between steps
-
+    if debug
+        # Needed for debugging
+        fs = zeros(3 * nModes)
+        gs = zeros(3 * nModes)
+    end
 
     # ************************************************
     #     Loop over velocity range
@@ -533,7 +544,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
 
         # Sweep k and find crossings
         kSweep = ωSweep * b_ref / ((U∞ * cos(FOIL.Λ)))
-        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList)
+        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
         # --- Check flight condition ---
         if (nFlow == 1) # first flight condition
@@ -616,20 +627,42 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
         if failed # backup dynamic pressure
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
         else # store solution
-            # Eigenvalues
+            # Non-dimensionalization factor
+            tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
+
+            # --- Debug things ---
+            if debug
+
+                dimensionalization = tmpFactor / 2π
+                gs[m[1:nCorr, 1]] = p_cross_r[m[1:nCorr, 2]] * dimensionalization
+                fs[m[1:nCorr, 1]] = p_cross_i[m[1:nCorr, 2]] * dimensionalization
+                fname = @sprintf("./DebugOutput/eigenvalues-%03i.dat", nFlow)
+                speedString = @sprintf("Flow speed [m/s]: %e\n", U∞)
+                stringData = "g_[1/s]     f_[Hz]\n"
+                open(fname, "w") do io
+                    write(io, speedString)
+                    write(io, stringData)
+                    for ii in 1:3*nModes
+                        stringData = @sprintf("%e %e\n", gs[ii], fs[ii])
+                        write(io, stringData)
+                    end
+                end
+            end
+
+
+            # --- Eigenvalues ---
             if m[nCorr, 1] > 3 * nModes # is it column 1 or 2 (it's column 1 so there's a bug)
-                println("NTotalModesFound ", NTotalModesFound)
-                println("nCorrNewModes", nCorrNewModes)
+                println("NTotalModesFound: ", NTotalModesFound)
+                println("nCorrNewModes: ", nCorrNewModes)
             end
             p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
             p_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
-            # Eigenvectors
+
+            # --- Eigenvectors ---
             R_eigs_r_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
             R_eigs_i_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
 
-            # Non-dimensionalization factor
-            tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
-            # Dimensional eigenvalues [rad/s]
+            # --- Dimensional eigenvalues [rad/s] ---
             true_eigs_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
             true_eigs_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
 
@@ -666,6 +699,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             # close(exampleFileIOStream)
 
 
+
+
             # --- Increment for next iteration ---
             nFlow += 1
             dynPTmp += ΔdynP
@@ -699,7 +734,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
 
 end # end function
 
-function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, globalDOFBlankingList)
+function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, globalDOFBlankingList; debug=false, qiter=1)
     """
     # This routine solves an eigenvalue problem over a range of reduced frequencies k searches for the
     # intersection of each mode with the diagonal line Im(p) = k and then does a linear interpolation
@@ -720,19 +755,26 @@ function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, glob
     # --- Loop over reduced frequency search range to construct lines ---
     p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
-    # # DEBUG CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k 
-    # plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1")
-    # plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2")
-    # plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3")
-    # plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4")
-    # plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5")
-    # plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6")
-    # plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7")
-    # plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8")
-    # plot!(k_history[1:ik], k_history[1:ik], lc=:black ,label="Im(p)=k")
-    # xlabel!("k")
-    # ylabel!("Im(p)")
-    # savefig("debug.pdf")
+    if debug
+        # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k 
+        plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1")
+        plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2")
+        plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3")
+        plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4")
+        plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5")
+        plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6")
+        plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7")
+        plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8")
+        plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
+        ylims!((0.0, 200.0))
+        xlims!((0.0, 200.0))
+        plotTitle = @sprintf("U = %.1f m/s", U∞)
+        title!(plotTitle)
+        xlabel!("k")
+        ylabel!("Im(p)")
+        fname = @sprintf("./DebugOutput/kCross-qiter-%03i.png", qiter)
+        savefig(fname)
+    end
 
     # --- Extract valid solutions through interpolation ---
     dimwithBC = dim - length(globalDOFBlankingList)
@@ -782,10 +824,12 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
     p_diff_max = 0.2 # maximum allowed change in poles btwn two steps
 
     # --- Determine Δk to step ---
-    # based on maximum in-vacuum natural frequency
-    # Δk = maximum(sqrt.(inv(MM) * KK)) * b / (U∞ * 100.0)
-    omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM, size(KK)[1])
-    Δk = maximum(sqrt.(omegaSquared) * b / (U∞ * 100.0))
+    # based on minimum wetted natural frequency
+    # Need to do a dummy call to get the hydrodynamic added mass
+    globalMf, _, _, _, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, 1.0, 1.0, CONSTANTS.elemType)
+    _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+    omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, dimwithBC)
+    Δk = minimum(sqrt.(omegaSquared) * b / (U∞))
 
     # ************************************************
     #     Perform iterations on k values
@@ -806,12 +850,6 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
         globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, U∞, ω, CONSTANTS.elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
-
-        # # --- Test wet eigensolve ---
-        # omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, 3)
-        # wetNatFreqs = sqrt.(omegaSquared) / (2π)
-        # println(wetNatFreqs)
-        # # TODO: The wet natural frequencies are off so there might be a bug with the added mass since air is good
 
         # --- Solve eigenvalue problem ---
         p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
