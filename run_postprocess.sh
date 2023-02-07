@@ -7,7 +7,8 @@
 cd POSTPROCESSING
 
 # python ./run_postprocessing.py --case testModal
-python ./run_postprocessing.py --case testModal --debug_plots
+python ./run_postprocessing.py --case testModal --debug_plots --is_modal
+python ./run_postprocessing.py --case testModal --debug_plots --is_flutter
 # julia ./POSTPROCESSING/postprocessing.jl
 
 cd ..

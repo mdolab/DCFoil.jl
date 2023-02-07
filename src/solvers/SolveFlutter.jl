@@ -65,15 +65,17 @@ function solve(
     global FOIL = InitModel.init_dynamic(fSearch, DVDict, uSweep=uSweep)
     nElem = FOIL.neval - 1
 
-    if debug
-        mkpath("DebugOutput/")
-    end
-
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
     println("====================================================================================")
     println("USweep: ", uSweep)
     println("freqSearch: ", fSearch)
+    if debug
+        mkpath("DebugOutput/")
+        println("+---------------------------+")
+        println("|    Running debug mode!    |")
+        println("+---------------------------+")
+    end
     # ---------------------------
     #   Assemble structure
     # ---------------------------
@@ -463,6 +465,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
         mesh object
     FOIL: FOIL  
         foil object
+    b_ref: float
+        reference semi-chord (mean semi-chord)
     dim: int
         dimension of hydro matrices
     elemType: string
@@ -546,6 +550,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
         kSweep = ωSweep * b_ref / ((U∞ * cos(FOIL.Λ)))
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
+        
         # --- Check flight condition ---
         if (nFlow == 1) # first flight condition
             # Sort eigenvalues based on the frequency (imaginary part)
@@ -554,35 +559,35 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             # Set the number of modes to correlate equal to the number of modes we're solving for
             global nCorr = nModes
             global NTotalModesFound = nModes
-
+            
             for ii in 1:nModes
                 m[ii, 1] = ii
                 m[ii, 2] = idxTmp[ii]
             end
-
-
+            
+            
         else # not first condition; apply mode tracking between flow speeds
-
+            
             # Compute correlation matrix
             corr, m, newModesIdx, nCorr, nCorrNewModes = compute_correlationMetrics(R_eigs_r_tmp[:, :, nFlow-1], R_eigs_i_tmp[:, :, nFlow-1], R_cross_r[:, 1:kCtr], R_cross_i[:, 1:kCtr], p_i[:, nFlow-1], p_cross_i[1:kCtr])
-
+            
             # --- Check if eigenvalue jump is too big ---
             # If the jump is too big, we back up
             # We do this by scaling the 'p' to the true eigenvalue
             eigScale = sqrt(dynPTmp / flowHistory[nFlow-1, 3]) # This is a velocity scale
-
-
+            
+            
             inner = (p_r[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
-                    (p_i[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
+            (p_i[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
             tmp[1:nCorr] = sqrt.(inner)
-
+            
             maxVal = maximum(tmp[1:nCorr])
-
+            
             if (maxVal > p_diff_max)
                 # println("Eigenvalue jump too big, backing up. p_diff: ", maxVal, " > ", p_diff_max)
                 failed = true
             end
-
+            
             # Were there too many iterations w/o progress? Mode probably disappeared
             if (dynPTmp - flowHistory[nFlow-1, 3] < ΔdynP / 50)
                 # Let's check the fail flag, if yes then accept
@@ -595,44 +600,44 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
                             m[nKeep, :] = m[ii, :]
                         end
                     end
-
+                    
                     # We only want the first nKeep modes so we need to overwrite nCorr, which is used later in the code for indexing
                     nCorr = nKeep
-
+                    
                     failed = false
                 end
             end
-
+            
             # Now we add in any new lower frequency modes that weren't correlated above
             if (nCorrNewModes > 0) && !failed
-
+                
                 # Append new modes' indices to the new 'm' array
                 for ii in 1:nCorrNewModes
                     m[nCorr+ii, 1] = NTotalModesFound + ii
                     m[nCorr+ii, 2] = newModesIdx[ii]
                 end
-
+                
                 # Increment the nCorr variable counter to include the recently added modes
                 nCorr += nCorrNewModes
-
+                
                 # Increment the shift variable for the next new mode
                 # NOTE: this shift variable has the total number of modes found over the ENTIRE simulation, not the current number of modes found
                 NTotalModesFound += nCorrNewModes
 
             end
         end
-
-
+        
+        
         # --- Store solution if good ---
         if failed # backup dynamic pressure
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
         else # store solution
             # Non-dimensionalization factor
             tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
-
+            
             # --- Debug things ---
             if debug
-
+                
                 dimensionalization = tmpFactor / 2π
                 gs[m[1:nCorr, 1]] = p_cross_r[m[1:nCorr, 2]] * dimensionalization
                 fs[m[1:nCorr, 1]] = p_cross_i[m[1:nCorr, 2]] * dimensionalization
@@ -648,8 +653,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
                     end
                 end
             end
-
-
+            
+            
             # --- Eigenvalues ---
             if m[nCorr, 1] > 3 * nModes # is it column 1 or 2 (it's column 1 so there's a bug)
                 println("NTotalModesFound: ", NTotalModesFound)
@@ -657,21 +662,21 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             end
             p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
             p_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
-
+            
             # --- Eigenvectors ---
             R_eigs_r_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
             R_eigs_i_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
-
+            
             # --- Dimensional eigenvalues [rad/s] ---
             true_eigs_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
             true_eigs_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
-
+            
             flowHistory[nFlow, 1] = U∞
             flowHistory[nFlow, 2] = FOIL.ρ_f
             flowHistory[nFlow, 3] = dynPTmp
-
+            
             iblank[m[1:nCorr, 1], nFlow] .= 1
-
+            
             # # --- Correlated eigenvalues found ---
             # filename = "dynP" * string(nFlow, pad=2) * ".txt"
             # exampleFileIOStream = open(filename, "w")
@@ -680,7 +685,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             #     write(exampleFileIOStream, "\n")
             # end
             # close(exampleFileIOStream)
-
+            
             # # --- Raw eigenvalues found ---
             # filename = "raw_dynP" * string(nFlow, pad=2) * ".txt"
             # exampleFileIOStream = open(filename, "w")
@@ -697,20 +702,20 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             #     write(exampleFileIOStream, "\n")
             # end
             # close(exampleFileIOStream)
-
-
-
-
+            
+            
+            
+            
             # --- Increment for next iteration ---
             nFlow += 1
             dynPTmp += ΔdynP
             # Determine flow speed
             U∞ = sqrt(2 * dynPTmp / FOIL.ρ_f)
-
+            
             # --- Check if we're done ---
             if (dynPTmp > dynPMax)
                 # We should stop at (or near) the max velocity specified so we should check if we're within some tolerance
-
+                
                 # First subtract previously added increment, then subtract max velocity
                 if (abs((dynPTmp - ΔdynP) - dynPMax) < SolutionConstants.mepsLarge)
                     # Exit the loop
@@ -719,22 +724,23 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
                     # If this fails, the step will be halved anyway and this process should repeat until the exit condition is met
                     dynPTmp = dynPMax
                 end
-
+                
             end
-
+            
         end
-
+        
+        # return true_eigs_r, true_eigs_i, R_eigs_r_tmp, R_eigs_i_tmp, iblank, flowHistory # my breakpoint
 
     end # end while
-
+    
     # Decrement flow index since it was incremented before exit
     nFlow -= 1
-
+    
     return true_eigs_r, true_eigs_i, R_eigs_r_tmp, R_eigs_i_tmp, iblank, flowHistory
-
+    
 end # end function
 
-function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, globalDOFBlankingList; debug=false, qiter=1)
+function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, globalDOFBlankingList; debug=false, qiter=1)
     """
     # This routine solves an eigenvalue problem over a range of reduced frequencies k searches for the
     # intersection of each mode with the diagonal line Im(p) = k and then does a linear interpolation
@@ -753,26 +759,27 @@ function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, glob
     N_MAX_K_ITER = 500 # max iterations
 
     # --- Loop over reduced frequency search range to construct lines ---
-    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
     if debug
         # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k 
-        plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1")
-        plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2")
-        plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3")
-        plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4")
-        plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5")
-        plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6")
-        plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7")
-        plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8")
+        plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7", marker=(:circle))
+        plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8", marker=(:circle))
         plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
-        ylims!((0.0, 200.0))
-        xlims!((0.0, 200.0))
+        ylims!((0.0, 100.0))
+        xlims!((0.0, 100.0))
         plotTitle = @sprintf("U = %.1f m/s", U∞)
         title!(plotTitle)
         xlabel!("k")
         ylabel!("Im(p)")
         fname = @sprintf("./DebugOutput/kCross-qiter-%03i.png", qiter)
+        println("Saving figure to: ", fname)
         savefig(fname)
     end
 
@@ -784,7 +791,7 @@ function compute_kCrossings(dim, kSweep, b, FOIL, U∞, MM, KK, structMesh, glob
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
 end # end function
 
-function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+function sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
     """
     Solve the eigenvalue problem over a range of reduced frequencies (k)
 
@@ -823,13 +830,13 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
 
     p_diff_max = 0.2 # maximum allowed change in poles btwn two steps
 
-    # --- Determine Δk to step ---
+    # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
     globalMf, _, _, _, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, 1.0, 1.0, CONSTANTS.elemType)
     _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, dimwithBC)
-    Δk = minimum(sqrt.(omegaSquared) * b / (U∞))
+    Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
 
     # ************************************************
     #     Perform iterations on k values
@@ -846,14 +853,13 @@ function sweep_kCrossings(dim, kSweep, b, U∞, MM, KK, structMesh, FOIL, global
         #   Compute hydrodynamics
         # ---------------------------
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
-        ω = k * U∞ / b
+        ω = k * U∞ / b_ref
         globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, U∞, ω, CONSTANTS.elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
         # --- Solve eigenvalue problem ---
-        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
-
+        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
         # --- Sort eigenvalues from small to large ---
         p_r = sort(p_r_tmp)
         idxs = sortperm(p_r_tmp)

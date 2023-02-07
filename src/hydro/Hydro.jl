@@ -432,7 +432,7 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
         ab::Float64 = linear(mesh, FOIL.ab, yⁿ)
         eb::Float64 = linear(mesh, FOIL.eb, yⁿ)
 
-        k::Float64 = ω * b / (U∞ * cos(FOIL.Λ)) # reduced frequency
+        k::Float64 = ω * b / (U∞ * cos(FOIL.Λ)) # local reduced frequency
 
         # Do computation once for efficiency
         CKVec = compute_theodorsen(k)

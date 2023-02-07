@@ -65,7 +65,7 @@ end
 if θ_sweep
     α₀ = 6.0
     U∞ = 10.0
-    θ₀ = 0.0:0.5:10.0
+    θ₀ = 0.0:10:90.0
 end
 
 # ************************************************
@@ -77,7 +77,7 @@ df = 1
 dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.01:df:1000.0 # frequency search range [Hz] for flutter modes
-uSweep = 5:dU:30.0 # flow speed [m/s] sweep for flutter
+uSweep = 8:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # # --- Foil from Deniz Akcabay's 2020 paper ---
