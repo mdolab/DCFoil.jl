@@ -29,7 +29,7 @@ from tabulate import tabulate
 # ==============================================================================
 import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting
-from divAndFlutterPlots import plotModeShapes, plotVgVf, plotRL
+from divAndFlutterPlots import plot_mode_shapes, plot_vg_vf_rl
 
 # ==============================================================================
 #                         Main driver
@@ -77,12 +77,13 @@ if __name__ == "__main__":
     # ************************************************
     #     Plot settings
     # ************************************************
-    niceplots.setRCParams()  # all settings
+    plt.style.use(niceplots.get_style("doumont-light"))  # all settings
     # --- Adjust default options for matplotlib ---
     myOptions = {
         "font.size": 20,
+        "font.family": "sans-serif",
         # "font.sans-serif": ["Helvetica"],
-        "text.usetex": True,
+        # "text.usetex": True,
         "text.latex.preamble": [
             r"\usepackage{lmodern}",
             r"\usepackage{amsmath}",
@@ -93,8 +94,6 @@ if __name__ == "__main__":
     }
     plt.rcParams.update(myOptions)
 
-    # Colormaps
-    cm = ["k", "b", "r", "g", "m", "c", "y"]
     # Linestyles
     ls = ["-", "--", "-.", ":"]
     # ==============================================================================
@@ -178,7 +177,7 @@ if __name__ == "__main__":
         # --- Read in data ---
         print("Reading in flutter data...")
 
-        fname = f"{outputDir}/vg_vf_plot.pdf"
+        fname = f"{outputDir}/vg_vf_rl_plot.pdf"
         # ************************************************
         #     Debug code
         # ************************************************
@@ -208,7 +207,15 @@ if __name__ == "__main__":
 
                 flowIter += 1
 
-            plotVgVf(vSweep, fSweep, gSweep, ls=ls, fname=fname)
+            plot_vg_vf_rl(
+                vSweep,
+                fSweep,
+                gSweep,
+                ls=ls,
+                fname=fname,
+                # units="kts",
+                # marker="o",
+            )
 
     # ==============================================================================
     #                         Plot results
@@ -302,12 +309,11 @@ if __name__ == "__main__":
         }
 
         # --- Plot ---
-        fig, axes = plotModeShapes(
+        fig, axes = plot_mode_shapes(
             y=nodes,
             nModes=nModes,
             modeShapes=modeShapeData,
             modeFreqs=modeFreqData,
             ls=ls,
-            cm=cm,
             fname=fname,
         )
