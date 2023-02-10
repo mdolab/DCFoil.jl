@@ -310,7 +310,6 @@ dryThetaDeg = np.array(
             -30.91642214264735,
             -27.73658161590683,
             -23.655786273256496,
-            -19.15763686147146,
             -20.873425812358533,
             -15.262332216214332,
             -11.413400245305482,
@@ -420,7 +419,6 @@ dryFreqHz = np.array(
             602.6730901704182,
             620.6066275392931,
             645.34038242529,
-            674.0692684353825,
             660.7042614375086,
             689.5591267762363,
             702.9009286928357,
@@ -476,13 +474,14 @@ if __name__ == "__main__":
     # Create figure object
     fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(11, 8))
 
-    # Wet modal validation
+    # ---------------------------
+    #   Wet modal validation
+    # ---------------------------
     ax = axes
     for ii in range(len(wetFreqHz)):
-        ax.plot(fiberAngles, wetNatFreqs[:, ii], ls="-", label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
+        ax.plot(fiberAngles, wetNatFreqs[:, ii], label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
     for ii in range(len(wetFreqHz)):
-        ax.plot(wetThetaDeg[ii], wetFreqHz[ii], ls="--", label=f"Mode {ii+1} (ABAQUS)", c=cm[ii])
-
+        ax.plot(wetThetaDeg[ii], wetFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
     ax.set_xlabel(r"$\theta_f$ [$\degree$]")
     ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, labelpad=50)
     ax.legend(fontsize=15, labelcolor="linecolor", loc="best", frameon=False, ncol=2)
@@ -490,16 +489,12 @@ if __name__ == "__main__":
 
     # Structural modal validation
     for ii in range(len(dryFreqHz)):
-        ax.plot(-fiberAngles, structNatFreqs[:, ii], ls="-", label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
+        ax.plot(-fiberAngles, structNatFreqs[:, ii],  label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
     for ii in range(len(dryFreqHz)):
-        ax.plot(dryThetaDeg[ii], dryFreqHz[ii], ls="--", label=f"Mode {ii+1} (ABAQUS)", c=cm[ii])
+        ax.plot(dryThetaDeg[ii], dryFreqHz[ii],  label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
 
-    ax.annotate(
-        "Dry modes", xy=(0.25, 0.5), ha="center", xycoords="axes fraction", size=15, color="gray"
-    )
-    ax.annotate(
-        "Wet modes", xy=(0.75, 0.5), ha="center", xycoords="axes fraction", size=15, color="blue"
-    )
+    ax.annotate("Dry modes", xy=(0.25, 0.5), ha="center", xycoords="axes fraction", size=15, color="gray")
+    ax.annotate("Wet modes", xy=(0.75, 0.5), ha="center", xycoords="axes fraction", size=15, color="blue")
 
     ax.set_ylim(bottom=0.0)
 

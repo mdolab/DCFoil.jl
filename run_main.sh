@@ -5,5 +5,5 @@
 ############################################################
 
 
-# Run the tests in the test directory
-julia main.jl
+# Run the program
+julia main.jl > std.out

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Set the -e option so it exits if a command fails
+set -e
+
 # ==============================================================================
 #                             Plots
 # ==============================================================================
@@ -7,21 +10,30 @@
 cd POSTPROCESSING
 
 # python ./run_postprocessing.py --case testModal
-python ./run_postprocessing.py --case testModal --debug_plots --is_modal
-python ./run_postprocessing.py --case testModal --debug_plots --is_flutter
+python ./run_postprocessing.py --case testAir --debug_plots --is_modal
+python ./run_postprocessing.py --case testAir --debug_plots --is_flutter
 # julia ./POSTPROCESSING/postprocessing.jl
 
 cd ..
 
-# # ==============================================================================
-# #                             Movies
-# # ==============================================================================
-# # ffmpeg -r <fps> -i <files>
-# fps=30
-# mkdir ./POSTPROCESSING/MOVIES/
+# ==============================================================================
+#                             Movies
+# ==============================================================================
+# ffmpeg -r <fps> -i <files>
+fps=10
+mkdir -p ./POSTPROCESSING/MOVIES/
 
-# # ************************************************
-# #     Debug output
-# # ************************************************
-# ffmpeg -r $fps -i ./DebugOutput/kCross-qiter-%03d.png movie.mp4
-# mv movie.mp4 ./POSTPROCESSING/MOVIES/kCrossings.mp4
+# ************************************************
+#     Debug output
+# ************************************************
+ffmpeg -r $fps -i ./DebugOutput/kCross-qiter-%03d.png movie.mp4
+mv movie.mp4 ./POSTPROCESSING/MOVIES/kCrossings.mp4
+
+ffmpeg -r $fps -i ./DebugOutput/Vf-qiter-%03d.png movie.mp4
+mv movie.mp4 ./POSTPROCESSING/MOVIES/V-f.mp4
+
+ffmpeg -r $fps -i ./DebugOutput/Vg-qiter-%03d.png movie.mp4
+mv movie.mp4 ./POSTPROCESSING/MOVIES/V-g.mp4
+
+ffmpeg -r $fps -i ./DebugOutput/RL-qiter-%03d.png movie.mp4
+mv movie.mp4 ./POSTPROCESSING/MOVIES/RL.mp4

@@ -71,6 +71,7 @@ function solve(
     println("USweep: ", uSweep)
     println("freqSearch: ", fSearch)
     if debug
+        rm("DebugOutput/", recursive=true)
         mkpath("DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
@@ -138,7 +139,7 @@ function solve(
     dim = size(Ks)[1] + length(globalDOFBlankingList)
 
     # --- Apply the flutter solution method ---
-    N_MAX_Q_ITER = 1000 # TEST VALUE
+    N_MAX_Q_ITER = 2000 # TEST VALUE
     true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(
         uSweep,
         structMesh,
@@ -285,7 +286,6 @@ function write_sol(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHis
     save(fname, "data", flowHistory)
 end # end function
 
-
 function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, outputDir="./OUTPUT/")
     """
     Write out the p-k flutter results
@@ -375,9 +375,9 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     """
 
     # Rows and columns of old and new eigenvectors
-    M_old::Int64 = size(old_r)[1]
+    M_old::Int64 = size(old_r)[1] # TODO: why aren't these used
     N_old::Int64 = size(old_r)[2]
-    M_new::Int64 = size(new_r)[1]
+    M_new::Int64 = size(new_r)[1] # TODO: why aren't these used
     N_new::Int64 = size(new_r)[2]
 
     # --- Initialize ---
@@ -514,7 +514,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
 
     # --- Working vars ---
     flowHistory = zeros(Float64, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
-    tmp = zeros(Float64, 3 * dim)
+    tmp = zeros(Float64, 3 * dim) # temp array to store eigenvalues deltas between flow speeds
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
     ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
     p_diff_max = 0.1 # max allowed change in roots between steps
@@ -540,58 +540,69 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     # ---------------------------
     while (nFlow <= N_MAX_Q_ITER)
 
-        # Flow condition printout
-        println("Running nFlow = ", nFlow, " dynP ", round(U∞^2 * 0.5 * FOIL.ρ_f, digits=3), "[Pa]", " rho_f ", FOIL.ρ_f, "[kg/m^3] vel ", U∞, " [m/s])")
+        # Flow condition header printout
+        if nFlow % 10 == 1 # header every 10 iterations
+            println("+--------+------------------+-----------------+-------+------------------+-----------+") # header
+            println("|  nFlow | Dyn. press. [Pa] | Velocity [m/s]  | nCorr | NTotalModesFound | flow fail |")
+            println("+--------+------------------+-----------------+-------+------------------+-----------+") # header
+        end
 
         # Set the proper fail flag
-        failed = false
+        global is_failed = false # declare it as global for this scope
 
         # Sweep k and find crossings
         kSweep = ωSweep * b_ref / ((U∞ * cos(FOIL.Λ)))
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
-        
+        # Need to initialize some variables for the scope of the while loop
+        global nCorr = nModes
+        global NTotalModesFound = nModes
+
         # --- Check flight condition ---
         if (nFlow == 1) # first flight condition
+            # Set the number of modes to correlate equal to the number of modes we're solving for
+            nCorr = nModes
+            NTotalModesFound = nModes
+
             # Sort eigenvalues based on the frequency (imaginary part)
             idxTmp = sortperm(p_cross_i[1:kCtr])
 
-            # Set the number of modes to correlate equal to the number of modes we're solving for
-            global nCorr = nModes
-            global NTotalModesFound = nModes
-            
+            # Populate correlation matrix
             for ii in 1:nModes
                 m[ii, 1] = ii
                 m[ii, 2] = idxTmp[ii]
             end
-            
-            
+
+            # --- Print out first flight condition ---
+            println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |            %03d   |        %d  |",
+                nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
         else # not first condition; apply mode tracking between flow speeds
-            
+
             # Compute correlation matrix
             corr, m, newModesIdx, nCorr, nCorrNewModes = compute_correlationMetrics(R_eigs_r_tmp[:, :, nFlow-1], R_eigs_i_tmp[:, :, nFlow-1], R_cross_r[:, 1:kCtr], R_cross_i[:, 1:kCtr], p_i[:, nFlow-1], p_cross_i[1:kCtr])
-            
+
             # --- Check if eigenvalue jump is too big ---
             # If the jump is too big, we back up
             # We do this by scaling the 'p' to the true eigenvalue
             eigScale = sqrt(dynPTmp / flowHistory[nFlow-1, 3]) # This is a velocity scale
-            
-            
+
+            # Compute difference between old and new modes
             inner = (p_r[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
-            (p_i[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
+                    (p_i[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
             tmp[1:nCorr] = sqrt.(inner)
-            
+
             maxVal = maximum(tmp[1:nCorr])
-            
+
             if (maxVal > p_diff_max)
-                # println("Eigenvalue jump too big, backing up. p_diff: ", maxVal, " > ", p_diff_max)
-                failed = true
+                println("Eigenvalue jump too big, backing up. p_diff: ", maxVal, " > ", p_diff_max)
+                println("Setting failed flag")
+                is_failed = true
             end
-            
+
             # Were there too many iterations w/o progress? Mode probably disappeared
             if (dynPTmp - flowHistory[nFlow-1, 3] < ΔdynP / 50)
                 # Let's check the fail flag, if yes then accept
-                if (failed)
+                if (is_failed)
                     # We should keep all modes that have high correlations, drop others
                     nKeep::Int64 = 0
                     for ii in 1:nCorr
@@ -600,44 +611,44 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
                             m[nKeep, :] = m[ii, :]
                         end
                     end
-                    
+
                     # We only want the first nKeep modes so we need to overwrite nCorr, which is used later in the code for indexing
                     nCorr = nKeep
-                    
-                    failed = false
+
+                    is_failed = false
                 end
             end
-            
+
             # Now we add in any new lower frequency modes that weren't correlated above
-            if (nCorrNewModes > 0) && !failed
-                
+            if (nCorrNewModes > 0) && !is_failed
+
                 # Append new modes' indices to the new 'm' array
                 for ii in 1:nCorrNewModes
                     m[nCorr+ii, 1] = NTotalModesFound + ii
                     m[nCorr+ii, 2] = newModesIdx[ii]
                 end
-                
+
                 # Increment the nCorr variable counter to include the recently added modes
                 nCorr += nCorrNewModes
-                
+
                 # Increment the shift variable for the next new mode
                 # NOTE: this shift variable has the total number of modes found over the ENTIRE simulation, not the current number of modes found
                 NTotalModesFound += nCorrNewModes
 
             end
-        end
-        
-        
+        end # end if flight condition
+
+
         # --- Store solution if good ---
-        if failed # backup dynamic pressure
+        if is_failed # backup dynamic pressure
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
+            println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp)
         else # store solution
             # Non-dimensionalization factor
             tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
-            
-            # --- Debug things ---
+
+            # --- Write eigenvalues to file ---
             if debug
-                
                 dimensionalization = tmpFactor / 2π
                 gs[m[1:nCorr, 1]] = p_cross_r[m[1:nCorr, 2]] * dimensionalization
                 fs[m[1:nCorr, 1]] = p_cross_i[m[1:nCorr, 2]] * dimensionalization
@@ -653,30 +664,32 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
                     end
                 end
             end
-            
-            
+
+
             # --- Eigenvalues ---
+
+            # Debug code check...
             if m[nCorr, 1] > 3 * nModes # is it column 1 or 2 (it's column 1 so there's a bug)
                 println("NTotalModesFound: ", NTotalModesFound)
                 println("nCorrNewModes: ", nCorrNewModes)
             end
             p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
             p_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
-            
+
             # --- Eigenvectors ---
             R_eigs_r_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
             R_eigs_i_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
-            
+
             # --- Dimensional eigenvalues [rad/s] ---
             true_eigs_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
             true_eigs_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
-            
+
             flowHistory[nFlow, 1] = U∞
             flowHistory[nFlow, 2] = FOIL.ρ_f
             flowHistory[nFlow, 3] = dynPTmp
-            
+
             iblank[m[1:nCorr, 1], nFlow] .= 1
-            
+
             # # --- Correlated eigenvalues found ---
             # filename = "dynP" * string(nFlow, pad=2) * ".txt"
             # exampleFileIOStream = open(filename, "w")
@@ -685,7 +698,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             #     write(exampleFileIOStream, "\n")
             # end
             # close(exampleFileIOStream)
-            
+
             # # --- Raw eigenvalues found ---
             # filename = "raw_dynP" * string(nFlow, pad=2) * ".txt"
             # exampleFileIOStream = open(filename, "w")
@@ -702,42 +715,48 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             #     write(exampleFileIOStream, "\n")
             # end
             # close(exampleFileIOStream)
-            
-            
-            
-            
+
+
+
+
             # --- Increment for next iteration ---
             nFlow += 1
             dynPTmp += ΔdynP
             # Determine flow speed
             U∞ = sqrt(2 * dynPTmp / FOIL.ρ_f)
-            
+
             # --- Check if we're done ---
             if (dynPTmp > dynPMax)
                 # We should stop at (or near) the max velocity specified so we should check if we're within some tolerance
-                
+
                 # First subtract previously added increment, then subtract max velocity
                 if (abs((dynPTmp - ΔdynP) - dynPMax) < SolutionConstants.mepsLarge)
                     # Exit the loop
                     break
                 else # Try max value
                     # If this fails, the step will be halved anyway and this process should repeat until the exit condition is met
+                    println("Flow condition failed. Set max dynamic pressure")
                     dynPTmp = dynPMax
                 end
-                
+
             end
-            
+
         end
-        
+
+        # --- Print out flight condition ---
+        if (nFlow != 1)
+            println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |            %03d   |        %d  |",
+                nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
+        end # end if
         # return true_eigs_r, true_eigs_i, R_eigs_r_tmp, R_eigs_i_tmp, iblank, flowHistory # my breakpoint
 
     end # end while
-    
+
     # Decrement flow index since it was incremented before exit
     nFlow -= 1
-    
+
     return true_eigs_r, true_eigs_i, R_eigs_r_tmp, R_eigs_i_tmp, iblank, flowHistory
-    
+
 end # end function
 
 function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, globalDOFBlankingList; debug=false, qiter=1)
@@ -761,25 +780,29 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
     # --- Loop over reduced frequency search range to construct lines ---
     p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
-    if debug
+    if (debug) # && qiter > 52 && qiter < 54
         # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k 
-        plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7", marker=(:circle))
-        plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8", marker=(:circle))
+        marker = false
+        plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[9, 1:ik], label="mode 9", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[10, 1:ik], label="mode 10", marker=marker)
+        plot!(k_history[1:ik], p_eigs_i[11, 1:ik], label="mode 11", marker=marker)
         plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
-        ylims!((0.0, 100.0))
-        xlims!((0.0, 100.0))
-        plotTitle = @sprintf("U = %.1f m/s", U∞)
+        ylims!((-10.0, 100.0))
+        xlims!((-10.0, 100.0))
+        plotTitle = @sprintf("U = %.3f m/s", U∞)
         title!(plotTitle)
         xlabel!("k")
         ylabel!("Im(p)")
         fname = @sprintf("./DebugOutput/kCross-qiter-%03i.png", qiter)
-        println("Saving figure to: ", fname)
+        # println("Saving figure to: ", fname)
         savefig(fname)
     end
 
@@ -787,6 +810,62 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
     dimwithBC = dim - length(globalDOFBlankingList)
     p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr = extract_kCrossings(dimwithBC, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik, N_MAX_K_ITER)
 
+    if debug
+        # Plot all extracted kCrossings as a root-locus
+        scatter([p_cross_r[1]], [p_cross_i[1]], label="mode 1")
+        scatter!([p_cross_r[2]], [p_cross_i[2]], label="mode 2")
+        scatter!([p_cross_r[3]], [p_cross_i[3]], label="mode 3")
+        scatter!([p_cross_r[4]], [p_cross_i[4]], label="mode 4")
+        scatter!([p_cross_r[5]], [p_cross_i[5]], label="mode 5")
+        scatter!([p_cross_r[6]], [p_cross_i[6]], label="mode 6")
+        scatter!([p_cross_r[7]], [p_cross_i[7]], label="mode 7")
+        scatter!([p_cross_r[8]], [p_cross_i[8]], label="mode 8")
+        ylims!((-10.0, 100.0))
+        xlims!((-20.0, 10.0))
+        plotTitle = @sprintf("U = %.3f m/s", U∞)
+        title!(plotTitle)
+        xlabel!("Re(p)")
+        ylabel!("Im(p)")
+        fname = @sprintf("./DebugOutput/RL-qiter-%03i.png", qiter)
+        # println("Saving figure to: ", fname)
+        savefig(fname)
+        # Plot all extracted kCrossings as a V-f
+        scatter([U∞], [p_cross_i[1]], label="mode 1")
+        scatter!([U∞], [p_cross_i[2]], label="mode 2")
+        scatter!([U∞], [p_cross_i[3]], label="mode 3")
+        scatter!([U∞], [p_cross_i[4]], label="mode 4")
+        scatter!([U∞], [p_cross_i[5]], label="mode 5")
+        scatter!([U∞], [p_cross_i[6]], label="mode 6")
+        scatter!([U∞], [p_cross_i[7]], label="mode 7")
+        scatter!([U∞], [p_cross_i[8]], label="mode 8")
+        xlims!((7.9, 8.7))
+        ylims!((-10.0, 100.0))
+        plotTitle = @sprintf("U = %.3f m/s", U∞)
+        title!(plotTitle)
+        xlabel!("V [m/s]")
+        ylabel!("Im(p)")
+        fname = @sprintf("./DebugOutput/Vf-qiter-%03i.png", qiter)
+        # println("Saving figure to: ", fname)
+        savefig(fname)
+        # Plot all extracted kCrossings as a V-g
+        scatter([U∞], [p_cross_r[1]], label="mode 1")
+        scatter!([U∞], [p_cross_r[2]], label="mode 2")
+        scatter!([U∞], [p_cross_r[3]], label="mode 3")
+        scatter!([U∞], [p_cross_r[4]], label="mode 4")
+        scatter!([U∞], [p_cross_r[5]], label="mode 5")
+        scatter!([U∞], [p_cross_r[6]], label="mode 6")
+        scatter!([U∞], [p_cross_r[7]], label="mode 7")
+        scatter!([U∞], [p_cross_r[8]], label="mode 8")
+        xlims!((7.9, 8.7))
+        ylims!((-10.0, 0.0))
+        plotTitle = @sprintf("U = %.3f m/s", U∞)
+        title!(plotTitle)
+        xlabel!("V [m/s]")
+        ylabel!("Re(p)")
+        fname = @sprintf("./DebugOutput/Vg-qiter-%03i.png", qiter)
+        # println("Saving figure to: ", fname)
+        savefig(fname)
+    end
 
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
 end # end function
@@ -974,6 +1053,8 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
                 R_cross_r[:, ctr] = R_eigs_r[:, ii, jj]
                 R_cross_i[:, ctr] = R_eigs_i[:, ii, jj]
                 ctr += 1
+
+                println("You found a real root!")
 
             elseif jj < ik # Always true except for last mode
                 # Get left and right points

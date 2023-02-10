@@ -70,7 +70,11 @@ if __name__ == "__main__":
     # --- Read in DVDict ---
     DVDict = json.load(open(f"{dataDir}/init_DVDict.json"))
     # --- Read in funcs ---
-    funcs = json.load(open(f"{dataDir}/funcs.json"))
+    try:
+        funcs = json.load(open(f"{dataDir}/funcs.json"))
+    except:
+        funcs = None
+        print("No funcs.json file found.")
 
     nodes = np.linspace(0, DVDict["s"], DVDict["neval"], endpoint=True)
 
@@ -178,6 +182,7 @@ if __name__ == "__main__":
         print("Reading in flutter data...")
 
         fname = f"{outputDir}/vg_vf_rl_plot.pdf"
+        # breakpoint()
         # ************************************************
         #     Debug code
         # ************************************************
@@ -185,7 +190,7 @@ if __name__ == "__main__":
             debugDir = "../DebugOutput/"
             testlines = readlines(f"{debugDir}/eigenvalues-001.dat")
             nModes = len(testlines) - 2
-            nFlows = 300
+            nFlows = 100
             vSweep = []
             fSweep = np.zeros((nModes, nFlows))
             gSweep = np.zeros((nModes, nFlows))
@@ -202,20 +207,56 @@ if __name__ == "__main__":
                 for jj in range(nModes):
                     line = lines[jj + 2]
                     line = line.split()
-                    gSweep[jj, ii] = float(line[0])
-                    fSweep[jj, ii] = float(line[1])
+                    g = float(line[0])
+                    f = float(line[1])
+                    # if g == f and f < 1e-10:
+                    #     g = np.nan
+                    #     f = np.nan
+                    #     print(speed)
+                    #     print("mode:", jj + 1)
+                    #     print("Setting to nan because g == f == 0")
+                    # else:
+                    gSweep[jj, ii] = g
+                    fSweep[jj, ii] = f
 
                 flowIter += 1
 
-            plot_vg_vf_rl(
+            fig, axes = plot_vg_vf_rl(
                 vSweep,
                 fSweep,
                 gSweep,
+                nModes=4,
                 ls=ls,
-                fname=fname,
                 # units="kts",
                 # marker="o",
+                # showRLlabels=True,
+                modeList=[
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    # weird modes
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                ],
             )
+
+            # axes[0, 0].set_xlim(7.9, 14.0)
+            axes[1, 0].set_ylim(-20, 350)
+            axes[1, 1].set_xlim(-50, 10)
+
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()
 
     # ==============================================================================
     #                         Plot results
@@ -315,5 +356,11 @@ if __name__ == "__main__":
             modeShapes=modeShapeData,
             modeFreqs=modeFreqData,
             ls=ls,
-            fname=fname,
         )
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
