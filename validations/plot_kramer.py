@@ -489,9 +489,9 @@ if __name__ == "__main__":
 
     # Structural modal validation
     for ii in range(len(dryFreqHz)):
-        ax.plot(-fiberAngles, structNatFreqs[:, ii],  label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
+        ax.plot(-fiberAngles, structNatFreqs[:, ii], label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
     for ii in range(len(dryFreqHz)):
-        ax.plot(dryThetaDeg[ii], dryFreqHz[ii],  label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
+        ax.plot(dryThetaDeg[ii], dryFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
 
     ax.annotate("Dry modes", xy=(0.25, 0.5), ha="center", xycoords="axes fraction", size=15, color="gray")
     ax.annotate("Wet modes", xy=(0.75, 0.5), ha="center", xycoords="axes fraction", size=15, color="blue")

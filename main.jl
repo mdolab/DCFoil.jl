@@ -73,14 +73,15 @@ end
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
 neval = 10 # spatial nodes
-nModes = 5 # number of modes to solve for; 
+nModes = 4 # number of modes to solve for; 
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
+# nModes is really the starting number of structural modes you want to solve for
 df = 1
 dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.01:df:1000.0 # frequency search range [Hz] for flutter modes
-uSweep = 8.0:dU:30.0 # flow speed [m/s] sweep for flutter
+uSweep = 8.0:dU:9.5 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # # --- Foil from Deniz Akcabay's 2020 paper ---

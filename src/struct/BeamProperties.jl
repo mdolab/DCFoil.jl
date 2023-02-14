@@ -65,8 +65,9 @@ function compute_section_property(section::section_property)
     ν₂₁ = (E₂ / E₁) * ν₁₂
 
     # Fiber frame
-    q₁₁ = E₁ / (1 - ν₁₂ * ν₂₁)
-    q₂₂ = E₂ / (1 - ν₁₂ * ν₂₁)
+    divPoissonsRatio = 1 / (1 - ν₁₂ * ν₂₁)
+    q₁₁ = E₁ * divPoissonsRatio
+    q₂₂ = E₂ * divPoissonsRatio
     q₁₂ = q₂₂ * ν₁₂
     q₆₆ = G₁₂
 

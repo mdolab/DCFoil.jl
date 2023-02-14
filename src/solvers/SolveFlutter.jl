@@ -551,7 +551,9 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
         global is_failed = false # declare it as global for this scope
 
         # Sweep k and find crossings
-        kSweep = ωSweep * b_ref / ((U∞ * cos(FOIL.Λ)))
+        # Non-dimensionalization factor
+        tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
+        kSweep = ωSweep / tmpFactor
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
         # Need to initialize some variables for the scope of the while loop
@@ -644,8 +646,25 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
             println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp)
         else # store solution
+            # --- Eigenvalues ---
+            p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
+            p_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
+
+            # --- Eigenvectors ---
+            R_eigs_r_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
+            R_eigs_i_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
+
+            # --- Dimensional eigenvalues [rad/s] ---
             # Non-dimensionalization factor
             tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
+            true_eigs_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
+            true_eigs_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
+
+            flowHistory[nFlow, 1] = U∞
+            flowHistory[nFlow, 2] = FOIL.ρ_f
+            flowHistory[nFlow, 3] = dynPTmp
+
+            iblank[m[1:nCorr, 1], nFlow] .= 1
 
             # --- Write eigenvalues to file ---
             if debug
@@ -663,33 +682,18 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
                         write(io, stringData)
                     end
                 end
+
+                fname = @sprintf("./DebugOutput/iblank-%03i.dat", nFlow)
+                stringData = "iblank\n"
+                open(fname, "w") do io
+                    write(io, speedString)
+                    write(io, stringData)
+                    for ii in 1:3*nModes
+                        stringData = @sprintf("%i\n", iblank[ii, nFlow])
+                        write(io, stringData)
+                    end
+                end
             end
-
-
-            # --- Eigenvalues ---
-
-            # Debug code check...
-            if m[nCorr, 1] > 3 * nModes # is it column 1 or 2 (it's column 1 so there's a bug)
-                println("NTotalModesFound: ", NTotalModesFound)
-                println("nCorrNewModes: ", nCorrNewModes)
-            end
-            p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
-            p_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
-
-            # --- Eigenvectors ---
-            R_eigs_r_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
-            R_eigs_i_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
-
-            # --- Dimensional eigenvalues [rad/s] ---
-            true_eigs_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
-            true_eigs_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
-
-            flowHistory[nFlow, 1] = U∞
-            flowHistory[nFlow, 2] = FOIL.ρ_f
-            flowHistory[nFlow, 3] = dynPTmp
-
-            iblank[m[1:nCorr, 1], nFlow] .= 1
-
             # # --- Correlated eigenvalues found ---
             # filename = "dynP" * string(nFlow, pad=2) * ".txt"
             # exampleFileIOStream = open(filename, "w")
@@ -1126,7 +1130,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, 
     #             |0  (U/b)^2 * M|   |p*u|     |-(K-q*A^R)  -(U/b*C - qinf/k * A^I)  |   |p*u|
     # ARGUMENTS
     #       dim - the size of reduced problem
-    #       b - the half chord. Scalar
+    #       b - the reference half chord. Scalar
     #       vel - the velocity of the fluid. Scalar
     #       Mf, Cf_r, Cf_i, Kf_r, Kf_i - The AIC (real/imag parts). Array(dim,dim)
     #       MM - structural mass matrix. Array(dim,dim)
@@ -1152,18 +1156,20 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, 
     # All entries in A and B are real except the ones coming from the AIC
     if pkEqnType == "Hassig"
 
+        nonDimFactor = (U∞ * cos(FOIL.Λ) / b)
+
         # B - Real part
         firstRow = hcat(zeroMat, iMat)
-        secondRow = hcat(-1 * (Kf_r + KK), -1 * (U∞ * cos(FOIL.Λ) / b) .* (Cf_r))
+        secondRow = hcat(-1 * (Kf_r + KK), -1 * nonDimFactor .* (Cf_r))
 
         B_r = vcat(firstRow, secondRow)
 
         # B - Imag part
-        secondRow = hcat(-1 * (Kf_i), -1 * (U∞ * cos(FOIL.Λ) / b) .* (Cf_i))
+        secondRow = hcat(-1 * (Kf_i), -1 * nonDimFactor .* (Cf_i))
 
         # A - real part
         firstRow = hcat(iMat, zeroMat)
-        secondRow = hcat(zeroMat, (U∞ / b)^2 .* (Mf + MM))
+        secondRow = hcat(zeroMat, nonDimFactor * nonDimFactor .* (Mf + MM))
 
         A_r = vcat(firstRow, secondRow)
 

@@ -189,14 +189,18 @@ end
 #     Hydrodynamic strip forces
 # ************************************************
 function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
-    qf = 0.5 * rho_f * U∞^2 # Dynamic pressure
+    """
+    Hydrodynamic stiffness force
+    """
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b # precompute division by b to get a
 
     # Aerodynamic quasi-steady stiffness 
     # (1st row is lift, 2nd row is pitching moment)
 
     k_hα = -2 * b * clα * Ck # lift due to angle of attack
     k_αα = -2 * eb * b * clα * Ck # moment due to angle of attack (disturbing)
-    K_f = qf * cos(Λ)^2 *
+    K_f = qf * cos(Λ) * cos(Λ) *
           [
               0.0 k_hα
               0.0 k_αα
@@ -204,10 +208,10 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
 
     # Sweep correction to aerodynamic quasi-steady stiffness
     e_hh = U∞ * cos(Λ) * 2 * clα * Ck
-    e_hα = U∞ * cos(Λ) * (-clα) * b * (1 - ab / b) * Ck
-    e_αh = U∞ * cos(Λ) * clα * b * (1 + ab / b) * Ck
+    e_hα = U∞ * cos(Λ) * (-clα) * b * (1 - a) * Ck
+    e_αh = U∞ * cos(Λ) * clα * b * (1 + a) * Ck
     e_αα = U∞ * cos(Λ) *
-           (π * b^2 - clα * eb * b * (1 - 2 * (ab / b)) * Ck)
+           (π * b * b - clα * eb * b * (1 - 2 * (a)) * Ck)
     K̂_f = qf / U∞ * sin(Λ) * b *
            [
                e_hh e_hα
@@ -222,14 +226,15 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     """
     Fluid-added damping matrix
     """
-    qf = 0.5 * rho_f * U∞^2 # Dynamic pressure
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b # precompute division by b to get a
 
     # Aerodynamic quasi-steady damping
     # (1st row is lift, 2nd row is pitching moment)
     c_hh = 2 * clα * Ck
-    c_hα = -b * (2π + clα * (1 - 2 * ab / b) * Ck)
+    c_hα = -b * (2π + clα * (1 - 2 * a) * Ck)
     c_αh = 2 * eb * clα * Ck
-    c_αα = 0.5 * b * (1 - 2 * ab / b) * (2π * b - 2 * clα * eb * Ck)
+    c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
     C_f = qf / U∞ * cos(Λ) * b *
           [
               c_hh c_hα
@@ -240,7 +245,7 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     e_hh = 2π * b
     e_hα = 2π * ab * b
     e_αh = 2π * ab * b
-    e_αα = 2π * b^3 * (0.125 + (ab / b)^2)
+    e_αα = 2π * b^3 * (0.125 + a * a)
     Ĉ_f = qf / U∞ * sin(Λ) * b *
            [
                e_hh e_hα
@@ -254,11 +259,13 @@ function compute_node_mass(b, ab, rho_f)
     """
     Fluid-added mass matrix
     """
+    bSquared = b * b # precompute square of b
+    a = ab / b # precompute division by b to get a
     m_hh = 1
     m_hα = ab
     m_αh = ab
-    m_αα = b^2 * (0.125 + (ab / b)^2)
-    M_f = π * rho_f * b^2 *
+    m_αα = bSquared * (0.125 + a * a)
+    M_f = π * rho_f * bSquared *
           [
               m_hh m_hα
               m_αh m_αα
@@ -297,7 +304,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     end
 
     # fluid dynamic pressure    
-    qf = 0.5 * FOIL.ρ_f * FOIL.U∞^2
+    qf = 0.5 * FOIL.ρ_f * FOIL.U∞*FOIL.U∞
 
     # --- Initialize planform area counter ---
     planformArea = 0.0

@@ -28,8 +28,8 @@ from tabulate import tabulate
 # Extension modules
 # ==============================================================================
 import niceplots
-from helperFuncs import load_jld, readlines, get_bendingtwisting
-from divAndFlutterPlots import plot_mode_shapes, plot_vg_vf_rl
+from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals
+from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing
 
 # ==============================================================================
 #                         Main driver
@@ -101,8 +101,11 @@ if __name__ == "__main__":
     # Linestyles
     ls = ["-", "--", "-.", ":"]
     # ==============================================================================
-    #                         Static hydroelastic
+    #                         READ IN DATA
     # ==============================================================================
+    # ************************************************
+    #     Static hydroelastic
+    # ************************************************
     if args.is_static:
         # ************************************************
         #     Read in data
@@ -124,9 +127,9 @@ if __name__ == "__main__":
         fname = f"{dataDir}/moment.dat"
         moment = np.loadtxt(fname)
 
-    # ==============================================================================
-    #                         Dynamic hydroelastic
-    # ==============================================================================
+    # ************************************************
+    #     Dynamic hydroelastic
+    # ************************************************
     if args.is_forced:
         print("Reading in forced vibration data")
         # --- Read frequencies ---
@@ -149,9 +152,9 @@ if __name__ == "__main__":
         fname = f"{dataDir}/TipMomentDyn.dat"
         dynTipMoment = np.loadtxt(fname)
 
-    # ==============================================================================
-    #                         Flutter and modal solutions
-    # ==============================================================================
+    # ************************************************
+    #     Flutter and modal solutions
+    # ************************************************
     if args.is_modal:
         # ************************************************
         #     Read in data
@@ -190,14 +193,16 @@ if __name__ == "__main__":
             debugDir = "../DebugOutput/"
             testlines = readlines(f"{debugDir}/eigenvalues-001.dat")
             nModes = len(testlines) - 2
-            nFlows = 100
+            nFlows = 2000
             vSweep = []
             fSweep = np.zeros((nModes, nFlows))
             gSweep = np.zeros((nModes, nFlows))
+            iblankSweep = np.zeros((nModes, nFlows))
 
             flowIter = 1
             for ii in range(nFlows):
                 lines = readlines(f"{debugDir}/eigenvalues-%03i.dat" % (flowIter))
+                iblankLines = readlines(f"{debugDir}/iblank-%03i.dat" % (flowIter))
 
                 nModes = len(lines) - 2
 
@@ -206,49 +211,28 @@ if __name__ == "__main__":
                 vSweep.append(float(speed))
                 for jj in range(nModes):
                     line = lines[jj + 2]
+                    iblankLine = iblankLines[jj + 2]
                     line = line.split()
                     g = float(line[0])
                     f = float(line[1])
-                    # if g == f and f < 1e-10:
-                    #     g = np.nan
-                    #     f = np.nan
-                    #     print(speed)
-                    #     print("mode:", jj + 1)
-                    #     print("Setting to nan because g == f == 0")
-                    # else:
                     gSweep[jj, ii] = g
                     fSweep[jj, ii] = f
+                    iblankSweep[jj, ii] = iblankLine
 
                 flowIter += 1
 
+            flutterSol = postprocess_flutterevals(iblankSweep, None, np.array(vSweep), gSweep, fSweep)
             fig, axes = plot_vg_vf_rl(
-                vSweep,
-                fSweep,
-                gSweep,
-                nModes=4,
+                flutterSol,
                 ls=ls,
                 # units="kts",
                 # marker="o",
                 # showRLlabels=True,
-                modeList=[
-                    0,
-                    1,
-                    2,
-                    3,
-                    4,
-                    # weird modes
-                    5,
-                    6,
-                    7,
-                    8,
-                    9,
-                    10,
-                    11,
-                ],
             )
 
-            # axes[0, 0].set_xlim(7.9, 14.0)
-            axes[1, 0].set_ylim(-20, 350)
+            axes[0, 0].set_xlim(8.4, 9.1)
+            axes[0, 0].set_ylim(-15, 2.5)
+            axes[1, 0].set_ylim(-10, 50)
             axes[1, 1].set_xlim(-50, 10)
 
             dosave = not not fname
@@ -261,6 +245,16 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         Plot results
     # ==============================================================================
+    fname = f"{outputDir}/wing-geom.pdf"
+    fig, axes = plot_wing(DVDict)
+
+    dosave = not not fname
+    plt.show(block=(not dosave))
+    if dosave:
+        plt.savefig(fname, format="pdf")
+        print("Saved to:", fname)
+    plt.close()
+
     if args.is_static:
         fname = f"{outputDir}/static_spanwise.pdf"
         dosave = not not fname
