@@ -3,12 +3,9 @@
 @File    :   plot_kramer.py
 @Time    :   2023/02/06
 @Author  :   Galen Ng
-@Desc    :   Use the composite beam from Kramer's CS paper:
-Kramer, M. R., Liu, Z., Young, Y. L. (2013). Free vibration of cantilevered composite plates in air and in water. Composite Structures
+@Desc    :   Use the composite beam from Akcabay's 2019 CS paper:
+Akcabay, D. T., & Young, Y. L. (2019). Steady and Dynamic Hydroelastic Behavior of Composite Lifting Surfaces. Composite Structures, 227(December 2018), 111240. https://doi.org/10.1016/j.compstruct.2019.111240
 to validate DCFoil
-
-The reference values were computed in:
-Liao, Y., Garg, N., Martins, J. R. R. A., Young, Y. L. (2019). Viscous fluid–structure interaction response of composite hydrofoils. Composite Structures
 
 """
 
@@ -40,26 +37,20 @@ from POSTPROCESSING.helperFuncs import load_jld
 # ************************************************
 #     Training values from paper
 # ************************************************
-from kramer_src.kramerData import wetFreqHz, wetThetaDeg, dryFreqHz, dryThetaDeg
+# Import static hydroelastic solves
+from akcabay_src.akcabayData import speed_hbar, hbar_neg15, speed_psi, psi_neg15
 
-fname = "kramer.pdf"
-analysisDir = "../OUTPUT/kramer_theta-"
-fiberAngles = np.arange(0, 90 + 10, 10)
-nModes = 5  # number of modes analyzed in DCFoil
+fname = "akcabay.pdf"
+analysisDir = "../OUTPUT/akcabay_U0-"
+speeds = np.arange(1, 40 + 1, 1)
 
 if __name__ == "__main__":
 
     # --- Read data ---
-    structNatFreqs = np.zeros((len(fiberAngles), nModes))
-    wetNatFreqs = np.zeros((len(fiberAngles), nModes))
-    for ii, fiber in enumerate(fiberAngles):
-        dataDir = f"{analysisDir}{fiber:.1f}/"
-        structJLData = load_jld(f"{dataDir}/modal/structModal.jld")
-        wetJLData = load_jld(f"{dataDir}/modal/wetModal.jld")
+    for ii, speed in enumerate(speeds):
+        dataDir = f"{analysisDir}{speed:.1f}/"
+        funcs = json.load(f"{dataDir}/static/funcs.json")
 
-        # NOTE: Julia stores data in column major order so it is transposed
-        structNatFreqs[ii, :] = np.asarray(structJLData["structNatFreqs"])
-        wetNatFreqs[ii, :] = np.asarray(wetJLData["wetNatFreqs"])
 
     dosave = not not fname
 

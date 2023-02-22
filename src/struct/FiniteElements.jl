@@ -374,6 +374,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     println("Using ", constitutive, " constitutive relations...")
     println(nElem, " elements")
     println(nNodes, " nodes")
+    println(nnd*nNodes, " total DOFs")
 
     # ************************************************
     #     Element loop

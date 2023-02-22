@@ -39,6 +39,14 @@ ccm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
 
 def plot_wing(DVDict: dict):
+    """
+    Use design var dictionary to plot the wing
+
+    Parameters
+    ----------
+    DVDict : dict
+        Contains all design variables
+    """
     # Create figure object
     labelpad = 30
     legfs = 15
@@ -152,7 +160,6 @@ def plot_wing(DVDict: dict):
 def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list):
     """
         Plot the mode shapes for the structural and wet modes
-        # TODO: make 2x2 plot
 
     Parameters
     ----------
@@ -285,7 +292,7 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
     return fig, axes
 
 
-def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=False):
+def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLlabels=False):
     """
     Plot the V-g, V-f, and R-L diagrams
 
@@ -313,15 +320,20 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
     fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
     flutterColor = "magenta"
 
+    # gLabel = "$g$ [rad/s]"
+    # fLabel = "$f$ [rad/s]"
+    # hz2rad = 2 * np.pi
+    gLabel = "$g$ [1/s]"
+    fLabel = "$f$ [Hz]"
+    hz2rad = 1
     # ************************************************
     #     V-g diagram
     # ************************************************
     ax = axes[0, 0]
+    xlabel = "$U_{\infty}$ " + f"[{units}]"
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)  # color index
 
-        vSweep = flutterSol[key]["U"]
-        gSweep = flutterSol[key]["pvals_r"]
         # --- Units for labeling ---
         if units == "kts":
             vSweep = 1.94384 * np.array(vSweep)  # kts
@@ -329,11 +341,12 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
             pass
         else:
             raise ValueError(f"Unsupported units: {units}")
-        xlabel = "$U_{\infty}$ " + f"[{units}]"
+        vSweep = flutterSol[key]["U"]
+        gSweep = flutterSol[key]["pvals_r"] * hz2rad
 
-        ax.plot(vSweep, gSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
-        # ax.scatter(vSweep, gSweep, color=(cm[iic]), marker=marker)
-        try:
+        try:  # Plot only if the data exists
+            ax.plot(vSweep, gSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
+            # ax.scatter(vSweep, gSweep, color=(cm[iic]), marker=marker)
             start = np.array([vSweep[0], gSweep[0]])
             end = np.array([vSweep[-1], gSweep[-1]])
             # Label mode number on the line
@@ -350,7 +363,7 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         except Exception:
             print(f"Mode {key} empty")
     ax.set_ylim(top=10)
-    ax.set_ylabel("$g$ [1/s]", rotation=0, labelpad=labelpad)
+    ax.set_ylabel(gLabel, rotation=0, labelpad=labelpad)
     ax.set_title("$V$-$g$")
     ax.set_xlabel(xlabel)
     # --- Put flutter boundary on plot ---
@@ -377,7 +390,7 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         iic = ii % len(cm)  # color index
 
         vSweep = flutterSol[key]["U"]
-        fSweep = flutterSol[key]["pvals_i"]
+        fSweep = flutterSol[key]["pvals_i"] * hz2rad
         # --- Units for labeling ---
         if units == "kts":
             vSweep = 1.94384 * np.array(vSweep)  # kts
@@ -386,9 +399,9 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         else:
             raise ValueError(f"Unsupported units: {units}")
 
-        ax.plot(vSweep, fSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
-        # ax.scatter(vSweep, fSweep, c=(cm[iic]), marker=marker)
-        try:
+        try:  # Plot only if the data exists
+            ax.plot(vSweep, fSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
+            # ax.scatter(vSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([vSweep[0], fSweep[0]])
             end = np.array([vSweep[-1], fSweep[-1]])
             # Label mode number on the line
@@ -404,7 +417,7 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         except Exception:
             print(f"Mode {key} empty")
 
-    ax.set_ylabel("$f$ [Hz]", rotation=0, labelpad=labelpad)
+    ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("$V$-$f$")
     # ax.set_xlim(vSweep[0] * 0.99, vSweep[-1] * 1.01)
     ax.set_xlabel(xlabel)
@@ -419,8 +432,8 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         iic = ii % len(cm)
 
         vSweep = flutterSol[key]["U"]
-        gSweep = flutterSol[key]["pvals_r"]
-        fSweep = flutterSol[key]["pvals_i"]
+        gSweep = flutterSol[key]["pvals_r"] * hz2rad
+        fSweep = flutterSol[key]["pvals_i"] * hz2rad
         # --- Units for labeling ---
         if units == "kts":
             vSweep = 1.94384 * np.array(vSweep)  # kts
@@ -429,10 +442,9 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         else:
             raise ValueError(f"Unsupported units: {units}")
 
-        ax.plot(gSweep, fSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
-        # ax.scatter(gSweep, fSweep, c=(cm[iic]), marker=marker)
-
-        try:
+        try:  # Plot only if the data exists
+            ax.plot(gSweep, fSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
+            # ax.scatter(gSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([gSweep[0], fSweep[0]])
             end = np.array([gSweep[-1], fSweep[-1]])
             ax.plot(start[0], start[1], marker="o", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
@@ -468,10 +480,10 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
         except Exception:
             print(f"Mode {key} empty")
 
-    ax.set_ylabel("$f$ [Hz]", rotation=0, labelpad=labelpad)
+    ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("Root locus")
     ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
-    ax.set_xlabel("$g$ [1/s]")
+    ax.set_xlabel(gLabel)
     # --- Put flutter boundary on plot ---
     ax.set_xlim(right=10)
     ax.axvline(
@@ -484,6 +496,109 @@ def plot_vg_vf_rl(flutterSol, ls: list, units="m/s", marker=None, showRLlabels=F
     ax.annotate(
         "Hydroelastic\ninstability", xy=(0.85, 0.5), ha="left", xycoords="axes fraction", size=legfs, color=flutterColor
     )
+
+    for ax in axes.flatten():
+        niceplots.adjust_spines(ax, outward=True)
+
+    return fig, axes
+
+
+def plot_dlf(flutterSol: dict, semichord: float, sweepAng: float, units="m/s"):
+    """
+    Plot the damping loss factor diagrams.
+
+    Parameters
+    ----------
+    flutterSol : dict
+        see 'postprocess_flutterevals()' for data structure
+    semichord : float
+        mean semichord of the wing
+    sweepAng : float
+        sweep angle of wing in radians
+    units : str, optional
+        units for velocity, by default "m/s"
+    """
+
+    # Sort keys to get consistent plotting
+    sortedModesNumbers = sorted(flutterSol.keys(), key=int)
+
+    # Create figure object
+    labelpad = 40
+    legfs = 15
+    fact = 1  # scale size
+    figsize = (18 * fact, 6 * fact)
+    xytext = (-5, 5)
+    fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
+
+    yLabel = "$\eta$ [-]"
+
+    # ************************************************
+    #     Plot DLF vs. velocity
+    # ************************************************
+    ax = axes[0]
+    xLabel = "$U_{\infty}$ " + f"[{units}]"
+
+    for ii, key in enumerate(sortedModesNumbers):
+        iic = ii % len(cm)  # color index
+
+        vSweep = flutterSol[key]["U"]
+        # --- Units for labeling ---
+        if units == "kts":
+            vSweep = 1.94384 * np.array(vSweep)  # kts
+        elif units == "m/s":
+            pass
+        else:
+            raise ValueError(f"Unsupported units: {units}")
+
+        dlf = -2 * np.divide(flutterSol[key]["pvals_r"], flutterSol[key]["pvals_i"])
+
+        try:
+            ax.plot(vSweep, dlf, ls="-", c=cm[iic], label=f"Mode {key}")
+            start = np.array([vSweep[0], dlf[0]])
+            end = np.array([vSweep[-1], dlf[-1]])
+            # Label mode number on the line
+            ax.annotate(
+                f"Mode {ii+1}",
+                xy=(start[0], start[1]),
+                ha="right",
+                # xy=(end[0], end[1]),
+                c=cm[iic],
+                fontsize=legfs,
+                xytext=xytext,
+                textcoords="offset points",
+            )
+        except Exception:
+            print(f"Mode {key} empty")
+
+    ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
+    ax.set_xlabel(xLabel)
+    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+
+    # ************************************************
+    #     Plot DLF vs. k
+    # ************************************************
+    ax = axes[1]
+    xLabel = "$k$ [-]"
+    for ii, key in enumerate(sortedModesNumbers):
+        iic = ii % len(cm)  # color index
+
+        fSweep = flutterSol[key]["pvals_i"]
+        vSweep = flutterSol[key]["U"]
+        kSweep = np.divide(fSweep * 2 * np.pi * semichord, vSweep * np.cos(sweepAng))
+        dlf = -2 * np.divide(flutterSol[key]["pvals_r"], fSweep)
+
+        try:
+            ax.loglog(kSweep, dlf, ls="-", c=cm[iic], label=f"Mode {key}")
+            start = np.array([kSweep[0], dlf[0]])
+            end = np.array([kSweep[-1], dlf[-1]])
+        except Exception:
+            print(f"Mode {key} empty")
+
+    ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
+    ax.set_xlabel(xLabel)
+    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+
+    plt.suptitle("Damping loss factor trends")
 
     for ax in axes.flatten():
         niceplots.adjust_spines(ax, outward=True)

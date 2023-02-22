@@ -45,7 +45,7 @@ DVDict = Dict(
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
-    "c" => 0.81 * ones(neval), # chord length [m]
+    "c" => 0.81 * ones(neval), # chord length [m] THERE SHOULD BE TAPER
     "s" => 2.7, # semispan [m]
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 0.06, # thickness-to-chord ratio
@@ -84,6 +84,23 @@ DVDict = Dict(
     "s" => 1, # semispan [m]
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
     "toc" => 1, # thickness-to-chord ratio
+    "x_αb" => 0 * ones(neval), # static imbalance [m]
+    "θ" => 0 * π / 180, # fiber angle global [rad]
+)
+
+# --- Eirikur's flat plate ---
+DVDict = Dict(
+    "neval" => neval,
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "U∞" => 10.0, # free stream velocity [m/s]
+    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "ρ_f" => 1.2250, # fluid density [kg/m³]
+    "material" => "eirikurPl", # preselect from material library
+    "g" => 0.04, # structural damping percentage
+    "c" => 0.3 * ones(neval), # chord length [m]
+    "s" => 0.85, # semispan [m]
+    "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+    "toc" => 0.00666666, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
     "θ" => 0 * π / 180, # fiber angle global [rad]
 )

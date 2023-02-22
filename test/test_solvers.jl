@@ -9,13 +9,15 @@ include("../src/solvers/SolveStatic.jl")
 using .SolveStatic
 include("../src/solvers/SolveForced.jl")
 using .SolveForced
+include("../src/solvers/SolveFlutter.jl")
+using .SolveFlutter
 
 # ==============================================================================
 #                         Test Static Solver
 # ==============================================================================
 function test_SolveStaticRigid()
     """
-    Very simple test with hydro and structural solvers over different numbers of nodes
+    Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Rigid beam
     """
 
@@ -103,11 +105,11 @@ function test_SolveStaticRigid()
 
     return rel_err
 
-end
+end # test_SolveStaticRigid
 
 function test_SolveStaticIso()
     """
-    Very simple test with hydro and structural solvers over different numbers of nodes
+    Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Stainless steel beam
     """
     # --- Reference value ---
@@ -188,11 +190,11 @@ function test_SolveStaticIso()
     rel_err = max(rel_err1, rel_err2)
 
     return rel_err
-end
+end # test_SolveStaticIso
 
 function test_SolveStaticComp()
     """
-    Very simple test with hydro and structural solvers over different numbers of nodes
+    Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
 
@@ -278,14 +280,14 @@ function test_SolveStaticComp()
 
     return rel_err
 
-end
+end # test_SolveStaticComp
 
 # ==============================================================================
 #                         Test Forced Response
 # ==============================================================================
 function test_SolveForcedComp()
     """
-    Very simple test with hydro and structural solvers over different numbers of nodes
+    Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
     nevals = [10, 20, 40] # list of number of nodes to test
@@ -356,4 +358,52 @@ function test_SolveForcedComp()
 
     # --- Relative error ---
 
+end # end test_SolveForcedComp
+
+# ==============================================================================
+#                         Test Flutter Solver
+# ==============================================================================
+
+function test_correlationMatrix()
+    """
+    Test the correlation method of van Zyl between k increments
+    """
+
+    # --- k^(n) data ---
+    R_old = [
+        0.0 0.0 0.0 0.0
+        0.0 0.0 0.0 0.0
+        0.0 0.0 0.0 0.0
+        0.0 0.0 0.0 0.0
+    ]
+    # --- k^(n+1) data ---
+    R_new = []
+
+    old_r = real(R_old)
+    old_i = imag(R_old)
+    new_r = real(R_new)
+    new_i = imag(R_new)
+    SolverFlutter.compute_correlationMatrix(old_r, old_i, new_r, new_i)
+end
+
+function test_correlationMetrics()
+    """
+    Test the correlation method of van Zyl when new modes are found between dynP increments
+    It uses the eigenvalues to help decide if a new mode is found
+    """
+
+    # --- q^(n) data ---
+    p_old = []
+    R_old = []
+    # --- q^(n+1) data ---
+    p_new = []
+    R_new = []
+
+    old_r = real(R_old)
+    old_i = imag(R_old)
+    new_r = real(R_new)
+    new_i = imag(R_new)
+    p_old_i = imag(p_old)
+    p_new_i = imag(p_new)
+    SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
 end

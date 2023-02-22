@@ -151,6 +151,7 @@ function cmplxStdEigValProb(A_r, A_i, n)
 
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
+    # eigen() is a spectral decomposition
     w, Vr = eigen(A)
 
     # Eigenvalues

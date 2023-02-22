@@ -17,7 +17,10 @@ import pickle
 #                         Helper functions
 # ==============================================================================
 def load_jld(filename: str):
-    # Load the data we need
+    """
+    Load the data we need
+    f is a dictionary
+    """
     f = h5py.File(filename, "r")
     return f
 
@@ -47,7 +50,7 @@ def get_bendingtwisting(states, nDOF=4):
     return w, psi
 
 
-def postprocess_flutterevals(iblankIn, rho, U, pvals_r, pvals_i):
+def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i):
     """
     Process the raw arrays with eigenvalues so they can be written out.
     Use the blanking array to create new modes

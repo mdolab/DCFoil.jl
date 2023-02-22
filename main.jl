@@ -17,7 +17,7 @@ using .DCFoil
 #     I/O
 # ************************************************
 # outputDir = "./OUTPUT/testAir/"
-outputDir = "./OUTPUT/testWater/"
+outputDir = "./OUTPUT/testWaterAkcabay/"
 mkpath(outputDir)
 
 # ************************************************
@@ -30,14 +30,14 @@ run_static = false
 run_forced = false
 run_modal = false
 run_flutter = false
+debug = false
 
 # Uncomment here
 # run_static = true
 # run_forced = true
-run_modal = true
+# run_modal = true
 run_flutter = true
-
-debug = true
+# debug = true
 
 α_sweep = true # sweep angle of attack
 U_sweep = true # sweep flow speed
@@ -72,7 +72,7 @@ end
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-neval = 10 # spatial nodes
+neval = 20 # spatial nodes
 nModes = 4 # number of modes to solve for; 
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -81,42 +81,60 @@ df = 1
 dU = 1
 fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
 fSearch = 0.01:df:1000.0 # frequency search range [Hz] for flutter modes
-uSweep = 8.0:dU:9.5 # flow speed [m/s] sweep for flutter
+uSweep = 28.0:dU:50 # flow speed [m/s] sweep for flutter
+# uSweep = 2.0:dU:25.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
-# # --- Foil from Deniz Akcabay's 2020 paper ---
-# DVDict = Dict(
-#     "neval" => neval,
-#     "α₀" => 6.0, # initial angle of attack [deg]
-#     "U∞" => 10.0, # free stream velocity [m/s]
-#     "Λ" => 0.0 * π / 180, # sweep angle [rad]
-#     "ρ_f" => 1000.0, # fluid density [kg/m³]
-#     "material" => "cfrp", # preselect from material library
-#     "g" => 0.04, # structural damping percentage
-#     "c" => 0.1 * ones(neval), # chord length [m]
-#     "s" => 0.3, # semispan [m]
-#     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
-#     "toc" => 0.12, # thickness-to-chord ratio
-#     "x_αb" => 0 * ones(neval), # static imbalance [m]
-#     "θ" => 0 * π / 180, # fiber angle global [rad]
-# )
-
-# --- Yingqian's Viscous FSI Paper (2019) ---
+# --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
     "neval" => neval,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 5.0, # free stream velocity [m/s]
+    "U∞" => 29.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
-    "c" => 0.0925 * ones(neval), # chord length [m]
-    "s" => 0.2438, # semispan [m]
+    "c" => 0.1 * ones(neval), # chord length [m]
+    "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
-    "toc" => 0.03459, # thickness-to-chord ratio
+    "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(neval), # static imbalance [m]
-    "θ" => 0 * π / 180, # fiber angle global [rad]
+    "θ" => -15 * π / 180, # fiber angle global [rad]
 )
+
+# # --- Yingqian's Viscous FSI Paper (2019) ---
+# DVDict = Dict(
+#     "neval" => neval,
+#     "α₀" => 6.0, # initial angle of attack [deg]
+#     "U∞" => 5.0, # free stream velocity [m/s]
+#     "Λ" => 0.0 * π / 180, # sweep angle [rad]
+#     "ρ_f" => 1000.0, # fluid density [kg/m³]
+#     "material" => "cfrp", # preselect from material library
+#     "g" => 0.04, # structural damping percentage
+#     "c" => 0.0925 * ones(neval), # chord length [m]
+#     "s" => 0.2438, # semispan [m]
+#     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+#     "toc" => 0.03459, # thickness-to-chord ratio
+#     "x_αb" => 0 * ones(neval), # static imbalance [m]
+#     "θ" => 0 * π / 180, # fiber angle global [rad]
+# )
+
+# # --- Eirikur's flat plate ---
+# DVDict = Dict(
+#     "neval" => neval,
+#     "α₀" => 7.4, # initial angle of attack [deg]
+#     "U∞" => 10.0, # free stream velocity [m/s]
+#     "Λ" => 0.0 * π / 180, # sweep angle [rad]
+#     "ρ_f" => 1.2250, # fluid density [kg/m³]
+#     "material" => "eirikurPl", # preselect from material library
+#     "g" => 0.04, # structural damping percentage
+#     "c" => 0.3 * ones(neval), # chord length [m]
+#     "s" => 0.85, # semispan [m]
+#     "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+#     "toc" => 0.00666666, # thickness-to-chord ratio
+#     "x_αb" => 0 * ones(neval), # static imbalance [m]
+#     "θ" => 0 * π / 180, # fiber angle global [rad]
+# )
 
 # ************************************************
 #     Cost functions

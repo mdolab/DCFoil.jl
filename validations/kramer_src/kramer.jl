@@ -3,10 +3,10 @@
 # @File    :   main.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
-# @Desc    :   Main executable for the project
+# @Desc    :   Code to verify modal analysis against Kramer's paper
 
 using Printf
-include("../src/DCFoil.jl")
+include("../../src/DCFoil.jl")
 
 using .DCFoil
 

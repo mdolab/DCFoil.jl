@@ -150,6 +150,13 @@ function solve(DVDict, evalFuncs, outputDir::String)
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
     # ************************************************
+    # Also a quick static divergence check
+    if costFuncs["psi_tip"] * DVDict["θ"] > 0.0
+        println("+---------------------------------------------------+")
+        println("|  WARNING: STATIC DIVERGENCE CONDITION DETECTED!   |")
+        println("|  PRODUCT OF FIBER ANGLE AND TIP TWIST ARE +VE     |")
+        println("+---------------------------------------------------+")
+    end
     write_sol(uSol, fHydro, costFuncs, elemType, outputDir)
 
     return costFuncs

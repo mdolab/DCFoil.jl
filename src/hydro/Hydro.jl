@@ -44,14 +44,14 @@ function compute_theodorsen(k)
     H₁²ᵣ = besselj1(k)
     H₁²ᵢ = -bessely1(k)
 
-    denom = ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
+    divDenom = 1 / ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
 
-    𝙲ᵣ = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) / denom
-    𝙲ᵢ = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) / denom
+    𝙲ᵣ = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
+    𝙲ᵢ = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
 
     ans = [𝙲ᵣ, 𝙲ᵢ]
 
-    if k == 0
+    if k < 1.11e-16
         println("You can't use the Theodorsen function for k = 0!")
     end
 
@@ -170,20 +170,6 @@ function use_free_surface(γ, α₀, U∞, chordVec, h)
     return γ_FS
 end
 
-
-# function compute_added_mass(ρ_f, chordVec)
-#     """
-#     Compute the added mass for a rectangular cross section
-
-#     return:
-#         added mass, Array
-#         added inertia, Array
-#     """
-#     mₐ = π * ρ_f * chordVec .* chordVec / 4 # Fluid-added mass vector [kg/m]
-#     Iₐ = π * ρ_f * chordVec .^ 4 / 128 # Fluid-added inertia [kg-m]
-
-#     return mₐ, Iₐ
-# end
 
 # ************************************************
 #     Hydrodynamic strip forces
@@ -304,7 +290,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     end
 
     # fluid dynamic pressure    
-    qf = 0.5 * FOIL.ρ_f * FOIL.U∞*FOIL.U∞
+    qf = 0.5 * FOIL.ρ_f * FOIL.U∞ * FOIL.U∞
 
     # --- Initialize planform area counter ---
     planformArea = 0.0
@@ -395,6 +381,7 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
     ------
     AIC: Matrix
         Aerodynamic influence coefficient matrix broken up into added mass, damping, and stiffness
+        in such a way that {F} = -([Mf]{udd} + [Cf]{ud} + [Kf]{u})
     mesh: Array
         Mesh of the foil
     FOIL: struct
@@ -426,10 +413,17 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
     for yⁿ in mesh
         # --- compute strip width ---
         # TODO: the first and last strip have half width
+        Δy = 0.0
         if jj < FOIL.neval
             Δy = mesh[jj+1] - mesh[jj]
+            if jj == 1
+                Δy = Δy / 2
+            end
         else
             Δy = mesh[jj] - mesh[jj-1]
+            if jj == FOIL.neval
+                Δy = Δy / 2
+            end
         end
 
         # --- Linearly interpolate values based on y loc ---

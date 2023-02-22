@@ -6,4 +6,4 @@
 
 
 # Run the program
-julia main.jl > std.out
+nohup julia main.jl > std.out

@@ -9,9 +9,6 @@
 # ==============================================================================
 # Standard Python modules
 # ==============================================================================
-import os
-import sys
-import copy
 import json
 import argparse
 from pathlib import Path
@@ -21,7 +18,7 @@ from pathlib import Path
 # ==============================================================================
 import numpy as np
 import matplotlib.pyplot as plt
-
+import seaborn as sns
 from tabulate import tabulate
 
 # ==============================================================================
@@ -29,7 +26,7 @@ from tabulate import tabulate
 # ==============================================================================
 import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals
-from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing
+from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf
 
 # ==============================================================================
 #                         Main driver
@@ -184,17 +181,28 @@ if __name__ == "__main__":
         # --- Read in data ---
         print("Reading in flutter data...")
 
-        fname = f"{outputDir}/vg_vf_rl_plot.pdf"
-        # breakpoint()
+        # Remember to transpose data since Julia stores in column major order
+        eigs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_i.jld")["data"]).T
+        eigs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_r.jld")["data"]).T
+        evecs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigenvectors_i.jld")["data"]).T
+        evecs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigenvectors_r.jld")["data"]).T
+        flowHistory = np.asarray(load_jld(f"{dataDir}/pkFlutter/flowHistory.jld")["data"]).T
+        iblank = np.asarray(load_jld(f"{dataDir}/pkFlutter/iblank.jld")["data"]).T
+
+        flutterSol = postprocess_flutterevals(
+            iblank, flowHistory[:, 1], flowHistory[:, 0], flowHistory[:, 2], eigs_r, eigs_i
+        )
         # ************************************************
         #     Debug code
         # ************************************************
         if args.debug_plots:
+            fname = f"{outputDir}/vg_vf_rl_plot.pdf"
             debugDir = "../DebugOutput/"
             testlines = readlines(f"{debugDir}/eigenvalues-001.dat")
             nModes = len(testlines) - 2
-            nFlows = 2000
+            nFlows = 157
             vSweep = []
+            flowList = []
             fSweep = np.zeros((nModes, nFlows))
             gSweep = np.zeros((nModes, nFlows))
             iblankSweep = np.zeros((nModes, nFlows))
@@ -219,6 +227,7 @@ if __name__ == "__main__":
                     fSweep[jj, ii] = f
                     iblankSweep[jj, ii] = iblankLine
 
+                flowList.append(flowIter)
                 flowIter += 1
 
             flutterSol = postprocess_flutterevals(iblankSweep, None, np.array(vSweep), gSweep, fSweep)
@@ -230,10 +239,22 @@ if __name__ == "__main__":
                 # showRLlabels=True,
             )
 
-            axes[0, 0].set_xlim(8.4, 9.1)
-            axes[0, 0].set_ylim(-15, 2.5)
-            axes[1, 0].set_ylim(-10, 50)
-            axes[1, 1].set_xlim(-50, 10)
+            # axes[0, 0].set_xlim(8.4, 8.7)
+            # axes[0, 0].set_ylim(-15, 2.5)
+            # axes[1, 0].set_ylim(-10, 250)
+            # axes[1, 1].set_xlim(-50, 10)
+
+            # # --- Debug nflow jumping ---
+            # niceColors = sns.color_palette("tab10")
+            # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
+            # cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+            # for mode in range(nModes):
+            #     iic = mode % len(cm)
+            #     axes[0, 1].plot(flowList, gSweep[mode, :], label=f"Mode {mode+1}", c=cm[iic])
+            # axes[0, 1].set_xlabel("nFlow")
+            # axes[0, 1].legend(fontsize=10, labelcolor="linecolor", loc="best", frameon=False)
+            # axes[0, 1].set_xlim(50, 60)
+            # axes[0, 1].set_xlim(0, nFlows)
 
             dosave = not not fname
             plt.show(block=(not dosave))
@@ -351,6 +372,53 @@ if __name__ == "__main__":
             modeFreqs=modeFreqData,
             ls=ls,
         )
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
+
+    if args.is_flutter:
+        # ---------------------------
+        #   Standard v-g, v-f, R-L plots
+        # ---------------------------
+        # --- File name ---
+        fname = f"{outputDir}/vg_vf_rl.pdf"
+
+        # --- Plot ---
+        fig, axes = plot_vg_vf_rl(
+            flutterSol=flutterSol,
+            ls=ls,
+            # units="kts",
+            # marker="o",
+            showRLlabels=True,
+        )
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
+
+        # ---------------------------
+        #   Damping loss plots
+        # ---------------------------
+        # --- File name ---
+        fname = f"{outputDir}/dlf.pdf"
+
+        # --- Plot ---
+        fig, axes = plot_dlf(
+            flutterSol=flutterSol,
+            semichord=0.5*np.mean(DVDict["c"]),
+            sweepAng=DVDict["Λ"],
+            # units="kts",
+        )
+        axes[0].set_ylim(-0.1, 1.2)
+        axes[1].set_ylim(-0.1, 1.2)
+        axes[1].set_xlim(left=10)
 
         dosave = not not fname
         plt.show(block=(not dosave))
