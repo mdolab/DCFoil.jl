@@ -36,7 +36,10 @@ using .FEMMethods
 using .SolutionConstants
 using .SolverRoutines
 
-function solve(DVDict, evalFuncs, outputDir::String)
+function solve(DVDict, evalFuncs, outputDir::String;
+    # --- Optional args ---
+    tipMass=false,
+    )
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
 
@@ -71,6 +74,12 @@ function solve(DVDict, evalFuncs, outputDir::String)
 
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    # if tipMass
+    #     bulbMass = 2200 #[kg]
+    #     bulbInertia = 900 #[kg-m²]
+    #     FOIL.x_αb[end] = -0.1 # [m]
+    #     FEMMethods.apply_tip_mass!(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
+    # end
 
     # --- Initialize states ---
     u = copy(globalF)
@@ -305,7 +314,7 @@ end
 
 function compute_∂r∂u(structuralStates, mode="FiDi")
     """
-    Jacobian of residuals with respect to structural states 
+    Jacobian of residuals with respect to structural states
     EXCLUDING BC NODES
     """
 
@@ -362,7 +371,7 @@ end
 
 function compute_direct()
     """
-    Computes direct vector 
+    Computes direct vector
     """
 end
 
@@ -375,10 +384,10 @@ function compute_jacobian(stateVec)
     Compute the jacobian df/dx
 
     Inputs:
-        stateVec: 
+        stateVec:
 
     returns:
-        
+
 
     """
     # ************************************************

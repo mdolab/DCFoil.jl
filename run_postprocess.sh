@@ -11,8 +11,14 @@ cd POSTPROCESSING
 
 # python ./run_postprocessing.py --case testModal
 # python ./run_postprocessing.py --case testWater --debug_plots --is_modal
-python ./run_postprocessing.py --case testWaterAkcabay --is_flutter
+# python ./run_postprocessing.py --case testWaterAkcabay --is_flutter --is_forced
 # julia ./POSTPROCESSING/postprocessing.jl
+
+# ************************************************
+#     IMOCA cases
+# ************************************************
+python ./run_postprocessing.py --case IMOCA60KeelSS --is_flutter
+python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
 
 cd ..
 

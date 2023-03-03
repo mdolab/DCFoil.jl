@@ -77,8 +77,9 @@ def plot_wing(DVDict: dict):
         xy=(y[neval // 2], ab[neval // 2]),
         c=cm[0],
         fontsize=legfs,
-        xytext=(10, 30),
+        xytext=(10, 20),
         textcoords="offset points",
+        bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
         arrowprops=dict(
             facecolor=cm[0],
             edgecolor=None,
@@ -96,8 +97,9 @@ def plot_wing(DVDict: dict):
         xy=(y[neval // 3], xalpha[neval // 3]),
         c=cm[1],
         fontsize=legfs,
-        xytext=(10, 30),
+        xytext=(10, 20),
         textcoords="offset points",
+        bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
         arrowprops=dict(
             facecolor=cm[1],
             edgecolor=None,
@@ -125,9 +127,9 @@ def plot_wing(DVDict: dict):
     valText = (
         f"{DVDict['α₀']}"
         + "$^{{\\circ}}$\n"
-        + f"{DVDict['Λ']*180/np.pi}"
+        + f"{DVDict['Λ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
-        + f"{DVDict['θ']*180/np.pi}"
+        + f"{DVDict['θ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
         + f"{DVDict['toc']*100:0.1f}%\n"
         + f"{neval}\n"
@@ -157,7 +159,75 @@ def plot_wing(DVDict: dict):
     return fig, ax
 
 
-def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list):
+def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fname=None):
+    """
+    Plot forced response of the tip of the wing
+
+    Parameters
+    ----------
+    fExtSweep : _type_
+        external forcing frequency sweep
+    dynTipBending : _type_
+        frequency response of tip bending [m]
+    dynTipTwisting : _type_
+        frequency response of tip twisting [deg]
+    dynLift : _type_
+        frequency response of lift [N]
+    dynMoment : _type_
+        frequency response of moment [N-m] about the midchord
+    """
+
+    # Create figure object
+    labelpad = 30
+    legfs = 15
+    nrows = 2
+    ncols = 2
+    figsize = (6 * ncols, 6 * nrows)
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
+    xLabel = "$f_{ext}$ [Hz]"
+    # ************************************************
+    #     Plot tip deflections
+    # ************************************************
+    ax = axes[0, 0]
+    yLabel = r"$\frac{w}{w(f_{ext}=0)}$"
+    nondim = dynTipBending[0]  # nondimensionalize by the static value
+    ax.plot(fExtSweep, dynTipBending / nondim, c=cm[0])
+    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    ax.set_xlabel(xLabel)
+
+    ax = axes[0, 1]
+    yLabel = r"$\frac{\psi}{\psi(f_{ext}=0)}$"
+    nondim = dynTipTwisting[0]  # nondimensionalize by the static value
+    ax.plot(fExtSweep, dynTipTwisting / nondim, c=cm[0])
+    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    ax.set_xlabel(xLabel)
+
+    # ************************************************
+    #     Plot forces
+    # ************************************************
+    ax = axes[1, 0]
+    yLabel = r"$\frac{L}{L(f_{ext}=0)}$"  # Lift
+    nondim = dynLift[0]  # nondimensionalize by the static value
+    ax.plot(fExtSweep, dynLift / nondim, c=cm[0])
+    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    ax.set_xlabel(xLabel)
+
+    ax = axes[1, 1]
+    yLabel = r"$\frac{M_y}{M_y(f_{ext}=0)}$"  # Moment
+    nondim = dynMoment[0]  # nondimensionalize by the static value
+    ax.plot(fExtSweep, dynMoment / nondim, c=cm[0])
+    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    ax.set_xlabel(xLabel)
+
+    for ax in axes.flatten():
+        niceplots.adjust_spines(ax, outward=True)
+
+    fig.suptitle("Frequency response spectra")
+
+    return fig, axes
+
+
+def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
     """
         Plot the mode shapes for the structural and wet modes
 
@@ -171,7 +241,7 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
         stores dry and wet mode shapes
     modeFreqs : dict
         stores dry and wet natural frequencies
-    ls : list
+    ls : str
         Line styles
     fname : str, optional
         Filename to save, by default None
@@ -207,23 +277,24 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
         ax = axes[0, 0]
 
         # Normalize by maximum value, if negative then flip sign
-        # maxValList = [np.max(abs(structBM[ii, :])), np.max(abs(structTM[ii, :]))]
-        # maxValListNoabs = [np.max((structBM[ii, :])), np.max((structTM[ii, :]))]
-        # argmax = np.argmax(maxValList)
-        # maxVal = maxValList[argmax]
-        # if maxVal != maxValListNoabs[argmax]:
-        #     maxVal *= -1
-        maxVal = np.max(abs(structBM[ii, :]))
-        maxValNoabs = np.max((structBM[ii, :]))
-        if maxVal != maxValNoabs:
-            maxVal *= -1.0
+        maxValList = [np.max(abs(structBM[ii, :])), np.max(abs(structTM[ii, :]))]
+        maxValListNoabs = [np.max((structBM[ii, :])), np.max((structTM[ii, :]))]
+        argmax = np.argmax(maxValList)
+        maxVal = maxValList[argmax]
+        if maxVal != maxValListNoabs[argmax]:
+            maxVal *= -1
+
+        # maxVal = np.max(abs(structBM[ii, :]))
+        # maxValNoabs = np.max((structBM[ii, :]))
+        # if maxVal != maxValNoabs:
+        #     maxVal *= -1.0
 
         structBM[ii, :] /= maxVal
 
-        # ax.plot(eta, structBM[ii, :], label=bendLabel, ls=ls[0], c=color)
+        # ax.plot(eta, structBM[ii, :], label=bendLabel, ls=ls, c=color)
         # ax.plot(eta, structTM[ii, :], label=twistLabel, ls=ls[1], c=color)
         labelString = f"({structNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, structBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls[0], c=ccm[ii])
+        ax.plot(eta, structBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
     ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
     ax.set_title("Dry Modes")
     ax.legend(fontsize=legfs, labelcolor="linecolor", loc="center left", frameon=False, ncol=1, bbox_to_anchor=(1, 0.5))
@@ -232,15 +303,23 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
     for ii in range(nModes):
         ax = axes[1, 0]
 
-        maxVal = np.max(abs(structTM[ii, :]))
-        maxValNoabs = np.max((structTM[ii, :]))
-        if maxVal != maxValNoabs:
-            maxVal *= -1.0
+        # Normalize by maximum value, if negative then flip sign
+        maxValList = [np.max(abs(structBM[ii, :])), np.max(abs(structTM[ii, :]))]
+        maxValListNoabs = [np.max((structBM[ii, :])), np.max((structTM[ii, :]))]
+        argmax = np.argmax(maxValList)
+        maxVal = maxValList[argmax]
+        if maxVal != maxValListNoabs[argmax]:
+            maxVal *= -1
+
+        # maxVal = np.max(abs(structTM[ii, :]))
+        # maxValNoabs = np.max((structTM[ii, :]))
+        # if maxVal != maxValNoabs:
+        #     maxVal *= -1.0
 
         structTM[ii, :] /= maxVal
 
         labelString = f"({structNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, structTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls[0], c=ccm[ii])
+        ax.plot(eta, structTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
 
     ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel(r"$\widebar{y}$ [-]")
@@ -262,7 +341,7 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
         wetBM[ii, :] /= maxVal
 
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls[0], c=ccm[ii])
+        ax.plot(eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
         ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
     ax.set_title("Wet Modes")
     ax.legend(fontsize=legfs, labelcolor="linecolor", loc="center left", frameon=False, ncol=1, bbox_to_anchor=(1, 0.5))
@@ -279,7 +358,7 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
         wetTM[ii, :] /= maxVal
 
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, wetTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls[0], c=ccm[ii])
+        ax.plot(eta, wetTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
 
     ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel("$\\widebar{y}$ [-]")
@@ -288,18 +367,28 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls: list
 
     for ax in axes.flatten():
         niceplots.adjust_spines(ax, outward=True)
-        ax.set_ylim([-1, 1])
+        ax.set_ylim([-1.1, 1.1])
     return fig, axes
 
 
-def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLlabels=False):
+def plot_vg_vf_rl(
+    fig, axes, flutterSol: dict, ls="-", alpha=1.0, units="m/s", marker=None, showRLlabels=False, nShift=0
+):
     """
     Plot the V-g, V-f, and R-L diagrams
 
     Parameters
     ----------
+    fig : matplotlib.figure.Figure
+        figure to plot on
+    axes : matplotlib.axes._subplots.AxesSubplot
+        axes to plot on, there must be 2x2 axes
     flutterSol : dict
         see 'postprocess_flutterevals()' for data structure
+    ls : str
+        line style for plots
+    alpha : float
+        alpha for plots
     units : str, optional
         units for velocity, by default "m/s"
     marker : str, optional
@@ -311,14 +400,12 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
     # Sort keys to get consistent plotting
     sortedModesNumbers = sorted(flutterSol.keys(), key=int)
 
-    # Create figure object
+    flutterColor = "magenta"
+
+    # Hardcoded settings
+    xytext = (-5, 6)
     labelpad = 40
     legfs = 15
-    fact = 1  # scale size
-    figsize = (18 * fact, 13 * fact)
-    xytext = (-5, 5)
-    fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
-    flutterColor = "magenta"
 
     # gLabel = "$g$ [rad/s]"
     # fLabel = "$f$ [rad/s]"
@@ -335,30 +422,31 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
         iic = ii % len(cm)  # color index
 
         # --- Units for labeling ---
+        vSweep = flutterSol[key]["U"]
+        gSweep = flutterSol[key]["pvals_r"] * hz2rad
         if units == "kts":
             vSweep = 1.94384 * np.array(vSweep)  # kts
         elif units == "m/s":
             pass
         else:
             raise ValueError(f"Unsupported units: {units}")
-        vSweep = flutterSol[key]["U"]
-        gSweep = flutterSol[key]["pvals_r"] * hz2rad
 
         try:  # Plot only if the data exists
-            ax.plot(vSweep, gSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
+            ax.plot(vSweep, gSweep, ls=ls, c=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
             # ax.scatter(vSweep, gSweep, color=(cm[iic]), marker=marker)
-            start = np.array([vSweep[0], gSweep[0]])
+            start = np.array([vSweep[0 + nShift], gSweep[0 + nShift]])
             end = np.array([vSweep[-1], gSweep[-1]])
             # Label mode number on the line
             ax.annotate(
                 f"Mode {ii+1}",
-                # xy=(start[0], start[1]),
-                # ha="right",
-                xy=(end[0], end[1]),
+                xy=(start[0], start[1]),
+                ha="left",
+                # xy=(end[0], end[1]),
                 c=cm[iic],
                 fontsize=legfs,
                 xytext=xytext,
                 textcoords="offset points",
+                # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
             )
         except Exception:
             print(f"Mode {key} empty")
@@ -380,7 +468,7 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
     # X = [vSweep[0], vSweep[-1] * 20]
     # Y = [0.0, 0.0]
     # ax.fill_between(X, Y, 10, color=flutterColor, alpha=0.2)
-    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
     # ************************************************
     #     V-f diagram
@@ -400,7 +488,7 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            ax.plot(vSweep, fSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
+            ax.plot(vSweep, fSweep, ls=ls, c=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
             # ax.scatter(vSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([vSweep[0], fSweep[0]])
             end = np.array([vSweep[-1], fSweep[-1]])
@@ -408,11 +496,12 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
             ax.annotate(
                 f"Mode {ii+1}",
                 xy=(start[0], start[1]),
-                ha="right",
+                ha="left",
                 c=cm[iic],
                 fontsize=legfs,
                 xytext=xytext,
                 textcoords="offset points",
+                # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
             )
         except Exception:
             print(f"Mode {key} empty")
@@ -421,7 +510,7 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
     ax.set_title("$V$-$f$")
     # ax.set_xlim(vSweep[0] * 0.99, vSweep[-1] * 1.01)
     ax.set_xlabel(xlabel)
-    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
     # ************************************************
     #     Root-locus diagram
@@ -443,7 +532,7 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            ax.plot(gSweep, fSweep, ls=ls[0], c=cm[iic], label=f"Mode {key}", marker=marker)
+            ax.plot(gSweep, fSweep, ls=ls, c=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
             # ax.scatter(gSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([gSweep[0], fSweep[0]])
             end = np.array([gSweep[-1], fSweep[-1]])
@@ -453,12 +542,14 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
             # Label mode number on the line
             ax.annotate(
                 f"Mode {ii+1}",
-                xy=(end[0], end[1]),
-                ha="right",
+                # xy=(end[0], end[1]),
+                xy=(start[0], start[1]),
+                ha="left",
                 c=cm[iic],
                 fontsize=legfs,
-                xytext=xytext,
+                xytext=(5, 5),
                 textcoords="offset points",
+                # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
             )
             if showRLlabels:  # show R-L speed labels
                 ax.annotate(
@@ -466,26 +557,30 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
                     xy=(start[0], start[1]),
                     c=cm[iic],
                     fontsize=legfs * 0.8,
-                    xytext=(5, 5),
+                    xytext=(5, -5),
                     textcoords="offset points",
+                    # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    va="top",
                 )
                 ax.annotate(
                     f"{vSweep[-1]:.1f}{units}",
                     xy=(end[0], end[1]),
                     c=cm[iic],
                     fontsize=legfs * 0.8,
-                    xytext=(5, 5),
+                    xytext=(5, -5),
                     textcoords="offset points",
+                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    va="top",
                 )
         except Exception:
             print(f"Mode {key} empty")
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("Root locus")
-    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_xlabel(gLabel)
     # --- Put flutter boundary on plot ---
-    ax.set_xlim(right=10)
+    # ax.set_xlim(right=10)
     ax.axvline(
         x=0.0,
         # label="Flutter boundary",
@@ -503,18 +598,26 @@ def plot_vg_vf_rl(flutterSol: dict, ls: list, units="m/s", marker=None, showRLla
     return fig, axes
 
 
-def plot_dlf(flutterSol: dict, semichord: float, sweepAng: float, units="m/s"):
+def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls="-", alpha=1.0, units="m/s", nShift=0):
     """
     Plot the damping loss factor diagrams.
 
     Parameters
     ----------
+    fig : matplotlib.figure.Figure
+        figure to plot on
+    axes : matplotlib.axes.Axes
+        axes to plot on, must be length 2
     flutterSol : dict
         see 'postprocess_flutterevals()' for data structure
     semichord : float
         mean semichord of the wing
     sweepAng : float
         sweep angle of wing in radians
+    ls : str, optional
+        line style, by default "-"
+    alpha : float, optional
+        line transparency, by default 1.0
     units : str, optional
         units for velocity, by default "m/s"
     """
@@ -522,13 +625,10 @@ def plot_dlf(flutterSol: dict, semichord: float, sweepAng: float, units="m/s"):
     # Sort keys to get consistent plotting
     sortedModesNumbers = sorted(flutterSol.keys(), key=int)
 
-    # Create figure object
     labelpad = 40
     legfs = 15
-    fact = 1  # scale size
-    figsize = (18 * fact, 6 * fact)
     xytext = (-5, 5)
-    fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
+    flutterColor = "magenta"
 
     yLabel = "$\eta$ [-]"
 
@@ -553,8 +653,8 @@ def plot_dlf(flutterSol: dict, semichord: float, sweepAng: float, units="m/s"):
         dlf = -2 * np.divide(flutterSol[key]["pvals_r"], flutterSol[key]["pvals_i"])
 
         try:
-            ax.plot(vSweep, dlf, ls="-", c=cm[iic], label=f"Mode {key}")
-            start = np.array([vSweep[0], dlf[0]])
+            ax.plot(vSweep, dlf, ls=ls, c=cm[iic], label=f"Mode {key}", alpha=alpha)
+            start = np.array([vSweep[0 + nShift], dlf[0 + nShift]])
             end = np.array([vSweep[-1], dlf[-1]])
             # Label mode number on the line
             ax.annotate(
@@ -570,9 +670,27 @@ def plot_dlf(flutterSol: dict, semichord: float, sweepAng: float, units="m/s"):
         except Exception:
             print(f"Mode {key} empty")
 
+    # --- Put flutter boundary on plot ---
+    ax.axhline(
+        y=0.0,
+        # label="Flutter boundary",
+        c=flutterColor,
+        ls="--",
+        # path_effects=[patheffects.withTickedStroke()], # ugly
+    )
+    ax.annotate(
+        "Hydroelastic instability",
+        xy=(0.5, 0.0),
+        ha="center",
+        xycoords="axes fraction",
+        size=legfs,
+        color=flutterColor,
+        zorder=1,
+    )
+
     ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel(xLabel)
-    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
     # ************************************************
     #     Plot DLF vs. k
@@ -588,15 +706,26 @@ def plot_dlf(flutterSol: dict, semichord: float, sweepAng: float, units="m/s"):
         dlf = -2 * np.divide(flutterSol[key]["pvals_r"], fSweep)
 
         try:
-            ax.loglog(kSweep, dlf, ls="-", c=cm[iic], label=f"Mode {key}")
+            ax.loglog(kSweep, dlf, ls=ls, c=cm[iic], label=f"Mode {key}", alpha=alpha)
             start = np.array([kSweep[0], dlf[0]])
             end = np.array([kSweep[-1], dlf[-1]])
+            # Label mode number on the line
+            ax.annotate(
+                f"Mode {ii+1}",
+                xy=(start[0], start[1]),
+                ha="left",
+                # xy=(end[0], end[1]),
+                c=cm[iic],
+                fontsize=legfs,
+                xytext=xytext,
+                textcoords="offset points",
+            )
         except Exception:
             print(f"Mode {key} empty")
 
     ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel(xLabel)
-    ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
     plt.suptitle("Damping loss factor trends")
 

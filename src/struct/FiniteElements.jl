@@ -21,10 +21,10 @@ module LinearBeamElem
 
     The shape function for the element with the {q} vector) is
         w(x, t) = <something-already-derived-in-textbooks>
-    
+
     You impose the geometric BC's to get the α coeffs since the function must be 'admissible'
         w(x,t) = [N(x)]{q(t)}
-    
+
     This has already been derived so no need to redo getting [N] in the code
 
 """
@@ -74,7 +74,7 @@ function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="be
 
     # --- Constitutive law ---
     if constitutive == "isotropic"
-        BTᵉ = 0
+        BTᵉ = 0.0
     end
 
     # ************************************************
@@ -321,7 +321,7 @@ function make_mesh(nElem::Int64, foil)
     Outputs
     -------
     mesh
-        (nNodes, nDim) array 
+        (nNodes, nDim) array
     elemConn
 
     """
@@ -374,7 +374,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     println("Using ", constitutive, " constitutive relations...")
     println(nElem, " elements")
     println(nNodes, " nodes")
-    println(nnd*nNodes, " total DOFs")
+    println(nnd * nNodes, " total DOFs")
 
     # ************************************************
     #     Element loop
@@ -456,21 +456,60 @@ function get_fixed_nodes(elemType::String, BCCond="clamped")
     return fixedNodes
 end
 
-function apply_tip_load!(F, elemType, loadType="force")
+function apply_tip_load!(globalF, elemType, loadType="force")
 
     if loadType == "force"
         if elemType == "bend-twist"
-            F[end-2] = 1.0
+            globalF[end-2] = 1.0
         elseif elemType == "BT2"
-            F[end-3] = 3000.0 / 2
+            globalF[end-3] = 3000.0 / 2
         end
     elseif loadType == "torque"
         if elemType == "bend-twist"
-            F[end] = 1.0
+            globalF[end] = 1.0
         elseif elemType == "BT2"
-            F[end-1] = 1.0
+            globalF[end-1] = 1.0
         end
     end
+end
+
+function apply_tip_mass!(globalM, mass, inertia, elemLength, foil, elemType="BT2")
+    """
+    Apply a tip mass to the global mass matrix
+
+    mass: mass of the tip [kg]
+    inertia: moment of inertia of the tip about C.G. [kg-m^2]
+    """
+    if elemType == "bend-twist"
+        println("Does not work")
+    elseif elemType == "BT2"
+        nDOF = 8
+        # --- Get sectional properties ---
+        ms = mass / elemLength
+        # Parallel axis theorem
+        Iea = inertia + mass * (foil.x_αb[end])^2
+        is = Iea / elemLength
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, foil.x_αb[end], elemType)
+
+        # --- Assemble into global matrix ---
+        globalM[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
+    end
+
+    println("+------------------------------------+")
+    println("|    Tip mass added!                 |")
+    println("+------------------------------------+")
+    println("Dist. CG is aft of EA: ", foil.x_αb[end], " [m]")
+
+end
+
+function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
+    """
+    Applies inertial load and modifies globalF
+    """
+
+    println("Adding inertial loads to FEM with gravity vector of", gravityVector)
+
+    # TODO: add gravity vector
 end
 
 function apply_BCs(K, M, F, globalDOFBlankingList)
@@ -488,6 +527,7 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
 
     return newK, newM, newF
 end
+
 
 function put_BC_back(q, elemType::String, BCType="clamped")
     """

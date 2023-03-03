@@ -20,7 +20,22 @@ using .SolveStatic
 using .SolveForced
 using .SolveFlutter
 
-function run_model(DVDict, evalFuncs; run_static=false, run_forced=false, run_modal=false, run_flutter=false, fSweep=nothing, tipForceMag=nothing, nModes=1, uSweep=nothing, fSearch=nothing, outputDir="./OUTPUT/", debug=false)
+function run_model(
+    DVDict, evalFuncs;
+    # --- Optional args ---
+    run_static=false,
+    run_forced=false,
+    run_modal=false,
+    run_flutter=false,
+    fSweep=nothing,
+    tipForceMag=nothing,
+    tipMass=false,
+    nModes=1,
+    uSweep=nothing,
+    fSearch=nothing,
+    outputDir="./OUTPUT/",
+    debug=false
+)
     """
     The interface into the src code
     """
@@ -35,7 +50,7 @@ function run_model(DVDict, evalFuncs; run_static=false, run_forced=false, run_mo
     #                         Static hydroelastic solution
     # ==============================================================================
     if run_static
-        SolveStatic.solve(DVDict, evalFuncs, outputDir)
+        SolveStatic.solve(DVDict, evalFuncs, outputDir; tipMass=tipMass)
     end
 
     # ==============================================================================
@@ -49,10 +64,10 @@ function run_model(DVDict, evalFuncs; run_static=false, run_forced=false, run_mo
     #                         Flutter solution
     # ==============================================================================
     if run_modal
-        SolveFlutter.solve_frequencies(DVDict, nModes, outputDir)
+        SolveFlutter.solve_frequencies(DVDict, nModes, outputDir; tipMass=tipMass)
     end
     if run_flutter
-        SolveFlutter.solve(DVDict, outputDir, uSweep, fSearch, nModes; debug=debug)
+        SolveFlutter.solve(DVDict, outputDir, uSweep, fSearch, nModes; debug=debug, tipMass=tipMass)
     end
 
 end

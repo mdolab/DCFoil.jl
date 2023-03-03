@@ -47,6 +47,7 @@ function solve(
     # --- Optional args ---
     use_freeSurface=false,
     cavitation=nothing,
+    tipMass=false,
     debug=false
 )
     """
@@ -86,6 +87,12 @@ function solve(
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    if tipMass
+        bulbMass = 2200 #[kg]
+        bulbInertia = 900 #[kg-m²]
+        FOIL.x_αb[end] = -0.1 # [m]
+        FEMMethods.apply_tip_mass!(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
+    end
 
     # ---------------------------
     #   Apply BC blanking
@@ -139,8 +146,8 @@ function solve(
     dim = size(Ks)[1] + length(globalDOFBlankingList)
 
     # --- Apply the flutter solution method ---
-    N_MAX_Q_ITER = 3000 # TEST VALUE
-    ΔdynP = 0.5 * FOIL.ρ_f * 1.5^2
+    N_MAX_Q_ITER = 4000 # TEST VALUE
+    ΔdynP = 0.5 * FOIL.ρ_f * 0.6^2
     true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(
         uSweep,
         structMesh,
@@ -164,7 +171,7 @@ function solve(
 
 end # end solve
 
-function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; use_freeSurface=false, cavitation=nothing, debug=false)
+function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; tipMass=false, use_freeSurface=false, cavitation=nothing, debug=false)
     """
         System natural frequencies
     """
@@ -199,6 +206,12 @@ function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; use_f
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    if tipMass
+        bulbMass = 2200 #[kg]
+        bulbInertia = 900 #[kg-m²]
+        FOIL.x_αb[end] = -0.1 # [m]
+        FEMMethods.apply_tip_mass!(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
+    end
 
     # ---------------------------
     #   Apply BC blanking
@@ -519,7 +532,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     Outputs
     -------
     true_eigs_r, true_eigs_i: array, size(3*nModes, N_MAX_Q_ITER)
-        real and imaginary parts of eigenvalues of flutter modes, unitless
+        real and imaginary parts of eigenvalues of flutter modes, [rad/s]
     R_eigs_r_tmp, R_eigs_i_tmp: array, size(2*dimwithBC, 3*nModes, N_MAX_Q_ITER)
         real and imaginary parts of eigenvectors of flutter modes
     iblank: array, size(3*nModes, N_MAX_Q_ITER)
@@ -814,7 +827,7 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
         ctr - reduced frequency counter
     """
 
-    N_MAX_K_ITER = 10000 # max k iterations before code breaks
+    N_MAX_K_ITER = 5000 # max k iterations before code breaks
 
     # --- Loop over reduced frequency search range to construct lines ---
     p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
@@ -835,8 +848,8 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
         plot!(k_history[1:ik], p_eigs_i[10, 1:ik], label="mode 10", marker=marker)
         plot!(k_history[1:ik], p_eigs_i[11, 1:ik], label="mode 11", marker=marker)
         plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
-        ylims!((-5, 5.0))
-        xlims!((-5, 5.0))
+        ylims!((-5, 30.0))
+        xlims!((-5, 30.0))
         plotTitle = @sprintf("U = %.3f m/s", U∞)
         title!(plotTitle)
         xlabel!("k")
@@ -878,7 +891,7 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
         scatter!([U∞], [p_cross_i[6]], label="mode 6")
         scatter!([U∞], [p_cross_i[7]], label="mode 7")
         scatter!([U∞], [p_cross_i[8]], label="mode 8")
-        xlims!((7.9, 8.7))
+        xlims!((2, 30))
         ylims!((-10.0, 100.0))
         plotTitle = @sprintf("U = %.3f m/s", U∞)
         title!(plotTitle)
@@ -896,7 +909,7 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
         scatter!([U∞], [p_cross_r[6]], label="mode 6")
         scatter!([U∞], [p_cross_r[7]], label="mode 7")
         scatter!([U∞], [p_cross_r[8]], label="mode 8")
-        xlims!((10, 30))
+        xlims!((2, 30))
         ylims!((-10.0, 0.0))
         plotTitle = @sprintf("U = %.3f m/s", U∞)
         title!(plotTitle)
@@ -1287,4 +1300,20 @@ function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_
     return p_r, p_i, R_aa_r, R_aa_i
 end # end function
 
+
+function compute_modalSpace(Ms, Ks, reducedSize=20)
+    """
+    Reduce to modal space
+    """
+
+    # --- Compute the modal space ---
+    omegaSquared, ubar = SolverRoutines.compute_eigsolve(Ms, Ks, reducedSize)
+    Qr = ubar
+
+    # --- Compute the reduced matrices ---
+    Ms_r = Qr' * Ms * Qr
+    Ks_r = Qr' * Ks * Qr
+
+    return Ms_r, Ks_r, Qr
+end
 end # end module

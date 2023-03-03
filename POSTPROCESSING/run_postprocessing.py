@@ -3,7 +3,9 @@
 @File    :   postprocessing.py
 @Time    :   2023/02/02
 @Author  :   Galen Ng
-@Desc    :   Make plots using python
+@Desc    :   Make plots using python.
+Use this file as a starting template for your own postprocessing scripts.
+
 """
 
 # ==============================================================================
@@ -26,7 +28,7 @@ from tabulate import tabulate
 # ==============================================================================
 import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals
-from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf
+from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf, plot_forced
 
 # ==============================================================================
 #                         Main driver
@@ -56,11 +58,12 @@ if __name__ == "__main__":
     if args.case is not None:
         dataDir += args.case
     # Output plot directory
-    outputDir = "./PLOTS/"
+    outputDir = f"./PLOTS/{args.case}/"
     if args.output is not None:
         outputDir += args.output
     # Create output directory if it doesn't exist
     Path(outputDir).mkdir(parents=True, exist_ok=True)
+
     # ************************************************
     #     Read in results
     # ************************************************
@@ -95,8 +98,8 @@ if __name__ == "__main__":
     }
     plt.rcParams.update(myOptions)
 
-    # Linestyles
-    ls = ["-", "--", "-.", ":"]
+    # # Linestyles
+    # ls = ["-", "--", "-.", ":"]
     # ==============================================================================
     #                         READ IN DATA
     # ==============================================================================
@@ -130,24 +133,19 @@ if __name__ == "__main__":
     if args.is_forced:
         print("Reading in forced vibration data")
         # --- Read frequencies ---
-        fname = f"{dataDir}/FreqSweep.dat"
-        freqs = np.loadtxt(fname)
+        fExtSweep = np.loadtxt(f"{dataDir}/forced/freqSweep.dat")
 
         # --- Read tip bending ---
-        fname = f"{dataDir}/TipBendDyn.dat"
-        dynTipBending = np.loadtxt(fname)
+        dynTipBending = np.asarray(load_jld(f"{dataDir}/forced/tipBendDyn.jld")["data"]).T
 
         # --- Read tip twisting ---
-        fname = f"{dataDir}/TipTwistDyn.dat"
-        dynTipTwisting = np.loadtxt(fname) * 180 / np.pi  # CONVERT TO DEGREES
+        dynTipTwisting = np.rad2deg(np.asarray(load_jld(f"{dataDir}/forced/tipTwistDyn.jld")["data"]).T)
 
         # --- Read tip lift ---
-        fname = f"{dataDir}/TipLiftDyn.dat"
-        dynTipLift = np.loadtxt(fname)
+        dynLift = np.asarray(load_jld(f"{dataDir}/forced/totalLiftDyn.jld")["data"]).T
 
         # --- Read tip moment ---
-        fname = f"{dataDir}/TipMomentDyn.dat"
-        dynTipMoment = np.loadtxt(fname)
+        dynMoment = np.asarray(load_jld(f"{dataDir}/forced/totalMomentDyn.jld")["data"]).T
 
     # ************************************************
     #     Flutter and modal solutions
@@ -182,8 +180,8 @@ if __name__ == "__main__":
         print("Reading in flutter data...")
 
         # Remember to transpose data since Julia stores in column major order
-        eigs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_i.jld")["data"]).T
-        eigs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_r.jld")["data"]).T
+        eigs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_i.jld")["data"]).T / (2 * np.pi)  # put in units of Hz
+        eigs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_r.jld")["data"]).T / (2 * np.pi)  # put in units of Hz
         evecs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigenvectors_i.jld")["data"]).T
         evecs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigenvectors_r.jld")["data"]).T
         flowHistory = np.asarray(load_jld(f"{dataDir}/pkFlutter/flowHistory.jld")["data"]).T
@@ -331,22 +329,26 @@ if __name__ == "__main__":
             print("Saved to:", fname)
         plt.close()
 
-    # TODO:
-    # if is_dynamic:
-    #     visuals = plot(
-    #         [freqs, freqs],
-    #         [dynTipBending, dynTipTwisting],
-    #         label=["" ""],
-    #         layout=(2, 2),
-    #         xlabel="Frequency [Hz]",
-    #         ylabel=[L"w_{\textrm{tip}}" * " [m]" L"\psi_{\textrm{tip}}" * " " * L"[^{\circ}]" "test" "test"],
-    #     )
-    #     titleTxt = L"U_{\infty} = %$flowSpeed \textrm{\,m/s}, α_0 = %$AOA^{\circ}, \Lambda = %$sweepAngle^{\circ}, θ_f = %$fiberAngle^{\circ}"
-    #     title = plot(title=titleTxt, grid=false, xticks=false, yticks=false, showaxis=false, bottom_margin=-50Plots.px)
-    #     plot(title, visuals, layout=@layout([A{0.1h}; B]))
+    if args.is_forced:
+        # --- File name ---
+        fname = f"{outputDir}/forced_dynamics.pdf"
 
-    #     savefig(outputDir * "tip_dynamics.pdf")
-    # end
+        # --- Plot ---
+        fig, axes = plot_forced(
+            fExtSweep,
+            dynTipBending,
+            dynTipTwisting,
+            dynLift,
+            dynMoment,
+            fname=fname,
+        )
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
 
     if args.is_modal:
         # --- File name ---
@@ -370,7 +372,7 @@ if __name__ == "__main__":
             nModes=nModes,
             modeShapes=modeShapeData,
             modeFreqs=modeFreqData,
-            ls=ls,
+            ls="-",
         )
 
         dosave = not not fname
@@ -388,13 +390,27 @@ if __name__ == "__main__":
         fname = f"{outputDir}/vg_vf_rl.pdf"
 
         # --- Plot ---
+        # Create figure object
+        fact = 1  # scale size
+        figsize = (18 * fact, 13 * fact)
+        fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
         fig, axes = plot_vg_vf_rl(
+            fig,
+            axes,
             flutterSol=flutterSol,
-            ls=ls,
-            # units="kts",
+            ls="-",
+            units="kts",
             # marker="o",
             showRLlabels=True,
+            nShift=1000,
         )
+
+        # --- Set limits ---
+        axes[0, 0].set_ylim(top=1, bottom=-5)
+        axes[0, 0].set_xlim(right=50, left=5)
+        axes[1, 1].set_xlim(right=1, left=-5)
+        axes[1, 1].set_ylim(top=20, bottom=0)
+        axes[1, 1].set_yticks(np.arange(0, 21, 2))
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -410,15 +426,24 @@ if __name__ == "__main__":
         fname = f"{outputDir}/dlf.pdf"
 
         # --- Plot ---
+        # Create figure object
+        fact = 1  # scale size
+        figsize = (18 * fact, 6 * fact)
+        fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
         fig, axes = plot_dlf(
+            fig,
+            axes,
             flutterSol=flutterSol,
-            semichord=0.5*np.mean(DVDict["c"]),
+            semichord=0.5 * np.mean(DVDict["c"]),
             sweepAng=DVDict["Λ"],
-            # units="kts",
+            ls="-",
+            units="kts",
+            nShift=500,
         )
-        axes[0].set_ylim(-0.1, 1.2)
-        axes[1].set_ylim(-0.1, 1.2)
-        axes[1].set_xlim(left=10)
+        axes[0].set_ylim(-0.1, 0.8)
+        axes[0].set_xlim(right=50, left=5)
+        # axes[1].set_ylim(-0.1, 1.2)
+        # axes[1].set_xlim(left=10)
 
         dosave = not not fname
         plt.show(block=(not dosave))

@@ -19,6 +19,7 @@ using FLOWMath: linear, akima
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
+using JLD
 
 # --- DCFoil modules ---
 # First include them
@@ -134,7 +135,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
         fDynamic, DynLift, DynMoment = Hydro.integrate_hydroLoads(uSol, fullAIC, DFOIL, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
 
-        # --- Store tip values ---
+        # --- Store total force and tip deflection values ---
         global LiftDyn[f_ctr] = abs(DynLift[end])
         global MomDyn[f_ctr] = abs(DynMoment[end])
         if elemType == "BT2"
@@ -161,10 +162,11 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     """
     Write out the dynamic results
     """
-    mkpath(outputDir)
+    workingOutput = outputDir * "forced/"
+    mkpath(workingOutput)
 
     # --- Write frequency sweep ---
-    fname = outputDir * "FreqSweep.dat"
+    fname = workingOutput * "freqSweep.dat"
     outfile = open(fname, "w")
     for f ∈ fSweep
         write(outfile, string(f) * "\n")
@@ -172,36 +174,20 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     close(outfile)
 
     # --- Write tip bending ---
-    fname = outputDir * "TipBendDyn.dat"
-    outfile = open(fname, "w")
-    for h ∈ TipBendDyn
-        write(outfile, string(h) * "\n")
-    end
-    close(outfile)
+    fname = workingOutput * "tipBendDyn.jld"
+    save(fname, "data", TipBendDyn)
 
     # --- Write tip twist ---
-    fname = outputDir * "TipTwistDyn.dat"
-    outfile = open(fname, "w")
-    for ψ ∈ TipTwistDyn
-        write(outfile, string(ψ) * "\n")
-    end
-    close(outfile)
+    fname = workingOutput * "tipTwistDyn.jld"
+    save(fname, "data", TipTwistDyn)
 
     # --- Write dynamic lift ---
-    fname = outputDir * "TipLiftDyn.dat"
-    outfile = open(fname, "w")
-    for L ∈ LiftDyn
-        write(outfile, string(L) * "\n")
-    end
-    close(outfile)
+    fname = workingOutput * "totalLiftDyn.jld"
+    save(fname, "data", LiftDyn)
 
     # --- Write dynamic moment ---
-    fname = outputDir * "TipMomentDyn.dat"
-    outfile = open(fname, "w")
-    for M ∈ MomDyn
-        write(outfile, string(M) * "\n")
-    end
-    close(outfile)
+    fname = workingOutput * "totalMomentDyn.jld"
+    save(fname, "data", MomDyn)
 
 end
 

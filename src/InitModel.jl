@@ -63,7 +63,7 @@ function init_static(neval::Int64, DVDict::Dict)
     ρₛ = 7900
     E₁ = 193e9
     E₂ = 193e9
-    G₁₂ = 77.2
+    G₁₂ = 77.2e9
     ν₁₂ = 0.3
     constitutive = "isotropic"
   elseif (DVDict["material"] == "rigid") # unrealistic rigid material
@@ -110,7 +110,7 @@ function init_static(neval::Int64, DVDict::Dict)
   for ii in 1:neval
     section = StructProp.section_property(c[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ)
 
-    EIₛ[ii], Kₛ[ii], GJₛ[ii], Sₛ[ii], Iₛ[ii], mₛ[ii] = StructProp.compute_section_property(section)
+    EIₛ[ii], Kₛ[ii], GJₛ[ii], Sₛ[ii], Iₛ[ii], mₛ[ii] = StructProp.compute_section_property(section, constitutive)
   end
 
   # ---------------------------
