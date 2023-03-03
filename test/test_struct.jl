@@ -1,6 +1,6 @@
-# Unit test 
+# Unit test
 # Check Fig 4.1 from
-# Deniz Tolga Akcabaya, Yin Lu Young "Steady and dynamic hydroelastic behavior of composite lifting surfaces" 
+# Deniz Tolga Akcabaya, Yin Lu Young "Steady and dynamic hydroelastic behavior of composite lifting surfaces"
 
 include("../src/struct/BeamProperties.jl")
 
@@ -38,7 +38,7 @@ function test_struct()
     for i in 1:N
         θₗ = θₐ[i]
         section = StructProp.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
-        EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ = StructProp.compute_section_property(section)
+        EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ = StructProp.compute_section_property(section, "orthotropic")
 
         EIₛₐ[i] = EIₛ
         Kₛₐ[i] = Kₛ
@@ -190,7 +190,7 @@ function test_FiniteElementIso()
     foil = InitModel.init_static(neval, DVDict)
 
     nElem = neval - 1
-    constitutive = "isotropic"
+    constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
     structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
     # ************************************************
     #     bend element
@@ -207,7 +207,7 @@ function test_FiniteElementIso()
     q1 = FEMMethods.solve_structure(K, M, F)
 
     # ************************************************
-    #     bend-twist 
+    #     bend-twist
     # ************************************************
     # ---------------------------
     #   Tip force only
@@ -272,7 +272,7 @@ function test_FiniteElementComp()
     constitutive = foil.constitutive
     structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
     # ************************************************
-    #     bend-twist 
+    #     bend-twist
     # ************************************************
     # ---------------------------
     #   Tip force only

@@ -86,7 +86,8 @@ function init_static(neval::Int64, DVDict::Dict)
     E₂ = 1
     G₁₂ = 1
     ν₁₂ = 0.25
-    constitutive = "isotropic"
+    # constitutive = "isotropic"
+    constitutive = "orthotropic" # NOTE: Need to use this because the isotropic case uses an ellipse for GJ
   elseif (DVDict["material"] == "test-comp")
     ρₛ = 1590.0
     E₁ = 1
