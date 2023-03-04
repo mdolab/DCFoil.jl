@@ -66,7 +66,7 @@ if __name__ == "__main__":
     plt.style.use(niceplots.get_style())  # all settings
     # --- Adjust default options for matplotlib ---
     myOptions = {
-        "font.size": 25,
+        "font.size": 35,
         "font.family": "sans-serif",  # set to "serif" to get the same as latex
         # "font.sans-serif": ["Helvetica"], # this does not work on all systems
         # "text.usetex": True, # use external latex for all text
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         )
     ax.set_xlabel(r"$\theta_f$ [$\degree$]")
     ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, labelpad=50)
-    ax.legend(fontsize=15, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+    ax.legend(fontsize=25, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_title("Modal validation")
 
     # Structural modal validation
@@ -112,8 +112,8 @@ if __name__ == "__main__":
     for ii in range(len(dryFreqHz)):
         ax.plot(dryThetaDeg[ii], dryFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
 
-    ax.annotate("Dry modes", xy=(0.25, 0.5), ha="center", xycoords="axes fraction", size=15, color="gray")
-    ax.annotate("Wet modes", xy=(0.75, 0.5), ha="center", xycoords="axes fraction", size=15, color="blue")
+    ax.annotate("Dry modes", xy=(0.25, 0.5), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.5)
+    ax.annotate("Wet modes", xy=(0.75, 0.5), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.5)
 
     ax.set_ylim(bottom=0.0)
 

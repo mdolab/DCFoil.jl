@@ -17,8 +17,10 @@ cd POSTPROCESSING
 # # ************************************************
 # #     IMOCA cases
 # # ************************************************
-# python ./run_postprocessing.py --case IMOCA60KeelSS --is_flutter
-# python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
+python ./run_postprocessing.py --case IMOCA60KeelSS --is_flutter
+python ./run_postprocessing.py --case IMOCA60Keel_ss_f15.0_w0.0 --is_modal
+python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
+python ./run_postprocessing.py --case IMOCA60Keel_cfrp_f15.0_w0.0 --is_modal
 
 # ************************************************
 #     Akcabay plots

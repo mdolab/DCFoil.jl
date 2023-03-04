@@ -227,7 +227,7 @@ def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fn
     return fig, axes
 
 
-def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
+def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12):
     """
         Plot the mode shapes for the structural and wet modes
 
@@ -252,11 +252,17 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
 
     # Create figure object
     labelpad = 40
-    legfs = 15
+    legfs = 20
     nrows = 2
     ncols = 2
     figsize = (9 * ncols, 4 * nrows)
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        sharex=True,
+        constrained_layout=True,
+        figsize=figsize,
+    )
 
     # Unpack data
     structBM = modeShapes["structBM"]
@@ -295,9 +301,27 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
         # ax.plot(eta, structTM[ii, :], label=twistLabel, ls=ls[1], c=color)
         labelString = f"({structNatFreqs[ii]:.2f}" + " Hz)"
         ax.plot(eta, structBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
+        # ax.annotate(
+        #     f"Mode {ii+1} {labelString}",
+        #     xy=(eta[-1 - nshift], structBM[ii, -1 - nshift]),
+        #     c=ccm[ii],
+        #     bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+        #     va="top",
+        #     xytext=(0, -2),
+        #     textcoords="offset points",
+        #     size=legfs,
+        # )
+
     ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
-    ax.set_title("Dry Modes")
-    ax.legend(fontsize=legfs, labelcolor="linecolor", loc="center left", frameon=False, ncol=1, bbox_to_anchor=(1, 0.5))
+    ax.set_title("Dry Modes", pad=labelpad)
+    ax.legend(
+        fontsize=legfs,
+        labelcolor="linecolor",
+        loc="center left",
+        frameon=False,
+        ncol=1,
+        bbox_to_anchor=(1, 0.5),
+    )
 
     # --- Twist modes ---
     for ii in range(nModes):
@@ -343,7 +367,17 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
         ax.plot(eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
         ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
-    ax.set_title("Wet Modes")
+        # ax.annotate(
+        #     f"Mode {ii+1} {labelString}",
+        #     xy=(eta[-1 - nshift], wetBM[ii, -1 - nshift]),
+        #     c=ccm[ii],
+        #     bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+        #     va="top",
+        #     xytext=(0, -2),
+        #     textcoords="offset points",
+        #     size=legfs,
+        # )
+    ax.set_title("Wet Modes", pad=labelpad)
     ax.legend(
         fontsize=legfs,
         labelcolor="linecolor",
@@ -569,17 +603,12 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            # TODO: plot with linear fading
-            # NPOINTS = len(gSweep)
-            # for jj in range(NPOINTS-1):
-            #     ax.plot(gSweep[jj], fSweep[jj], c=cm[iic], alpha=float(jj)/(NPOINTS-1))
-
             ax.plot(gSweep, fSweep, ls=ls, c=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
             # ax.scatter(gSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([gSweep[0], fSweep[0]])
             end = np.array([gSweep[-1], fSweep[-1]])
-            ax.plot(start[0], start[1], marker="o", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
-            ax.plot(end[0], end[1], marker="o", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
+            # ax.plot(start[0], start[1], marker="o", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
+            # ax.plot(end[0], end[1], marker="^", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
 
             # --- Label mode number on the line ---
             # check if mode is bifurcated and then alternate the label position
@@ -627,6 +656,16 @@ def plot_vg_vf_rl(
                     bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
                     va="top",
                 )
+
+            # --- Add arror pointing in speed ---
+            nmid = int(len(vSweep) // 4)
+            ax.annotate(
+                "",
+                xytext=(np.array([gSweep[-nmid - 1], fSweep[-nmid - 1]])),  # arrow start
+                xy=(np.array([gSweep[-nmid], fSweep[-nmid]])),  # arrow end
+                arrowprops=dict(arrowstyle="-|>", shrinkA=2, color=cm[iic], alpha=0.5),
+            )
+
             yticks.append(fSweep[0])
         except Exception:
             print(f"Mode {key} empty")

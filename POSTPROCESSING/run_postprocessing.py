@@ -84,7 +84,7 @@ if __name__ == "__main__":
     plt.style.use(niceplots.get_style("doumont-light"))  # all settings
     # --- Adjust default options for matplotlib ---
     myOptions = {
-        "font.size": 20,
+        "font.size": 25,
         "font.family": "sans-serif",
         # "font.sans-serif": ["Helvetica"],
         # "text.usetex": True,
@@ -399,22 +399,21 @@ if __name__ == "__main__":
             axes,
             flutterSol=flutterSol,
             ls="-",
-            # units="kts",
+            units="kts",
             # marker="o",
             showRLlabels=True,
             nShift=1500,
         )
 
         # # --- Set limits ---
-        axes[0,0].set_ylim(top=20)
-        axes[0,0].set_xlim(right=40, left=25)
-        # axes[0, 0].set_ylim(top=10)
-        # axes[0, 0].set_xlim(right=190, left=170)
-        # axes[0, 0].set_ylim(top=1, bottom=-5)
-        # axes[0, 0].set_xlim(right=50, left=5)
-        # axes[1, 1].set_xlim(right=1, left=-5)
-        # axes[1, 1].set_ylim(top=20, bottom=0)
-        # axes[1, 1].set_yticks(np.arange(0, 21, 2))
+        # axes[0,0].set_ylim(top=20)
+        # axes[0,0].set_xlim(right=40, left=25)
+        axes[0, 0].set_ylim(top=10)
+        axes[0, 0].set_xlim(right=190, left=170)
+        axes[0, 0].set_ylim(top=1, bottom=-5)
+        axes[0, 0].set_xlim(right=50, left=5)
+        axes[1, 1].set_xlim(right=1, left=-5)
+        axes[1, 1].set_ylim(top=20, bottom=0)
 
         dosave = not not fname
         plt.show(block=(not dosave))
