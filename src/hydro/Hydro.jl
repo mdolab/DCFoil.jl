@@ -26,7 +26,7 @@ using .SolverRoutines
 
 function compute_theodorsen(k)
     """
-    Theodorsen's transfer function for unsteady aero/hydrodynamics 
+    Theodorsen's transfer function for unsteady aero/hydrodynamics
     w/ separate real and imaginary parts. This is potential flow theory.
 
     Inputs:
@@ -86,8 +86,8 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothin
     NOTE:
     We use keyword arguments (denoted by the ';' to be more explicit)
 
-    This follows the formulation in 
-    'Principles of Naval Architecture Series (PNA) - Propulsion 2010' 
+    This follows the formulation in
+    'Principles of Naval Architecture Series (PNA) - Propulsion 2010'
     by Justin Kerwin & Jacques Hadler
     """
 
@@ -141,7 +141,7 @@ function use_free_surface(γ, α₀, U∞, chordVec, h)
         γ spanwise vortex strength m^2/s
         NOTE: with the current form, this is the negative of what some textbooks do so for example
         Typically L = - ρ U int( Γ(y))dy
-        but Kerwin and Hadler do 
+        but Kerwin and Hadler do
         C_L = 2Γ/(Uc)
     Returns:
     --------
@@ -181,7 +181,7 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
     a = ab / b # precompute division by b to get a
 
-    # Aerodynamic quasi-steady stiffness 
+    # Aerodynamic quasi-steady stiffness
     # (1st row is lift, 2nd row is pitching moment)
 
     k_hα = -2 * b * clα * Ck # lift due to angle of attack
@@ -289,7 +289,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
         nDOF = 4
     end
 
-    # fluid dynamic pressure    
+    # fluid dynamic pressure
     qf = 0.5 * FOIL.ρ_f * FOIL.U∞ * FOIL.U∞
 
     # --- Initialize planform area counter ---
@@ -496,7 +496,7 @@ end
 
 function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="bend-twist")
     """
-    Computes the steady hydrodynamic vector loads 
+    Computes the steady hydrodynamic vector loads
     given the solved hydrofoil shape (strip theory)
     """
     # ---------------------------

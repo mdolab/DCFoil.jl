@@ -25,10 +25,10 @@ run_modal = false
 run_flutter = false
 
 # Uncomment here
-run_static = true
+# run_static = true
 # run_forced = true
 # run_modal = true
-# run_flutter = true
+run_flutter = true
 
 debug = true
 
@@ -70,26 +70,45 @@ DVDict = Dict(
 evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
 
 # ==============================================================================
-#                         Call DCFoil
+#                         Call DCFoil TWICE
 # ==============================================================================
-for U in U_sweep
-    outputDir = @sprintf("./OUTPUT/akcabay_U0-%02.1f/", (U))
-    mkpath(outputDir)
-    DVDict["U∞"] = U
-    DCFoil.run_model(
-        DVDict,
-        evalFuncs;
-        # --- Optional args ---
-        run_static=run_static,
-        run_forced=run_forced,
-        run_modal=run_modal,
-        run_flutter=run_flutter,
-        fSweep=fSweep,
-        tipForceMag=tipForceMag,
-        nModes=nModes,
-        uSweep=uSweep,
-        fSearch=fSearch,
-        outputDir=outputDir,
-        debug=debug
-    )
-end
+outputDir = @sprintf("./OUTPUT/akcabay_f-15_w0/")
+mkpath(outputDir)
+DCFoil.run_model(
+    DVDict,
+    evalFuncs;
+    # --- Optional args ---
+    run_static=run_static,
+    run_forced=run_forced,
+    run_modal=run_modal,
+    run_flutter=run_flutter,
+    fSweep=fSweep,
+    tipForceMag=tipForceMag,
+    nModes=nModes,
+    uSweep=uSweep,
+    fSearch=fSearch,
+    outputDir=outputDir,
+    debug=debug
+)
+
+outputDir = @sprintf("./OUTPUT/akcabay_f+15_w-15/")
+mkpath(outputDir)
+DVDict["θ"] = 15 * π / 180
+DVDict["Λ"] = -15 * π / 180
+uSweep = 170:dU:190 # flow speed [m/s] sweep for flutter
+DCFoil.run_model(
+    DVDict,
+    evalFuncs;
+    # --- Optional args ---
+    run_static=run_static,
+    run_forced=run_forced,
+    run_modal=run_modal,
+    run_flutter=run_flutter,
+    fSweep=fSweep,
+    tipForceMag=tipForceMag,
+    nModes=nModes,
+    uSweep=uSweep,
+    fSearch=fSearch,
+    outputDir=outputDir,
+    debug=debug
+)

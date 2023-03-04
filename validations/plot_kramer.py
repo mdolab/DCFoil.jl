@@ -66,7 +66,7 @@ if __name__ == "__main__":
     plt.style.use(niceplots.get_style())  # all settings
     # --- Adjust default options for matplotlib ---
     myOptions = {
-        "font.size": 20,
+        "font.size": 25,
         "font.family": "sans-serif",  # set to "serif" to get the same as latex
         # "font.sans-serif": ["Helvetica"], # this does not work on all systems
         # "text.usetex": True, # use external latex for all text
@@ -92,12 +92,18 @@ if __name__ == "__main__":
     # ---------------------------
     ax = axes
     for ii in range(len(wetFreqHz)):
-        ax.plot(fiberAngles, wetNatFreqs[:, ii], label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
+        ax.plot(fiberAngles, wetNatFreqs[:, ii], label=f"Mode {ii+1}", c=cm[ii])
     for ii in range(len(wetFreqHz)):
-        ax.plot(wetThetaDeg[ii], wetFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
+        ax.plot(
+            wetThetaDeg[ii],
+            wetFreqHz[ii],
+            # label=f"Mode {ii+1} (ABAQUS)",
+            c=cm[ii],
+            alpha=0.5,
+        )
     ax.set_xlabel(r"$\theta_f$ [$\degree$]")
     ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, labelpad=50)
-    ax.legend(fontsize=15, labelcolor="linecolor", loc="best", frameon=False, ncol=2)
+    ax.legend(fontsize=15, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_title("Modal validation")
 
     # Structural modal validation

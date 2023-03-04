@@ -39,10 +39,11 @@ include("test_solvers.jl")
     #     Solver tests
     # ************************************************
     # Really just looking to see if the solver works
-    io = open("test.out", "w")
+    # --- Mesh convergence tests ---
+    io = open("testConv.out", "w")
     @test test_SolveStaticRigid() <= 1e-4 # rigid hydrofoil solve
     @test test_SolveStaticIso() <= 1e-4 # ss hydrofoil solve
     @test test_SolveStaticComp() <= 1e-4 # cfrp hydrofoil
-    # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     close(io)
+    # @test test_SolveForcedComp() <= 1e-12 # not ready yet
 end

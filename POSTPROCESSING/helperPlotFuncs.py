@@ -532,6 +532,11 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
+            # TODO: plot with linear fading
+            # NPOINTS = len(gSweep)
+            # for jj in range(NPOINTS-1):
+            #     ax.plot(gSweep[jj], fSweep[jj], c=cm[iic], alpha=float(jj)/(NPOINTS-1))
+
             ax.plot(gSweep, fSweep, ls=ls, c=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
             # ax.scatter(gSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([gSweep[0], fSweep[0]])
