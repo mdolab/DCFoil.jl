@@ -1,0 +1,51 @@
+
+# --- Julia ---
+
+# @File    :   SolutionConstants.jl
+# @Time    :   2022/06/16
+# @Author  :   Galen Ng
+# @Desc    :   Module to store used in the solution
+
+
+module SolutionConstants
+
+include("../hydro/Hydro.jl")
+include("../struct/BeamProperties.jl")
+using .Hydro, .StructProp
+
+# ==============================================================================
+#                         STRUCTS
+# ==============================================================================
+mutable struct DCFoilConstants{T<:Float64}
+    """
+    This is a catch all mutable struct to store variables that we do not 
+    want in function calls like r(u) or f(u)
+
+    """
+    Kmat::Matrix{T} # structural stiffness matrix
+    Mmat::Matrix{T} # structural mass matrix
+    elemType::String
+    mesh::LinRange{T,Int64}
+    AICmat::Matrix{T} # Aero influence coeff matrix
+    mode::String # type of derivative for drdu
+    planformArea::T
+end
+
+mutable struct DCFoilDynamicConstants{T<:Float64}
+    """
+    For the dynamic hydroelastic solve, there are more constants to store
+    """
+    elemType::String
+    mesh::LinRange{T,Int64}
+    Dmat::Matrix{ComplexF64} # dynamic matrix # TODO: these might change
+    AICmat::Matrix{ComplexF64} # just the aero part of Dmat # TODO: these might change
+    extForceVec::Vector{T} # external force vector excluding BC nodes
+end
+
+# ==============================================================================
+#                         CONSTANTS
+# ==============================================================================
+const mepsLarge = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it is a more robust value for solving
+const p_i_tol = 1.11e-12 # tolerance on real root criteria NOTE: this is tested to work
+
+end # end module

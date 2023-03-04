@@ -1,7 +1,10 @@
 # dcfoil-jl
-Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested). We test for macOS-latest and Ubuntu-latest.
+
+Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested). 
+We test for `macOS-latest` and `Ubuntu-latest`.
 
 ## Get started
+
 You must be in this root directory. From the terminal you can type
 `julia --project=.`
 OR
@@ -15,11 +18,16 @@ You may need to type into the Julia REPL
 Now you are ready to run the solver with 
 `include("main.jl")`
 Since this is JIT, it will be slow the first time because it needs to compile stuff first.
+You can alternatively run the code with
+`julia main.jl`
+NOTE: Running julia using shell script nohup DOES NOT WORK
 
 For more, see the formal documentation (TODO:) and journal paper (TODO:)
+
 ## Developers Notes
 
 ### Convention
+
 Please use this coding convention:
 
 camelCase - variables
@@ -30,7 +38,7 @@ SCREAMING_SNAKE_CASE - constants
 ### Dependencies
 
 Add package dependencies in the REPL with
-`Using Pkg`
+`using Pkg`
 `Pkg.add("package-name", preserve=PRESERVE_DIRECT)`
 to keep the version of the package static.
 
@@ -40,4 +48,4 @@ NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last ch
 
 ### Tests
 
-Under the `test` directory, run the `run_tests.jl`. 
+Under the `test` directory, run the `run_tests.jl`.

@@ -7,7 +7,7 @@
 """
 
 # ==============================================================================
-#                         Methods for element matrices
+#                         METHODS FOR ELEMENT MATRICES
 # ==============================================================================
 module LinearBeamElem
 """
@@ -21,10 +21,10 @@ module LinearBeamElem
 
     The shape function for the element with the {q} vector) is
         w(x, t) = <something-already-derived-in-textbooks>
-    
+
     You impose the geometric BC's to get the α coeffs since the function must be 'admissible'
         w(x,t) = [N(x)]{q(t)}
-    
+
     This has already been derived so no need to redo getting [N] in the code
 
 """
@@ -74,7 +74,7 @@ function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="be
 
     # --- Constitutive law ---
     if constitutive == "isotropic"
-        BTᵉ = 0
+        BTᵉ = 0.0
     end
 
     # ************************************************
@@ -143,19 +143,19 @@ function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="be
         println("Axial elements not implemented")
     elseif elemType == "BT2" # Higher order beam element
         # 8x8 matrix
-        coeff = 1 / lᵉ^3
+        coeff::Float64 = 1 / lᵉ^3
         # row 1
-        k11_11 = 12 * EIᵉ
-        k11_12 = 6 * EIᵉ * lᵉ
-        k11_13 = -12 * abᵉ * EIᵉ
-        k11_14 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
+        k11_11::Float64 = 12 * EIᵉ
+        k11_12::Float64 = 6 * EIᵉ * lᵉ
+        k11_13::Float64 = -12 * abᵉ * EIᵉ
+        k11_14::Float64 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
         # row 2
-        k11_22 = 4 * EIᵉ * lᵉ^2
-        k11_23 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
-        k11_24 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
+        k11_22::Float64 = 4 * EIᵉ * lᵉ^2
+        k11_23::Float64 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
+        k11_24::Float64 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
         # row 3
-        k11_33 = 6 * GJᵉ * lᵉ^2 / 5 + 12 * Sᵉ
-        k11_34 = GJᵉ * lᵉ^3 / 10 + 6 * Sᵉ * lᵉ
+        k11_33::Float64 = 6 * GJᵉ * lᵉ^2 / 5 + 12 * Sᵉ
+        k11_34::Float64 = GJᵉ * lᵉ^3 * 0.1 + 6 * Sᵉ * lᵉ
         # row 4
         k11_44 = (abᵉ * BTᵉ * lᵉ^3) + (2 * GJᵉ * lᵉ^4 / 15) + (4 * Sᵉ * lᵉ^2)
         # --- Block matrices ---
@@ -300,6 +300,9 @@ end
 
 end # end module
 
+# ==============================================================================
+#                         GENERIC FEM METHODS
+# ==============================================================================
 module FEMMethods
 """
 Module with generic FEM methods
@@ -308,15 +311,17 @@ Module with generic FEM methods
 # --- Libraries ---
 using LinearAlgebra
 using ..LinearBeamElem
+include("../solvers/SolverRoutines.jl")
+using .SolverRoutines
 
-function make_mesh(nElem, foil)
+function make_mesh(nElem::Int64, foil)
     """
     Makes a mesh and element connectivity from root to tip with root as origin
 
     Outputs
     -------
     mesh
-        (nNodes, nDim) array 
+        (nNodes, nDim) array
     elemConn
 
     """
@@ -354,19 +359,22 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     qLocal = zeros(nnd * 2)
 
     # --- Initialize matrices ---
-    nElem = size(elemConn)[1]
+    nElem::Int64 = size(elemConn)[1]
     nNodes = nElem + 1
-    globalK = zeros(nnd * (nNodes), nnd * (nNodes))
-    globalM = zeros(nnd * (nNodes), nnd * (nNodes))
-    globalF = zeros(nnd * (nNodes))
+    globalK::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
+    globalM::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
+    globalF::Vector{Float64} = zeros(nnd * (nNodes))
 
     # --- Debug printout for initialization ---
-    println("+---------------------------------------------------+")
-    println("|   Assembling global stiffness and mass matrices   |")
-    println("+---------------------------------------------------+")
+    # TODO: probabl a better way to pretty print this
+    println("+", "-"^50, "+")
+    println("|   Assembling global stiffness and mass matrices  |")
+    println("+", "-"^50, "+")
     println("Default 2 nodes per elem, nothing else will work")
     println("Using ", constitutive, " constitutive relations...")
-    println("There are ", nElem, " elements and ", nNodes, " nodes")
+    println(nElem, " elements")
+    println(nNodes, " nodes")
+    println(nnd * nNodes, " total DOFs")
 
     # ************************************************
     #     Element loop
@@ -375,31 +383,31 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         # ---------------------------
         #   Extract element info
         # ---------------------------
-        lᵉ = norm(coordMat[elemIdx+1] - coordMat[elemIdx], 2) # length of elem
-        nVec = (coordMat[elemIdx+1] - coordMat[elemIdx]) / lᵉ # unit normal vector
-        EIₛ = foil.EIₛ[elemIdx]
-        GJₛ = foil.GJₛ[elemIdx]
-        Kₛ = foil.Kₛ[elemIdx]
-        Sₛ = foil.Sₛ[elemIdx]
-        ab = foil.ab[elemIdx]
-        mₛ = foil.mₛ[elemIdx]
-        iₛ = foil.Iₛ[elemIdx]
-        x_αb = foil.x_αb[elemIdx]
+        lᵉ::Float64 = norm(coordMat[elemIdx+1] - coordMat[elemIdx], 2) # length of elem
+        nVec::Float64 = (coordMat[elemIdx+1] - coordMat[elemIdx]) / lᵉ # unit normal vector
+        EIₛ::Float64 = foil.EIₛ[elemIdx]
+        GJₛ::Float64 = foil.GJₛ[elemIdx]
+        Kₛ::Float64 = foil.Kₛ[elemIdx]
+        Sₛ::Float64 = foil.Sₛ[elemIdx]
+        ab::Float64 = foil.ab[elemIdx]
+        mₛ::Float64 = foil.mₛ[elemIdx]
+        iₛ::Float64 = foil.Iₛ[elemIdx]
+        x_αb::Float64 = foil.x_αb[elemIdx]
 
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, Kₛ, Sₛ, lᵉ, ab, elemType, constitutive)
+        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, Kₛ, Sₛ, lᵉ, ab, elemType, constitutive)
 
         # ---------------------------
         #   Local mass matrix
         # ---------------------------
-        mLocal = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
+        mLocal::Matrix{Float64} = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
 
         # ---------------------------
         #   Local force vector
         # ---------------------------
-        fLocal = zeros(nnd * 2)
+        fLocal::Vector{Float64} = zeros(nnd * 2)
 
         # ---------------------------
         #   Assemble into global matrices
@@ -429,7 +437,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     return globalK, globalM, globalF
 end
 
-function get_fixed_nodes(elemType, BCCond="clamped")
+function get_fixed_nodes(elemType::String, BCCond="clamped")
     """
     Depending on the elemType, return the indices of fixed nodes
     """
@@ -448,26 +456,65 @@ function get_fixed_nodes(elemType, BCCond="clamped")
     return fixedNodes
 end
 
-function apply_tip_load!(F, elemType, loadType="force")
+function apply_tip_load!(globalF, elemType, loadType="force")
 
     if loadType == "force"
         if elemType == "bend-twist"
-            F[end-2] = 1.0
+            globalF[end-2] = 1.0
         elseif elemType == "BT2"
-            F[end-3] = 1.0
+            globalF[end-3] = 3000.0 / 2
         end
     elseif loadType == "torque"
         if elemType == "bend-twist"
-            F[end] = 1.0
+            globalF[end] = 1.0
         elseif elemType == "BT2"
-            F[end-1] = 1.0
+            globalF[end-1] = 1.0
         end
     end
 end
 
+function apply_tip_mass!(globalM, mass, inertia, elemLength, foil, elemType="BT2")
+    """
+    Apply a tip mass to the global mass matrix
+
+    mass: mass of the tip [kg]
+    inertia: moment of inertia of the tip about C.G. [kg-m^2]
+    """
+    if elemType == "bend-twist"
+        println("Does not work")
+    elseif elemType == "BT2"
+        nDOF = 8
+        # --- Get sectional properties ---
+        ms = mass / elemLength
+        # Parallel axis theorem
+        Iea = inertia + mass * (foil.x_αb[end])^2
+        is = Iea / elemLength
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, foil.x_αb[end], elemType)
+
+        # --- Assemble into global matrix ---
+        globalM[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
+    end
+
+    println("+------------------------------------+")
+    println("|    Tip mass added!                 |")
+    println("+------------------------------------+")
+    println("Dist. CG is aft of EA: ", foil.x_αb[end], " [m]")
+
+end
+
+function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
+    """
+    Applies inertial load and modifies globalF
+    """
+
+    println("Adding inertial loads to FEM with gravity vector of", gravityVector)
+
+    # TODO: add gravity vector
+end
+
 function apply_BCs(K, M, F, globalDOFBlankingList)
     """
-    Applies BCs for nodal displacements
+    Applies BCs for nodal displacements and blanks them
     """
 
     newK = K[
@@ -481,6 +528,26 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     return newK, newM, newF
 end
 
+
+function put_BC_back(q, elemType::String, BCType="clamped")
+    """
+    appends the BCs back into the solution
+    """
+
+    if BCType == "clamped"
+        if elemType == "BT2"
+            uSol = vcat([0, 0, 0, 0], q)
+        else
+            println("Not working")
+            exit()
+        end
+    else
+        println("Not working")
+    end
+
+    return uSol, length(uSol)
+end
+
 function solve_structure(K, M, F)
     """
     Solve the structural system
@@ -492,8 +559,22 @@ function solve_structure(K, M, F)
     return q
 end
 
-end # end module
+function compute_modal(K, M, nEig::Int64)
+    """
+    Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
+    i.e., this is structural dynamics, not hydroelastics.
+    """
 
+    # use krylov method to get first few smallest eigenvalues
+    # Solve [K]{x} = λ[M]{x} where λ = ω²
+    eVals, eVecs = SolverRoutines.compute_eigsolve(K, M, nEig)
+
+    naturalFreqs = sqrt.(eVals) / (2π)
+
+    return naturalFreqs, eVecs
+end
+
+end # end module
 
 # module BrickElem
 # # TODO: maybe never

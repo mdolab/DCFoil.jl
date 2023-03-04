@@ -10,58 +10,17 @@
 module InitModel
 
 # --- Public functions ---
-export init_steady
+export init_static, init_dynamic
 
-include("Hydro.jl")
-include("Struct.jl")
+include("./hydro/Hydro.jl")
+include("./struct/BeamProperties.jl")
+include("./constants/DesignConstants.jl")
 using .Hydro, .StructProp
+using .DesignConstants
 
-mutable struct foil
+function init_static(neval::Int64, DVDict::Dict)
   """
-  Foil object with key properties for the system solution
-  This is a mutable struct, so it can be modified during the solution process
-  TODO: More design vars
-  """
-  c # chord length vector
-  t # thickness vector
-  s # semispan [m]
-  ab # dist from midchord to EA vector (+ve for EA aft) [m]
-  eb # dist from CP to EA (+ve for EA aft) [m]
-  x_αb # static imbalance (+ve for CG aft) [m]
-  mₛ # structural mass vector [kg/m]
-  Iₛ # structural moment of inertia vector [kg-m]
-  EIₛ # bending stiffness vector [N-m²]
-  GJₛ # torsion stiffness vector [N-m²]
-  Kₛ # bend-twist coupling vector [N-m²]
-  Sₛ # warping resistance vector [N-m⁴]
-  α₀ # rigid initial angle of attack [deg]
-  U∞ # flow speed [m/s]
-  Λ # sweep angle [rad]
-  g # structural damping percentage
-  clα # lift slopes [1/rad]
-  ρ_f::Float64 # fluid density [kg/m³]
-  neval::Int64 # number of evaluation points on span
-  constitutive::String # constitutive model
-end
-
-mutable struct DCFoilConstants
-  """
-  This is a catch all mutable struct to store variables that we do not 
-  want in function calls like r(u) or f(u)
-
-    TODO: there's probably a better place to put this call
-  """
-  Kmat
-  elemType::String
-  mesh
-  AICmat # Aero influence coeff matrix
-  mode::String # type of derivative for drdu
-  planformArea
-end
-
-function init_steady(neval::Int64, DVDict::Dict)
-  """
-  Initialize a steady hydrofoil model
+  Initialize a static hydrofoil model
 
   Inputs:
       neval: Int64, number of evaluation points on span
@@ -72,21 +31,21 @@ function init_steady(neval::Int64, DVDict::Dict)
   """
 
   # --- First print to screen in a box ---
-  println("+", "-"^80, "+")
-  println("This is your design variable setup...")
+  println("+", "-"^50, "+")
+  println("|            Design variable dictionary:           |")
+  println("+", "-"^50, "+")
   for kv in DVDict
     println(kv)
   end
-  println("+", "-"^80, "+")
 
   # ---------------------------
   #   Geometry
   # ---------------------------
-  c = DVDict["c"]
-  t = DVDict["toc"] * c
-  ab = DVDict["ab"]
-  eb = 0.25 * c + ab
-  x_αb = DVDict["x_αb"]
+  c::Vector{Float64} = DVDict["c"]
+  t::Vector{Float64} = DVDict["toc"] * c
+  ab::Vector{Float64} = DVDict["ab"]
+  eb::Vector{Float64} = 0.25 * c + ab
+  x_αb::Vector{Float64} = DVDict["x_αb"]
 
   # ---------------------------
   #   Structure
@@ -104,19 +63,42 @@ function init_steady(neval::Int64, DVDict::Dict)
     ρₛ = 7900
     E₁ = 193e9
     E₂ = 193e9
-    G₁₂ = 77.2
+    G₁₂ = 77.2e9
     ν₁₂ = 0.3
     constitutive = "isotropic"
-  elseif (DVDict["material"] == "test")
+  elseif (DVDict["material"] == "rigid") # unrealistic rigid material
+    ρₛ = 7900
+    E₁ = 193e12
+    E₂ = 193e12
+    G₁₂ = 77.2e12
+    ν₁₂ = 0.3
+    constitutive = "isotropic"
+  elseif (DVDict["material"] == "eirikurPl") # unrealistic rigid material
+    ρₛ = 2800
+    E₁ = 70e9
+    E₂ = 70e9
+    ν₁₂ = 0.3
+    G₁₂ = E₁ / 2 / (1 + ν₁₂)
+    constitutive = "isotropic"
+  elseif (DVDict["material"] == "test-iso")
     ρₛ = 1590.0
     E₁ = 1
     E₂ = 1
     G₁₂ = 1
     ν₁₂ = 0.25
-    constitutive = "isotropic"
+    # constitutive = "isotropic"
+    constitutive = "orthotropic" # NOTE: Need to use this because the isotropic case uses an ellipse for GJ
+  elseif (DVDict["material"] == "test-comp")
+    ρₛ = 1590.0
+    E₁ = 1
+    E₂ = 1
+    G₁₂ = 1
+    ν₁₂ = 0.25
+    constitutive = "orthotropic"
+
   end
-  g = DVDict["g"]
-  θ = DVDict["θ"]
+  g::Float64 = DVDict["g"]
+  θ::Float64 = DVDict["θ"]
 
   # --- Compute the structural properties for the foil ---
   EIₛ = zeros(Float64, neval)
@@ -129,7 +111,7 @@ function init_steady(neval::Int64, DVDict::Dict)
   for ii in 1:neval
     section = StructProp.section_property(c[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ)
 
-    EIₛ[ii], Kₛ[ii], GJₛ[ii], Sₛ[ii], Iₛ[ii], mₛ[ii] = StructProp.compute_section_property(section)
+    EIₛ[ii], Kₛ[ii], GJₛ[ii], Sₛ[ii], Iₛ[ii], mₛ[ii] = StructProp.compute_section_property(section, constitutive)
   end
 
   # ---------------------------
@@ -140,10 +122,23 @@ function init_steady(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Build final model
   # ---------------------------
-  model = foil(c, t, DVDict["s"], ab, eb, x_αb, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"], DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"], constitutive)
+  model = DesignConstants.foil(c, t, DVDict["s"], ab, eb, x_αb, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"], DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"], constitutive)
 
   return model
 
+end
+
+function init_dynamic(fSweep, DVDict::Dict; uSweep=0:0.1:1)
+  """
+  Perform much of the same initializations as init_static() except with other features
+
+  the default uSweep is a dummy array so type declaration works
+  """
+  staticModel = init_static(DVDict["neval"], DVDict)
+
+  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive, fSweep, uSweep)
+
+  return model
 end
 
 end # end module
