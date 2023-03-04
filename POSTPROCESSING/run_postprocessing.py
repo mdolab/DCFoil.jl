@@ -399,18 +399,22 @@ if __name__ == "__main__":
             axes,
             flutterSol=flutterSol,
             ls="-",
-            units="kts",
+            # units="kts",
             # marker="o",
             showRLlabels=True,
-            nShift=1000,
+            nShift=1500,
         )
 
-        # --- Set limits ---
-        axes[0, 0].set_ylim(top=1, bottom=-5)
-        axes[0, 0].set_xlim(right=50, left=5)
-        axes[1, 1].set_xlim(right=1, left=-5)
-        axes[1, 1].set_ylim(top=20, bottom=0)
-        axes[1, 1].set_yticks(np.arange(0, 21, 2))
+        # # --- Set limits ---
+        axes[0,0].set_ylim(top=20)
+        axes[0,0].set_xlim(right=40, left=25)
+        # axes[0, 0].set_ylim(top=10)
+        # axes[0, 0].set_xlim(right=190, left=170)
+        # axes[0, 0].set_ylim(top=1, bottom=-5)
+        # axes[0, 0].set_xlim(right=50, left=5)
+        # axes[1, 1].set_xlim(right=1, left=-5)
+        # axes[1, 1].set_ylim(top=20, bottom=0)
+        # axes[1, 1].set_yticks(np.arange(0, 21, 2))
 
         dosave = not not fname
         plt.show(block=(not dosave))

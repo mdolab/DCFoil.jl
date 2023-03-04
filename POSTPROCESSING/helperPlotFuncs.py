@@ -344,7 +344,14 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
         ax.plot(eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, c=ccm[ii])
         ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
     ax.set_title("Wet Modes")
-    ax.legend(fontsize=legfs, labelcolor="linecolor", loc="center left", frameon=False, ncol=1, bbox_to_anchor=(1, 0.5))
+    ax.legend(
+        fontsize=legfs,
+        labelcolor="linecolor",
+        loc="center left",
+        frameon=False,
+        ncol=1,
+        bbox_to_anchor=(1, 0.5),
+    )
 
     # --- Twist modes ---
     for ii in range(nModes):
@@ -372,7 +379,15 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-"):
 
 
 def plot_vg_vf_rl(
-    fig, axes, flutterSol: dict, ls="-", alpha=1.0, units="m/s", marker=None, showRLlabels=False, nShift=0
+    fig,
+    axes,
+    flutterSol: dict,
+    ls="-",
+    alpha=1.0,
+    units="m/s",
+    marker=None,
+    showRLlabels=False,
+    nShift=0,
 ):
     """
     Plot the V-g, V-f, and R-L diagrams
@@ -418,6 +433,7 @@ def plot_vg_vf_rl(
     # ************************************************
     ax = axes[0, 0]
     xlabel = "$U_{\infty}$ " + f"[{units}]"
+    yticks = []
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)  # color index
 
@@ -432,11 +448,19 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            ax.plot(vSweep, gSweep, ls=ls, c=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
+            ax.plot(
+                vSweep,
+                gSweep,
+                ls=ls,
+                c=cm[iic],
+                label=f"Mode {key}",
+                marker=marker,
+                alpha=alpha,
+            )
             # ax.scatter(vSweep, gSweep, color=(cm[iic]), marker=marker)
             start = np.array([vSweep[0 + nShift], gSweep[0 + nShift]])
             end = np.array([vSweep[-1], gSweep[-1]])
-            # Label mode number on the line
+            # --- Label mode number on the line ---
             ax.annotate(
                 f"Mode {ii+1}",
                 xy=(start[0], start[1]),
@@ -448,11 +472,12 @@ def plot_vg_vf_rl(
                 textcoords="offset points",
                 # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
             )
+            yticks.append(gSweep[end])
         except Exception:
             print(f"Mode {key} empty")
     ax.set_ylim(top=10)
     ax.set_ylabel(gLabel, rotation=0, labelpad=labelpad)
-    ax.set_title("$V$-$g$")
+    ax.set_title("$V$-$g$", pad=labelpad)
     ax.set_xlabel(xlabel)
     # --- Put flutter boundary on plot ---
     ax.axhline(
@@ -465,15 +490,12 @@ def plot_vg_vf_rl(
     ax.annotate(
         "Hydroelastic instability", xy=(0.5, 0.9), ha="center", xycoords="axes fraction", size=legfs, color=flutterColor
     )
-    # X = [vSweep[0], vSweep[-1] * 20]
-    # Y = [0.0, 0.0]
-    # ax.fill_between(X, Y, 10, color=flutterColor, alpha=0.2)
-    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
-
+    # ax.set_yticks(yticks + [0])
     # ************************************************
     #     V-f diagram
     # ************************************************
     ax = axes[1, 0]
+    bifCtr = 0  # Bifurcation counter
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)  # color index
 
@@ -492,22 +514,35 @@ def plot_vg_vf_rl(
             # ax.scatter(vSweep, fSweep, c=(cm[iic]), marker=marker)
             start = np.array([vSweep[0], fSweep[0]])
             end = np.array([vSweep[-1], fSweep[-1]])
-            # Label mode number on the line
+            # --- Label mode number on the line ---
+            # check if mode is bifurcated and then alternate the label position
+            if fSweep[0] < 1e-2:
+                if bifCtr % 2 == 0:
+                    va = "bottom"
+                else:
+                    xytext = (-5, -3)
+                    va = "top"
+                ha = "right"
+                bifCtr += 1
+            else:
+                ha = "left"
+                va = "bottom"
             ax.annotate(
                 f"Mode {ii+1}",
                 xy=(start[0], start[1]),
-                ha="left",
+                ha=ha,
+                va=va,
                 c=cm[iic],
                 fontsize=legfs,
                 xytext=xytext,
                 textcoords="offset points",
-                # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
             )
         except Exception:
             print(f"Mode {key} empty")
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
-    ax.set_title("$V$-$f$")
+    ax.set_title("$V$-$f$", pad=labelpad)
     # ax.set_xlim(vSweep[0] * 0.99, vSweep[-1] * 1.01)
     ax.set_xlabel(xlabel)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
@@ -517,6 +552,8 @@ def plot_vg_vf_rl(
     # ************************************************
     markerSize = 8
     ax = axes[1, 1]
+    bifCtr = 0  # Bifurcation counter
+    yticks = []
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)
 
@@ -544,12 +581,25 @@ def plot_vg_vf_rl(
             ax.plot(start[0], start[1], marker="o", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
             ax.plot(end[0], end[1], marker="o", markersize=markerSize, c=cm[iic], markeredgecolor="gray")
 
-            # Label mode number on the line
+            # --- Label mode number on the line ---
+            # check if mode is bifurcated and then alternate the label position
+            if fSweep[0] < 1e-2:  # low freq
+                if bifCtr % 2 == 0:
+                    ha = "right"
+                    xytext = (-5, 5)
+                else:
+                    ha = "left"
+                    xytext = (5, 5)
+                bifCtr += 1
+            else:  # defaults
+                ha = "left"
+                va = "bottom"
+                xytext = (5, 5)
             ax.annotate(
                 f"Mode {ii+1}",
                 # xy=(end[0], end[1]),
                 xy=(start[0], start[1]),
-                ha="left",
+                ha=ha,
                 c=cm[iic],
                 fontsize=legfs,
                 xytext=(5, 5),
@@ -577,13 +627,16 @@ def plot_vg_vf_rl(
                     bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
                     va="top",
                 )
+            yticks.append(fSweep[0])
         except Exception:
             print(f"Mode {key} empty")
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
-    ax.set_title("Root locus")
+    ax.set_title("Root locus", pad=labelpad)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_xlabel(gLabel)
+    ax.set_yticks(yticks)
+
     # --- Put flutter boundary on plot ---
     # ax.set_xlim(right=10)
     ax.axvline(

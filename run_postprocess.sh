@@ -14,11 +14,16 @@ cd POSTPROCESSING
 # python ./run_postprocessing.py --case testWaterAkcabay --is_flutter --is_forced
 # julia ./POSTPROCESSING/postprocessing.jl
 
+# # ************************************************
+# #     IMOCA cases
+# # ************************************************
+# python ./run_postprocessing.py --case IMOCA60KeelSS --is_flutter
+# python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
+
 # ************************************************
-#     IMOCA cases
+#     Akcabay plots
 # ************************************************
-python ./run_postprocessing.py --case IMOCA60KeelSS --is_flutter
-python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
+python ./run_postprocessing.py --case akcabay_f-15_w0 --is_flutter
 
 cd ..
 
