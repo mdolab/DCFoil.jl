@@ -14,8 +14,9 @@ export init_static, init_dynamic
 
 include("./hydro/Hydro.jl")
 include("./struct/BeamProperties.jl")
+include("./struct/MaterialLibrary.jl")
 include("./constants/DesignConstants.jl")
-using .Hydro, .StructProp
+using .Hydro, .StructProp, .MaterialLibrary
 using .DesignConstants
 
 function init_static(neval::Int64, DVDict::Dict)
@@ -50,53 +51,7 @@ function init_static(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Structure
   # ---------------------------
-  # --- composite ---
-  # TODO: Make a material property library
-  if (DVDict["material"] == "cfrp")
-    ρₛ = 1590.0
-    E₁ = 117.8e9
-    E₂ = 13.4e9
-    G₁₂ = 3.9e9
-    ν₁₂ = 0.25
-    constitutive = "orthotropic"
-  elseif (DVDict["material"] == "ss") # stainless-steel
-    ρₛ = 7900
-    E₁ = 193e9
-    E₂ = 193e9
-    G₁₂ = 77.2e9
-    ν₁₂ = 0.3
-    constitutive = "isotropic"
-  elseif (DVDict["material"] == "rigid") # unrealistic rigid material
-    ρₛ = 7900
-    E₁ = 193e12
-    E₂ = 193e12
-    G₁₂ = 77.2e12
-    ν₁₂ = 0.3
-    constitutive = "isotropic"
-  elseif (DVDict["material"] == "eirikurPl") # unrealistic rigid material
-    ρₛ = 2800
-    E₁ = 70e9
-    E₂ = 70e9
-    ν₁₂ = 0.3
-    G₁₂ = E₁ / 2 / (1 + ν₁₂)
-    constitutive = "isotropic"
-  elseif (DVDict["material"] == "test-iso")
-    ρₛ = 1590.0
-    E₁ = 1
-    E₂ = 1
-    G₁₂ = 1
-    ν₁₂ = 0.25
-    # constitutive = "isotropic"
-    constitutive = "orthotropic" # NOTE: Need to use this because the isotropic case uses an ellipse for GJ
-  elseif (DVDict["material"] == "test-comp")
-    ρₛ = 1590.0
-    E₁ = 1
-    E₂ = 1
-    G₁₂ = 1
-    ν₁₂ = 0.25
-    constitutive = "orthotropic"
-
-  end
+  ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(DVDict["material"])
   g::Float64 = DVDict["g"]
   θ::Float64 = DVDict["θ"]
 
@@ -117,7 +72,7 @@ function init_static(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα = Hydro.compute_glauert_circ(semispan=DVDict["s"], chordVec=c, α₀=DVDict["α₀"] * π / 180, U∞=DVDict["U∞"], neval=neval)
+  clα = Hydro.compute_glauert_circ(semispan=DVDict["s"], chordVec=c, α₀=deg2rad(DVDict["α₀"]), U∞=DVDict["U∞"], neval=neval)
 
   # ---------------------------
   #   Build final model
