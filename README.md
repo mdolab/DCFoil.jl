@@ -1,4 +1,4 @@
-# dcfoil-jl
+# DCFoil.jl
 
 Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested).
 We test for `macOS-latest` and `Ubuntu-latest`.

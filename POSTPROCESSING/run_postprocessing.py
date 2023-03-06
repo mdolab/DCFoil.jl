@@ -41,7 +41,8 @@ if __name__ == "__main__":
     parser.add_argument("--is_forced", action="store_true", default=False)
     parser.add_argument("--is_modal", action="store_true", default=False)
     parser.add_argument("--is_flutter", action="store_true", default=False)
-    parser.add_argument("--debug_plots", action="store_true", default=False)
+    parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
+    parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
     args = parser.parse_args()
     # Echo the args
     print(30 * "-")

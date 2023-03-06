@@ -16,6 +16,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import tecplot as tp
 
 # import matplotlib
 # import matplotlib.patheffects as patheffects
@@ -25,6 +26,7 @@ import seaborn as sns
 # Extension modules
 # ==============================================================================
 import niceplots
+import nicetecplots as ntp
 
 # --- Enable niceplot colors as a list ---
 # plt.style.use(niceplots.get_style())
@@ -834,3 +836,10 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
         niceplots.adjust_spines(ax, outward=True)
 
     return fig, axes
+
+
+def pytecplot_plotmesh(args, fname: str):
+    if not args.batch:
+        tp.session.connect()
+
+    lay = ntp.Layout()
