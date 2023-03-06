@@ -31,13 +31,13 @@ function init_static(neval::Int64, DVDict::Dict)
     foil: struct
   """
 
-  # --- First print to screen in a box ---
-  println("+", "-"^50, "+")
-  println("|            Design variable dictionary:           |")
-  println("+", "-"^50, "+")
-  for kv in DVDict
-    println(kv)
-  end
+  # # --- First print to screen in a box ---
+  # println("+", "-"^50, "+")
+  # println("|            Design variable dictionary:           |")
+  # println("+", "-"^50, "+")
+  # for kv in DVDict
+  #   println(kv)
+  # end
 
   # ---------------------------
   #   Geometry
@@ -83,15 +83,13 @@ function init_static(neval::Int64, DVDict::Dict)
 
 end
 
-function init_dynamic(fSweep, DVDict::Dict; uSweep=0:0.1:1)
+function init_dynamic(DVDict::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
   """
   Perform much of the same initializations as init_static() except with other features
-
-  the default uSweep is a dummy array so type declaration works
   """
   staticModel = init_static(DVDict["neval"], DVDict)
 
-  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive, fSweep, uSweep)
+  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive, fSweep, uRange)
 
   return model
 end

@@ -36,23 +36,29 @@ using .FEMMethods
 using .SolutionConstants
 using .SolverRoutines
 
-function solve(DVDict, evalFuncs, outputDir::String;
-    # --- Optional args ---
-    tipMass=false,
-    )
+# ==============================================================================
+#                         Top level API routines
+# ==============================================================================
+function solve(DVDict::Dict, evalFuncs, solverOptions::Dict)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
-
+    Inputs
+    ------
+    DVDict: Dict
+        The dictionary of design variables
+    evalFuncs: Dict
+        The dictionary of functions to evaluate
+    solverOptions: Dict
+        The dictionary of solver options
+    Returns
+    -------
+    costFuncs: Dict
+        The dictionary of cost functions
     """
     # ************************************************
     #     INITIALIZE
     # ************************************************
-    # --- Write the init dict to output folder ---
-    stringData = JSON.json(DVDict)
-    open(outputDir * "init_DVDict.json", "w") do io
-        write(io, stringData)
-    end
-
+    outputDir = solverOptions["outputDir"]
     neval = DVDict["neval"]
     global FOIL = InitModel.init_static(neval, DVDict) # seems to only be global in this module
     nElem = neval - 1
@@ -74,7 +80,7 @@ function solve(DVDict, evalFuncs, outputDir::String;
 
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
-    # if tipMass
+    # if solverOptions["tipMass"]
     #     bulbMass = 2200 #[kg]
     #     bulbInertia = 900 #[kg-m²]
     #     FOIL.x_αb[end] = -0.1 # [m]
@@ -271,7 +277,7 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
 
     # --- Write twist ---
     if @isdefined(Ψ)
-        fname = outputDir * "twisting.dat"
+        fname = workingOutputDir * "twisting.dat"
         outfile = open(fname, "w")
         # write(outfile, "Twist\n")
         for Ψⁿ ∈ Ψ

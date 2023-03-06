@@ -37,16 +37,19 @@ using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 
-function solve(DVDict, outputDir::String, fSweep, tipForceMag)
+function solve(DVDict, solverOptions::Dict)
     """
-    Solve 
+    Solve
         (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
     using the 'tipForceMag' as the harmonic forcing on the RHS
     """
     # ---------------------------
     #   Initialize
     # ---------------------------
-    global FOIL = InitModel.init_dynamic(fSweep, DVDict)
+    outputDir = solverOptions["outputDir"]
+    fSweep = solverOptions["fSweep"]
+    tipForceMag = solverOptions["tipForceMag"]
+    global FOIL = InitModel.init_dynamic(DVDict; fSweep=fSweep)
     nElem = FOIL.neval - 1
     constitutive = FOIL.constitutive
 
@@ -115,7 +118,7 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
         #  Dynamic matrix
         D = -1 * ω^2 * (Ms + Mf) + im * ω * Cf + (Ks + Kf)
 
-        # Complex AIC 
+        # Complex AIC
         AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)
 
         # Store constants
@@ -155,7 +158,11 @@ function solve(DVDict, outputDir::String, fSweep, tipForceMag)
     # ************************************************
     write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir)
 
-    return TipBendDyn, TipTwistDyn, LiftDyn, MomDyn
+    # TODO:
+    costFuncs = nothing
+    # costFuncs = SolverRoutines.compute_costFuncs()
+
+    return costFuncs
 end
 
 function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="./OUTPUT/")
@@ -213,7 +220,7 @@ end
 #     uUnfolded = [real(u); imag(u)]
 #     for ii in 1:maxIters
 #         # println(u)
-#         # NOTE: these functions handle a complex input but return the unfolded output 
+#         # NOTE: these functions handle a complex input but return the unfolded output
 #         # (i.e., concatenation of real and imag)
 #         res = compute_residuals(uUnfolded)
 #         ∂r∂u = compute_∂r∂u(uUnfolded, mode)
@@ -315,7 +322,7 @@ end
 
 function compute_∂r∂u(structuralStates, mode="FiDi")
     """
-    Jacobian of residuals with respect to dynamic structural states 
+    Jacobian of residuals with respect to dynamic structural states
     EXCLUDING BC NODES
     """
 

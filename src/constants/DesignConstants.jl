@@ -17,7 +17,7 @@ struct foil{T<:Float64}
     """
     Foil object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
-    TODO: More design vars
+    TODO: Make twist a DV
     """
     c::Vector{T} # chord length vector
     t::Vector{T} # thickness vector
@@ -66,8 +66,8 @@ struct dynamicFoil{T<:Float64}
     neval::Int64 # number of evaluation points on span
     constitutive::String # constitutive model
     # --- Only things different for the dynamic foil ---
-    fSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forcing frequency sweep [Hz] (for harmonically forced solution)
-    uSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forward speed sweep [m/s] (for flutter solution)
+    fSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    uRange::Vector{T} # forward speed sweep [m/s] (for flutter solution)
 end
 
 end # end module

@@ -27,7 +27,7 @@ from tabulate import tabulate
 # Extension modules
 # ==============================================================================
 import niceplots
-from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals
+from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals, find_DivAndFlutterPoints
 from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf, plot_forced
 
 # ==============================================================================
@@ -72,9 +72,9 @@ if __name__ == "__main__":
     # --- Read in funcs ---
     try:
         funcs = json.load(open(f"{dataDir}/funcs.json"))
-    except:
+    except FileNotFoundError:
         funcs = None
-        print("No funcs.json file found.")
+        print("No funcs.json file found...")
 
     nodes = np.linspace(0, DVDict["s"], DVDict["neval"], endpoint=True)
 
@@ -190,6 +190,7 @@ if __name__ == "__main__":
         flutterSol = postprocess_flutterevals(
             iblank, flowHistory[:, 1], flowHistory[:, 0], flowHistory[:, 2], eigs_r, eigs_i
         )
+        instabPts = find_DivAndFlutterPoints(flutterSol, "pvals_r", "U")
         # ************************************************
         #     Debug code
         # ************************************************
@@ -264,6 +265,8 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         Plot results
     # ==============================================================================
+
+    # Default visualize wing geometry
     fname = f"{outputDir}/wing-geom.pdf"
     fig, axes = plot_wing(DVDict)
 

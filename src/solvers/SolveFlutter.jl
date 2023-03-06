@@ -3,7 +3,7 @@
 @File    :   SolveFlutter.jl
 @Time    :   2022/10/07
 @Author  :   Galen Ng
-@Desc    :   p-k method for flutter analysis
+@Desc    :   p-k method for flutter analysis, also contains modal analysis
 """
 
 module SolveFlutter
@@ -38,18 +38,10 @@ using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 
-function solve(
-    DVDict::Dict,
-    outputDir::String,
-    uSweep::StepRangeLen{Float64,Base.TwicePrecision{Float64}},
-    fSearch::StepRangeLen{Float64,Base.TwicePrecision{Float64}},
-    nModes::Int64;
-    # --- Optional args ---
-    use_freeSurface=false,
-    cavitation=nothing,
-    tipMass=false,
-    debug=false
-)
+# ==============================================================================
+#                         Top level API routines
+# ==============================================================================
+function solve(DVDict::Dict, solverOptions::Dict)
     """
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
@@ -58,19 +50,19 @@ function solve(
     # ************************************************
     #     Initialize
     # ************************************************
-    # --- Write the init dict to output folder ---
-    stringData = JSON.json(DVDict)
-    open(outputDir * "init_DVDict.json", "w") do io
-        write(io, stringData)
-    end
-    global FOIL = InitModel.init_dynamic(fSearch, DVDict, uSweep=uSweep)
+    outputDir = solverOptions["outputDir"]
+    uRange = solverOptions["uRange"]
+    fSweep = solverOptions["fSweep"]
+    nModes = solverOptions["nModes"]
+    tipMass = solverOptions["tipMass"]
+    debug = solverOptions["debug"]
+    global FOIL = InitModel.init_dynamic(DVDict; uRange=uRange, fSweep=fSweep)
     nElem = FOIL.neval - 1
 
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
     println("====================================================================================")
-    println("USweep: ", uSweep)
-    println("freqSearch: ", fSearch)
+    println("uRange: ", uRange)
     if debug
         rm("DebugOutput/", recursive=true)
         mkpath("DebugOutput/")
@@ -149,16 +141,16 @@ function solve(
     N_MAX_Q_ITER = 4000 # TEST VALUE
     ΔdynP = 0.5 * FOIL.ρ_f * 0.6^2
     true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(
-        uSweep,
+        uRange,
         structMesh,
         FOIL,
         b_ref,
         dim,
         elemType,
         globalDOFBlankingList,
-        N_MAX_Q_ITER;
+        N_MAX_Q_ITER,
+        nModes;
         # --- Optional args ---
-        nModes=nModes,
         ΔdynP=ΔdynP,
         debug=debug
     )
@@ -171,19 +163,19 @@ function solve(
 
 end # end solve
 
-function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; tipMass=false, use_freeSurface=false, cavitation=nothing, debug=false)
+function solve_frequencies(DVDict::Dict, solverOptions::Dict)
     """
-        System natural frequencies
+    System natural frequencies
     """
 
     # ************************************************
     #     Initialize
     # ************************************************
-    # --- Write the init dict to output folder ---
-    stringData = JSON.json(DVDict)
-    open(outputDir * "init_DVDict.json", "w") do io
-        write(io, stringData)
-    end
+    outputDir = solverOptions["outputDir"]
+    nModes = solverOptions["nModes"]
+    tipMass = solverOptions["tipMass"]
+    debug = solverOptions["debug"]
+    # --- Initialize the model ---
     global FOIL = InitModel.init_static(DVDict["neval"], DVDict)
     nElem = FOIL.neval - 1
 
@@ -273,8 +265,11 @@ function solve_frequencies(DVDict::Dict, nModes::Int64, outputDir::String; tipMa
     # ************************************************
     #     Write solution out to files
     # ************************************************
-    write_modalsol(structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, outputDir)
+    if !(isempty(outputDir))
+        write_modalsol(structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, outputDir)
+    end
 
+    return structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol
 end # end solve_frequencies
 
 function write_sol(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, outputDir="./OUTPUT/")
@@ -326,6 +321,9 @@ function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeSh
 
 end # end function
 
+# ==============================================================================
+#                         Flutter routines
+# ==============================================================================
 function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     """
     DESCRIPTION
@@ -339,7 +337,7 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
         new_r, new_i - the real/imaginary part of the new eigenvector from current iteration. The size is (Mnew, Mnew)
     Outputs
     -------
-        C - The square correlation matrix. Values range from 0-1 where rows represent old eigenvectors and columns new eigenvectors. 
+        C - The square correlation matrix. Values range from 0-1 where rows represent old eigenvectors and columns new eigenvectors.
         The size is (M_old, M_new)
     """
 
@@ -424,7 +422,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     end
 
     # --- Loop over corr matrix ---
-    # This loop finds the max element in the C matrix, 
+    # This loop finds the max element in the C matrix,
     # stores the row and column indices in mTmp and corrTmp,
     # then zeros out the row and column in the C matrix
     isMaxValZero = true
@@ -500,18 +498,18 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     return corr, m, newModesIdx, nCorrelatedModes, nNewModes
 end # end function
 
-function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, globalDOFBlankingList, N_MAX_Q_ITER; nModes=10, ΔdynP=10.0, debug=false)
+function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, globalDOFBlankingList, N_MAX_Q_ITER, nModes; ΔdynP=10.0, debug=false)
     """
     Non-iterative flutter solution following van Zyl https://arc.aiaa.org/doi/abs/10.2514/2.2806
     Everything from here on is based on the FORTRAN code written by Eirikur Jonsson
 
     Inputs
     ------
-    vel: array, size(# of flight conditions)
-        free-stream velocities for eigenvalue solve (flight conditions)
+    vel: vector, size(2)
+        start and end free-stream velocities for eigenvalue solve (flight conditions)
     structMesh: StructMesh
         mesh object
-    FOIL: FOIL  
+    FOIL: FOIL
         foil object
     b_ref: float
         reference semi-chord (mean semi-chord)
@@ -522,7 +520,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim, elemType, 
     globalDOFBlankingList: array, size(# of DOFs blanked)
         list of DOFs to be blanked
     N_MAX_Q_ITER: int
-        maximum number of dynamic pressure iterations 
+        maximum number of dynamic pressure iterations
     nModes: int
         number of modes to solve for
     ΔdynP: float
@@ -834,7 +832,7 @@ function compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, MM, KK, structMesh, 
 
     if (debug) # && qiter > 52 && qiter < 54
         nonDimFactor = U∞ * cos(FOIL.Λ) / b_ref / (2π)
-        # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k 
+        # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k
         marker = false
         plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=marker)
         plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=marker)
@@ -938,8 +936,8 @@ function sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, structMesh, FOIL, gl
     -------
         p_eigs_r - unsorted eigenvalues of length ik [rad/s]
         p_eigs_i - unsorted eigenvalues of length ik [rad/s]
-        R_eigs_r - unsorted eigenvectors of length ik [-] 
-        R_eigs_i - unsorted eigenvectors of length ik [-] 
+        R_eigs_r - unsorted eigenvectors of length ik [-]
+        R_eigs_i - unsorted eigenvectors of length ik [-]
         k_history - history of reduced frequencies. Actual k values that we analyzed and accepted
         ik - number of k's that were actually analyzed and accepted
         The result is essentially 'nMode' sets of lines that the eigenvalue problem was solved for
@@ -1011,7 +1009,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, structMesh, FOIL, gl
             # Determine location of new eigenvectors
             idxs = SolverRoutines.argmax2d(transpose(corr))
 
-            # Check if entries are missing/duplicated 
+            # Check if entries are missing/duplicated
             # TODO: this might not be a problem
 
             # --- Order eigenvalues and eigenvectors based on correlation matrix ---
@@ -1103,7 +1101,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
             # Check if we found a real root
             # NOTE: If your flutter analyses are failing, this is probably why
             if k_history[jj] < SolutionConstants.p_i_tol && abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol # SolutionConstants.mepsLarge # Real root
-                # There should be another real root coming up or we already processed 
+                # There should be another real root coming up or we already processed
                 # one matching the zero freq
                 p_cross_r[ctr] = p_eigs_r[ii, jj]
                 p_cross_i[ctr] = p_eigs_i[ii, jj]
@@ -1158,7 +1156,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
 
-end # end function
+end # end extract_kCrossings
 
 function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
     # """
@@ -1185,7 +1183,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_
     #     This method is good because the matrices are all real
 
     # Ng
-    #     The Aerodynamic loads are written in terms of generalized hydro matrices which may 
+    #     The Aerodynamic loads are written in terms of generalized hydro matrices which may
     #     only be possible with analytical methods for hydrodynamics
     #     F_aero = -(Mf*uddot + Cf*udot + Kf*u)
     #         p * |I       0                 | * | u |  =  |    0        I               | * | u |
@@ -1298,7 +1296,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_
     # println("Flutter positive eigenvalues: ", p_i .* nonDimFactor, "Hz")
 
     return p_r, p_i, R_aa_r, R_aa_i
-end # end function
+end # end solve_eigenvalueProblem
 
 
 function compute_modalSpace(Ms, Ks, reducedSize=20)
@@ -1316,4 +1314,11 @@ function compute_modalSpace(Ms, Ks, reducedSize=20)
 
     return Ms_r, Ks_r, Qr
 end
+
+# ==============================================================================
+#                         Sensitivity routines
+# ==============================================================================
+function compute_jacobian()
+end # end compute_jacobian
+
 end # end module

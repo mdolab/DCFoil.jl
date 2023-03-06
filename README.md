@@ -1,6 +1,6 @@
 # dcfoil-jl
 
-Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested). 
+Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested).
 We test for `macOS-latest` and `Ubuntu-latest`.
 
 ## Get started
@@ -8,21 +8,22 @@ We test for `macOS-latest` and `Ubuntu-latest`.
 You must be in this root directory. From the terminal you can type
 `julia --project=.`
 OR
-in the Julia REPL, type 
+in the Julia REPL, type
 `] activate .`
-and all the dependencies in the `Project.toml` should be queued to compiled at runtime. 
+and all the dependencies in the `Project.toml` should be queued to compiled at runtime.
 You can double check that all the right packages are present with `status` in the Pkg REPL.
 You may need to type into the Julia REPL
 `Pkg.instantiate()`
 
-Now you are ready to run the solver with 
+Now you are ready to run the solver with
 `include("main.jl")`
 Since this is JIT, it will be slow the first time because it needs to compile stuff first.
 You can alternatively run the code with
 `julia main.jl`
 NOTE: Running julia using shell script nohup DOES NOT WORK
 
-For more, see the formal documentation (TODO:) and journal paper (TODO:)
+TODO: paper links
+For more, see the formal documentation <> and journal paper
 
 ## Developers Notes
 
@@ -42,8 +43,8 @@ Add package dependencies in the REPL with
 `Pkg.add("package-name", preserve=PRESERVE_DIRECT)`
 to keep the version of the package static.
 
-To update all dependencies (be careful with this in case it breaks tests TODO)
-`Pkg.update(level=UPLEVEL_PATCH)` 
+To update all dependencies (be careful with this in case it breaks tests)
+`Pkg.update(level=UPLEVEL_PATCH)`
 NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last change (also see `help <your-command>`).
 
 ### Tests

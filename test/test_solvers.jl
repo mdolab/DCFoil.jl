@@ -48,6 +48,27 @@ function test_SolveStaticRigid()
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
 
+    solverOptions = Dict(
+        # --- I/O ---
+        "debug" => false,
+        "outputDir" => "",
+        # --- General solver options ---
+        "tipMass" => false,
+        "use_cavitation" => false,
+        "use_freesurface" => false,
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 0:0.1:10,
+        "tipForceMag" => 0.0,
+        # --- Eigen solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 5,
+        "uSweep" => nothing,
+    )
+
     # ************************************************
     #     Cost functions
     # ************************************************
@@ -67,7 +88,7 @@ function test_SolveStaticRigid()
         DVDict["ab"] = 0 * ones(neval)
         DVDict["x_αb"] = 0 * ones(neval)
         # --- Solve ---
-        costFuncs = SolveStatic.solve(DVDict, evalFuncs, "../OUTPUT")
+        costFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["w_tip"]
         tipTwistData[meshlvl] = costFuncs["psi_tip"]
         meshlvl += 1
@@ -138,6 +159,26 @@ function test_SolveStaticIso()
         "x_αb" => 0 * ones(neval), # static imbalance [m]
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
+    solverOptions = Dict(
+        # --- I/O ---
+        "debug" => false,
+        "outputDir" => "",
+        # --- General solver options ---
+        "tipMass" => false,
+        "use_cavitation" => false,
+        "use_freesurface" => false,
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 0:0.1:10,
+        "tipForceMag" => 0.0,
+        # --- Eigen solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 5,
+        "uSweep" => nothing,
+    )
 
     # ************************************************
     #     Cost functions
@@ -158,7 +199,7 @@ function test_SolveStaticIso()
         DVDict["ab"] = 0 * ones(neval)
         DVDict["x_αb"] = 0 * ones(neval)
         # --- Solve ---
-        costFuncs = SolveStatic.solve(DVDict, evalFuncs, "../OUTPUT")
+        costFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["w_tip"]
         tipTwistData[meshlvl] = costFuncs["psi_tip"]
         meshlvl += 1
@@ -224,6 +265,26 @@ function test_SolveStaticComp()
         "x_αb" => 0 * ones(neval), # static imbalance [m]
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
+    solverOptions = Dict(
+        # --- I/O ---
+        "debug" => false,
+        "outputDir" => "",
+        # --- General solver options ---
+        "tipMass" => false,
+        "use_cavitation" => false,
+        "use_freesurface" => false,
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 0:0.1:10,
+        "tipForceMag" => 0.0,
+        # --- Eigen solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 5,
+        "uSweep" => nothing,
+    )
 
     # ************************************************
     #     Cost functions
@@ -244,7 +305,7 @@ function test_SolveStaticComp()
         DVDict["ab"] = 0 * ones(neval)
         DVDict["x_αb"] = 0 * ones(neval)
         # --- Solve ---
-        costFuncs = SolveStatic.solve(DVDict, evalFuncs, "../OUTPUT")
+        costFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["w_tip"]
         tipTwistData[meshlvl] = costFuncs["psi_tip"]
         meshlvl += 1
@@ -314,7 +375,26 @@ function test_SolveForcedComp()
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
 
-
+    solverOptions = Dict(
+        # --- I/O ---
+        "debug" => false,
+        "outputDir" => "",
+        # --- General solver options ---
+        "tipMass" => false,
+        "use_cavitation" => false,
+        "use_freesurface" => false,
+        # --- Static solve ---
+        "run_static" => false,
+        # --- Forced solve ---
+        "run_forced" => true,
+        "fSweep" => fSweep,
+        "tipForceMag" => tipForceMag,
+        # --- Eigen solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 5,
+        "uSweep" => nothing,
+    )
     # ==============================================================================
     #                         Call Forced Vibration Solver
     # ==============================================================================
@@ -329,7 +409,7 @@ function test_SolveForcedComp()
         DVDict["ab"] = 0 * ones(neval)
         DVDict["x_αb"] = 0 * ones(neval)
         # --- Solve ---
-        TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(DVDict, "../OUTPUT", fSweep, tipForceMag)
+        TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(DVDict, solverOptions)
         tipBendData[meshlvl] = TipBendDyn[1]
         tipTwistData[meshlvl] = TipTwistDyn[1]
         meshlvl += 1
@@ -406,4 +486,76 @@ function test_correlationMetrics()
     p_old_i = imag(p_old)
     p_new_i = imag(p_new)
     SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
+end
+
+# function test_flutter()
+#     """
+#     Test flutter solver
+#     """
+#     SolveFlutter.solve()
+# end
+
+function test_modal()
+    """
+    Test modal solver
+    NOTE: only testing the frequencies bc it is assumed the eigenvector coming out is right
+    """
+    # ************************************************
+    #     Reference solution
+    # ************************************************
+    refDryFreqs = [74.848, 157.680, 469.063, 613.743, 1313.393]
+    refWetFreqs = [19.142, 62.571, 119.878, 243.393, 335.450]
+
+    # ************************************************
+    #     Computed solution
+    # ************************************************
+    neval = 40 # spatial nodes
+
+    # --- Yingqian's Viscous FSI Paper (2019) ---
+    DVDict = Dict(
+        "neval" => neval,
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "material" => "cfrp", # preselect from material library
+        "g" => 0.04, # structural damping percentage
+        "c" => 0.0925 * ones(neval), # chord length [m]
+        "s" => 0.2438, # semispan [m]
+        "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+        "toc" => 0.03459, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(neval), # static imbalance [m]
+        "θ" => deg2rad(0), # fiber angle global [rad]
+    )
+    solverOptions = Dict(
+        # --- I/O ---
+        "debug" => false,
+        "outputDir" => "",
+        # --- General solver options ---
+        "tipMass" => false,
+        "use_cavitation" => false,
+        "use_freesurface" => false,
+        # --- Static solve ---
+        "run_static" => false,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 0:0.1:10,
+        "tipForceMag" => 0.0,
+        # --- Eigen solve ---
+        "run_modal" => true,
+        "run_flutter" => false,
+        "nModes" => 5,
+        "uSweep" => nothing,
+    )
+
+    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(DVDict, solverOptions)
+
+    # ************************************************
+    #     Relative error
+    # ************************************************
+    rel_err1 = LinearAlgebra.norm(structNatFreqs - refDryFreqs, 2) / LinearAlgebra.norm(refDryFreqs, 2)
+    rel_err2 = LinearAlgebra.norm(wetNatFreqs - refWetFreqs, 2) / LinearAlgebra.norm(refWetFreqs, 2)
+    rel_err = max(rel_err1, rel_err2)
+
+    return rel_err
 end

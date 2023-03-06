@@ -8,7 +8,6 @@
 
 using Test
 
-# include("test_BVP.jl") # TODO:
 include("test_struct.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
@@ -46,4 +45,5 @@ include("test_solvers.jl")
     @test test_SolveStaticComp() <= 1e-4 # cfrp hydrofoil
     close(io)
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
+    @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
 end

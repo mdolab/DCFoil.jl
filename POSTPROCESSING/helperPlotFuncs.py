@@ -454,7 +454,7 @@ def plot_vg_vf_rl(
     # Hardcoded settings
     xytext = (-5, 6)
     labelpad = 40
-    legfs = 15
+    legfs = 20
 
     # gLabel = "$g$ [rad/s]"
     # fLabel = "$f$ [rad/s]"
@@ -468,6 +468,7 @@ def plot_vg_vf_rl(
     ax = axes[0, 0]
     xlabel = "$U_{\infty}$ " + f"[{units}]"
     yticks = []
+    emptyModes = []
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)  # color index
 
@@ -508,7 +509,8 @@ def plot_vg_vf_rl(
             )
             yticks.append(gSweep[end])
         except Exception:
-            print(f"Mode {key} empty")
+            emptyModes.append(key)
+    print(f"Empty modes: {emptyModes}")
     ax.set_ylim(top=10)
     ax.set_ylabel(gLabel, rotation=0, labelpad=labelpad)
     ax.set_title("$V$-$g$", pad=labelpad)
@@ -573,7 +575,7 @@ def plot_vg_vf_rl(
                 bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
             )
         except Exception:
-            print(f"Mode {key} empty")
+            continue
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("$V$-$f$", pad=labelpad)
@@ -668,7 +670,7 @@ def plot_vg_vf_rl(
 
             yticks.append(fSweep[0])
         except Exception:
-            print(f"Mode {key} empty")
+            continue
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("Root locus", pad=labelpad)
@@ -723,7 +725,7 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
     sortedModesNumbers = sorted(flutterSol.keys(), key=int)
 
     labelpad = 40
-    legfs = 15
+    legfs = 20
     xytext = (-5, 5)
     flutterColor = "magenta"
 
@@ -734,7 +736,7 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
     # ************************************************
     ax = axes[0]
     xLabel = "$U_{\infty}$ " + f"[{units}]"
-
+    emptyModes = []
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)  # color index
 
@@ -765,7 +767,9 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
                 textcoords="offset points",
             )
         except Exception:
-            print(f"Mode {key} empty")
+            emptyModes.append(key)
+
+    print(f"Empty modes: {emptyModes}")
 
     # --- Put flutter boundary on plot ---
     ax.axhline(
@@ -818,7 +822,7 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
                 textcoords="offset points",
             )
         except Exception:
-            print(f"Mode {key} empty")
+            continue
 
     ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel(xLabel)
