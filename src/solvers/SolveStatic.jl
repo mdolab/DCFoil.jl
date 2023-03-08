@@ -39,7 +39,7 @@ using .SolverRoutines
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(DVDict::Dict, evalFuncs, solverOptions::Dict)
+function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dict)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
     Inputs
@@ -59,10 +59,8 @@ function solve(DVDict::Dict, evalFuncs, solverOptions::Dict)
     #     INITIALIZE
     # ************************************************
     outputDir = solverOptions["outputDir"]
-    neval = DVDict["neval"]
-    global FOIL = InitModel.init_static(neval, DVDict) # seems to only be global in this module
-    nElem = neval - 1
-    constitutive = FOIL.constitutive
+    nNodes = DVDict["nNodes"]
+    global FOIL = InitModel.init_static(nNodes, DVDict) # seems to only be global in this module
 
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
@@ -76,9 +74,7 @@ function solve(DVDict::Dict, evalFuncs, solverOptions::Dict)
     elemType = "BT2"
     loadType = "force"
 
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
-
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
     # if solverOptions["tipMass"]
     #     bulbMass = 2200 #[kg]

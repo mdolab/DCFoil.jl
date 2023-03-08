@@ -38,7 +38,7 @@ U_sweep = 1.0:1.0:40.0
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-neval = 20 # spatial nodes
+nNodes = 20 # spatial nodes
 nModes = 4 # number of modes to solve for;
 df = 1
 dU = 1
@@ -49,18 +49,18 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # --- Foil from Deniz Akcabay's 2020 paper ---
 DVDict = Dict(
-    "neval" => neval,
+    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 29.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
-    "c" => 0.1 * ones(neval), # chord length [m]
+    "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
-    "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(neval), # static imbalance [m]
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => -15 * π / 180, # fiber angle global [rad]
 )
 

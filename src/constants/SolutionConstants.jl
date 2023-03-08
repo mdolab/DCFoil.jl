@@ -18,14 +18,14 @@ using .Hydro, .StructProp
 # ==============================================================================
 mutable struct DCFoilConstants{T<:Float64}
     """
-    This is a catch all mutable struct to store variables that we do not 
+    This is a catch all mutable struct to store variables that we do not
     want in function calls like r(u) or f(u)
 
     """
-    Kmat::Matrix{T} # structural stiffness matrix
-    Mmat::Matrix{T} # structural mass matrix
+    Kmat::Matrix{T} # structural stiffness matrix (after BC blanking)
+    Mmat::Matrix{T} # structural mass matrix (after BC blanking)
     elemType::String
-    mesh::LinRange{T,Int64}
+    mesh::LinRange{T,Int64} # TODO: this might change
     AICmat::Matrix{T} # Aero influence coeff matrix
     mode::String # type of derivative for drdu
     planformArea::T

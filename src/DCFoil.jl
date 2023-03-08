@@ -37,13 +37,17 @@ function run_model(
     # ==============================================================================
     #                         Initializations
     # ==============================================================================
-    # --- Default options ---
+    # ---------------------------
+    #   Default options
+    # ---------------------------
     if isempty(solverOptions)
         solverOptions = set_defaultOptions()
     end
     outputDir = solverOptions["outputDir"]
 
-    # --- Write the DVs and options to output folder ---
+    # ---------------------------
+    #   Write DVs and options
+    # ---------------------------
     stringData = JSON.json(DVDict)
     open(outputDir * "init_DVDict.json", "w") do io
         write(io, stringData)
@@ -53,22 +57,26 @@ function run_model(
         write(io, stringData)
     end
 
-    # --- Initialize the empty cost func and sensitivities dictionary ---
+    # ---------------------------
+    #   Cost functions
+    # ---------------------------
     costFuncs = Dict()
     costFuncSens = Dict()
 
+    # ---------------------------
+    #   Mesh generation
+    # ---------------------------
+    FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    nElem = FOIL.nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
     # --- Write mesh to tecplot for later visualization ---
-    neval = DVDict["neval"]
-    global FOIL = InitModel.init_static(neval, DVDict) # seems to only be global in this module
-    nElem = neval - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     tecplotIO.write_mesh(structMesh, outputDir, "mesh.dat")
 
     # ==============================================================================
     #                         Static hydroelastic solution
     # ==============================================================================
     if solverOptions["run_static"]
-        staticCostFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
+        staticCostFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
         costFuncs = merge(costFuncs, staticCostFuncs)
     end
 
@@ -76,7 +84,7 @@ function run_model(
     #                         Forced vibration solution
     # ==============================================================================
     if solverOptions["run_forced"]
-        forcedCostFuncs = SolveForced.solve(DVDict, solverOptions)
+        forcedCostFuncs = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
         # costFuncs = merge(costFuncs, forcedCostFuncs) TODO: costFuncs
     end
 
@@ -84,10 +92,10 @@ function run_model(
     #                         Flutter solution
     # ==============================================================================
     if solverOptions["run_modal"]
-        SolveFlutter.solve_frequencies(DVDict, solverOptions)
+        SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        flutterCostFuncs = SolveFlutter.solve(DVDict, solverOptions)
+        flutterCostFuncs = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
         # costFuncs = merge(costFuncs, flutterCostFuncs)
     end
 
@@ -104,6 +112,9 @@ function set_defaultOptions()
         "debug" => false,
         "outputDir" => "./OUTPUT/",
         # --- General solver options ---
+        "config" => "wing",
+        "gravityVector" => [0.0, 0.0, -9.81],
+        "rotation" => 0.0, # Rotation of the wing about the x-axis [deg]
         "tipMass" => false,
         "use_cavitation" => false,
         "use_freeSurface" => false,

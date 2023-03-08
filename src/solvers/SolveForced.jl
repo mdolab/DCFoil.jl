@@ -37,7 +37,7 @@ using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 
-function solve(DVDict, solverOptions::Dict)
+function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     """
     Solve
         (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
@@ -50,8 +50,6 @@ function solve(DVDict, solverOptions::Dict)
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
     global FOIL = InitModel.init_dynamic(DVDict; fSweep=fSweep)
-    nElem = FOIL.neval - 1
-    constitutive = FOIL.constitutive
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -63,8 +61,7 @@ function solve(DVDict, solverOptions::Dict)
     elemType = "BT2"
     loadType = "force"
 
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
     # ---------------------------

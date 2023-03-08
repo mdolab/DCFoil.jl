@@ -19,12 +19,12 @@ include("./constants/DesignConstants.jl")
 using .Hydro, .StructProp, .MaterialLibrary
 using .DesignConstants
 
-function init_static(neval::Int64, DVDict::Dict)
+function init_static(nNodes::Int64, DVDict::Dict)
   """
   Initialize a static hydrofoil model
 
   Inputs:
-      neval: Int64, number of evaluation points on span
+      nNodes: Int64, number of evaluation points on span
       DVDict: Dict, dictionary of model parameters, the design variables
 
   returns:
@@ -56,14 +56,14 @@ function init_static(neval::Int64, DVDict::Dict)
   θ::Float64 = DVDict["θ"]
 
   # --- Compute the structural properties for the foil ---
-  EIₛ = zeros(Float64, neval)
-  Kₛ = zeros(Float64, neval)
-  GJₛ = zeros(Float64, neval)
-  Sₛ = zeros(Float64, neval)
-  Iₛ = zeros(Float64, neval)
-  mₛ = zeros(Float64, neval)
+  EIₛ = zeros(Float64, nNodes)
+  Kₛ = zeros(Float64, nNodes)
+  GJₛ = zeros(Float64, nNodes)
+  Sₛ = zeros(Float64, nNodes)
+  Iₛ = zeros(Float64, nNodes)
+  mₛ = zeros(Float64, nNodes)
   # --- Loop over the span ---
-  for ii in 1:neval
+  for ii in 1:nNodes
     section = StructProp.section_property(c[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ)
 
     EIₛ[ii], Kₛ[ii], GJₛ[ii], Sₛ[ii], Iₛ[ii], mₛ[ii] = StructProp.compute_section_property(section, constitutive)
@@ -72,12 +72,12 @@ function init_static(neval::Int64, DVDict::Dict)
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα = Hydro.compute_glauert_circ(semispan=DVDict["s"], chordVec=c, α₀=deg2rad(DVDict["α₀"]), U∞=DVDict["U∞"], neval=neval)
+  clα = Hydro.compute_glauert_circ(semispan=DVDict["s"], chordVec=c, α₀=deg2rad(DVDict["α₀"]), U∞=DVDict["U∞"], nNodes=nNodes)
 
   # ---------------------------
   #   Build final model
   # ---------------------------
-  model = DesignConstants.foil(c, t, DVDict["s"], ab, eb, x_αb, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"], DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["neval"], constitutive)
+  model = DesignConstants.foil(c, t, DVDict["s"], ab, eb, x_αb, mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, DVDict["α₀"], DVDict["U∞"], DVDict["Λ"], g, clα, DVDict["ρ_f"], DVDict["nNodes"], constitutive)
 
   return model
 
@@ -87,9 +87,9 @@ function init_dynamic(DVDict::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
   """
   Perform much of the same initializations as init_static() except with other features
   """
-  staticModel = init_static(DVDict["neval"], DVDict)
+  staticModel = init_static(DVDict["nNodes"], DVDict)
 
-  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.neval, staticModel.constitutive, fSweep, uRange)
+  model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
 
   return model
 end

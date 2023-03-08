@@ -26,7 +26,8 @@ import tecplot as tp
 # Extension modules
 # ==============================================================================
 import niceplots
-import nicetecplots as ntp
+
+# import nicetecplots as ntp
 
 # --- Enable niceplot colors as a list ---
 # plt.style.use(niceplots.get_style())
@@ -59,8 +60,8 @@ def plot_wing(DVDict: dict):
     alpha = 0.5
     fig, ax = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
 
-    neval = DVDict["neval"]
-    y = np.linspace(0, DVDict["s"], neval)
+    nNodes = DVDict["nNodes"]
+    y = np.linspace(0, DVDict["s"], nNodes)
 
     # ax = axes[0]
     # ************************************************
@@ -76,7 +77,7 @@ def plot_wing(DVDict: dict):
     ax.plot(y, ab, c=cm[0], ls="--", alpha=alpha)
     ax.annotate(
         f"E.A.",
-        xy=(y[neval // 2], ab[neval // 2]),
+        xy=(y[nNodes // 2], ab[nNodes // 2]),
         c=cm[0],
         fontsize=legfs,
         xytext=(10, 20),
@@ -96,7 +97,7 @@ def plot_wing(DVDict: dict):
     ax.plot(y, xalpha, c=cm[1], ls="-.", alpha=alpha)
     ax.annotate(
         "C.G.",
-        xy=(y[neval // 3], xalpha[neval // 3]),
+        xy=(y[nNodes // 3], xalpha[nNodes // 3]),
         c=cm[1],
         fontsize=legfs,
         xytext=(10, 20),
@@ -134,8 +135,8 @@ def plot_wing(DVDict: dict):
         + f"{DVDict['θ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
         + f"{DVDict['toc']*100:0.1f}%\n"
-        + f"{neval}\n"
-        + f"{neval*3}"
+        + f"{nNodes}\n"
+        + f"{nNodes*3}"
     )
     ax.annotate(
         geomText,
@@ -229,7 +230,7 @@ def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fn
     return fig, axes
 
 
-def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12):
+def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12):
     """
         Plot the mode shapes for the structural and wet modes
 
@@ -245,26 +246,16 @@ def plot_mode_shapes(y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", 
         stores dry and wet natural frequencies
     ls : str
         Line styles
-    fname : str, optional
-        Filename to save, by default None
+    nshift : int
+        number of nodes to shift the labels by
     """
     # Check if we want to save
 
     eta = y / y[-1]  # Normalized spanwise coordinate
 
-    # Create figure object
+    # Font options
     labelpad = 40
     legfs = 20
-    nrows = 2
-    ncols = 2
-    figsize = (9 * ncols, 4 * nrows)
-    fig, axes = plt.subplots(
-        nrows=nrows,
-        ncols=ncols,
-        sharex=True,
-        constrained_layout=True,
-        figsize=figsize,
-    )
 
     # Unpack data
     structBM = modeShapes["structBM"]
@@ -423,6 +414,7 @@ def plot_vg_vf_rl(
     units="m/s",
     marker=None,
     showRLlabels=False,
+    annotateModes=False,
     nShift=0,
 ):
     """
@@ -498,17 +490,18 @@ def plot_vg_vf_rl(
             start = np.array([vSweep[0 + nShift], gSweep[0 + nShift]])
             end = np.array([vSweep[-1], gSweep[-1]])
             # --- Label mode number on the line ---
-            ax.annotate(
-                f"Mode {ii+1}",
-                xy=(start[0], start[1]),
-                ha="left",
-                # xy=(end[0], end[1]),
-                c=cm[iic],
-                fontsize=legfs,
-                xytext=xytext,
-                textcoords="offset points",
-                # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
-            )
+            if annotateModes:
+                ax.annotate(
+                    f"Mode {ii+1}",
+                    xy=(start[0], start[1]),
+                    ha="left",
+                    # xy=(end[0], end[1]),
+                    c=cm[iic],
+                    fontsize=legfs,
+                    xytext=xytext,
+                    textcoords="offset points",
+                    # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                )
             yticks.append(gSweep[end])
         except Exception:
             emptyModes.append(key)
@@ -565,17 +558,19 @@ def plot_vg_vf_rl(
             else:
                 ha = "left"
                 va = "bottom"
-            ax.annotate(
-                f"Mode {ii+1}",
-                xy=(start[0], start[1]),
-                ha=ha,
-                va=va,
-                c=cm[iic],
-                fontsize=legfs,
-                xytext=xytext,
-                textcoords="offset points",
-                bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
-            )
+
+            if annotateModes:
+                ax.annotate(
+                    f"Mode {ii+1}",
+                    xy=(start[0], start[1]),
+                    ha=ha,
+                    va=va,
+                    c=cm[iic],
+                    fontsize=legfs,
+                    xytext=xytext,
+                    textcoords="offset points",
+                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                )
         except Exception:
             continue
 
@@ -628,17 +623,19 @@ def plot_vg_vf_rl(
                 ha = "left"
                 va = "bottom"
                 xytext = (5, 5)
-            ax.annotate(
-                f"Mode {ii+1}",
-                # xy=(end[0], end[1]),
-                xy=(start[0], start[1]),
-                ha=ha,
-                c=cm[iic],
-                fontsize=legfs,
-                xytext=(5, 5),
-                textcoords="offset points",
-                # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
-            )
+
+            if annotateModes:
+                ax.annotate(
+                    f"Mode {ii+1}",
+                    # xy=(end[0], end[1]),
+                    xy=(start[0], start[1]),
+                    ha=ha,
+                    c=cm[iic],
+                    fontsize=legfs,
+                    xytext=(5, 5),
+                    textcoords="offset points",
+                    # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                )
             if showRLlabels:  # show R-L speed labels
                 ax.annotate(
                     f"{vSweep[0]:.1f}{units}",
@@ -678,7 +675,7 @@ def plot_vg_vf_rl(
     ax.set_title("Root locus", pad=labelpad)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_xlabel(gLabel)
-    ax.set_yticks(yticks)
+    # ax.set_yticks(yticks)
 
     # --- Put flutter boundary on plot ---
     # ax.set_xlim(right=10)

@@ -26,25 +26,25 @@ function test_SolveStaticRigid()
     refBendSol = [0.0000002080248011, 0.0000002068145797, 0.0000002072123383]
     refTwistSol = [0.0000000159776292, 0.0000000160026983, 0.0000000160364539]
 
-    nevals = [10, 20, 40] # list of number of nodes to test
+    nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
-    neval = nevals[1] # spatial nodes
+    nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "rigid", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(neval), # chord length [m]
+        "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(neval), # static imbalance [m]
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
 
@@ -78,17 +78,21 @@ function test_SolveStaticRigid()
     #                         Call Static Solver
     # ==============================================================================
     # Call it for different mesh levels
-    tipBendData = zeros(length(nevals))
-    tipTwistData = zeros(length(nevals))
+    tipBendData = zeros(length(nNodess))
+    tipTwistData = zeros(length(nNodess))
     meshlvl = 1
-    for neval in nevals
+    for nNodes in nNodess
         # --- Resize some stuff ---
-        DVDict["neval"] = neval
-        DVDict["c"] = 0.1 * ones(neval)
-        DVDict["ab"] = 0 * ones(neval)
-        DVDict["x_αb"] = 0 * ones(neval)
+        DVDict["nNodes"] = nNodes
+        DVDict["c"] = 0.1 * ones(nNodes)
+        DVDict["ab"] = 0 * ones(nNodes)
+        DVDict["x_αb"] = 0 * ones(nNodes)
+        # --- Mesh ---
+        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        nElem = nNodes - 1
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
-        costFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
+        costFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["w_tip"]
         tipTwistData[meshlvl] = costFuncs["psi_tip"]
         meshlvl += 1
@@ -108,7 +112,7 @@ function test_SolveStaticRigid()
         write(io, "  meshlvl   | tip bend [m] | tip twist [rad] |\n")
         for tip in tipBendData
             tipTwist = tipTwistData[meshlvl]
-            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nevals[meshlvl], tip, tipTwist)
+            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], tip, tipTwist)
             write(io, line)
             meshlvl += 1
         end
@@ -138,25 +142,25 @@ function test_SolveStaticIso()
     refBendSol = [0.0002080524592060, 0.0002068421525681, 0.0002072400251625]
     refTwistSol = [0.0000159796182303, 0.0000160046939335, 0.0000160384580202]
 
-    nevals = [10, 20, 40] # list of number of nodes to test
+    nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
-    neval = nevals[1] # spatial nodes
+    nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "ss", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(neval), # chord length [m]
+        "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(neval), # static imbalance [m]
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
     solverOptions = Dict(
@@ -189,17 +193,21 @@ function test_SolveStaticIso()
     #                         Call Static Solver
     # ==============================================================================
     # Call it for different mesh levels
-    tipBendData = zeros(length(nevals))
-    tipTwistData = zeros(length(nevals))
+    tipBendData = zeros(length(nNodess))
+    tipTwistData = zeros(length(nNodess))
     meshlvl = 1
-    for neval in nevals
+    for nNodes in nNodess
         # --- Resize some stuff ---
-        DVDict["neval"] = neval
-        DVDict["c"] = 0.1 * ones(neval)
-        DVDict["ab"] = 0 * ones(neval)
-        DVDict["x_αb"] = 0 * ones(neval)
+        DVDict["nNodes"] = nNodes
+        DVDict["c"] = 0.1 * ones(nNodes)
+        DVDict["ab"] = 0 * ones(nNodes)
+        DVDict["x_αb"] = 0 * ones(nNodes)
+        # --- Mesh ---
+        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        nElem = nNodes - 1
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
-        costFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
+        costFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["w_tip"]
         tipTwistData[meshlvl] = costFuncs["psi_tip"]
         meshlvl += 1
@@ -219,7 +227,7 @@ function test_SolveStaticIso()
         write(io, "  meshlvl   | tip bend [m] | tip twist [rad] |\n")
         for tip in tipBendData
             tipTwist = tipTwistData[meshlvl]
-            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nevals[meshlvl], tip, tipTwist)
+            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], tip, tipTwist)
             write(io, line)
             meshlvl += 1
         end
@@ -244,25 +252,25 @@ function test_SolveStaticComp()
     refBendSol = [0.0004975455285840, 0.0004938633758853, 0.0004949057635612]
     refTwistSol = [-0.0008526586938542, -0.0008359901040122, -0.0008387865527998]
 
-    nevals = [10, 20, 40] # list of number of nodes to test
+    nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
-    neval = nevals[1] # spatial nodes
+    nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "cfrp", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(neval), # chord length [m]
+        "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(neval), # static imbalance [m]
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
     solverOptions = Dict(
@@ -295,17 +303,21 @@ function test_SolveStaticComp()
     #                         Call Static Solver
     # ==============================================================================
     # Call it for different mesh levels
-    tipBendData = zeros(length(nevals))
-    tipTwistData = zeros(length(nevals))
+    tipBendData = zeros(length(nNodess))
+    tipTwistData = zeros(length(nNodess))
     meshlvl = 1
-    for neval in nevals
+    for nNodes in nNodess
         # --- Resize some stuff ---
-        DVDict["neval"] = neval
-        DVDict["c"] = 0.1 * ones(neval)
-        DVDict["ab"] = 0 * ones(neval)
-        DVDict["x_αb"] = 0 * ones(neval)
+        DVDict["nNodes"] = nNodes
+        DVDict["c"] = 0.1 * ones(nNodes)
+        DVDict["ab"] = 0 * ones(nNodes)
+        DVDict["x_αb"] = 0 * ones(nNodes)
+        # --- Mesh ---
+        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        nElem = nNodes - 1
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
-        costFuncs = SolveStatic.solve(DVDict, evalFuncs, solverOptions)
+        costFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["w_tip"]
         tipTwistData[meshlvl] = costFuncs["psi_tip"]
         meshlvl += 1
@@ -325,7 +337,7 @@ function test_SolveStaticComp()
         write(io, "  meshlvl   | tip bend [m] | tip twist [rad] |\n")
         for tip in tipBendData
             tipTwist = tipTwistData[meshlvl]
-            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nevals[meshlvl], tip, tipTwist)
+            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], tip, tipTwist)
             write(io, line)
             meshlvl += 1
         end
@@ -351,27 +363,27 @@ function test_SolveForcedComp()
     Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
-    nevals = [10, 20, 40] # list of number of nodes to test
+    nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
-    neval = nevals[1] # spatial nodes
+    nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     fSweep = 0.01:0.1:10
     tipForceMag = 1.0
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "cfrp", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(neval), # chord length [m]
+        "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(neval), # static imbalance [m]
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => 15 * π / 180, # fiber angle global [rad]
     )
 
@@ -399,17 +411,21 @@ function test_SolveForcedComp()
     #                         Call Forced Vibration Solver
     # ==============================================================================
     # Call it for different mesh levels
-    tipBendData = zeros(length(nevals))
-    tipTwistData = zeros(length(nevals))
+    tipBendData = zeros(length(nNodess))
+    tipTwistData = zeros(length(nNodess))
     meshlvl = 1
-    for neval in nevals
+    for nNodes in nNodess
         # --- Resize some stuff ---
-        DVDict["neval"] = neval
-        DVDict["c"] = 0.1 * ones(neval)
-        DVDict["ab"] = 0 * ones(neval)
-        DVDict["x_αb"] = 0 * ones(neval)
+        DVDict["nNodes"] = nNodes
+        DVDict["c"] = 0.1 * ones(nNodes)
+        DVDict["ab"] = 0 * ones(nNodes)
+        DVDict["x_αb"] = 0 * ones(nNodes)
+        # --- Mesh ---
+        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        nElem = nNodes - 1
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
-        TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(DVDict, solverOptions)
+        TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
         tipBendData[meshlvl] = TipBendDyn[1]
         tipTwistData[meshlvl] = TipTwistDyn[1]
         meshlvl += 1
@@ -430,7 +446,7 @@ function test_SolveForcedComp()
         write(io, "  meshlvl   | tip bend [m] | tip twist [rad] |\n")
         for tip in tipBendData
             tipTwist = tipTwistData[meshlvl]
-            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nevals[meshlvl], tip, tipTwist)
+            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], tip, tipTwist)
             write(io, line)
             meshlvl += 1
         end
@@ -488,6 +504,10 @@ function test_correlationMetrics()
     SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
 end
 
+function test_modeSpace()
+    """
+    """
+end
 # function test_flutter()
 #     """
 #     Test flutter solver
@@ -509,22 +529,22 @@ function test_modal()
     # ************************************************
     #     Computed solution
     # ************************************************
-    neval = 40 # spatial nodes
+    nNodes = 40 # spatial nodes
 
     # --- Yingqian's Viscous FSI Paper (2019) ---
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "cfrp", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 0.0925 * ones(neval), # chord length [m]
+        "c" => 0.0925 * ones(nNodes), # chord length [m]
         "s" => 0.2438, # semispan [m]
-        "ab" => 0 * ones(neval), # dist from midchord to EA [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.03459, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(neval), # static imbalance [m]
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(0), # fiber angle global [rad]
     )
     solverOptions = Dict(
@@ -547,8 +567,11 @@ function test_modal()
         "nModes" => 5,
         "uSweep" => nothing,
     )
-
-    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(DVDict, solverOptions)
+    # --- Mesh ---
+    FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    nElem = nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
 
     # ************************************************
     #     Relative error

@@ -312,30 +312,70 @@ Module with generic FEM methods
 using LinearAlgebra
 using ..LinearBeamElem
 include("../solvers/SolverRoutines.jl")
+include("../constants/SolutionConstants.jl")
 using .SolverRoutines
+using .SolutionConstants
 
-function make_mesh(nElem::Int64, foil)
+function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
     """
-    Makes a mesh and element connectivity from root to tip with root as origin
-
+    Makes a mesh and element connectivity
+    First element is always origin
+    Inputs
+    ------
+    nElem: number of elements
+    FOIL: struct with foil properties
+    config: "wing" or "t-foil"
+    rotation: rotation of the foil in degrees
     Outputs
     -------
     mesh
         (nNodes, nDim) array
     elemConn
-
+        (nElem, nNodesPerElem) array
     """
-
-    println("Right now only 1D mesh in y dir...")
-
-    mesh = LinRange(0, foil.s, nElem + 1)
+    mesh = Array{Float64}(undef, nElem + 1, 3)
     elemConn = Array{Int64}(undef, nElem, 2)
-    for ii ∈ 1:nElem
-        elemConn[ii, 1] = ii
-        elemConn[ii, 2] = ii + 1
+    rot = deg2rad(rotation)
+    if config == "wing"
+        if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
+            println("Right now only 1D mesh in y dir...")
+            mesh = LinRange(0, FOIL.s, nElem + 1)
+            for ii ∈ 1:nElem
+                elemConn[ii, 1] = ii
+                elemConn[ii, 2] = ii + 1
+            end
+        else
+            # Set up a line mesh
+            mesh[:, 1] = LinRange(0, FOIL.s, nElem + 1)
+            for nodeIdx in 1:nElem+1 # loop nodes and rotate
+                mesh[nodeIdx, :] = rotate3d(mesh[nodeIdx, :], rot; axis="x")
+            end
+        end
+    elseif config == "t-foil"
+        mesh
     end
-
     return mesh, elemConn
+
+end
+
+function rotate3d(dataVec, rot; axis="x")
+    """
+    Rotates a 3D vector about x-axis by rot radians
+    """
+    rotMat = Array{Float64}(undef, 3, 3)
+    c = cos(rot)
+    s = sin(rot)
+    if axis == "x"
+        rotMat = [
+            1 0 0
+            0 c -s
+            0 s c
+        ]
+    else
+        println("Only x-axis rotation implemented")
+    end
+    transformedVec = rotMat * dataVec
+    return transformedVec
 end
 
 function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive="isotropic")

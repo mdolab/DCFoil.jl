@@ -27,45 +27,42 @@ debug = false
 tipMass = false
 
 # Uncomment here
-run_static = true
+# run_static = true
 # run_forced = true
-# run_modal = true
-# run_flutter = true
+run_modal = true
+run_flutter = true
 debug = true
 # tipMass = true
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-neval = 10 # spatial nodes
-nModes = 3 # number of modes to solve for;
+nNodes = 20 # spatial nodes
+nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 df = 1
-fSweep = 0.1:df:600.0 # forcing frequency [Hz] sweep
-uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-# uRange = 2.0:dU:25.0 # flow speed [m/s] sweep for flutter
+fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+# uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
+uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 
-# --- IMOCA 60 bulb keel ---
 DVDict = Dict(
-    "name" => "IMOCA60Keel",
-    "neval" => neval,
+    "name" => "akcabay-swept",
+    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 50.0 / 1.9438, # free stream velocity [m/s]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
-    "ρ_f" => 1025.0, # fluid density [kg/m³]
-    # "material" => "ss", # preselect from material library
-    # "toc" => 0.1, # thickness-to-chord ratio
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
-    "toc" => 0.15, # thickness-to-chord ratio
     "g" => 0.04, # structural damping percentage
-    "c" => 0.65 * ones(neval), # chord length [m]
-    "s" => 4.0, # semispan [m]
-    "ab" => 0 * ones(neval), # dist from midchord to EA [m]
-    "x_αb" => 0 * ones(neval), # static imbalance [m]
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12, # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
 )
 
@@ -95,6 +92,9 @@ solverOptions = Dict(
     "debug" => debug,
     "outputDir" => outputDir,
     # --- General solver options ---
+    "config" => "wing",
+    "rotation" => 0.0, # deg
+    "gravityVector" => [0.0, 0.0, -9.81],
     "tipMass" => tipMass,
     "use_freeSurface" => false,
     "use_cavitation" => false,
@@ -118,6 +118,6 @@ costFuncs = DCFoil.run_model(
     DVDict,
     evalFuncs;
     # --- Optional args ---
-    solverOptions=solverOptions,
+    solverOptions=solverOptions
 )
 

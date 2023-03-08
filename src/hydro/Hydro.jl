@@ -58,7 +58,7 @@ function compute_theodorsen(k)
     return ans
 end
 
-function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothing, useFS=false)
+function compute_glauert_circ(; semispan, chordVec, α₀, U∞, nNodes, h=nothing, useFS=false)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -79,7 +79,7 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothin
         α₀: float, angle of attack [rad]
 
     returns:
-        cl_α : array, shape (neval,)
+        cl_α : array, shape (nNodes,)
             sectional lift slopes for a 3D wing [rad⁻¹] starting from the root
             sometimes denoted in literature as 'a₀'
 
@@ -91,7 +91,7 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothin
     by Justin Kerwin & Jacques Hadler
     """
 
-    ỹ = π / 2 * ((1:1:neval) / neval) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
+    ỹ = π / 2 * ((1:1:nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
     y = -semispan * cos.(ỹ) # the physical coordinate (y) is only calculated to the root (-semispan, 0)
 
     # ---------------------------
@@ -102,14 +102,14 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothin
     # --- Elliptical planform ---
     chordₚ = chordVec .* sin.(ỹ) # parametrized chord goes from 0 to the original chord value from tip to root...corresponds to amount of downwash w(y)?
 
-    n = (1:1:neval) * 2 - ones(neval) # node numbers x2 (node multipliers)
+    n = (1:1:nNodes) * 2 - ones(nNodes) # node numbers x2 (node multipliers)
 
     b = π / 4 * (chordₚ / semispan) * α₀ .* sin.(ỹ) # RHS vector
 
     ỹn = ỹ .* n' # outer product of ỹ and n, matrix of [0, π/2]*node multipliers
 
-    sinỹ_mat = repeat(sin.(ỹ), outer=[1, neval]) # parametrized square matrix where the columns go from 0 to 1
-    chord_ratio_mat = π / 4 * chordₚ / semispan .* n' # outer product of [0,...,tip chord-semispan ratio] and [1:2:neval*2-1] so the columns are the chord-span ratio vector times node multipliers with π/4 in front
+    sinỹ_mat = repeat(sin.(ỹ), outer=[1, nNodes]) # parametrized square matrix where the columns go from 0 to 1
+    chord_ratio_mat = π / 4 * chordₚ / semispan .* n' # outer product of [0,...,tip chord-semispan ratio] and [1:2:nNodes*2-1] so the columns are the chord-span ratio vector times node multipliers with π/4 in front
 
     chord11 = sin.(ỹn) .* (chord_ratio_mat + sinỹ_mat) #matrix-matrix multiplication to get the [A] matrix
 
@@ -127,7 +127,7 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, neval, h=nothin
 
     # --- Interpolate lift slopes onto domain ---
     # pGlauert = plot(LinRange(0, 2.7, 250), clα)
-    cl_α = linear(y, clα, LinRange(-semispan, 0, neval)) # Use BYUFLOW lab math function
+    cl_α = linear(y, clα, LinRange(-semispan, 0, nNodes)) # Use BYUFLOW lab math function
 
     return reverse!(cl_α)
 end
@@ -302,7 +302,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     # ---------------------------
     for yⁿ ∈ mesh
         # --- compute strip width ---
-        if jj < FOIL.neval
+        if jj < FOIL.nNodes
             Δy = mesh[jj+1] - mesh[jj]
         else
             Δy = mesh[jj] - mesh[jj-1]
@@ -414,14 +414,14 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
         # --- compute strip width ---
         # TODO: the first and last strip have half width
         Δy = 0.0
-        if jj < FOIL.neval
+        if jj < FOIL.nNodes
             Δy = mesh[jj+1] - mesh[jj]
             if jj == 1
                 Δy = Δy / 2
             end
         else
             Δy = mesh[jj] - mesh[jj-1]
-            if jj == FOIL.neval
+            if jj == FOIL.nNodes
                 Δy = Δy / 2
             end
         end
@@ -503,7 +503,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="b
     #   Initializations
     # ---------------------------
     foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, FOIL, elemType)
-    nGDOF = FOIL.neval * nDOF
+    nGDOF = FOIL.nNodes * nDOF
 
     # ---------------------------
     #   Strip theory
@@ -541,7 +541,6 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
     foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, DFOIL, elemType)
-    # nGDOF = DFOIL.neval * nDOF
 
     # --- Strip theory ---
     # This is the hydro force traction vector
