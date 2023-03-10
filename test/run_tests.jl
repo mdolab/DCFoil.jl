@@ -4,6 +4,8 @@
 @Time    :   2022/07/15
 @Author  :   Galen Ng, Sicheng He
 @Desc    :   Run the test files
+Some big picture notes:
+TODO: look into setting up inital data for these tests?
 """
 
 using Test
