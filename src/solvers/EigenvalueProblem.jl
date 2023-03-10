@@ -5,7 +5,8 @@ using LinearAlgebra
 
 function compute_eigsolve(K, M, nEig; issym=true)
 
-    # TODO: ok this is most definitely NOT the way it should be in the production version because this is super expensive but whatever
+    # TODO: ok this is most definitely NOT the way it should be in the production version because this
+    # is super expensive but whatever
     # eigsorter = :SR # smallest real part
     # eigsorter = KrylovKit.EigSorter(abs; rev=false)
     # I THINK THE CODE HERE IS BROKEN TRY OTEHRS

@@ -1,5 +1,5 @@
 """
-Special Newton-Rhapson solver
+Newton-Rhapson solver
 """
 module NewtonRhapson
 
@@ -92,11 +92,11 @@ function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200
                 global iters = copy(ii)
             end
         end
-        
+
     elseif is_cmplx
         uUnfolded = [real(u0); imag(u0)]
         for ii in 1:maxIters
-            # NOTE: these functions handle a complex input but return the unfolded output 
+            # NOTE: these functions handle a complex input but return the unfolded output
             # (i.e., concatenation of real and imag)
             res = compute_residuals(uUnfolded)
             ∂r∂u = compute_∂r∂u(uUnfolded, mode)

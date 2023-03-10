@@ -51,7 +51,6 @@ if __name__ == "__main__":
         dataDir = f"{analysisDir}{speed:.1f}/"
         funcs = json.load(f"{dataDir}/static/funcs.json")
 
-
     dosave = not not fname
 
     plt.style.use(niceplots.get_style())  # all settings

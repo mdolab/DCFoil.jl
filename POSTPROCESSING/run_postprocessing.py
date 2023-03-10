@@ -27,7 +27,7 @@ from tabulate import tabulate
 # Extension modules
 # ==============================================================================
 import niceplots
-from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals
+from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals, find_DivAndFlutterPoints
 from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf, plot_forced
 
 # ==============================================================================
@@ -35,13 +35,15 @@ from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf
 # ==============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--case", type=str, default=None)
+    # parser.add_argument("--cases", type=str, default=None)
+    parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--is_static", action="store_true", default=False)
     parser.add_argument("--is_forced", action="store_true", default=False)
     parser.add_argument("--is_modal", action="store_true", default=False)
     parser.add_argument("--is_flutter", action="store_true", default=False)
-    parser.add_argument("--debug_plots", action="store_true", default=False)
+    parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
+    parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
     args = parser.parse_args()
     # Echo the args
     print(30 * "-")
@@ -55,10 +57,14 @@ if __name__ == "__main__":
     # ************************************************
     # Input data read directory
     dataDir = "../OUTPUT/"
-    if args.case is not None:
-        dataDir += args.case
+    caseDirs = []
+    if args.cases is not None:
+        for case in args.cases:
+            caseDirs.append(dataDir + case)
+    else:
+        raise ValueError("Please specify a case to run postprocessing on")
     # Output plot directory
-    outputDir = f"./PLOTS/{args.case}/"
+    outputDir = f"./PLOTS/{args.cases[0]}/"
     if args.output is not None:
         outputDir += args.output
     # Create output directory if it doesn't exist
@@ -67,16 +73,21 @@ if __name__ == "__main__":
     # ************************************************
     #     Read in results
     # ************************************************
-    # --- Read in DVDict ---
-    DVDict = json.load(open(f"{dataDir}/init_DVDict.json"))
-    # --- Read in funcs ---
-    try:
-        funcs = json.load(open(f"{dataDir}/funcs.json"))
-    except:
-        funcs = None
-        print("No funcs.json file found.")
+    DVDictDict = {}
+    funcsDict = {}
 
-    nodes = np.linspace(0, DVDict["s"], DVDict["neval"], endpoint=True)
+    for ii, caseDir in enumerate(caseDirs):
+        key = args.cases[ii]
+        # --- Read in DVDict ---
+        DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        # --- Read in funcs ---
+        try:
+            funcsDict[key] = json.load(open(f"{caseDir}/funcs.json"))
+        except FileNotFoundError:
+            funcs = None
+            print("No funcs.json file found...")
+
+        nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
 
     # ************************************************
     #     Plot settings
@@ -84,7 +95,7 @@ if __name__ == "__main__":
     plt.style.use(niceplots.get_style("doumont-light"))  # all settings
     # --- Adjust default options for matplotlib ---
     myOptions = {
-        "font.size": 20,
+        "font.size": 25,
         "font.family": "sans-serif",
         # "font.sans-serif": ["Helvetica"],
         # "text.usetex": True,
@@ -98,8 +109,8 @@ if __name__ == "__main__":
     }
     plt.rcParams.update(myOptions)
 
-    # # Linestyles
-    # ls = ["-", "--", "-.", ":"]
+    # Linestyles
+    ls = ["-", "--", "-.", ":"]
     # ==============================================================================
     #                         READ IN DATA
     # ==============================================================================
@@ -111,21 +122,28 @@ if __name__ == "__main__":
         #     Read in data
         # ************************************************
         print("Reading in static hydroelastic data")
-        # --- Read bending ---
-        fname = f"{dataDir}/bending.dat"
-        bending = np.loadtxt(fname)
+        bendingDict = {}
+        twistingDict = {}
+        liftDict = {}
+        momentDict = {}
 
-        # --- Read twisting ---
-        fname = f"{dataDir}/twisting.dat"
-        twisting = readlines(fname)
+        for ii, caseDir in enumerate(caseDirs):
+            key = args.cases[ii]
+            # --- Read bending ---
+            fname = f"{caseDir}/bending.dat"
+            bendingDict[key] = np.loadtxt(fname)
 
-        # --- Read lift ---
-        fname = f"{dataDir}/lift.dat"
-        lift = np.loadtxt(fname)
+            # --- Read twisting ---
+            fname = f"{caseDir}/twisting.dat"
+            twistingDict[key] = readlines(fname)
 
-        # --- Read moment ---
-        fname = f"{dataDir}/moment.dat"
-        moment = np.loadtxt(fname)
+            # --- Read lift ---
+            fname = f"{caseDir}/lift.dat"
+            liftDict[key] = np.loadtxt(fname)
+
+            # --- Read moment ---
+            fname = f"{caseDir}/moment.dat"
+            momentDict[key] = np.loadtxt(fname)
 
     # ************************************************
     #     Dynamic hydroelastic
@@ -155,41 +173,68 @@ if __name__ == "__main__":
         #     Read in data
         # ************************************************
         print("Reading in modal data...")
-        structJLData = load_jld(f"{dataDir}/modal/structModal.jld")
-        wetJLData = load_jld(f"{dataDir}/modal/wetModal.jld")
 
-        # NOTE: Julia stores data in column major order so it is transposed
-        structNatFreqs = np.asarray(structJLData["structNatFreqs"])
-        structModes = np.asarray(structJLData["structModeShapes"])
-        wetNatFreqs = np.asarray(wetJLData["wetNatFreqs"])
-        wetModes = np.asarray(wetJLData["wetModeShapes"])
+        structNatFreqsDict = {}
+        structBendModesDict = {}
+        structTwistModesDict = {}
+        wetNatFreqsDict = {}
+        wetBendModesDict = {}
+        wetTwistModesDict = {}
 
-        # Turn into the right states
-        nModes = structModes.shape[0]
-        nDOF = 4  # TODO: should be an option somehow
-        structBendModes = np.zeros((nModes, DVDict["neval"]))
-        structTwistModes = np.zeros((nModes, DVDict["neval"]))
-        wetBendModes = np.zeros((nModes, DVDict["neval"]))
-        wetTwistModes = np.zeros((nModes, DVDict["neval"]))
-        for ii in range(nModes):
-            structBendModes[ii, :], structTwistModes[ii, :] = get_bendingtwisting(structModes[ii, :], nDOF=nDOF)
-            wetBendModes[ii, :], wetTwistModes[ii, :] = get_bendingtwisting(wetModes[ii, :], nDOF=nDOF)
+        for ii, caseDir in enumerate(caseDirs):
+            key = args.cases[ii]
+            DVDict = DVDictDict[key]
+
+            structJLData = load_jld(f"{caseDir}/modal/structModal.jld")
+            wetJLData = load_jld(f"{caseDir}/modal/wetModal.jld")
+
+            # NOTE: Julia stores data in column major order so it is transposed
+            structNatFreqsDict[key] = np.asarray(structJLData["structNatFreqs"])
+            structModes = np.asarray(structJLData["structModeShapes"])
+            wetNatFreqsDict[key] = np.asarray(wetJLData["wetNatFreqs"])
+            wetModes = np.asarray(wetJLData["wetModeShapes"])
+
+            # Turn into the right states
+            nModes = structModes.shape[0]
+            nDOF = 4  # TODO: should be an option somehow
+            structBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+            structTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+            wetBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+            wetTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+            for ii in range(nModes):
+                structBendModesDict[key][ii, :], structTwistModesDict[key][ii, :] = get_bendingtwisting(
+                    structModes[ii, :], nDOF=nDOF
+                )
+                wetBendModesDict[key][ii, :], wetTwistModesDict[key][ii, :] = get_bendingtwisting(
+                    wetModes[ii, :], nDOF=nDOF
+                )
 
     if args.is_flutter:
-        # --- Read in data ---
+        # ************************************************
+        #     Read in data
+        # ************************************************
         print("Reading in flutter data...")
 
-        # Remember to transpose data since Julia stores in column major order
-        eigs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_i.jld")["data"]).T / (2 * np.pi)  # put in units of Hz
-        eigs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigs_r.jld")["data"]).T / (2 * np.pi)  # put in units of Hz
-        evecs_i = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigenvectors_i.jld")["data"]).T
-        evecs_r = np.asarray(load_jld(f"{dataDir}/pkFlutter/eigenvectors_r.jld")["data"]).T
-        flowHistory = np.asarray(load_jld(f"{dataDir}/pkFlutter/flowHistory.jld")["data"]).T
-        iblank = np.asarray(load_jld(f"{dataDir}/pkFlutter/iblank.jld")["data"]).T
+        flutterSolDict = {}
+        instabPtsDict = {}
+        for ii, caseDir in enumerate(caseDirs):
+            key = args.cases[ii]
+            # Remember to transpose data since Julia stores in column major order
+            eigs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_i.jld")["data"]).T / (
+                2 * np.pi
+            )  # put in units of Hz
+            eigs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_r.jld")["data"]).T / (
+                2 * np.pi
+            )  # put in units of Hz
+            evecs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_i.jld")["data"]).T
+            evecs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_r.jld")["data"]).T
+            flowHistory = np.asarray(load_jld(f"{caseDir}/pkFlutter/flowHistory.jld")["data"]).T
+            iblank = np.asarray(load_jld(f"{caseDir}/pkFlutter/iblank.jld")["data"]).T
 
-        flutterSol = postprocess_flutterevals(
-            iblank, flowHistory[:, 1], flowHistory[:, 0], flowHistory[:, 2], eigs_r, eigs_i
-        )
+            flutterSolDict[key] = postprocess_flutterevals(
+                iblank, flowHistory[:, 1], flowHistory[:, 0], flowHistory[:, 2], eigs_r, eigs_i
+            )
+            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
         # ************************************************
         #     Debug code
         # ************************************************
@@ -264,15 +309,19 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         Plot results
     # ==============================================================================
-    fname = f"{outputDir}/wing-geom.pdf"
-    fig, axes = plot_wing(DVDict)
 
-    dosave = not not fname
-    plt.show(block=(not dosave))
-    if dosave:
-        plt.savefig(fname, format="pdf")
-        print("Saved to:", fname)
-    plt.close()
+    # Default visualize wing geometry
+    for key in args.cases:
+        fname = f"{outputDir}/wing-geom-{key}.pdf"
+        DVDict = DVDictDict[key]
+        fig, axes = plot_wing(DVDict)
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
 
     if args.is_static:
         fname = f"{outputDir}/static_spanwise.pdf"
@@ -354,26 +403,41 @@ if __name__ == "__main__":
         # --- File name ---
         fname = f"{outputDir}/modal-struct.pdf"
 
-        # --- Pack up data to plot ---
-        modeShapeData = {
-            "structBM": structBendModes,
-            "structTM": structTwistModes,
-            "wetBM": wetBendModes,
-            "wetTM": wetTwistModes,
-        }
-        modeFreqData = {
-            "structNatFreqs": structNatFreqs,
-            "wetNatFreqs": wetNatFreqs,
-        }
-
-        # --- Plot ---
-        fig, axes = plot_mode_shapes(
-            y=nodes,
-            nModes=nModes,
-            modeShapes=modeShapeData,
-            modeFreqs=modeFreqData,
-            ls="-",
+        # Create figure object
+        nrows = 2
+        ncols = 2
+        figsize = (9 * ncols, 4 * nrows)
+        fig, axes = plt.subplots(
+            nrows=nrows,
+            ncols=ncols,
+            sharex=True,
+            constrained_layout=True,
+            figsize=figsize,
         )
+        for ii, key in enumerate(args.cases):
+
+            # --- Pack up data to plot ---
+            modeShapeData = {
+                "structBM": structBendModesDict[key],
+                "structTM": structTwistModesDict[key],
+                "wetBM": wetBendModesDict[key],
+                "wetTM": wetTwistModesDict[key],
+            }
+            modeFreqData = {
+                "structNatFreqs": structNatFreqsDict[key],
+                "wetNatFreqs": wetNatFreqsDict[key],
+            }
+
+            # --- Plot ---
+            fig, axes = plot_mode_shapes(
+                fig,
+                axes,
+                y=nodes,
+                nModes=nModes,
+                modeShapes=modeShapeData,
+                modeFreqs=modeFreqData,
+                ls=ls[ii],
+            )
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -389,28 +453,37 @@ if __name__ == "__main__":
         # --- File name ---
         fname = f"{outputDir}/vg_vf_rl.pdf"
 
-        # --- Plot ---
         # Create figure object
         fact = 1  # scale size
         figsize = (18 * fact, 13 * fact)
         fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
-        fig, axes = plot_vg_vf_rl(
-            fig,
-            axes,
-            flutterSol=flutterSol,
-            ls="-",
-            units="kts",
-            # marker="o",
-            showRLlabels=True,
-            nShift=1000,
-        )
+        for ii, key in enumerate(args.cases):
+            if ii == 0:
+                annotateModes = True
+            else:
+                annotateModes = False
+            # --- Plot ---
+            fig, axes = plot_vg_vf_rl(
+                fig,
+                axes,
+                flutterSol=flutterSolDict[key],
+                ls=ls[ii],
+                # units="kts",
+                # marker="o",
+                showRLlabels=True,
+                annotateModes=annotateModes,
+                nShift=50,
+            )
 
-        # --- Set limits ---
-        axes[0, 0].set_ylim(top=1, bottom=-5)
-        axes[0, 0].set_xlim(right=50, left=5)
-        axes[1, 1].set_xlim(right=1, left=-5)
-        axes[1, 1].set_ylim(top=20, bottom=0)
-        axes[1, 1].set_yticks(np.arange(0, 21, 2))
+            # # --- Set limits ---
+            # axes[0,0].set_ylim(top=20)
+            # axes[0,0].set_xlim(right=40, left=25)
+            axes[0, 0].set_ylim(top=10)
+            axes[0, 0].set_xlim(right=190, left=170)
+            # axes[0, 0].set_ylim(top=1, bottom=-5)
+            # axes[0, 0].set_xlim(right=50, left=5)
+            # axes[1, 1].set_xlim(right=1, left=-5)
+            # axes[1, 1].set_ylim(top=20, bottom=0)
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -425,25 +498,26 @@ if __name__ == "__main__":
         # --- File name ---
         fname = f"{outputDir}/dlf.pdf"
 
-        # --- Plot ---
         # Create figure object
         fact = 1  # scale size
         figsize = (18 * fact, 6 * fact)
         fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
-        fig, axes = plot_dlf(
-            fig,
-            axes,
-            flutterSol=flutterSol,
-            semichord=0.5 * np.mean(DVDict["c"]),
-            sweepAng=DVDict["Λ"],
-            ls="-",
-            units="kts",
-            nShift=500,
-        )
-        axes[0].set_ylim(-0.1, 0.8)
-        axes[0].set_xlim(right=50, left=5)
-        # axes[1].set_ylim(-0.1, 1.2)
-        # axes[1].set_xlim(left=10)
+        for ii, key in enumerate(args.cases):
+            # --- Plot ---
+            fig, axes = plot_dlf(
+                fig,
+                axes,
+                flutterSol=flutterSolDict[key],
+                semichord=0.5 * np.mean(DVDictDict[key]["c"]),
+                sweepAng=DVDictDict[key]["Λ"],
+                ls="-",
+                units="kts",
+                nShift=500,
+            )
+            axes[0].set_ylim(-0.1, 0.8)
+            axes[0].set_xlim(right=50, left=5)
+            # axes[1].set_ylim(-0.1, 1.2)
+            # axes[1].set_xlim(left=10)
 
         dosave = not not fname
         plt.show(block=(not dosave))

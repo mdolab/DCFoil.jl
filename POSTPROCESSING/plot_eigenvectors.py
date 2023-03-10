@@ -70,8 +70,8 @@ if __name__ == "__main__":
     f = load_jld(dataDir + f"sorted-eigenvectors-002.jld")
     sorted_evec_r = np.asarray(f["evec_r"]).T
     nmodes = sorted_evec_r.shape[1]  # number of modes is number of columns
-    neval = sorted_evec_r.shape[0] // 2  # number of eigenvalues is number of rows
-    ybar = np.linspace(0, 1, neval)
+    nNodes = sorted_evec_r.shape[0] // 2  # number of eigenvalues is number of rows
+    ybar = np.linspace(0, 1, nNodes)
     fig, axes = plt.subplots(
         nrows=nmodes, ncols=2, sharex=True, sharey=True, constrained_layout=True, figsize=(14, 5 * nmodes)
     )
@@ -81,10 +81,10 @@ if __name__ == "__main__":
         sorted_evec_i = np.asarray(f["evec_i"]).T
         for mode in range(nmodes):
             ax = axes[mode, 0]
-            ax.plot(ybar, sorted_evec_r[:neval, mode], label="Real", c=cm[nFlow])
+            ax.plot(ybar, sorted_evec_r[:nNodes, mode], label="Real", c=cm[nFlow])
             ax.set_ylabel(f"Mode {mode+1}", rotation=0, labelpad=40)
             ax = axes[mode, 1]
-            ax.plot(ybar, sorted_evec_i[:neval, mode], label="Imag", c=cm[nFlow])
+            ax.plot(ybar, sorted_evec_i[:nNodes, mode], label="Imag", c=cm[nFlow])
     axes[0, 0].set_title("Real")
     axes[0, 1].set_title("Imag")
     for ax in axes.flatten():

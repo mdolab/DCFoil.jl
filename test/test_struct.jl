@@ -171,25 +171,25 @@ function test_FiniteElementIso()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
-    neval = 30
+    nNodes = 30
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 30.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "test-iso", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 1 * ones(neval), # chord length [m]
+        "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
-        "ab" => zeros(neval), # dist from midchord to EA [m]
+        "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
-        "x_αb" => zeros(neval), # static imbalance [m]
+        "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
     )
-    foil = InitModel.init_static(neval, DVDict)
+    foil = InitModel.init_static(nNodes, DVDict)
 
-    nElem = neval - 1
+    nElem = nNodes - 1
     constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
     structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
     # ************************************************
@@ -250,25 +250,25 @@ function test_FiniteElementComp()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
-    neval = 30
+    nNodes = 30
     DVDict = Dict(
-        "neval" => neval,
+        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 30.0 * π / 180, # sweep angle [rad]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "material" => "test-comp", # preselect from material library
         "g" => 0.04, # structural damping percentage
-        "c" => 1 * ones(neval), # chord length [m]
+        "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
-        "ab" => zeros(neval), # dist from midchord to EA [m]
+        "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
-        "x_αb" => zeros(neval), # static imbalance [m]
+        "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
     )
-    foil = InitModel.init_static(neval, DVDict)
+    foil = InitModel.init_static(nNodes, DVDict)
 
-    nElem = neval - 1
+    nElem = nNodes - 1
     constitutive = foil.constitutive
     structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
     # ************************************************

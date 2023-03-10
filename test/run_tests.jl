@@ -4,11 +4,12 @@
 @Time    :   2022/07/15
 @Author  :   Galen Ng, Sicheng He
 @Desc    :   Run the test files
+Some big picture notes:
+TODO: look into setting up inital data for these tests?
 """
 
 using Test
 
-# include("test_BVP.jl") # TODO:
 include("test_struct.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
@@ -38,11 +39,13 @@ include("test_solvers.jl")
     # ************************************************
     #     Solver tests
     # ************************************************
-    # Really just looking to see if the solver works
-    io = open("test.out", "w")
+    # --- Mesh convergence tests ---
+    io = open("testConv.out", "w")
     @test test_SolveStaticRigid() <= 1e-4 # rigid hydrofoil solve
     @test test_SolveStaticIso() <= 1e-4 # ss hydrofoil solve
     @test test_SolveStaticComp() <= 1e-4 # cfrp hydrofoil
-    # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     close(io)
+    # @test test_SolveForcedComp() <= 1e-12 # not ready yet
+    @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
+    @test test_flutter() <= 1e-5 # flutter analysis of cfrp
 end

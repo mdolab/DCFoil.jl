@@ -55,7 +55,18 @@ function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
     return foilTotalStates, nDOF
 end
 
-function compute_cost_func(foilStructuralStates)
+function compute_costFuncs(sol, evalFuncs)
+    """
+    Compute cost functions
+
+    Inputs
+    ------
+    sol : Dict()
+        Dictionary containing solution data
+    evalFuncs : Dict()
+        Dictionary of what cost functions to evaluate
+    """
+    
     # TODO
 end
 
@@ -213,5 +224,5 @@ function maxLocArr2d(A)
     return maxI, maxJ, maxVal
 
 end
-    
+
 end # end module

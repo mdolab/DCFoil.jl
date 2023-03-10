@@ -59,7 +59,7 @@ function test_stiffness()
     sweepAnswers = vec(real(SweepMatrix)) # put computed solutions here
     rel_err2 = LinearAlgebra.norm(sweepAnswers - sweepref_sol, 2) / LinearAlgebra.norm(sweepref_sol, 2)
 
-    # Just take the max error 
+    # Just take the max error
     rel_err = max(abs(rel_err1), abs(rel_err2))
 
     return rel_err
@@ -155,31 +155,31 @@ function test_hydroLoads()
 
     elemType = "BT2"
 
-    nevals = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120]
-    liftData = zeros(length(nevals))
-    momData = zeros(length(nevals))
+    nNodess = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120]
+    liftData = zeros(length(nNodess))
+    momData = zeros(length(nNodess))
     meshlvl = 1
 
-    for neval in nevals
+    for nNodes in nNodess
 
         DVDict = Dict(
-            "neval" => neval,
+            "nNodes" => nNodes,
             "α₀" => 6.0, # initial angle of attack [deg]
             "U∞" => 5.0, # free stream velocity [m/s]
             "Λ" => 30.0 * π / 180, # sweep angle [rad]
             "ρ_f" => 1000.0, # fluid density [kg/m³]
             "material" => "test-comp", # preselect from material library
             "g" => 0.04, # structural damping percentage
-            "c" => 1 * ones(neval), # chord length [m]
+            "c" => 1 * ones(nNodes), # chord length [m]
             "s" => 1.0, # semispan [m]
-            "ab" => zeros(neval), # dist from midchord to EA [m]
+            "ab" => zeros(nNodes), # dist from midchord to EA [m]
             "toc" => 1, # thickness-to-chord ratio
-            "x_αb" => zeros(neval), # static imbalance [m]
+            "x_αb" => zeros(nNodes), # static imbalance [m]
             "θ" => 0 * π / 180, # fiber angle global [rad]
         )
-        FOIL = InitModel.init_static(neval, DVDict)
+        FOIL = InitModel.init_static(nNodes, DVDict)
 
-        nElem = neval - 1
+        nElem = nNodes - 1
         constitutive = FOIL.constitutive
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
 
@@ -224,10 +224,10 @@ function test_FSeffect()
     Test the high-speed FS asymptotic effect
     """
 
-    neval = 3
+    nNodes = 3
     # Fnh = 6
     depth = 0.5 #[m]
-    chordVec = vcat(LinRange(0.12, 0.12, neval))
+    chordVec = vcat(LinRange(0.12, 0.12, nNodes))
 
     Usweep = 1:1:20
     FnhVec = zeros(length(Usweep))
@@ -235,9 +235,9 @@ function test_FSeffect()
     cl_rc = zeros(length(Usweep))
     uCtr = 1
     for U∞ in Usweep
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=true)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=false)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -251,9 +251,9 @@ function test_FSeffect()
     depth = 0.1 #[m]
     uCtr = 1
     for U∞ in Usweep
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=true)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=false)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -267,9 +267,9 @@ function test_FSeffect()
     depth = 0.05 #[m]
     uCtr = 1
     for U∞ in Usweep
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=true)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * 1 # rad
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, neval=neval, h=depth, useFS=false)
+        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * 1 # rad
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -291,12 +291,12 @@ end
 
 function test_theodorsenDeriv()
 
-    neval = 3 # Number of spatial nodes
-    chordVec = vcat(LinRange(0.81, 0.405, neval))
+    nNodes = 3 # Number of spatial nodes
+    chordVec = vcat(LinRange(0.81, 0.405, nNodes))
     # ---------------------------
     #   Test glauert lift distribution
     # ---------------------------
-    cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, neval=neval)
+    cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
     pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
     plot!(title="lift slope")
 
