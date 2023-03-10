@@ -11,6 +11,10 @@ include("../src/solvers/SolveForced.jl")
 using .SolveForced
 include("../src/solvers/SolveFlutter.jl")
 using .SolveFlutter
+include("../src/InitModel.jl")
+using .InitModel
+include("../src/struct/FiniteElements.jl")
+using .FEMMethods
 
 # ==============================================================================
 #                         Test Static Solver
@@ -33,6 +37,7 @@ function test_SolveStaticRigid()
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
+        "name" => "akcabay",
         "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
@@ -66,7 +71,7 @@ function test_SolveStaticRigid()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 5,
-        "uSweep" => nothing,
+        "uRange" => nothing,
     )
 
     # ************************************************
@@ -149,6 +154,7 @@ function test_SolveStaticIso()
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
+        "name" => "akcabay",
         "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
@@ -181,7 +187,7 @@ function test_SolveStaticIso()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 5,
-        "uSweep" => nothing,
+        "uRange" => nothing,
     )
 
     # ************************************************
@@ -259,6 +265,7 @@ function test_SolveStaticComp()
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
+        "name" => "akcabay",
         "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
@@ -291,7 +298,7 @@ function test_SolveStaticComp()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 5,
-        "uSweep" => nothing,
+        "uRange" => nothing,
     )
 
     # ************************************************
@@ -372,6 +379,7 @@ function test_SolveForcedComp()
     fSweep = 0.01:0.1:10
     tipForceMag = 1.0
     DVDict = Dict(
+        "name" => "akcabay",
         "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
         "U∞" => 6.0, # free stream velocity [m/s]
@@ -405,7 +413,7 @@ function test_SolveForcedComp()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 5,
-        "uSweep" => nothing,
+        "uRange" => nothing,
     )
     # ==============================================================================
     #                         Call Forced Vibration Solver
@@ -460,60 +468,103 @@ end # end test_SolveForcedComp
 #                         Test Flutter Solver
 # ==============================================================================
 
-function test_correlationMatrix()
-    """
-    Test the correlation method of van Zyl between k increments
-    """
-
-    # --- k^(n) data ---
-    R_old = [
-        0.0 0.0 0.0 0.0
-        0.0 0.0 0.0 0.0
-        0.0 0.0 0.0 0.0
-        0.0 0.0 0.0 0.0
-    ]
-    # --- k^(n+1) data ---
-    R_new = []
-
-    old_r = real(R_old)
-    old_i = imag(R_old)
-    new_r = real(R_new)
-    new_i = imag(R_new)
-    SolverFlutter.compute_correlationMatrix(old_r, old_i, new_r, new_i)
-end
-
-function test_correlationMetrics()
-    """
-    Test the correlation method of van Zyl when new modes are found between dynP increments
-    It uses the eigenvalues to help decide if a new mode is found
-    """
-
-    # --- q^(n) data ---
-    p_old = []
-    R_old = []
-    # --- q^(n+1) data ---
-    p_new = []
-    R_new = []
-
-    old_r = real(R_old)
-    old_i = imag(R_old)
-    new_r = real(R_new)
-    new_i = imag(R_new)
-    p_old_i = imag(p_old)
-    p_new_i = imag(p_new)
-    SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
-end
-
-function test_modeSpace()
-    """
-    """
-end
-# function test_flutter()
+# function test_correlationMatrix()
 #     """
-#     Test flutter solver
+#     Test the correlation method of van Zyl between k increments
 #     """
-#     SolveFlutter.solve()
+
+#     # --- k^(n) data ---
+#     R_old = [
+#         0.0 0.0 0.0 0.0
+#         0.0 0.0 0.0 0.0
+#         0.0 0.0 0.0 0.0
+#         0.0 0.0 0.0 0.0
+#     ]
+#     # --- k^(n+1) data ---
+#     R_new = []
+
+#     old_r = real(R_old)
+#     old_i = imag(R_old)
+#     new_r = real(R_new)
+#     new_i = imag(R_new)
+#     SolverFlutter.compute_correlationMatrix(old_r, old_i, new_r, new_i)
 # end
+
+# function test_correlationMetrics()
+#     """
+#     Test the correlation method of van Zyl when new modes are found between dynP increments
+#     It uses the eigenvalues to help decide if a new mode is found
+#     """
+
+#     # --- q^(n) data ---
+#     p_old = []
+#     R_old = []
+#     # --- q^(n+1) data ---
+#     p_new = []
+#     R_new = []
+
+#     old_r = real(R_old)
+#     old_i = imag(R_old)
+#     new_r = real(R_new)
+#     new_i = imag(R_new)
+#     p_old_i = imag(p_old)
+#     p_new_i = imag(p_new)
+#     SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
+# end
+
+# function test_modeSpace()
+#     """
+#     """
+# end
+function test_flutter()
+    """
+    Test flutter solver
+    """
+    nNodes = 10
+    DVDict = Dict(
+        "name" => "akcabay",
+        "nNodes" => nNodes,
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "U∞" => 6.0, # free stream velocity [m/s]
+        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "material" => "cfrp", # preselect from material library
+        "g" => 0.04, # structural damping percentage
+        "c" => 0.1 * ones(nNodes), # chord length [m]
+        "s" => 0.3, # semispan [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "θ" => 15 * π / 180, # fiber angle global [rad]
+    )
+
+    solverOptions = Dict(
+        # --- I/O ---
+        "debug" => false,
+        "outputDir" => "",
+        # --- General solver options ---
+        "tipMass" => false,
+        "use_cavitation" => false,
+        "use_freesurface" => false,
+        # --- Static solve ---
+        "run_static" => false,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 1:0.1:1000,
+        "tipForceMag" => 0.0,
+        # --- Eigen solve ---
+        "run_modal" => false,
+        "run_flutter" => true,
+        "nModes" => 3,
+        "uRange" => [5.0, 6.0],
+    )
+    FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    nElem = nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+    SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+
+    return 0.0
+end
 
 function test_modal()
     """
@@ -565,7 +616,7 @@ function test_modal()
         "run_modal" => true,
         "run_flutter" => false,
         "nModes" => 5,
-        "uSweep" => nothing,
+        "uRange" => nothing,
     )
     # --- Mesh ---
     FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)

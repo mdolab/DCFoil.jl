@@ -37,7 +37,6 @@ include("test_solvers.jl")
     # ************************************************
     #     Solver tests
     # ************************************************
-    # Really just looking to see if the solver works
     # --- Mesh convergence tests ---
     io = open("testConv.out", "w")
     @test test_SolveStaticRigid() <= 1e-4 # rigid hydrofoil solve
@@ -46,4 +45,5 @@ include("test_solvers.jl")
     close(io)
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
+    @test test_flutter() <= 1e-5 # flutter analysis of cfrp
 end

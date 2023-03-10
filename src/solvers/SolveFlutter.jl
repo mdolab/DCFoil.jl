@@ -113,7 +113,7 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
 
     # --- Apply the flutter solution method ---
     N_MAX_Q_ITER = 4000 # TEST VALUE
-    Nr = dim ÷ 4 # reduced problem size (Nr x Nr)
+    Nr = 20 # reduced problem size (Nr x Nr)
     true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(
         uRange,
         structMesh,
@@ -701,7 +701,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim::Int64, Nr:
         # --- Store solution if good ---
         if is_failed # backup dynamic pressure
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
-            println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp)
+            U∞ = sqrt(2 * dynPTmp / flowHistory[nFlow-1, 2])
+            println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp, " Pa and new U∞: ", U∞, " m/s")
         else # store solution
             # --- Eigenvalues ---
             p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
@@ -759,6 +760,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim::Int64, Nr:
 
             # --- Increment for next iteration ---
             nFlow += 1
+            # Bool check if dynP or U∞ is being used
             if !(isnothing(ΔdynP))
                 dynPTmp += ΔdynP
                 # Determine flow speed

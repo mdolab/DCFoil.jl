@@ -129,7 +129,7 @@ function set_defaultOptions()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 3,
-        "uSweep" => nothing,
+        "uRange" => nothing,
     )
     return solverOptions
 end # set_defaultOptions
