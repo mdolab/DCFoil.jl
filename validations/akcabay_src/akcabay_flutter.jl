@@ -67,7 +67,7 @@ DVDict = Dict(
 # ************************************************
 #     Cost functions
 # ************************************************
-evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
+evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 
 # ==============================================================================
 #                         Call DCFoil TWICE

@@ -112,7 +112,6 @@ DVDict = Dict(
 #   IMOCA 60
 # ---------------------------
 # --- IMOCA 60 bulb keel ---
-# --- IMOCA 60 bulb keel ---
 DVDict = Dict(
     "name" => "IMOCA60Keel",
     "nNodes" => nNodes,

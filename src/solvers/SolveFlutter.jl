@@ -104,7 +104,7 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
-    idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
+    idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
 
@@ -112,9 +112,9 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     dim = size(Ks)[1] + length(globalDOFBlankingList)
 
     # --- Apply the flutter solution method ---
-    N_MAX_Q_ITER = 4000 # TEST VALUE
+    N_MAX_Q_ITER = solverOptions["maxQIter"] # TEST VALUE
     Nr = 20 # reduced problem size (Nr x Nr)
-    true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory = compute_pkFlutterAnalysis(
+    true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = compute_pkFlutterAnalysis(
         uRange,
         structMesh,
         FOIL,
@@ -136,6 +136,16 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # ************************************************
     write_sol(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, outputDir)
 
+    # Finally, return everything you need to compute cost functions and sensitivities
+    sol = Dict(
+        "N_MAX_Q_ITER" => N_MAX_Q_ITER,
+        "flowHistory" => flowHistory,
+        "NTotalModesFound" => NTotalModesFound,
+        "nFlow" => nFlow,
+        "true_eigs_r" => true_eigs_r,
+        "iblank" => iblank,
+    )
+    return sol
 end # end solve
 
 function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
@@ -824,7 +834,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim::Int64, Nr:
         end
     end
 
-    return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory
+    return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
 
 end # end function
 
@@ -1327,7 +1337,6 @@ function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_
     return p_r, p_i, R_aa_r, R_aa_i
 end # end solve_eigenvalueProblem
 
-
 function compute_modalSpace(Ms, Ks; Cs=nothing, reducedSize=20)
     """
     Reduce to modal space to reduce the size of the problem
@@ -1356,10 +1365,129 @@ function compute_modalSpace(Ms, Ks; Cs=nothing, reducedSize=20)
     return Ms_r, Ks_r, Qr
 end
 
+function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound, nFlow, true_eigs_r, iblank, ρKS)
+    """
+    Function to compute damping on all modes and aggregate into the flutter constraint
+
+    Inputs
+    ------
+    N_MAX_Q_ITER
+    flowHistory - flow history. Array(Nflow, 3)
+    NTotalModesFound - total number of modes found. Int
+    nFlow - number of flow conditions. Int
+    eigs_r - real part of the eigenvalues across all flow conditions [rad/s]. Array(N_MAX_Q_ITER, Nmodes)
+    iblank - blanking indices
+
+    Outputs
+    -------
+    pmG - flutter safety margin
+    obj - flutter constraint. Float
+    """
+    # ************************************************
+    #     Initializations
+    # ************************************************
+    # Array with same size as nFlow
+    idx = zeros(Int64, nFlow)
+    for ii in 1:nFlow
+        idx[ii] = ii
+    end
+    ksTmp = zeros(Float64, NTotalModesFound)
+
+    G = zeros(Float64, nFlow)
+    # TODO: safety window
+    # if useSafetyWindow
+    #     G[1:nFound] = compute_safetyWindow(flowHistory[1:nFlow,1], nFlow)
+    # end
+
+    pmG = zeros(Float64, NTotalModesFound, nFlow)
+    pmG[1:NTotalModesFound, 1:nFlow] = true_eigs_r[1:NTotalModesFound, 1:nFlow]
+    pmGTmp = zeros(Float64, nFlow) # working pmG for the mode
+
+    # ************************************************
+    #     Aggregate damping
+    # ************************************************
+    # ---------------------------
+    #   Aggregate by velocities
+    # ---------------------------
+    for modeIdx in 1:NTotalModesFound
+
+        # Extract indices from 'idx' using the mask from 'iblank' containing the values for this mode
+        subIdx, nFound = SolverRoutines.ipack1d(idx, iblank[modeIdx, 1:nFlow] .!= 0, nFlow)
+
+        # if useSafetyWindow
+        #     pmG[modeIdx, subIdx[1:nFound]] -= G[subIdx[1:nFound]]
+        # end
+
+        pmGTmp[1:nFound] = pmG[modeIdx, subIdx[1:nFound]]
+
+        # Aggregate for this mode
+        ksTmp[modeIdx] = compute_KS(pmGTmp[1:nFound], ρKS)
+    end
+
+    # ---------------------------
+    #   Aggregate over modes
+    # ---------------------------
+    obj = compute_KS(ksTmp, ρKS)
+
+    println("ksrho = ", ρKS)
+    println("ksTmp = ", ksTmp)
+    println("obj = ", obj)
+
+    return obj, pmG
+end
+
+function compute_KS(g, ρKS)
+    """
+    Compute the KS function
+
+    Inputs
+    ------
+    g - flutter constraints
+    ρKS - KS parameter. Float
+
+    Outputs
+    -------
+    gKS - KS function. Float
+    """
+
+    gmax = maximum(g)
+
+    Σ = 0.0 # sum
+    for gval in g
+        Σ += exp(ρKS * (gval - gmax))
+    end
+
+    # --- Compute the KS function ---
+    gKS = gmax + 1 / ρKS * log(Σ)
+
+    return gKS
+end # compute_KS
 # ==============================================================================
-#                         Sensitivity routines
+#                         Cost func and sensitivity routines
 # ==============================================================================
-function compute_jacobian()
-end # end compute_jacobian
+
+function evalFuncs(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS)
+    """
+    Compute the cost funcs
+
+    See DCFoil.jl for possible funcs
+    """
+
+    costFuncs = Dict()
+    obj, pmG = postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS)
+    costFuncs["flutter"] = obj
+
+    return costFuncs
+end
+
+function evalFuncsSens()
+
+end # end evalFuncsSens
+
+function compute_∂f∂x(sol)
+    """
+
+    """
+end # end compute_∂f∂x
 
 end # end module

@@ -1,6 +1,6 @@
 module SolverRoutines
 """
-Generic solver routines every solver needs
+Generic routines every solver needs
 """
 
 # --- Libraries ---
@@ -9,6 +9,9 @@ include("./NewtonRhapson.jl")
 include("./EigenvalueProblem.jl")
 using .NewtonRhapson, .EigenvalueProblem
 
+# ==============================================================================
+#                         Solver routines
+# ==============================================================================
 function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="FAD", is_cmplx=false)
     """
     Given input u, solve the system r(u) = 0
@@ -29,7 +32,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
 
     return converged_u, converged_r
 
-end
+end # converge_r
 
 function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
     """
@@ -53,23 +56,7 @@ function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
     foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
 
     return foilTotalStates, nDOF
-end
-
-function compute_costFuncs(sol, evalFuncs)
-    """
-    Compute cost functions
-
-    Inputs
-    ------
-    sol : Dict()
-        Dictionary containing solution data
-    evalFuncs : Dict()
-        Dictionary of what cost functions to evaluate
-    """
-    
-    # TODO
-end
-
+end # return_totalStates
 
 # ==============================================================================
 #                         Linear algebra routines
@@ -85,7 +72,7 @@ function compute_eigsolve(K, M, nEigs; issym=true)
     eVals, eVecs = EigenvalueProblem.compute_eigsolve(K, M, nEigs; issym=issym)
 
     return eVals, eVecs
-end
+end # compute_eigsolve
 
 function cmplxInverse(A_r, A_i, n)
     """
@@ -122,7 +109,7 @@ function cmplxInverse(A_r, A_i, n)
     Ainv_i = Ainvcopy[n+1:end, 1:n]
 
     return Ainv_r, Ainv_i
-end
+end # cmplxInverse
 
 function cmplxMatmult(A_r, A_i, B_r, B_i)
     """
@@ -135,7 +122,7 @@ function cmplxMatmult(A_r, A_i, B_r, B_i)
     C_i = A_r * B_i + A_i * B_r
 
     return C_r, C_i
-end
+end # cmplxMatmult
 
 function cmplxStdEigValProb(A_r, A_i, n)
     """
@@ -176,8 +163,11 @@ function cmplxStdEigValProb(A_r, A_i, n)
     VL_i = imag(Vr)
 
     return w_r, w_i, VL_r, VL_i, VR_r, VR_i
-end
+end # cmplxStdEigValProb
 
+# ==============================================================================
+#                         Utility routines
+# ==============================================================================
 function argmax2d(A)
     """
     Find the indices of maximum value for each column of 2d array A
@@ -196,7 +186,7 @@ function argmax2d(A)
 
     return locs
 
-end
+end # argmax2d
 
 function maxLocArr2d(A)
     """
@@ -223,6 +213,47 @@ function maxLocArr2d(A)
 
     return maxI, maxJ, maxVal
 
-end
+end # maxLocArr2d
 
-end # end module
+function count1d(mask)
+    """
+    Count number of 'true' elements in 1d array
+    """
+
+    nTrue = 0
+
+    for ii in eachindex(mask)
+        if mask[ii]
+            nTrue += 1
+        end
+    end
+
+    return nTrue
+end # count1d
+
+function ipack1d(A, mask, nFlow)
+    """
+    Extract elements from array A which have corresponding element in mask set to 'true'
+    mask array contains boolean values
+
+    Outputs
+    -------
+        B - subset array containing elements of A which have corresponding element in mask set to 'true'
+        nFound - number of elements in B
+    """
+
+    nTrue = count1d(mask)
+    B = zeros(Int64, nFlow)
+
+    nFound = 0
+    for ii in eachindex(A)
+        if mask[ii]
+            nFound += 1
+            B[nFound] = A[ii]
+        end
+    end
+
+    return B, nFound
+end # ipack1d
+
+end # SolverRoutines

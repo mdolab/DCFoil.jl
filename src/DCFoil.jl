@@ -60,8 +60,8 @@ function run_model(
     # ---------------------------
     #   Cost functions
     # ---------------------------
-    costFuncs = Dict()
-    costFuncSens = Dict()
+    costFuncsDict = Dict()
+    costFuncSensDict = Dict()
 
     # ---------------------------
     #   Mesh generation
@@ -77,7 +77,7 @@ function run_model(
     # ==============================================================================
     if solverOptions["run_static"]
         staticCostFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncs = merge(costFuncs, staticCostFuncs)
+        costFuncsDict = merge(costFuncs, staticCostFuncs)
     end
 
     # ==============================================================================
@@ -95,17 +95,19 @@ function run_model(
         SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        flutterCostFuncs = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
-        # costFuncs = merge(costFuncs, flutterCostFuncs)
+        sol = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+        flutterCostFuncsDict = compute_costFuncs(sol, evalFuncs, solverOptions)
+        costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end
 
-    return costFuncs
+    return costFuncsDict
 end
 
 function set_defaultOptions()
     """
     Set the default solver options
     Case sensitive
+    TODO: maybe move this to a defaultOptions file
     """
     solverOptions = Dict(
         # --- I/O ---
@@ -128,10 +130,127 @@ function set_defaultOptions()
         # --- Eigen solve ---
         "run_modal" => false,
         "run_flutter" => false,
-        "nModes" => 3,
-        "uRange" => nothing,
+        "nModes" => 3, # Number of struct modes to solve for (starting)
+        "uRange" => nothing, # Range of velocities to sweep
+        "maxQIter" => 200, #max dyn pressure iters
     )
     return solverOptions
 end # set_defaultOptions
+
+# ==============================================================================
+#                         Cost func and sensitivity routines
+# ==============================================================================
+function compute_costFuncs(sol, evalFuncs, solverOptions)
+    """
+    Common interface to compute cost functions
+
+    Inputs
+    ------
+    sol : Dict()
+        Dictionary containing solution data
+    evalFuncs : 1d array
+        List of what cost functions to evaluate
+    """
+
+    evalFuncsDict = Dict()
+
+    # --- Solver cost funcs ---
+    staticCostFuncs = [
+    # "psitip"
+    # "wtip"
+    # "lift"
+    # "moment"
+    # "cl"
+    # "cmy"
+    ]
+    forcedCostFuncs = [
+        "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
+        "peakwtip"
+        "vibareapsi" # integrated deformations under the spectral curve (see Ng et al. 2022)
+        "vibareaw"
+    ]
+    flutterCostFuncs = [
+        "flutter" # flutter value (damping)
+        "lockin" # lock-in value
+        "gap" # mode gap width
+    ]
+
+    # # Assemble all possible
+    # allCostFuncs = hcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
+
+    # Loop over all evalFuncs
+    for k in evalFuncs
+
+        if k in staticCostFuncs
+            # Unpack solver data TODO: I'll do this later
+            sol
+            staticEvalFuncs = SolveStatic.evalFuncs(states, forces, k)
+            evalFuncsDict[k] = staticEvalFuncs[k]
+        elseif k in forcedCostFuncs
+            SolveForced.evalFuncs()
+        elseif k in flutterCostFuncs
+            # Unpack solver data
+            N_MAX_Q_ITER = sol["N_MAX_Q_ITER"]
+            flowHistory = sol["flowHistory"]
+            NTotalModesFound = sol["NTotalModesFound"]
+            nFlow = sol["nFlow"]
+            true_eigs_r = sol["true_eigs_r"]
+            iblank = sol["iblank"]
+            ρKS = solverOptions["rhoKS"]
+            # Get flutter evalFunc and stick into solver evalFuncs
+            flutterEvalFuncs = SolveFlutter.evalFuncs(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, true_eigs_r, iblank, ρKS)
+            evalFuncsDict[k] = flutterEvalFuncs[k]
+        else
+            println("Unsupported cost function: ", k)
+        end
+    end
+    return evalFuncsDict
+end # compute_costFuncs
+
+function compute_jacobian(partials::Dict, evalFuncs; method="adjoint")
+    """
+    Evaluate the sensitivity of the cost functions in evalFuncs
+
+    Inputs
+    ------
+    partials : Dict()
+        Dictionary containing the partial derivatives of the total derivative equation
+            df/dx = ∂f/∂x + ∂f/∂u * du/dx
+        in the context of adjoint or direct methods
+    evalFuncs : Array{String}
+        List of what cost functions to evaluate
+    method : String
+        Method to use to compute the sensitivity
+            "adjoint" : Use the adjoint method
+            "direct" : Use the direct method
+    Outputs
+    -------
+    funcsSens : Dict()
+        Dictionary containing the sensitivity of the cost functions
+    """
+
+    funcsSens = Dict()
+
+    for func in evalFuncs
+
+        ∂f∂x = partials["∂f∂x"][func]
+
+        stateSens = zeros(size(∂f∂x)) # initialize -1 * (∂f/∂u * du/dx)
+        if method == "adjoint"
+            ∂r∂x = partials["∂r∂x"][func]
+            ψ = partials["ψ"][func] # adjoint vector
+            stateSens = transpose(ψ) * ∂r∂x
+        elseif method == "direct"
+            ∂f∂u = partials["∂f∂u"][func]
+            ϕ = partials["ϕ"][func] # direct vector
+            stateSens = ∂f∂u * ϕ
+        end
+
+        # Compute sensitivity
+        funcsSens[func] = ∂f∂x - stateSens
+    end
+
+    return funcsSens
+end # compute_jacobian
 
 end # module

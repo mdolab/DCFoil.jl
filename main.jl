@@ -69,7 +69,7 @@ DVDict = Dict(
 # ************************************************
 #     Cost functions
 # ************************************************
-evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
+evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "flutter"]
 
 # ************************************************
 #     I/O
@@ -110,6 +110,8 @@ solverOptions = Dict(
     "run_flutter" => run_flutter,
     "nModes" => nModes,
     "uRange" => uRange,
+    "maxQIter" => 4000,
+    "rhoKS" => 80.0,
 )
 # ==============================================================================
 #                         Call DCFoil

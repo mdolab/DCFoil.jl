@@ -124,7 +124,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
-    idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
+    idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
 
@@ -146,7 +146,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     #     COMPUTE FUNCTIONS OF INTEREST
     # ************************************************
-    costFuncs = compute_cost_func(uSol, fHydro, evalFuncs)
+    costFuncs = evalFuncs(uSol, fHydro, evalFuncs)
 
     # ************************************************
     #     COMPUTE SENSITIVITIES
@@ -162,7 +162,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #     WRITE SOLUTION OUT TO FILES
     # ************************************************
     # Also a quick static divergence check
-    if costFuncs["psi_tip"] * DVDict["θ"] > 0.0
+    if costFuncs["psitip"] * DVDict["θ"] > 0.0
         println("+---------------------------------------------------+")
         println("|  WARNING: STATIC DIVERGENCE CONDITION DETECTED!   |")
         println("|  PRODUCT OF FIBER ANGLE AND TIP TWIST ARE +VE     |")
@@ -173,52 +173,6 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     return costFuncs
 end
 
-function compute_cost_func(states, forces, evalFuncs)
-    """
-    Given {u} and the forces, compute the cost functions
-    """
-
-    if CONSTANTS.elemType == "BT2"
-        nDOF = 4
-        Ψ = states[3:nDOF:end]
-        Moments = forces[3:nDOF:end]
-        W = states[1:nDOF:end]
-        Lift = forces[1:nDOF:end]
-    else
-        println("Invalid element type")
-    end
-
-    # ************************************************
-    #     COMPUTE COST FUNCS
-    # ************************************************
-    costFuncs = Dict() # initialize empty costFunc dictionary
-    if "w_tip" in evalFuncs
-        w_tip = W[end]
-        costFuncs["w_tip"] = w_tip
-    end
-    if "psi_tip" in evalFuncs
-        psi_tip = Ψ[end]
-        costFuncs["psi_tip"] = psi_tip
-    end
-    if "lift" in evalFuncs
-        TotalLift = sum(Lift)
-        costFuncs["lift"] = TotalLift
-    end
-    if "moment" in evalFuncs
-        TotalMoment = sum(Moments)
-        costFuncs["moment"] = TotalMoment
-    end
-    if "cl" in evalFuncs
-        CL = TotalLift / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea)
-        costFuncs["cl"] = CL
-    end
-    if "cmy" in evalFuncs
-        CM = TotalMoment / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea * mean(FOIL.c))
-        costFuncs["cmy"] = CM
-    end
-
-    return costFuncs
-end
 
 function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/")
     """
@@ -300,8 +254,55 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
 end
 
 # ==============================================================================
-#                         Sensitivity routines
+#                         Cost func and sensitivity routines
 # ==============================================================================
+function evalFuncs(states, forces, evalFuncs)
+    """
+    Given {u} and the forces, compute the cost functions
+    """
+
+    if CONSTANTS.elemType == "BT2"
+        nDOF = 4
+        Ψ = states[3:nDOF:end]
+        Moments = forces[3:nDOF:end]
+        W = states[1:nDOF:end]
+        Lift = forces[1:nDOF:end]
+    else
+        println("Invalid element type")
+    end
+
+    # ************************************************
+    #     COMPUTE COST FUNCS
+    # ************************************************
+    costFuncs = Dict() # initialize empty costFunc dictionary
+    if "wtip" in evalFuncs
+        w_tip = W[end]
+        costFuncs["wtip"] = w_tip
+    end
+    if "psitip" in evalFuncs
+        psi_tip = Ψ[end]
+        costFuncs["psitip"] = psi_tip
+    end
+    if "lift" in evalFuncs
+        TotalLift = sum(Lift)
+        costFuncs["lift"] = TotalLift
+    end
+    if "moment" in evalFuncs
+        TotalMoment = sum(Moments)
+        costFuncs["moment"] = TotalMoment
+    end
+    if "cl" in evalFuncs
+        CL = TotalLift / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea)
+        costFuncs["cl"] = CL
+    end
+    if "cmy" in evalFuncs
+        CM = TotalMoment / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea * mean(FOIL.c))
+        costFuncs["cmy"] = CM
+    end
+
+    return costFuncs
+end
+
 function compute_∂f∂x(foilPDESol)
 
 end

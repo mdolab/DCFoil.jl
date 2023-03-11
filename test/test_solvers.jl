@@ -77,7 +77,7 @@ function test_SolveStaticRigid()
     # ************************************************
     #     Cost functions
     # ************************************************
-    evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
+    evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 
     # ==============================================================================
     #                         Call Static Solver
@@ -98,8 +98,8 @@ function test_SolveStaticRigid()
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
         costFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        tipBendData[meshlvl] = costFuncs["w_tip"]
-        tipTwistData[meshlvl] = costFuncs["psi_tip"]
+        tipBendData[meshlvl] = costFuncs["wtip"]
+        tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
     end
 
@@ -193,7 +193,7 @@ function test_SolveStaticIso()
     # ************************************************
     #     Cost functions
     # ************************************************
-    evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
+    evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 
     # ==============================================================================
     #                         Call Static Solver
@@ -214,8 +214,8 @@ function test_SolveStaticIso()
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
         costFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        tipBendData[meshlvl] = costFuncs["w_tip"]
-        tipTwistData[meshlvl] = costFuncs["psi_tip"]
+        tipBendData[meshlvl] = costFuncs["wtip"]
+        tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
     end
 
@@ -304,7 +304,7 @@ function test_SolveStaticComp()
     # ************************************************
     #     Cost functions
     # ************************************************
-    evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
+    evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 
     # ==============================================================================
     #                         Call Static Solver
@@ -325,8 +325,8 @@ function test_SolveStaticComp()
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
         costFuncs = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        tipBendData[meshlvl] = costFuncs["w_tip"]
-        tipTwistData[meshlvl] = costFuncs["psi_tip"]
+        tipBendData[meshlvl] = costFuncs["wtip"]
+        tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
     end
 

@@ -288,7 +288,7 @@ function test_FiniteElementComp()
 
     q1 = FEMMethods.solve_structure(K, M, F)
     bt_Ftip_wtip = q1[end-2]
-    bt_Ftip_psitip = q1[end]
+    bt_Ftip_psitip" = q1[end]
 
     # ---------------------------
     #   Tip torque only
@@ -302,7 +302,7 @@ function test_FiniteElementComp()
 
     q2 = FEMMethods.solve_structure(K, M, F)
     bt_Ttip_wtip = q2[end-2]
-    bt_Ttip_psitip = q2[end]
+    bt_Ttip_psitip" = q2[end]
 
     # ---------------------------
     #   Tip force only
@@ -318,7 +318,7 @@ function test_FiniteElementComp()
 
     q3 = FEMMethods.solve_structure(K, M, F)
     BT2_Ftip_wtip = q3[end-3]
-    BT2_Ftip_psitip = q3[end-1]
+    BT2_Ftip_psitip" = q3[end-1]
 
     # ---------------------------
     #   Tip torque only
@@ -332,17 +332,17 @@ function test_FiniteElementComp()
 
     q4 = FEMMethods.solve_structure(K, M, F)
     BT2_Ttip_wtip = q4[end-3]
-    BT2_Ttip_psitip = q4[end-1]
+    BT2_Ttip_psitip" = q4[end-1]
 
     # --- Print these out if something does not make sense ---
     # println("bt_Ftip_wtip = ", bt_Ftip_wtip, " [m]")
-    # println("bt_Ftip_psitip = ", bt_Ftip_psitip, " [rad]")
+    # println("bt_Ftip_psitip" = ", bt_Ftip_psitip", " [rad]")
     # println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
-    # println("bt_Ttip_psitip = ", bt_Ttip_psitip, " [rad]")
+    # println("bt_Ttip_psitip" = ", bt_Ttip_psitip", " [rad]")
     # println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
-    # println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
+    # println("BT2_Ftip_psitip" = ", BT2_Ftip_psitip", " [rad]")
     # println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
-    # println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+    # println("BT2_Ttip_psitip" = ", BT2_Ttip_psitip", " [rad]")
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
@@ -350,7 +350,7 @@ function test_FiniteElementComp()
     ref_sol = [4, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 2.56699]
 
     # --- Relative error ---
-    answers = [bt_Ftip_wtip, bt_Ftip_psitip, bt_Ttip_wtip, bt_Ttip_psitip, BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
+    answers = [bt_Ftip_wtip, bt_Ftip_psitip", bt_Ttip_wtip, bt_Ttip_psitip", BT2_Ftip_wtip, BT2_Ftip_psitip", BT2_Ttip_wtip, BT2_Ttip_psitip"] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
     return rel_err

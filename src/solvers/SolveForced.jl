@@ -91,7 +91,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
-    idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
+    idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
     # ************************************************
