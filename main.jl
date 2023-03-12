@@ -27,7 +27,7 @@ debug = false
 tipMass = false
 
 # Uncomment here
-# run_static = true
+run_static = true
 # run_forced = true
 run_modal = true
 run_flutter = true
@@ -48,7 +48,7 @@ fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
-
+# TODO: This should get broken up into DVs and model setup
 DVDict = Dict(
     "name" => "akcabay-swept",
     "nNodes" => nNodes,

@@ -22,6 +22,8 @@ using Zygote
 using Plots # for debugging
 using Printf
 using JLD # julia data format
+using FiniteDifferences
+using Zygote
 
 # --- DCFoil modules ---
 include("../InitModel.jl")
@@ -31,12 +33,14 @@ include("../hydro/Hydro.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
+include("./DCFoilSolution.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
+using .DCFoilSolution
 
 # ==============================================================================
 #                         Top level API routines
@@ -136,16 +140,11 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # ************************************************
     write_sol(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, outputDir)
 
-    # Finally, return everything you need to compute cost functions and sensitivities
-    sol = Dict(
-        "N_MAX_Q_ITER" => N_MAX_Q_ITER,
-        "flowHistory" => flowHistory,
-        "NTotalModesFound" => NTotalModesFound,
-        "nFlow" => nFlow,
-        "true_eigs_r" => true_eigs_r,
-        "iblank" => iblank,
-    )
-    return sol
+
+    # --- Store solution in struct ---
+    global FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank)
+
+    return FLUTTERSOL
 end # end solve
 
 function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
@@ -1462,11 +1461,12 @@ function compute_KS(g, ρKS)
 
     return gKS
 end # compute_KS
+
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-
-function evalFuncs(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS)
+# All of these routines have to take the exact same inputs
+function evalFuncs(x, N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS)
     """
     Compute the cost funcs
 
@@ -1480,14 +1480,27 @@ function evalFuncs(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, i
     return costFuncs
 end
 
-function evalFuncsSens()
+function evalFuncsSens(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS; mode="FiDi")
+    """
+    Compute the total sensitivities for this
+    """
 
+
+    return costFuncs
 end # end evalFuncsSens
 
-function compute_∂f∂x(sol)
+function compute_∂f∂x(x; mode="FiDi")
+    """
+    This is a matrix of partial derivatives evaluated at 'x'
     """
 
-    """
+    ∂KS∂g =
+        if mode == "FiDi"
+            ∂g∂x = compute_pkFlutterAnalysis
+        end
+
+    ∂KSflutter∂x = ∂g∂x
+    return ∂f∂x
 end # end compute_∂f∂x
 
 end # end module

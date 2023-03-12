@@ -30,11 +30,13 @@ include("../struct/FiniteElements.jl")
 include("../hydro/Hydro.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
+include("./DCFoilSolution.jl")
 # then use them
 using .InitModel, .Hydro, .StructProp
 using .FEMMethods
 using .SolutionConstants
 using .SolverRoutines
+using .DCFoilSolution
 
 # ==============================================================================
 #                         Top level API routines
@@ -136,6 +138,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     derivMode = "FAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
 
+    # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
     # qSol = q # just use pre-solve solution
     uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
@@ -143,16 +146,16 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # --- Get hydroLoads again on solution ---
     fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
 
-    # ************************************************
-    #     COMPUTE FUNCTIONS OF INTEREST
-    # ************************************************
-    costFuncs = evalFuncs(uSol, fHydro, evalFuncs)
+    # # ************************************************
+    # #     COMPUTE FUNCTIONS OF INTEREST
+    # # ************************************************
+    # costFuncs = evalFuncs(uSol, fHydro, evalFuncs)
 
-    # ************************************************
-    #     COMPUTE SENSITIVITIES
-    # ************************************************
-    mode = "FAD"
-    ∂r∂u = compute_∂r∂u(qSol, mode)
+    # # ************************************************
+    # #     COMPUTE SENSITIVITIES
+    # # ************************************************
+    # mode = "FAD"
+    # ∂r∂u = compute_∂r∂u(qSol, mode)
     # # TODO:I'm not really sure how to do these yet
     # ∂r∂x = compute_∂r∂x(qSol, mode)
     # ∂f∂u = compute_∂f∂u(qSol, mode)
@@ -161,20 +164,22 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
     # ************************************************
-    # Also a quick static divergence check
-    if costFuncs["psitip"] * DVDict["θ"] > 0.0
-        println("+---------------------------------------------------+")
-        println("|  WARNING: STATIC DIVERGENCE CONDITION DETECTED!   |")
-        println("|  PRODUCT OF FIBER ANGLE AND TIP TWIST ARE +VE     |")
-        println("+---------------------------------------------------+")
-    end
-    write_sol(uSol, fHydro, costFuncs, elemType, outputDir)
+    # # Also a quick static divergence check
+    # if costFuncs["psitip"] * DVDict["θ"] > 0.0
+    #     println("+---------------------------------------------------+")
+    #     println("|  WARNING: STATIC DIVERGENCE CONDITION DETECTED!   |")
+    #     println("|  PRODUCT OF FIBER ANGLE AND TIP TWIST ARE +VE     |")
+    #     println("+---------------------------------------------------+")
+    # end
+    write_sol(uSol, fHydro, elemType, outputDir)
 
-    return costFuncs
+    global STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro)
+
+    return STATSOL
 end
 
 
-function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/")
+function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
     """
     Inputs
     ------
@@ -185,36 +190,36 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
     workingOutputDir = outputDir * "static/"
     mkpath(workingOutputDir)
 
-    # --- First print costFuncs to screen in a box ---
-    println("+", "-"^50, "+")
-    println("|                costFunc dictionary:              |")
-    println("+", "-"^50, "+")
-    for kv in funcs
-        println("| ", kv)
-    end
+    # # --- First print costFuncs to screen in a box ---
+    # println("+", "-"^50, "+")
+    # println("|                costFunc dictionary:              |")
+    # println("+", "-"^50, "+")
+    # for kv in funcs
+    #     println("| ", kv)
+    # end
 
-    fname = workingOutputDir * "funcs.json"
-    stringData = JSON.json(funcs)
-    open(fname, "w") do io
-        write(io, stringData)
-    end
+    # fname = workingOutputDir * "funcs.json"
+    # stringData = JSON.json(funcs)
+    # open(fname, "w") do io
+    #     write(io, stringData)
+    # end
 
     if elemType == "bend"
         nDOF = 2
     elseif elemType == "bend-twist"
         nDOF = 3
         Ψ = states[nDOF:nDOF:end]
-        Moments = forces[nDOF:nDOF:end]
+        Moments = fHydro[nDOF:nDOF:end]
     elseif elemType == "BT2"
         nDOF = 4
         Ψ = states[3:nDOF:end]
-        Moments = forces[3:nDOF:end]
+        Moments = fHydro[3:nDOF:end]
     else
         error("Invalid element type")
     end
 
     W = states[1:nDOF:end]
-    Lift = forces[1:nDOF:end]
+    Lift = fHydro[1:nDOF:end]
 
     # --- Write bending ---
     fname = workingOutputDir * "bending.dat"
@@ -249,7 +254,6 @@ function write_sol(states, forces, funcs, elemType="bend", outputDir="./OUTPUT/"
         write(outfile, string(Mⁿ, "\n"))
     end
     close(outfile)
-
 
 end
 
