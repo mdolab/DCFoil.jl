@@ -4,6 +4,7 @@ authors = ["gng <nggw@umich.edu>"]
 version = "0.1.0"
 
 [deps]
+Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
 FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"

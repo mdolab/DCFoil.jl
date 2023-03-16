@@ -87,7 +87,10 @@ if __name__ == "__main__":
             funcs = None
             print("No funcs.json file found...")
 
-        nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
+        try:
+            nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
+        except KeyError:
+            nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
 
     # ************************************************
     #     Plot settings
@@ -454,7 +457,7 @@ if __name__ == "__main__":
         fname = f"{outputDir}/vg_vf_rl.pdf"
 
         # Create figure object
-        fact = 1  # scale size
+        fact = .85  # scale size
         figsize = (18 * fact, 13 * fact)
         fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
         for ii, key in enumerate(args.cases):
@@ -468,21 +471,21 @@ if __name__ == "__main__":
                 axes,
                 flutterSol=flutterSolDict[key],
                 ls=ls[ii],
-                # units="kts",
+                units="kts",
                 # marker="o",
                 showRLlabels=True,
                 annotateModes=annotateModes,
-                nShift=50,
+                nShift=1000,
             )
 
             # # --- Set limits ---
-            # axes[0,0].set_ylim(top=20)
+            axes[0, 0].set_ylim(top=1, bottom=-4)
+            axes[0, 0].set_xlim(right=50, left=5)
             # axes[0,0].set_xlim(right=40, left=25)
-            axes[0, 0].set_ylim(top=15,bottom=-10)
-            axes[0, 0].set_xlim(right=190, left=170)
+            # axes[0, 0].set_ylim(top=15,bottom=-10)
+            # axes[0, 0].set_xlim(right=190, left=170)
             # axes[0, 0].set_ylim(top=1, bottom=-5)
-            # axes[0, 0].set_xlim(right=50, left=5)
-            # axes[1, 1].set_xlim(right=1, left=-5)
+            axes[1, 1].set_xlim(right=1, left=-5)
             # axes[1, 1].set_ylim(top=20, bottom=0)
 
         dosave = not not fname
@@ -499,7 +502,7 @@ if __name__ == "__main__":
         fname = f"{outputDir}/dlf.pdf"
 
         # Create figure object
-        fact = 1  # scale size
+        fact = 0.85  # scale size
         figsize = (18 * fact, 6 * fact)
         fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
         for ii, key in enumerate(args.cases):

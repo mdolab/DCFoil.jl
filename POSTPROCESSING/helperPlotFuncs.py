@@ -60,7 +60,10 @@ def plot_wing(DVDict: dict):
     alpha = 0.5
     fig, ax = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
 
-    nNodes = DVDict["nNodes"]
+    try:
+        nNodes = DVDict["nNodes"]
+    except KeyError:
+        nNodes = DVDict["neval"]
     y = np.linspace(0, DVDict["s"], nNodes)
 
     # ax = axes[0]
