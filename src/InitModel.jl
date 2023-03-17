@@ -26,6 +26,7 @@ function init_static(nNodes::Int64, DVDict::Dict)
   Inputs:
       nNodes: Int64, number of evaluation points on span
       DVDict: Dict, dictionary of model parameters, the design variables
+      --> you can let these accept Complex64 dtype to complex step the code
 
   returns:
     foil: struct

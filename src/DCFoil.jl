@@ -96,8 +96,8 @@ function run_model(
     end
     if solverOptions["run_flutter"]
         FLUTTERSOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
-        # flutterCostFuncsDict = compute_costFuncs(sol, evalFuncs, solverOptions)
-        # costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
+        flutterCostFuncsDict = compute_costFuncs(FLUTTERSOL, evalFuncs, solverOptions)
+        costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end
 
     return costFuncsDict
@@ -140,65 +140,64 @@ end # set_defaultOptions
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-# function compute_costFuncs(sol, evalFuncs, solverOptions)
-#     """
-#     Common interface to compute cost functions
+function compute_costFuncs(SOL, evalFuncs, solverOptions)
+    """
+    Common interface to compute cost functions
 
-#     Inputs
-#     ------
-#     sol : Dict()
-#         Dictionary containing solution data
-#     evalFuncs : 1d array
-#         List of what cost functions to evaluate
-#     """
+    Inputs
+    ------
+    sol : Dict()
+        Dictionary containing solution data
+    evalFuncs : 1d array
+        List of what cost functions to evaluate
+    """
+    x = 0.0 # dummy
+    evalFuncsDict = Dict()
 
-#     evalFuncsDict = Dict()
+    # --- Solver cost funcs ---
+    staticCostFuncs = [
+    # "psitip"
+    # "wtip"
+    # "lift"
+    # "moment"
+    # "cl"
+    # "cmy"
+    ]
+    forcedCostFuncs = [
+        "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
+        "peakwtip"
+        "vibareapsi" # integrated deformations under the spectral curve (see Ng et al. 2022)
+        "vibareaw"
+    ]
+    flutterCostFuncs = [
+        "ksflutter" # flutter value (damping)
+        "lockin" # lock-in value
+        "gap" # mode gap width
+    ]
 
-#     # --- Solver cost funcs ---
-#     staticCostFuncs = [
-#     # "psitip"
-#     # "wtip"
-#     # "lift"
-#     # "moment"
-#     # "cl"
-#     # "cmy"
-#     ]
-#     forcedCostFuncs = [
-#         "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
-#         "peakwtip"
-#         "vibareapsi" # integrated deformations under the spectral curve (see Ng et al. 2022)
-#         "vibareaw"
-#     ]
-#     flutterCostFuncs = [
-#         "flutter" # flutter value (damping)
-#         "lockin" # lock-in value
-#         "gap" # mode gap width
-#     ]
+    # # Assemble all possible
+    # allCostFuncs = hcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
 
-#     # # Assemble all possible
-#     # allCostFuncs = hcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
+    # Loop over all evalFuncs
+    for k in evalFuncs
 
-#     # Loop over all evalFuncs
-#     for k in evalFuncs
-
-#         if k in staticCostFuncs
-#             # Unpack solver data TODO: I'll do this later
-#             staticEvalFuncs = SolveStatic.evalFuncs(states, forces, k)
-#             evalFuncsDict[k] = staticEvalFuncs[k]
-#         elseif k in forcedCostFuncs
-#             SolveForced.evalFuncs()
-#         elseif k in flutterCostFuncs
-#             # Unpack solver data
-#             ρKS = solverOptions["rhoKS"]
-#             # Get flutter evalFunc and stick into solver evalFuncs
-#             flutterEvalFuncs = SolveFlutter.evalFuncs(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, true_eigs_r, iblank, ρKS)
-#             evalFuncsDict[k] = flutterEvalFuncs[k]
-#         else
-#             println("Unsupported cost function: ", k)
-#         end
-#     end
-#     return evalFuncsDict
-# end # compute_costFuncs
+        if k in staticCostFuncs
+            staticEvalFuncs = SolveStatic.evalFuncs(states, forces, k)
+            evalFuncsDict[k] = staticEvalFuncs[k]
+        elseif k in forcedCostFuncs
+            SolveForced.evalFuncs()
+        elseif k in flutterCostFuncs
+            # Unpack solver data
+            ρKS = solverOptions["rhoKS"]
+            # Get flutter evalFunc and stick into solver evalFuncs
+            flutterEvalFuncs = SolveFlutter.evalFuncs(x, SOL, ρKS)
+            evalFuncsDict[k] = flutterEvalFuncs[k]
+        else
+            println("Unsupported cost function: ", k)
+        end
+    end
+    return evalFuncsDict
+end # compute_costFuncs
 
 # function compute_jacobian(partials::Dict, evalFuncs; method="adjoint")
 #     """

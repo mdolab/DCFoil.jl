@@ -1,11 +1,12 @@
 # --- Julia ---
 
-# @File    :   main.jl
-# @Time    :   2022/06/16
+# @File    :   test_deriv.jl
+# @Time    :   2023/03/16
 # @Author  :   Galen Ng
-# @Desc    :   Main executable for the project
+# @Desc    :   Derivatives wrt fiber angle
 
 using Printf # for better file name
+using JLD
 include("src/DCFoil.jl")
 
 using .DCFoil
@@ -48,7 +49,6 @@ fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
-# TODO: This should get broken up into DVs and model setup
 DVDict = Dict(
     "name" => "akcabay-swept",
     "nNodes" => nNodes,
@@ -116,10 +116,64 @@ solverOptions = Dict(
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-costFuncs = DCFoil.run_model(
-    DVDict,
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
-)
+steps = [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12] # step sizes
+dvKey = "θ" # dv to test deriv
 
+# ************************************************
+#     Forward difference checks
+# ************************************************
+derivs = zeros(length(steps))
+for (ii, dh) in enumerate(steps)
+    costFuncs = DCFoil.run_model(
+        DVDict,
+        evalFuncs;
+        solverOptions=solverOptions
+    )
+    flutt_i = costFuncs["ksflutter"]
+    DVDict[dvKey] += dh
+    costFuncs = DCFoil.run_model(
+        DVDict,
+        evalFuncs;
+        # --- Optional args ---
+        solverOptions=solverOptions
+    )
+    flutt_f = costFuncs["ksflutter"]
+
+    derivs[ii] = (flutt_f - flutt_i) / dh
+    @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
+
+    # --- Reset DV ---
+    DVDict[dvKey] -= dh
+end
+
+save("FWDDiff.jld", "data", derivs)
+
+# # ************************************************
+# #     Complex step checks
+# # ************************************************
+# derivs = zeros(length(steps))
+# for (ii, dh) in enumerate(steps)
+#     # costFuncs = DCFoil.run_model(
+#     #     DVDict,
+#     #     evalFuncs;
+#     #     solverOptions=solverOptions
+#     # )
+#     # flutt_i = costFuncs["ksflutter"]
+#     DVDict[dvKey] += 1im * dh
+
+#     costFuncs = DCFoil.run_model(
+#         DVDict,
+#         evalFuncs;
+#         # --- Optional args ---
+#         solverOptions=solverOptions
+#     )
+#     flutt_f = costFuncs["ksflutter"]
+
+#     derivs[ii] = Imag(flutt_f) / dh
+#     @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
+
+#     # --- Reset DV ---
+#     DVDict[dvKey] -= 1im * dh
+# end
+
+# save("CStep.jld", "data", derivs)

@@ -1,5 +1,7 @@
 # DCFoil.jl
 
+![Alt text](./media/logo.svg "logo-text")
+
 Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested).
 We test for `macOS-latest` and `Ubuntu-latest`.
 

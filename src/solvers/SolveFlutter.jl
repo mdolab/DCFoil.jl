@@ -1466,7 +1466,7 @@ end # compute_KS
 #                         Cost func and sensitivity routines
 # ==============================================================================
 # All of these routines have to take the exact same inputs
-function evalFuncs(x, N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS)
+function evalFuncs(x, SOL, ρKS)
     """
     Compute the cost funcs
 
@@ -1474,8 +1474,8 @@ function evalFuncs(x, N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r
     """
 
     costFuncs = Dict()
-    obj, pmG = postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS)
-    costFuncs["flutter"] = obj
+    obj, pmG = postprocess_damping(SOL.N_MAX_Q_ITER, SOL.flowHistory, SOL.NTotalModesFound, SOL.nFlow, SOL.eigs_r, SOL.iblank, ρKS)
+    costFuncs["ksflutter"] = obj
 
     return costFuncs
 end
