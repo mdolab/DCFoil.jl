@@ -6,6 +6,7 @@
 OUTPUT/
 POSTPROCESSING/MOVIES/
 POSTPROCESSING/PLOTS/
+*.jld
 
 # Test files
 *.out
