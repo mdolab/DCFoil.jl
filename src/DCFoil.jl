@@ -61,12 +61,11 @@ function run_model(
     #   Cost functions
     # ---------------------------
     costFuncsDict = Dict()
-    costFuncSensDict = Dict()
 
     # ---------------------------
     #   Mesh generation
     # ---------------------------
-    FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    FOIL = InitModel.init_static(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
     # --- Write mesh to tecplot for later visualization ---
@@ -190,8 +189,10 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
             # Unpack solver data
             ρKS = solverOptions["rhoKS"]
             # Get flutter evalFunc and stick into solver evalFuncs
-            flutterEvalFuncs = SolveFlutter.evalFuncs(x, SOL, ρKS)
-            evalFuncsDict[k] = flutterEvalFuncs[k]
+            # TODO: doesn't work but ok for now while I sort out sensitivities
+            # flutterEvalFuncs = SolveFlutter.evalFuncs(x, SOL, ρKS)
+            flutterEvalFuncs, _ = SolveFlutter.postprocess_damping(SOL.N_MAX_Q_ITER, SOL.flowHistory, SOL.NTotalModesFound, SOL.nFlow, SOL.eigs_r, SOL.iblank, ρKS)
+            evalFuncsDict[k] = flutterEvalFuncs
         else
             println("Unsupported cost function: ", k)
         end
@@ -199,6 +200,32 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
     return evalFuncsDict
 end # compute_costFuncs
 
+function compute_funcSens(DVDict, evalFuncs;
+    # --- Optional args ---
+    mode = "FiDi",
+    solverOptions=Dict())
+    # ---------------------------
+    #   Mesh generation
+    # ---------------------------
+    FOIL = InitModel.init_static(DVDict, solverOptions)
+    nElem = FOIL.nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
+    # --- Write mesh to tecplot for later visualization ---
+
+    # ---------------------------
+    #   Cost functions
+    # ---------------------------
+    costFuncsSensDict = Dict()
+
+    # ==============================================================================
+    #                         Flutter solution
+    # ==============================================================================
+    if solverOptions["run_flutter"]
+        costFuncsSensDict = SolveFlutter.evalFuncsSens(structMesh, elemConn, DVDict, solverOptions, evalFuncs; mode=mode)
+    end
+
+    return costFuncsSensDict
+end
 # function compute_jacobian(partials::Dict, evalFuncs; method="adjoint")
 #     """
 #     Evaluate the sensitivity of the cost functions in evalFuncs

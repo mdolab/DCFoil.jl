@@ -49,7 +49,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL = InitModel.init_dynamic(DVDict; fSweep=fSweep)
+    global FOIL = InitModel.init_dynamic(DVDict, solverOptions; fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -198,7 +198,7 @@ end
 # # ==============================================================================
 # #                         Solver routines
 # # ==============================================================================
-# function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
+# function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="RAD")
 #     """
 #     Simple complex data type Newton-Rhapson solver
 
@@ -264,7 +264,7 @@ end
 #     return converged_u, converged_r
 # end
 
-# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
+# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="RAD")
 #     """
 #     Given initial input u0, solve system r(u) = 0 with complex Newton
 #     """
@@ -330,7 +330,7 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         # First derivative using 3 stencil points
         ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
-    elseif mode == "FAD" # Forward automatic differentiation
+    elseif mode == "RAD" # Forward automatic differentiation
         ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif mode == "RAD" # Reverse automatic differentiation

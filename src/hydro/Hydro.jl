@@ -58,6 +58,118 @@ function compute_theodorsen(k)
     return ans
 end
 
+# ==============================================================================
+#                         Free surface effects
+# ==============================================================================
+# The following functions compute the generic force coefficients 'C' for the equation
+#     C = Ci  α̈ + Cd α̇ + Cs α
+# However, none of the ROM appears to account for heave effects
+# The ROM should not be used for k > 0.2 and should DEFINITELY not be used for k > 1.0
+
+function compute_clsROM(k, hcRatio, Fnc)
+    """
+    Compute unsteady force coeff with free-surface effect using a polynomial fit
+    Kennedy, R. C., Helfers, D., Young, Y. L. (2015). A Reduced-Order Model for an Oscillating Hydrofoil near the Free Surface. SNAME FAST. http://onepetro.org/snamefast/proceedings-pdf/FAST15/3-FAST15/D031S014R003/2434879/sname-fast-2015-062.pdf/1
+    """
+    if Fnc < 4
+        println("Fnc must be greater than 4 to be independent of free surface")
+        # If you're above this, then you can keep using the same added mass formulation
+    end
+    if k >= 0.2
+        println("Error due to higher k")
+        # This error is because the vortex sheet is not flat anymore
+    end
+    p00 = 5.268
+    p10 = 0.217
+    p01 = -6.085
+    p20 = -0.0141
+    p11 = -0.0425
+    p02 = 4.586
+    p12 = 0.0
+    p03 = 0.0
+    kSquared = k * k
+    CForce = p00 + p10 * hcRatio + p01 * k + p20 * hcRatio * hcRatio + p11 * hcRatio * k + p02 * kSquared + p12 * hcRatio * kSquared + p03 * kSquared * k
+    return CForce
+end
+
+function compute_cldROM(k, hcRatio, Fnc)
+    """
+    Compute unsteady force coeff with free-surface effect using a polynomial fit
+    Kennedy, R. C., Helfers, D., Young, Y. L. (2015). A Reduced-Order Model for an Oscillating Hydrofoil near the Free Surface. SNAME FAST. http://onepetro.org/snamefast/proceedings-pdf/FAST15/3-FAST15/D031S014R003/2434879/sname-fast-2015-062.pdf/1
+    """
+    if Fnc < 4
+        println("Fnc must be greater than 4 to be independent of free surface")
+        # If you're above this, then you can keep using the same added mass formulation
+    end
+    if k >= 0.2
+        println("Error due to higher k")
+        # This error is because the vortex sheet is not flat anymore
+    end
+    p00 = 0.0837
+    p10 = -0.0192
+    p01 = -5.597
+    p20 = 0.0
+    p11 = 0.0251
+    p02 = 26.662
+    p12 = 0.00304
+    p03 = -16.218
+    kSquared = k * k
+    CForce = p00 + p10 * hcRatio + p01 * k + p20 * hcRatio * hcRatio + p11 * hcRatio * k + p02 * kSquared + p12 * hcRatio * kSquared + p03 * kSquared * k
+    return CForce
+end
+#  NOTE: the moments are about the elastic axis
+function compute_cmsROM(k, hcRatio, Fnc)
+    """
+    Compute unsteady force coeff with free-surface effect using a polynomial fit
+    Kennedy, R. C., Helfers, D., Young, Y. L. (2015). A Reduced-Order Model for an Oscillating Hydrofoil near the Free Surface. SNAME FAST. http://onepetro.org/snamefast/proceedings-pdf/FAST15/3-FAST15/D031S014R003/2434879/sname-fast-2015-062.pdf/1
+    """
+    if Fnc < 4
+        println("Fnc must be greater than 4 to be independent of free surface")
+        # If you're above this, then you can keep using the same added mass formulation
+    end
+    if k >= 0.2
+        println("Error due to higher k")
+        # This error is because the vortex sheet is not flat anymore
+    end
+    p00 = 0.0633
+    p10 = -0.00883
+    p01 = -0.000890
+    p20 = 0.000634
+    p11 = 0.00106
+    p02 = -0.127
+    p12 = 0.0
+    p03 = 0.0
+    kSquared = k * k
+    CForce = p00 + p10 * hcRatio + p01 * k + p20 * hcRatio * hcRatio + p11 * hcRatio * k + p02 * kSquared + p12 * hcRatio * kSquared + p03 * kSquared * k
+    return CForce
+end
+
+function compute_cmdROM(k, hcRatio, Fnc)
+    """
+    Compute unsteady force coeff with free-surface effect using a polynomial fit
+    Kennedy, R. C., Helfers, D., Young, Y. L. (2015). A Reduced-Order Model for an Oscillating Hydrofoil near the Free Surface. SNAME FAST. http://onepetro.org/snamefast/proceedings-pdf/FAST15/3-FAST15/D031S014R003/2434879/sname-fast-2015-062.pdf/1
+    """
+    if Fnc < 4
+        println("Fnc must be greater than 4 to be independent of free surface")
+        # If you're above this, then you can keep using the same added mass formulation
+    end
+    if k >= 0.2
+        println("Error due to higher k")
+        # This error is because the vortex sheet is not flat anymore
+    end
+    p00 = -0.000675
+    p10 = 0.000320
+    p01 = -1.023#*0.5
+    p20 = 0.0
+    p11 = -0.00355#*0.25
+    p02 = -0.177#*0.25
+    p12 = 0.0
+    p03 = 0.0
+    kSquared = k * k
+    CForce = p00 + p10 * hcRatio + p01 * k + p20 * hcRatio * hcRatio + p11 * hcRatio * k + p02 * kSquared + p12 * hcRatio * kSquared + p03 * kSquared * k
+    return CForce
+end
+
 function compute_glauert_circ(; semispan, chordVec, α₀, U∞, nNodes, h=nothing, useFS=false)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
@@ -174,7 +286,7 @@ end
 # ************************************************
 #     Hydrodynamic strip forces
 # ************************************************
-function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
+function compute_node_stiff(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     """
     Hydrodynamic stiffness force
     """
@@ -207,8 +319,7 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
     return K_f, K̂_f
 end
 
-
-function compute_node_damp(clα, b, eb, ab, U∞, Λ, ω, rho_f, Ck)
+function compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     """
     Fluid-added damping matrix
     """
@@ -439,8 +550,8 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
         CKVec = compute_theodorsen(k)
         Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
 
-        K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, FOIL.Λ, ω, FOIL.ρ_f, Ck)
-        C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, FOIL.Λ, ω, FOIL.ρ_f, Ck)
+        K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, FOIL.Λ, FOIL.ρ_f, Ck)
+        C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, FOIL.Λ, FOIL.ρ_f, Ck)
         M_f = compute_node_mass(b, ab, FOIL.ρ_f)
 
         # --- Compute Compute local AIC matrix for this element ---

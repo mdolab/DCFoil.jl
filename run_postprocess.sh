@@ -36,9 +36,9 @@ python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
 
 cd ..
 
-# # ==============================================================================
-# #                             Movies
-# # ==============================================================================
+# ==============================================================================
+#                             Movies
+# ==============================================================================
 # # ffmpeg -r <fps> -i <files>
 # fps=50
 # mkdir -p ./POSTPROCESSING/MOVIES/
@@ -60,3 +60,11 @@ cd ..
 
 # ffmpeg -r $fps -i ./DebugOutput/corr-%03d.pdf movie.mp4
 # mv movie.mp4 ./POSTPROCESSING/MOVIES/corr.mp4
+
+
+# ************************************************
+#     Hydroelastic mode migration
+# ************************************************
+# m=1 # mode number
+# ffmpeg -r $fps -i ./POSTPROCESSING/PLOTS/IMOCA60KeelCFRP/hydroelastic-mode-shapes/mode$m_%04d.png movie.mp4
+# mv movie.mp4 ./POSTPROCESSING/MOVIES/IMOCA60KeelCFRP/mode$m.mp4

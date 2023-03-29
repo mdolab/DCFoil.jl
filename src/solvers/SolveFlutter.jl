@@ -2,7 +2,7 @@
 """
 @File    :   SolveFlutter.jl
 @Time    :   2022/10/07
-@Author  :   Galen Ng
+@Author  :   Galen Ng with snippets from Eirikur Jonsson
 @Desc    :   p-k method for flutter analysis, also contains modal analysis
 """
 
@@ -17,7 +17,9 @@ export solve
 # --- Libraries ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote
+using Zygote, FiniteDifferences
+using BenchmarkTools
+using TimerOutputs
 # using Profile # for profiling
 using Plots # for debugging
 using Printf
@@ -50,6 +52,7 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
     """
+    # to = TimerOutput() # for timing
 
     # ************************************************
     #     Initialize
@@ -60,7 +63,7 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     nModes = solverOptions["nModes"]
     tipMass = solverOptions["tipMass"]
     debug = solverOptions["debug"]
-    global FOIL = InitModel.init_dynamic(DVDict; uRange=uRange, fSweep=fSweep)
+    global FOIL = InitModel.init_dynamic(DVDict, solverOptions; uRange=uRange, fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
@@ -79,6 +82,7 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     elemType = "BT2"
     loadType = "force"
 
+    # @timeit to "FEM assembly"
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
     if tipMass
@@ -93,17 +97,20 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # ---------------------------
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    fname = @sprintf("%s/structMatrices.jld", outputDir)
+    save(fname, "Ks", Ks, "Ms", Ms)
 
     # ---------------------------
     #   Initialize stuff
     # ---------------------------
     u = copy(globalF)
-    derivMode = "FAD"
+    derivMode = "RAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     # ---------------------------
     #   Pre-solve system
     # ---------------------------
+    # @timeit to "FEM static solution"
     q = FEMMethods.solve_structure(Ks, Ms, F)
 
     # --- Populate displacement vector ---
@@ -118,6 +125,7 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # --- Apply the flutter solution method ---
     N_MAX_Q_ITER = solverOptions["maxQIter"] # TEST VALUE
     Nr = 20 # reduced problem size (Nr x Nr)
+    # @timeit to "Flutter solution"
     true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = compute_pkFlutterAnalysis(
         uRange,
         structMesh,
@@ -133,6 +141,10 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
         Δu=0.4,
         debug=debug
     )
+    # disable_timer!(to)
+    # println("")
+    # show(to)
+    # println("")
 
     uSol, _ = FEMMethods.put_BC_back(u, CONSTANTS.elemType)
     # ************************************************
@@ -160,7 +172,7 @@ function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Di
     tipMass = solverOptions["tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
-    global FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    global FOIL = InitModel.init_static(DVDict, solverOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -204,7 +216,7 @@ function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Di
     globalKf_r = copy(globalKs) * 0
     globalKf_i = copy(globalKs) * 0
     globalCf_i = copy(globalKs) * 0
-    derivMode = "FAD"
+    derivMode = "RAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     # ---------------------------
@@ -380,9 +392,9 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     """
 
     # Rows and columns of old and new eigenvectors
-    M_old::Int64 = size(old_r)[1] # TODO: why aren't these used
+    # M_old::Int64 = size(old_r)[1] # TODO: why aren't these used
     N_old::Int64 = size(old_r)[2]
-    M_new::Int64 = size(new_r)[1] # TODO: why aren't these used
+    # M_new::Int64 = size(new_r)[1] # TODO: why aren't these used
     N_new::Int64 = size(new_r)[2]
 
     # --- Initialize outputs ---
@@ -483,6 +495,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, FOIL, b_ref, dim::Int64, Nr:
     """
     Non-iterative flutter solution following van Zyl https://arc.aiaa.org/doi/abs/10.2514/2.2806
     Everything from here on is based on the FORTRAN code written by Eirikur Jonsson.
+    The docstrings may be exactly the same as Eirikur's code.
 
     Inputs
     ------
@@ -982,6 +995,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, Qr, structMesh, FOIL
     globalKf_r::Matrix{Float64} = zeros(Float64, dim, dim)
     globalKf_i::Matrix{Float64} = zeros(Float64, dim, dim)
     globalCf_i::Matrix{Float64} = zeros(Float64, dim, dim)
+    # TODO: visualization of matrix magnitudes
 
     dimwithBC = Nr
     # Eigenvalue and vector matrices
@@ -1379,8 +1393,8 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
 
     Outputs
     -------
-    pmG - flutter safety margin
     obj - flutter constraint. Float
+    pmG - flutter safety margin
     """
     # ************************************************
     #     Initializations
@@ -1466,41 +1480,46 @@ end # compute_KS
 #                         Cost func and sensitivity routines
 # ==============================================================================
 # All of these routines have to take the exact same inputs
-function evalFuncs(x, SOL, ρKS)
+function evalFuncs(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     """
-    Compute the cost funcs
-
-    See DCFoil.jl for possible funcs
+    Effectively a wrapper to solve and compute the cost func
     """
 
-    costFuncs = Dict()
+    SOL = solve(structMesh, elemConn, DVDict, solverOptions)
+    ρKS = solverOptions["rhoKS"]
+
     obj, pmG = postprocess_damping(SOL.N_MAX_Q_ITER, SOL.flowHistory, SOL.NTotalModesFound, SOL.nFlow, SOL.eigs_r, SOL.iblank, ρKS)
-    costFuncs["ksflutter"] = obj
 
-    return costFuncs
+    return obj
 end
 
-function evalFuncsSens(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, eigs_r, iblank, ρKS; mode="FiDi")
+function evalFuncsSens(structMesh, elemConn, DVDict::Dict, solverOptions::Dict, evalFunc; mode="FiDi")
     """
     Compute the total sensitivities for this
     """
+    if evalFunc == "ksflutter"
+        funcsSens = compute_∂f∂x(structMesh, elemConn, DVDict, solverOptions; mode=mode)
+        return funcsSens
+    end
 
-
-    return costFuncs
 end # end evalFuncsSens
 
-function compute_∂f∂x(x; mode="FiDi")
+function compute_∂f∂x(structMesh, elemConn, DVDict, solverOptions::Dict; mode="FiDi")
     """
     This is a matrix of partial derivatives evaluated at 'x'
     """
 
-    ∂KS∂g =
-        if mode == "FiDi"
-            ∂g∂x = compute_pkFlutterAnalysis
-        end
+    if mode == "FiDi" # use finite differences
+        ∂KSflutter∂x = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> evalFuncs(structMesh, elemConn, x, solverOptions), DVDict)
+        ∂f∂x = ∂KSflutter∂x
+        return ∂f∂x
+    elseif mode == "RAD" # use automatic differentiation
+        ∂KSflutter∂x = Zygote.gradient((x) -> evalFuncs(structMesh, elemConn, x, solverOptions), DVDict) #TODO: pick up here
+        ∂f∂x = ∂KSflutter∂x
+        return ∂f∂x
+    end
 
-    ∂KSflutter∂x = ∂g∂x
-    return ∂f∂x
+
 end # end compute_∂f∂x
 
 end # end module

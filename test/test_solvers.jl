@@ -93,7 +93,7 @@ function test_SolveStaticRigid()
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
         # --- Mesh ---
-        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
@@ -209,7 +209,7 @@ function test_SolveStaticIso()
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
         # --- Mesh ---
-        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
@@ -320,7 +320,7 @@ function test_SolveStaticComp()
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
         # --- Mesh ---
-        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
@@ -429,7 +429,7 @@ function test_SolveForcedComp()
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
         # --- Mesh ---
-        FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+        FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
         # --- Solve ---
@@ -558,7 +558,7 @@ function test_flutter()
         "nModes" => 3,
         "uRange" => [5.0, 6.0],
     )
-    FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    FOIL = InitModel.init_static(DVDict, solverOptions)
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
@@ -619,7 +619,7 @@ function test_modal()
         "uRange" => nothing,
     )
     # --- Mesh ---
-    FOIL = InitModel.init_static(DVDict["nNodes"], DVDict)
+    FOIL = InitModel.init_static(DVDict, solverOptions)
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)

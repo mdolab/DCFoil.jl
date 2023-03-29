@@ -12,7 +12,7 @@ using .NewtonRhapson, .EigenvalueProblem
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="FAD", is_cmplx=false)
+function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="RAD", is_cmplx=false)
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters

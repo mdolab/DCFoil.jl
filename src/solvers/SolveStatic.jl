@@ -61,8 +61,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #     INITIALIZE
     # ************************************************
     outputDir = solverOptions["outputDir"]
-    nNodes = DVDict["nNodes"]
-    global FOIL = InitModel.init_static(nNodes, DVDict) # seems to only be global in this module
+    nNodes = solverOptions["nNodes"]
+    global FOIL = InitModel.init_static(DVDict, solverOptions) # seems to only be global in this module
 
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
@@ -135,7 +135,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
-    derivMode = "FAD"
+    derivMode = "RAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
 
     # Actual solve
@@ -145,21 +145,6 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
 
     # --- Get hydroLoads again on solution ---
     fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
-
-    # # ************************************************
-    # #     COMPUTE FUNCTIONS OF INTEREST
-    # # ************************************************
-    # costFuncs = evalFuncs(uSol, fHydro, evalFuncs)
-
-    # # ************************************************
-    # #     COMPUTE SENSITIVITIES
-    # # ************************************************
-    # mode = "FAD"
-    # ∂r∂u = compute_∂r∂u(qSol, mode)
-    # # TODO:I'm not really sure how to do these yet
-    # ∂r∂x = compute_∂r∂x(qSol, mode)
-    # ∂f∂u = compute_∂f∂u(qSol, mode)
-    # ∂f∂x = compute_∂f∂x(qSol, mode)
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -329,7 +314,7 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         # First derivative using 3 stencil points
         ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
-    elseif mode == "FAD" # Forward automatic differentiation
+    elseif mode == "RAD" # Reverse automatic differentiation
         ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif mode == "RAD" # Reverse automatic differentiation

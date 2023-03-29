@@ -593,8 +593,7 @@ function solve_structure(K, M, F)
     Solve the structural system
     """
 
-    println("FEM solve took")
-    @time q = K \ F # TODO: should probably replace this with an iterative solver
+    q = K \ F # TODO: should probably replace this with an iterative solver
 
     return q
 end
