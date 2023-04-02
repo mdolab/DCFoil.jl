@@ -8,6 +8,7 @@ using LinearAlgebra
 include("./NewtonRhapson.jl")
 include("./EigenvalueProblem.jl")
 using .NewtonRhapson, .EigenvalueProblem
+using Zygote
 
 # ==============================================================================
 #                         Solver routines
@@ -146,7 +147,6 @@ function cmplxStdEigValProb(A_r, A_i, n)
     # --- Initialize matrices ---
     A = A_r + 1im * A_i
 
-
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
@@ -244,14 +244,16 @@ function ipack1d(A, mask, nFlow)
 
     nTrue = count1d(mask)
     B = zeros(Int64, nFlow)
+    B_z = Zygote.Buffer(B)
 
     nFound = 0
     for ii in eachindex(A)
         if mask[ii]
             nFound += 1
-            B[nFound] = A[ii]
+            B_z[nFound] = A[ii]
         end
     end
+    B = copy(B_z)
 
     return B, nFound
 end # ipack1d

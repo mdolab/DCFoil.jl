@@ -38,7 +38,7 @@ debug = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 10 # spatial nodes
+nNodes = 8 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -121,25 +121,36 @@ steps = [1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 
 dvKey = "θ" # dv to test deriv
 evalFunc = "ksflutter"
 
-# ************************************************
-#     Forward difference checks
-# ************************************************
-funcVal = 0.0f0
-derivs = zeros(length(steps))
+# Right now, we require a complete solve to get the derivatives
+include("../../src/solvers/SolveFlutter.jl")
+include("../../src/InitModel.jl")
+include("../../src/struct/FiniteElements.jl")
+using .SolveFlutter, .InitModel, .FEMMethods
+FOIL = InitModel.init_static(DVDict, solverOptions)
+nElem = FOIL.nNodes - 1
+structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
+SOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
 
-# for (ii, dh) in enumerate(steps)
-derivs = DCFoil.compute_funcSens(DVDict, evalFunc; mode="FiDi", solverOptions=solverOptions)
-save("./FINDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal) # index the first because it returns a tuple
-println("deriv = ", derivs)
+# # NOTE: I have just been commenting out the following chunks
+# # ************************************************
+# #     Forward difference checks
+# # ************************************************
+# funcVal = 0.0f0
+# derivs = zeros(length(steps))
+
+# # for (ii, dh) in enumerate(steps)
+# derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="FiDi", solverOptions=solverOptions)
+# save("./FINDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal) # index the first because it returns a tuple
+# println("deriv = ", derivs)
 
 
 
 # ************************************************
 #     RAD checks
 # ************************************************
-
-# TODO: PICKUP HERE and fix the mutating!!
-derivs = DCFoil.compute_funcSens(DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
+SOL = 1
+solverOptions["debug"] = false # You have to turn debug off for RAD to work
+derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
 save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
 println("deriv = ", derivs)
 

@@ -200,7 +200,7 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
     return evalFuncsDict
 end # compute_costFuncs
 
-function compute_funcSens(DVDict, evalFuncs;
+function compute_funcSens(SOL, DVDict, evalFuncs;
     # --- Optional args ---
     mode = "FiDi",
     solverOptions=Dict())
@@ -221,7 +221,7 @@ function compute_funcSens(DVDict, evalFuncs;
     #                         Flutter solution
     # ==============================================================================
     if solverOptions["run_flutter"]
-        costFuncsSensDict = SolveFlutter.evalFuncsSens(structMesh, elemConn, DVDict, solverOptions, evalFuncs; mode=mode)
+        costFuncsSensDict = SolveFlutter.evalFuncsSens(SOL, structMesh, elemConn, DVDict, solverOptions, evalFuncs; mode=mode)
     end
 
     return costFuncsSensDict

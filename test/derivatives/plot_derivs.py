@@ -41,6 +41,9 @@ def load_jld(filename: str):
 # ==============================================================================
 #                         Main driver
 # ==============================================================================
+
+derivs = load_jld("../../eigenDerivs.jld")
+breakpoint()
 if __name__ == "__main__":
     fname = "derivs.pdf"
 
