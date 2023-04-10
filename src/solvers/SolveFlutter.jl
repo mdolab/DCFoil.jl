@@ -11,8 +11,10 @@ module SolveFlutter
 Eigenvalue and eigenvector solution
 
 NOTE:
-any function with '_d' at the end is the one used for differentiation because certain operations cannot be differentiated
+any function with '_d' at the end is the one used for forward differentiation 
+because certain operations cannot be differentiated
 by the AD tool (e.g., anything related to file writing)
+'_b' is for backward mode
 """
 
 # --- Public functions ---
@@ -2086,7 +2088,7 @@ end
 
 function evalFuncsSens(SOL, structMesh, elemConn, DVDict::Dict, solverOptions::Dict, evalFunc; mode="FiDi")
     """
-    Compute the total sensitivities for this
+    Compute the total sensitivities for this evalFunc
     """
     if evalFunc == "ksflutter"
 
@@ -2107,6 +2109,7 @@ function compute_∂f∂x(structMesh, elemConn, DVDict, solverOptions::Dict; mod
         ∂f∂x = ∂KSflutter∂x
         return ∂f∂x
     elseif mode == "RAD" # use automatic differentiation
+        # TODO: REPLACE WITH SENS FUNC
         ∂KSflutter∂x = Zygote.gradient((x) -> evalFuncs_d(structMesh, elemConn, x, solverOptions), DVDict)
         return ∂KSflutter∂x
     end

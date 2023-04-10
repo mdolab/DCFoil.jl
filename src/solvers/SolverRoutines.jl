@@ -1,6 +1,12 @@
 module SolverRoutines
 """
 Generic routines every solver needs
+
+NOTE:
+any function with '_d' at the end is the one used for forward differentiation 
+because certain operations cannot be differentiated
+by the AD tool (e.g., anything related to file writing)
+'_b' is for backward mode
 """
 
 # --- Libraries ---
@@ -165,6 +171,93 @@ function cmplxStdEigValProb(A_r, A_i, n)
     return w_r, w_i, VL_r, VL_i, VR_r, VR_i
 end # cmplxStdEigValProb
 
+function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id)
+    """
+    Analytic derivative for the standard eigenvalue problem Av= \lambda v
+    with eigenvalues d_k
+        Dd = I \circ (U^-1 * Ad U)
+        Ud = U * (F \circ U^-1 * Ad * U)
+    where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
+
+    See: 
+        Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
+
+    Inputs
+    ------
+        A_r
+        A_rd
+        A_i
+        A_id
+    Outputs
+    -------
+        w_r - real part of eigenvalues
+        w_rd - real part of eigenvalues (seed)
+        w_i - imag part of eigenvalues
+        w_id - imag part of eigenvalues (seed)
+        VR_r - real right eigenvectors
+        VR_rd - real right eigenvectors (seed)
+        VR_i - imag right eigenvectors
+        VR_id - imag right eigenvectors (seed)
+    """
+    # --- Initialize matrices ---
+    w_rd = zeros(size(A_r))
+    w_id = zeros(size(A_r))
+    E = zeros(size(A_r))
+    F = zeros(size(A_r))
+    A = A_r + 1im * A_i
+
+    # --- Solve standard eigenvalue problem (Ax = λx) ---
+    # This method uses the julia built-in eigendecomposition
+    # eigen() is a spectral decomposition
+    w, Vr = eigen(A)
+    n = size(Vr)[1]
+    VR_r = real(Vr)
+    VR_i = imag(Vr)
+
+    # ---------------------------
+    #   Eigenvalue derivatives Dd
+    # ---------------------------
+    # --- Compute eigenvector inverses U^-1 ---
+    Vrinv_r, Vrinv_i = cmplxInverse(VR_r, VR_i, n)
+    Vrinv = Vrinv_r + 1im * Vrinv_i
+
+    # --- Compute U^-1 * Ad * U ---
+    tmp1 = (Vrinv * Ad) * Vr
+
+    # Don't do Hadamard product with identity matrix.
+    for ii = 1:n
+        w_rd = real(tmp2(ii, ii))
+        w_id = imag(tmp2(ii, ii))
+    end
+    # ---------------------------
+    #   Eigenvector derivatives Ud
+    # ---------------------------
+    # --- E ---
+    for jj in 1:n
+        for ii in 1:n
+            E[ii, jj] = w(jj) - w(ii)
+        end
+    end
+
+    # --- F ---
+    for jj in 1:n
+        for ii in 1:n
+            if ii != jj
+                F[ii, jj] = 1.0 / E[ii, jj]
+            end
+        end
+    end
+
+    # --- F \circ (U^-1 * Ad * U) ---
+    tmp1 = F .* tmp1
+
+    # --- Final U * (F \circ (U^-1 * Ad * U)) ---
+    Vrd = Vr * tmp1
+    VR_rd = real(Vrd)
+    VR_id = imag(Vrd)
+
+    return w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id
+end # cmplxStdEigValProb_d
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================

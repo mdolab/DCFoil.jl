@@ -226,6 +226,7 @@ function compute_funcSens(SOL, DVDict, evalFuncs;
 
     return costFuncsSensDict
 end
+
 # function compute_jacobian(partials::Dict, evalFuncs; method="adjoint")
 #     """
 #     Evaluate the sensitivity of the cost functions in evalFuncs
