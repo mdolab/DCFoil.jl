@@ -121,15 +121,19 @@ steps = [1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 
 dvKey = "θ" # dv to test deriv
 evalFunc = "ksflutter"
 
+
+
 # Right now, we require a complete solve to get the derivatives
 include("../../src/solvers/SolveFlutter.jl")
 include("../../src/InitModel.jl")
 include("../../src/struct/FiniteElements.jl")
-using .SolveFlutter, .InitModel, .FEMMethods
+include("../../src/solvers/SolverRoutines.jl")
+include("../../src/hydro/Hydro.jl")
+using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro
 FOIL = InitModel.init_static(DVDict, solverOptions)
 nElem = FOIL.nNodes - 1
 structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
-SOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+# SOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
 
 # # NOTE: I have just been commenting out the following chunks
 # # ************************************************
@@ -143,16 +147,52 @@ SOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
 # save("./FINDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal) # index the first because it returns a tuple
 # println("deriv = ", derivs)
 
+# ************************************************
+#     Stupid simple unit tests
+# ************************************************
+dh = steps[4]
+bd = 1.0
+
+pkEqnType = "ng"
+dim = 3
+ω = 0.1
+b = 1.0
+U∞ = 1.0
+DOFBlankingList = [1, 2, 3, 4]
+Mf = zeros(Float64, dim, dim)
+Cf_r = zeros(Float64, dim, dim)
+Kf_r = zeros(Float64, dim, dim)
+Kf_i = zeros(Float64, dim, dim)
+Cf_i = zeros(Float64, dim, dim)
+KK = zeros(Float64, dim, dim)
+MM = zeros(Float64, dim, dim)
+# Mf[1:dim, 1:dim] .= 1.0
+Kf_r[1:dim, 1:dim] .= -1.0
+KK[1:dim, 1:dim] .= 10.0
+for ii in 1:dim
+    MM[ii, ii] = 10.0
+end
+p_r, p_rd, p_i, p_id, R_aa_r, R_aa_rd, R_aa_i, R_aa_id = SolveFlutter.solve_eigenvalueProblem_d(pkEqnType, dim, b, bd, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+# TODO: PICKUP HERE verify derivatives here
+
+# # ************************************************
+# #     FAD checks
+# # ************************************************
+# SOL = 1
+# solverOptions["debug"] = false # You have to turn debug off for RAD to work
+# derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="FAD", solverOptions=solverOptions)
+# save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
+# println("deriv = ", derivs)
 
 
-# ************************************************
-#     RAD checks
-# ************************************************
-SOL = 1
-solverOptions["debug"] = false # You have to turn debug off for RAD to work
-derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
-save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
-println("deriv = ", derivs)
+# # ************************************************
+# #     RAD checks
+# # ************************************************
+# SOL = 1
+# solverOptions["debug"] = false # You have to turn debug off for RAD to work
+# derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
+# save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
+# println("deriv = ", derivs)
 
 # # ************************************************
 # #     Forward difference checks (dumb way)
