@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"

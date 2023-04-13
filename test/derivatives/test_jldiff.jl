@@ -7,6 +7,7 @@
 
 using Printf # for better file name
 using JLD
+using ForwardDiff, FiniteDifferences
 include("../../src/DCFoil.jl")
 
 using .DCFoil
@@ -154,7 +155,7 @@ dh = steps[4]
 bd = 1.0
 
 pkEqnType = "ng"
-dim = 3
+dim = 2
 ω = 0.1
 b = 1.0
 U∞ = 1.0
@@ -172,9 +173,30 @@ KK[1:dim, 1:dim] .= 10.0
 for ii in 1:dim
     MM[ii, ii] = 10.0
 end
-p_r, p_rd, p_i, p_id, R_aa_r, R_aa_rd, R_aa_i, R_aa_id = SolveFlutter.solve_eigenvalueProblem_d(pkEqnType, dim, b, bd, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+# p_r, p_rd, p_i, p_id, R_aa_r, R_aa_rd, R_aa_i, R_aa_id = SolveFlutter.solve_eigenvalueProblem_d(pkEqnType, dim, b, bd, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
 # TODO: PICKUP HERE verify derivatives here
-
+A_r = [2.0 7.0; 1.0 8.0]
+A_rd = zeros(Float64, dim, dim)
+A_rd[1, 1] = 1.0
+A_i = [0.0 0.0; 0.0 0.0]
+A_id = zeros(Float64, dim, dim)
+w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id = SolverRoutines.cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, dim)
+println("Primal values:")
+println("w_r = ", w_r)
+println("w_i = ", w_i)
+println("VR_r", VR_r)
+println("VR_i", VR_i)
+println("Dual values:")
+println("w_rd = ", w_rd)
+println("w_id = ", w_id)
+# println("VR_rd", VR_rd)
+# println("VR_id", VR_id)
+w_r, w_i, _, _, _, _ = SolverRoutines.cmplxStdEigValProb(A_r, A_i, dim)
+A_r[1, 1] += dh
+w_rf, w_i, _, _, _, _ = SolverRoutines.cmplxStdEigValProb(A_r, A_i, dim)
+fd = (w_rf - w_r) ./ dh
+println("FD:")
+println("d w_r / d A_r ", fd)
 # # ************************************************
 # #     FAD checks
 # # ************************************************

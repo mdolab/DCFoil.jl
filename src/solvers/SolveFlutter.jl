@@ -32,6 +32,7 @@ using Printf
 using JLD # julia data format
 using FiniteDifferences
 using Zygote
+using ChainRules
 
 # --- DCFoil modules ---
 include("../InitModel.jl")
@@ -2110,7 +2111,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, U∞, MM, KK, Qr, structMesh, FOIL
 
         # --- Solve eigenvalue problem ---
         # println(k)
-        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, k, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
         # --- Sort eigenvalues from small to large ---
         p_r = sort(real(p_r_tmp))
         idxs = sortperm(real(p_r_tmp))
@@ -2267,7 +2268,7 @@ function sweep_kCrossings_d(dim, kSweep, b_ref, U∞, MM, KK, Qr, structMesh, FO
 
         # --- Solve eigenvalue problem ---
         # println(k)
-        p_r_tmp, p_r_tmpd, p_i_tmp, p_i_tmpd, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem_d(pkEqnType, dimwithBC, k, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+        p_r_tmp, p_r_tmpd, p_i_tmp, p_i_tmpd, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem_d(pkEqnType, dimwithBC, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
 
 
         # --- Sort eigenvalues from small to large ---
@@ -2435,7 +2436,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
 end # end extract_kCrossings
 
-function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
     # """
     # This routine solves the following eigenvalue problem.
     #   [ (U/b)^2 * p^2 * M + (U/b) * C + K - F_aero ] * u = 0
@@ -2569,16 +2570,16 @@ function solve_eigenvalueProblem(pkEqnType, dim, k, b, U∞, FOIL, Mf, Cf_r, Cf_
     # --- Compute the eigenvalues ---
     p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb(FlutterMat_r, FlutterMat_i, 2 * dim)
 
-    # --- Forward AD deriv ---
-    # NOTE: the eigenvector derivatives here are not used
-    p_r_tmp, p_r_tmpd, p_i_tmp, p_i_tmpd, R_aa_r_tmp, R_aa_r_tmpd, R_aa_i_tmp, R_aa_i_tmpd = SolverRoutines.cmplxStdEigValProb_d(real(FlutterMat_r), imag(FlutterMat_r), real(FlutterMat_i), imag(FlutterMat_i), 2 * dim)
-    # println("Flutter positive eigenvalues: ", all(>=(0), p_i) .* nonDimFactor, "Hz")
-    # println("Flutter positive eigenvalues: ", p_i .* nonDimFactor, "Hz")
-    # Operator overloading
-    p_r = p_r_tmp .+ 1im * p_r_tmpd
-    p_i = p_i_tmp .+ 1im * p_i_tmpd
-    R_aa_r = R_aa_r_tmp .+ 1im * 0
-    R_aa_i = R_aa_i_tmp .+ 1im * 0
+    # # --- Forward AD deriv ---
+    # # NOTE: the eigenvector derivatives here are not used
+    # p_r_tmp, p_r_tmpd, p_i_tmp, p_i_tmpd, R_aa_r_tmp, R_aa_r_tmpd, R_aa_i_tmp, R_aa_i_tmpd = SolverRoutines.cmplxStdEigValProb_d(real(FlutterMat_r), imag(FlutterMat_r), real(FlutterMat_i), imag(FlutterMat_i), 2 * dim)
+    # # println("Flutter positive eigenvalues: ", all(>=(0), p_i) .* nonDimFactor, "Hz")
+    # # println("Flutter positive eigenvalues: ", p_i .* nonDimFactor, "Hz")
+    # # Operator overloading
+    # p_r = p_r_tmp .+ 1im * p_r_tmpd
+    # p_i = p_i_tmp .+ 1im * p_i_tmpd
+    # R_aa_r = R_aa_r_tmp .+ 1im * 0
+    # R_aa_i = R_aa_i_tmp .+ 1im * 0
 
     # --- Reverse AD deriv ---
     # TODO: Implement this
@@ -2923,7 +2924,7 @@ function compute_∂KSflutt∂x(SOL, structMesh, elemConn, DVDict, solverOptions
     """
     Gradient of the KSFlutter cost function evaluated at 'x'
     """
-
+    
     if mode == "FiDi" # use finite differences
         ∂KSflutter∂x = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> evalFuncs(structMesh, elemConn, x, solverOptions), DVDict)
         ∂f∂x = ∂KSflutter∂x
@@ -2935,9 +2936,7 @@ function compute_∂KSflutt∂x(SOL, structMesh, elemConn, DVDict, solverOptions
 
         return ∂KSflutter∂x
     elseif mode == "FAD"
-        # The end goal is
-        #  dKSflutterdx = ∑  ∂()
-        # Outer --> inner process of building up chain rule
+        # ForwardDiff.gradient((x) -> evalFuncs(structMesh, elemConn, x, solverOptions), DVDict)
         ∂KSflutter∂x, SOL = solve_d(structMesh, elemConn, DVDict, solverOptions)
 
         return ∂KSflutter∂x

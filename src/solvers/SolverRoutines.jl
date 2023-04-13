@@ -190,9 +190,9 @@ function cmplxMatmult_d(A_r, A_rd, A_i, A_id, B_r, B_rd, B_i, B_id)
 
     C_r, C_i = cmplxMatmult(A_r, A_i, B_r, B_i)
 
-    C_rd = A_rd*B_r - A_id*B_i + A_r*B_rd - A_i*B_id
+    C_rd = A_rd * B_r - A_id * B_i + A_r * B_rd - A_i * B_id
 
-    C_id = A_rd*B_i + A_id*B_r + A_r*B_id + A_i*B_rd
+    C_id = A_rd * B_i + A_id * B_r + A_r * B_id + A_i * B_rd
 
     return C_r, C_rd, C_i, C_id
 end # cmplxMatmult
@@ -239,41 +239,41 @@ function cmplxStdEigValProb(A_r, A_i, n)
 end # cmplxStdEigValProb
 
 function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
-    # """
-    # Forward mode analytic derivative for the standard eigenvalue problem Av= \lambda v
-    # with eigenvalues d_k
-    #     Dd = I \circ (U^-1 * Ad U)
-    #     Ud = U * (F \circ U^-1 * Ad * U)
-    # where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-    # 
-    # 'd' terms are the forward seeds
-    # 
-    # See: 
-    #     Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
-    # 
-    # Inputs
-    # ------
-    #     A_r
-    #     A_rd (forward seed)
-    #     A_i
-    #     A_id (forward seed)
-    # Outputs
-    # -------
-    #     w_r - real part of eigenvalues
-    #     w_rd - real part of eigenvalues (derivative)
-    #     w_i - imag part of eigenvalues
-    #     w_id - imag part of eigenvalues (derivative)
-    #     VR_r - real right eigenvectors
-    #     VR_rd - real right eigenvectors (derivative)
-    #     VR_i - imag right eigenvectors
-    #     VR_id - imag right eigenvectors (derivative)
-    # """
+    """
+    Forward mode analytic derivative for the standard eigenvalue problem [A] v= λ v
+    with eigenvalues d_k
+        Dd = I ∘ (U^-1 * Ad U)
+        Ud = U * (F ∘ U^-1 * Ad * U)
+    where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
+
+    'd' terms are the forward seeds
+
+    See: 
+        Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
+
+    Inputs
+    ------
+        A_r - nxn real part matrix
+        A_rd (forward seed)
+        A_i - nxn imag part matrix
+        A_id (forward seed)
+    Outputs
+    -------
+        w_r - real part of eigenvalues
+        w_rd - real part of eigenvalues (derivative)
+        w_i - imag part of eigenvalues
+        w_id - imag part of eigenvalues (derivative)
+        VR_r - real right eigenvectors
+        VR_rd - real right eigenvectors (derivative)
+        VR_i - imag right eigenvectors
+        VR_id - imag right eigenvectors (derivative)
+    """
 
     # --- Initialize matrices ---
-    w_rd = zeros(size(A_r))
-    w_id = zeros(size(A_r))
-    E = zeros(ComplexF64, size(A_r))
-    F = zeros(ComplexF64, size(A_r))
+    w_rd = zeros(n)
+    w_id = zeros(n)
+    E = zeros(ComplexF64, n, n)
+    F = zeros(ComplexF64, n, n)
     A = A_r + 1im * A_i
     Ad = A_rd + 1im * A_id
 
@@ -298,8 +298,8 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
 
     # Don't do Hadamard product with identity matrix.
     for ii = 1:n
-        w_rd = real(tmp1[ii, ii])
-        w_id = imag(tmp1[ii, ii])
+        w_rd[ii] = real(tmp1[ii, ii])
+        w_id[ii] = imag(tmp1[ii, ii])
     end
     # ---------------------------
     #   Eigenvector derivatives Ud
@@ -320,7 +320,7 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
         end
     end
 
-    # --- F \circ (U^-1 * Ad * U) ---
+    # --- F ∘ (U^-1 * Ad * U) ---
     tmp1 = F .* tmp1
 
     # --- Final U * (F \circ (U^-1 * Ad * U)) ---
@@ -330,6 +330,90 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
 
     return w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id
 end # cmplxStdEigValProb_d
+
+function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
+    """
+    Reverse mode analytic derivative for the standard eigenvalue problem [A] v= λ v
+    with eigenvalues d_k
+        Ā = U^-H * (D̄ + F ∘ (U^H * Ū)) * U^H
+    where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
+
+    overbar terms are the reverse seeds
+
+    See: 
+        Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
+
+    Inputs
+    ------
+        A_r - nxn real part matrix
+        A_i - nxn imag part matrix
+    Outputs
+    -------
+        w_r - real part of eigenvalues
+        w_i - imag part of eigenvalues
+        VR_r - real right eigenvectors
+        VR_i - imag right eigenvectors
+    """
+
+    # --- Initialize matrices ---
+    E = zeros(ComplexF64, n, n)
+    F = zeros(ComplexF64, n, n)
+    A = A_r + 1im * A_i
+    VR̄ = VR̄_r + 1im * VR̄_i
+    w̄ = w̄_r + 1im * w̄_i
+
+    # --- Solve standard eigenvalue problem (Ax = λx) ---
+    # This method uses the julia built-in eigendecomposition
+    # eigen() is a spectral decomposition
+    w, Vr = eigen(A)
+    w_r = real(w)
+    w_i = imag(w)
+    VR_r = real(Vr)
+    VR_i = imag(Vr)
+
+    # ---------------------------
+    #   Hermitian transpose (U^-H) conj transpose
+    # ---------------------------
+    VrHerm = Vr'
+    VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
+
+    # --- E ---
+    for jj in 1:n
+        for ii in 1:n
+            E[ii, jj] = w[jj] - w[ii]
+        end
+    end
+
+    # --- F ---
+    for jj in 1:n
+        for ii in 1:n
+            if ii != jj
+                F[ii, jj] = 1.0 / E[ii, jj]
+            end
+        end
+    end
+
+    # --- Calculate F ∘ (U^H * Ū) ---
+    tmp1 = F .* (VrHerm * VR̄)
+
+    # Add D̄
+    for ii = 1:n
+        tmp1[ii, ii] += w̄[ii]
+    end
+
+    Ā = ((VrHerminv_r + 1im * VrHerminv_i) * tmp1) * VrHerm
+    Ā_r = real(Ā)
+    Ā_i = imag(Ā)
+
+    # Then zero seeds out
+    w̄_r = zeros(n)
+    w̄_i = zeros(n)
+    VR̄_r = zeros(n, n)
+    VR̄_i = zeros(n, n)
+
+    return Ā_r, Ā_i, w_r, w̄_r, w_i, w̄_i, VR_r, VR̄_r, VR_i, VR̄_i
+
+end # cmplxStdEigValProb_b
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================
