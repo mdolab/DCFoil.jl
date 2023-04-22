@@ -66,7 +66,7 @@ struct dynamicFoil{T<:Float64}
     nNodes::Int64 # number of evaluation points on span
     constitutive::String # constitutive model
     # --- Only things different for the dynamic foil ---
-    fSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    fSweep # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
     uRange::Vector{T} # forward speed sweep [m/s] (for flutter solution)
 end
 

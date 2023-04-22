@@ -7,7 +7,7 @@
 
 using Printf # for better file name
 using JLD
-using ForwardDiff, FiniteDifferences
+using ForwardDiff, FiniteDifferences, Zygote
 include("../../src/DCFoil.jl")
 
 using .DCFoil
@@ -39,13 +39,12 @@ debug = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 8 # spatial nodes
+nNodes = 5 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
-df = 1
-fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [180.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -130,11 +129,16 @@ include("../../src/InitModel.jl")
 include("../../src/struct/FiniteElements.jl")
 include("../../src/solvers/SolverRoutines.jl")
 include("../../src/hydro/Hydro.jl")
-using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro
-FOIL = InitModel.init_static(DVDict, solverOptions)
+include("../../src/constants/SolutionConstants.jl")
+using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .SolutionConstants
+# FOIL = InitModel.init_static(DVDict, solverOptions)
+FOIL = InitModel.init_dynamic(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
 nElem = FOIL.nNodes - 1
 structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
-# SOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, "BT2", FOIL.constitutive)
+Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, [1, 2, 3, 4])
+global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, "BT2", structMesh, zeros(2, 2), "FAD", 0.0)
+# obj, pmg, SOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
 
 # # NOTE: I have just been commenting out the following chunks
 # # ************************************************
@@ -151,11 +155,11 @@ structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["c
 # ************************************************
 #     Stupid simple unit tests
 # ************************************************
-dh = steps[4]
+dh = steps[6]
 bd = 1.0
 
 pkEqnType = "ng"
-dim = 2
+dim = size(globalKs, 1) #big probl
 ω = 0.1
 b = 1.0
 U∞ = 1.0
@@ -173,49 +177,96 @@ KK[1:dim, 1:dim] .= 10.0
 for ii in 1:dim
     MM[ii, ii] = 10.0
 end
-# p_r, p_rd, p_i, p_id, R_aa_r, R_aa_rd, R_aa_i, R_aa_id = SolveFlutter.solve_eigenvalueProblem_d(pkEqnType, dim, b, bd, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
-# TODO: PICKUP HERE verify derivatives here
-A_r = [2.0 7.0; 1.0 8.0]
-A_rd = zeros(Float64, dim, dim)
-A_rd[1, 1] = 1.0
-A_i = [0.0 0.0; 0.0 0.0]
-A_id = zeros(Float64, dim, dim)
-w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id = SolverRoutines.cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, dim)
-println("Primal values:")
-println("w_r = ", w_r)
-println("w_i = ", w_i)
-println("VR_r", VR_r)
-println("VR_i", VR_i)
-println("Dual values:")
-println("w_rd = ", w_rd)
-println("w_id = ", w_id)
-# println("VR_rd", VR_rd)
-# println("VR_id", VR_id)
-w_r, w_i, _, _, _, _ = SolverRoutines.cmplxStdEigValProb(A_r, A_i, dim)
-A_r[1, 1] += dh
-w_rf, w_i, _, _, _, _ = SolverRoutines.cmplxStdEigValProb(A_r, A_i, dim)
-fd = (w_rf - w_r) ./ dh
-println("FD:")
-println("d w_r / d A_r ", fd)
-# # ************************************************
-# #     FAD checks
-# # ************************************************
-# SOL = 1
-# solverOptions["debug"] = false # You have to turn debug off for RAD to work
-# derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="FAD", solverOptions=solverOptions)
-# save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
-# println("deriv = ", derivs)
 
-
-# # ************************************************
-# #     RAD checks
-# # ************************************************
-# SOL = 1
+# # ---------------------------
+# #   FD check
+# # ---------------------------
+# w_r, w_i, _, _, VR_r, VR_i = SolverRoutines.cmplxStdEigValProb(A_r, A_i, dim)
+# A_r[2, 1] += dh
+# # A_i[1, 1] += dh
+# w_rf, w_i, _, _, VR_rf, VR_if = SolverRoutines.cmplxStdEigValProb(A_r, A_i, dim)
+# fd = (w_rf - w_r) ./ dh
+# fdVr = (VR_rf - VR_r) ./ dh
+# A_r[2, 1] -= dh
+# println("FD:")
+# println("d w_r / d A_r ", fd)
+# println("d VR_r / d A_r ", fdVr)
+# # # ************************************************
+# # #     FAD checks
+# # # ************************************************
+# # SOL = 1
 # solverOptions["debug"] = false # You have to turn debug off for RAD to work
+# b_ref = sum(FOIL.c) / FOIL.nNodes # mean semichord
+# # # obj, pmG, FLUTTERSOL = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
+# SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
+# # ForwardDiff.derivative(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4), b_ref)
+# # derivs = Zygote.forwarddiff(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4), b_ref)
+# derivs = Zygote.gradient(b_ref) do x
+#     Zygote.forwarddiff(x) do x
+#         SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
+#         # Mr, Kr, Qr = SolveFlutter.compute_modalSpace(Ms, Ks; reducedSize=8)
+#         # tmpFactor = U∞ * cos(FOIL.Λ) / x
+#         # div_tmp = 1 / tmpFactor
+#         # ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
+#         # kSweep = zeros(ForwardDiff.Dual,length(ωSweep))
+#         # for i = 1:length(ωSweep)
+#         #     kSweep[i] = ωSweep[i] * div_tmp
+#         # end
+#         # SolveFlutter.compute_kCrossings(dim, kSweep, x, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1,2,3,4]; debug=debug, qiter=1)
+#     end
+# end
+# # # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="FAD", solverOptions=solverOptions)
+# save("./FADDiff.jld", "derivs", derivs[1])
+# println("deriv = ", derivs[1])
+
+# TODO: PICKUP HERE, JUST GO FOR THE RAD rrule method now. The forwardDiff.Dual is annoying
+# # # ************************************************
+# # #     RAD checks
+# # # ************************************************
+# # SOL = 1
+solverOptions["debug"] = false # You have to turn debug off for RAD to work
+b_ref = sum(FOIL.c) / FOIL.nNodes # mean semichord
+Mr, Kr, Qr = SolveFlutter.compute_modalSpace(Ms, Ks; reducedSize=dim - 4)
+tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
+div_tmp = 1 / tmpFactor
+ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
+kSweep = ωSweep * div_tmp
+derivs, = Zygote.jacobian(x -> SolveFlutter.compute_kCrossings(dim, kSweep, x, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=debug, qiter=1), b_ref)
+# obj, pmG, FLUTTERSOL = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
+# derivs = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4), b_ref)
 # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
 # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
 # println("deriv = ", derivs)
 
+# # ---------------------------
+# #   Test simple matrix operations for 3x3 matrices
+# # ---------------------------
+# # derivs = Zygote.jacobian(x -> A*x, rand(3, 3))
+# # derivs = Zygote.jacobian(x -> inv(x), rand(3, 3))
+# n = 2
+# A_r = rand(n, n)
+# A_i = rand(n, n)
+# derivs, = Zygote.jacobian((x_r, x_i) -> SolverRoutines.cmplxStdEigValProb2(x_r, x_i, n), A_r, A_i)
+# # Unpack derivatives properly
+# w_r_jac = derivs[1:n, :]
+# w_i_jac = derivs[n+1:n^2, :]
+# # All of the eigenvector derivatives are wrong :(
+# VR_r_jac = derivs[n^2+1:2n^2, :]
+# VR_i_jac = derivs[2n^2+1:end, :]
+
+# # --- FD check ---
+# FDJac, = FiniteDifferences.jacobian(central_fdm(3, 1), (x_r, x_i) -> SolverRoutines.cmplxStdEigValProb2(x_r, x_i, n), A_r, A_i)
+
+# FDJacN = zeros(2 * n + 2 * n^2, n^2 * 2)
+# y = SolverRoutines.cmplxStdEigValProb2(A_r, A_i, n)
+# dh = 1e-8
+# A_r[1, 1] += dh
+# dy = SolverRoutines.cmplxStdEigValProb2(A_r, A_i, n)
+# FDJacN[:, 1] = (dy - y) / dh
+# A_r[1, 1] -= dh
+# println("RADJac=", derivs[:, 1])
+# println("FDJac = ", FDJac[:, 1])
+# println("FDJacN = ", FDJacN[:, 1])
 # # ************************************************
 # #     Forward difference checks (dumb way)
 # # ************************************************

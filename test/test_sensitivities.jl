@@ -91,3 +91,73 @@ function test_jacobian()
 
     return
 end
+
+function test_eigenvalueAD()
+    """
+    Dot product test!
+    """
+
+    # --- A test matrix ---
+    A_r = [2.0 7.0; 1.0 8.0]
+    A_i = [1.0 0.0; 0.0 1.0]
+
+    # ---------------------------
+    #   forward AD
+    # ---------------------------
+    dim = 2
+    A_rd = zeros(Float64, dim, dim)
+    A_id = zeros(Float64, dim, dim)
+    # A_rd[2, 1] = 1.0
+    A_rd .= 1.0 # poke all entries in matrix in forward
+    # TODO: try other seed
+    A_id .= 1.0
+    # A_id[1, 1] = 1.0
+    w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id = SolverRoutines.cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, dim)
+    # println("Primal forward values:")
+    # println("w_r = ", w_r)
+    # println("w_i = ", w_i)
+    # println("VR_r", VR_r)
+    # println("VR_i", VR_i)
+    # println("Dual forward values:")
+    # println("w_rd = ", w_rd)
+    # println("w_id = ", w_id)
+    # println("VR_rd", VR_rd)
+    # println("VR_id", VR_id)
+    # ---------------------------
+    #   backward AD
+    # ---------------------------
+    w_rb = zeros(Float64, dim)
+    w_ib = zeros(Float64, dim)
+    w_rb = [1, 1] # poke both eigenvalues in reverse
+    w_rb = w_rd # TODO: try this
+    w_ib = [1, 1]
+    Vrb_r = zeros(Float64, dim, dim)
+    Vrb_i = zeros(Float64, dim, dim)
+    A_rb, A_ib, w_r, w_rbz, w_i, w_ibz, _, _, _, _ = SolverRoutines.cmplxStdEigValProb_b(A_r, A_i, dim, w_rb, w_ib, Vrb_r, Vrb_i)
+    # println("Primal reverse values:")
+    # println("w_r = ", w_r)
+    # println("w_i = ", w_i)
+    # # println("VR_r", VR_r)
+    # # println("VR_i", VR_i)
+    # println("Dual reverse values:")
+    # # println("wb_r = ", w_rb)
+    # # println("wb_i = ", w_ib)
+    # println("A_rb", A_rb)
+    # println("A_ib", A_ib)
+
+    # ---------------------------
+    #   Dot product test
+    # ---------------------------
+    # --- Outputs ---
+    ḟ = w_rd
+    f̄ = w_rb
+    # --- Inputs ---
+    # The inputs were matrices so we just unroll them
+    ẋ = vec(A_rd)
+    x̄ = vec(A_rb)
+    # --- Dot product ---
+    lhs = (transpose(ẋ) * x̄)
+    rhs = (transpose(ḟ) * f̄)
+    # These should be equal if you did it right
+    return lhs - rhs
+end

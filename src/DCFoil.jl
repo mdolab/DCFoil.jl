@@ -94,7 +94,7 @@ function run_model(
         SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        FLUTTERSOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+        obj, pmG, FLUTTERSOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
         flutterCostFuncsDict = compute_costFuncs(FLUTTERSOL, evalFuncs, solverOptions)
         costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end

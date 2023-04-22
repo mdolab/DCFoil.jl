@@ -484,7 +484,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     return AIC, planformArea
 end
 
-function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, globalCf_i::Matrix{Float64}, globalKf_r::Matrix{Float64}, globalKf_i::Matrix{Float64}, mesh, FOIL, U∞, ω, elemType="BT2")
+function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, FOIL, U∞, ω, elemType="BT2")
     """
     Compute the AIC matrix for a given mesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
@@ -492,7 +492,9 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
     ------
     AIC: Matrix
         Aerodynamic influence coefficient matrix broken up into added mass, damping, and stiffness
-        in such a way that {F} = -([Mf]{udd} + [Cf]{ud} + [Kf]{u})
+        in such a way that 
+            {F} = -([Mf]{udd} + [Cf]{ud} + [Kf]{u})
+        These are matrices
     mesh: Array
         Mesh of the foil
     FOIL: struct
@@ -521,18 +523,19 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
     # ---------------------------
     #   Loop over strips (nodes)
     # ---------------------------
+    nNodes = length(mesh)
     for yⁿ in mesh
         # --- compute strip width ---
         # TODO: the first and last strip have half width
         Δy = 0.0
-        if jj < FOIL.nNodes
+        if jj < nNodes
             Δy = mesh[jj+1] - mesh[jj]
             if jj == 1
                 Δy = Δy / 2
             end
         else
             Δy = mesh[jj] - mesh[jj-1]
-            if jj == FOIL.nNodes
+            if jj == nNodes
                 Δy = Δy / 2
             end
         end
@@ -544,14 +547,14 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
         ab::Float64 = linear(mesh, FOIL.ab, yⁿ)
         eb::Float64 = linear(mesh, FOIL.eb, yⁿ)
 
-        k::Float64 = ω * b / (U∞ * cos(FOIL.Λ)) # local reduced frequency
+        k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
 
         # Do computation once for efficiency
         CKVec = compute_theodorsen(k)
-        Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
+        Ck = CKVec[1] + 1im * CKVec[2]
 
-        K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, FOIL.Λ, FOIL.ρ_f, Ck)
-        C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, FOIL.Λ, FOIL.ρ_f, Ck)
+        K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+        C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
         M_f = compute_node_mass(b, ab, FOIL.ρ_f)
 
         # --- Compute Compute local AIC matrix for this element ---
@@ -563,19 +566,19 @@ function compute_AICs!(globalMf::Matrix{Float64}, globalCf_r::Matrix{Float64}, g
                 0.00000000 0.0 K_f[2, 2] # Pitching moment
             ]
         elseif elemType == "BT2"
-            KLocal::Matrix{ComplexF64} = [
+            KLocal = [
                 0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
                 0.0 0.0 0.0 0.0
                 0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
                 0.0 0.0 0.0 0.0
             ]
-            CLocal::Matrix{ComplexF64} = [
+            CLocal = [
                 C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
                 0.0 0.0 0.0 0.0
                 C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
                 0.0 0.0 0.0 0.0
             ]
-            MLocal::Matrix{Float64} = [
+            MLocal = [
                 M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
                 0.0 0.0 0.0 0.0
                 M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
@@ -676,7 +679,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT
     return ForceVector, TotalLift, TotalMoment
 end
 
-function apply_BCs(K::Matrix{Float64}, C::Matrix{Float64}, M::Matrix{Float64}, globalDOFBlankingList::Vector{Int64})
+function apply_BCs(K, C, M, globalDOFBlankingList::Vector{Int64})
     """
     Applies BCs for nodal displacements
 

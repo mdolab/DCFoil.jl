@@ -6,15 +6,20 @@ NOTE:
 any function with '_d' at the end is the one used for forward differentiation 
 because certain operations cannot be differentiated
 by the AD tool (e.g., anything related to file writing)
-'_b' is for backward mode
+'_b' is for backward mode.
+In julia, the chainrules rrule is '_b'
 """
 
 # --- Libraries ---
 using LinearAlgebra
+using ChainRulesCore
 include("./NewtonRhapson.jl")
 include("./EigenvalueProblem.jl")
 using .NewtonRhapson, .EigenvalueProblem
 using Zygote
+using ForwardDiff
+
+const RealOrComplex = Union{Real,Complex}
 
 # ==============================================================================
 #                         Solver routines
@@ -165,6 +170,10 @@ function cmplxInverse_d(A_r, A_rd, A_i, A_id, n)
     return Ainv_r, Ainv_rd, Ainv_i, Ainv_id
 end # cmplxInverse_d
 
+function cmplxInverse_b()
+    # TODO:
+end
+
 function cmplxMatmult(A_r, A_i, B_r, B_i)
     """
     Complex multiplication of matrices using real arithmetic
@@ -197,34 +206,37 @@ function cmplxMatmult_d(A_r, A_rd, A_i, A_id, B_r, B_rd, B_i, B_id)
     return C_r, C_rd, C_i, C_id
 end # cmplxMatmult
 
+function cmplxMatmult_b(A_r, A_i, B_r, B_i)
+    # Won't do this for now: 
+end
 
 function cmplxStdEigValProb(A_r, A_i, n)
     """
     Inputs
     ------
-        A_r
-        A_i
-        n
-
+    A_r
+    A_i
+    n
+    
     Outputs
     -------
-        w_r - real part of eigenvalues
-        w_i - imag part of eigenvalues
-        VL_r - left eigenvectors
-        VL_i - left eigenvectors
-        VR_r - right eigenvectors
-        VR_i - right eigenvectors
-        We mostly care about the right eigenvectors (occuring on right of A matrix)
+    w_r - real part of eigenvalues
+    w_i - imag part of eigenvalues
+    VL_r - left eigenvectors
+    VL_i - left eigenvectors
+    VR_r - right eigenvectors
+    VR_i - right eigenvectors
+    We mostly care about the right eigenvectors (occuring on right of A matrix)
     """
-
+    
     # --- Initialize matrices ---
     A = A_r + 1im * A_i
-
+    
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
     w, Vr = eigen(A)
-
+    
     # Eigenvalues
     w_r = real(w)
     w_i = imag(w)
@@ -241,34 +253,35 @@ end # cmplxStdEigValProb
 function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
     """
     Forward mode analytic derivative for the standard eigenvalue problem [A] v= λ v
-    with eigenvalues d_k
+        with eigenvalues d_k
         Dd = I ∘ (U^-1 * Ad U)
         Ud = U * (F ∘ U^-1 * Ad * U)
-    where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-
-    'd' terms are the forward seeds
-
-    See: 
+        where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
+        
+        'd' terms are the forward seeds
+        
+        See: 
         Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
-
-    Inputs
-    ------
+        
+        Inputs
+        ------
         A_r - nxn real part matrix
         A_rd (forward seed)
         A_i - nxn imag part matrix
         A_id (forward seed)
     Outputs
     -------
-        w_r - real part of eigenvalues
-        w_rd - real part of eigenvalues (derivative)
-        w_i - imag part of eigenvalues
-        w_id - imag part of eigenvalues (derivative)
-        VR_r - real right eigenvectors
-        VR_rd - real right eigenvectors (derivative)
-        VR_i - imag right eigenvectors
-        VR_id - imag right eigenvectors (derivative)
+    w_r - real part of eigenvalues
+    w_rd - real part of eigenvalues (derivative)
+    w_i - imag part of eigenvalues
+    w_id - imag part of eigenvalues (derivative)
+    VR_r - real right eigenvectors
+    VR_rd - real right eigenvectors (derivative)
+    VR_i - imag right eigenvectors
+    VR_id - imag right eigenvectors (derivative)
+    The eigenvalue derivatives compare well with the FD check
     """
-
+    
     # --- Initialize matrices ---
     w_rd = zeros(n)
     w_id = zeros(n)
@@ -276,7 +289,7 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
     F = zeros(ComplexF64, n, n)
     A = A_r + 1im * A_i
     Ad = A_rd + 1im * A_id
-
+    
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
@@ -285,14 +298,14 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
     w_i = imag(w)
     VR_r = real(Vr)
     VR_i = imag(Vr)
-
+    
     # ---------------------------
     #   Eigenvalue derivatives Dd
     # ---------------------------
     # --- Compute eigenvector inverses U^-1 ---
     Vrinv_r, Vrinv_i = cmplxInverse(VR_r, VR_i, n)
     Vrinv = Vrinv_r + 1im * Vrinv_i
-
+    
     # --- Compute U^-1 * Ad * U ---
     tmp1 = (Vrinv * Ad) * Vr
 
@@ -302,66 +315,67 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
         w_id[ii] = imag(tmp1[ii, ii])
     end
     # ---------------------------
-    #   Eigenvector derivatives Ud
+    #   Eigenvector derivatives U̇
     # ---------------------------
+    # TODO: these don't work apparently
     # --- E ---
     for jj in 1:n
         for ii in 1:n
             E[ii, jj] = w[jj] - w[ii]
         end
     end
-
+    
     # --- F ---
     for jj in 1:n
         for ii in 1:n
-            if ii != jj
+            if jj != ii
                 F[ii, jj] = 1.0 / E[ii, jj]
             end
         end
     end
-
+    
     # --- F ∘ (U^-1 * Ad * U) ---
-    tmp1 = F .* tmp1
-
-    # --- Final U * (F \circ (U^-1 * Ad * U)) ---
-    Vrd = Vr * tmp1
+    tmp2 = F .* tmp1
+    
+    # --- Final U * (F ∘ (U^-1 * Ad * U)) ---
+    Vrd = Vr * tmp2
     VR_rd = real(Vrd)
     VR_id = imag(Vrd)
-
+    
     return w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id
 end # cmplxStdEigValProb_d
 
 function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
     """
     Reverse mode analytic derivative for the standard eigenvalue problem [A] v= λ v
-    with eigenvalues d_k
+        with eigenvalues d_k
         Ā = U^-H * (D̄ + F ∘ (U^H * Ū)) * U^H
-    where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-
-    overbar terms are the reverse seeds
-
+        where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
+        
+        overbar terms are the reverse seeds
+        
     See: 
         Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
 
     Inputs
     ------
-        A_r - nxn real part matrix
-        A_i - nxn imag part matrix
+    A_r - nxn real part matrix
+    A_i - nxn imag part matrix
     Outputs
     -------
-        w_r - real part of eigenvalues
-        w_i - imag part of eigenvalues
-        VR_r - real right eigenvectors
-        VR_i - imag right eigenvectors
+    w_r - real part of eigenvalues
+    w_i - imag part of eigenvalues
+    VR_r - real right eigenvectors
+    VR_i - imag right eigenvectors
     """
-
+    
     # --- Initialize matrices ---
     E = zeros(ComplexF64, n, n)
     F = zeros(ComplexF64, n, n)
     A = A_r + 1im * A_i
     VR̄ = VR̄_r + 1im * VR̄_i
     w̄ = w̄_r + 1im * w̄_i
-
+    
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
@@ -370,20 +384,20 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
     w_i = imag(w)
     VR_r = real(Vr)
     VR_i = imag(Vr)
-
+    
     # ---------------------------
     #   Hermitian transpose (U^-H) conj transpose
     # ---------------------------
     VrHerm = Vr'
     VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
-
+    
     # --- E ---
     for jj in 1:n
         for ii in 1:n
             E[ii, jj] = w[jj] - w[ii]
         end
     end
-
+    
     # --- F ---
     for jj in 1:n
         for ii in 1:n
@@ -400,20 +414,52 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
     for ii = 1:n
         tmp1[ii, ii] += w̄[ii]
     end
-
+    
     Ā = ((VrHerminv_r + 1im * VrHerminv_i) * tmp1) * VrHerm
     Ā_r = real(Ā)
     Ā_i = imag(Ā)
-
+    
     # Then zero seeds out
     w̄_r = zeros(n)
     w̄_i = zeros(n)
     VR̄_r = zeros(n, n)
     VR̄_i = zeros(n, n)
-
+    
     return Ā_r, Ā_i, w_r, w̄_r, w_i, w̄_i, VR_r, VR̄_r, VR_i, VR̄_i
-
+    
 end # cmplxStdEigValProb_b
+
+function cmplxStdEigValProb2(A_r, A_i, n)
+    """
+    Give back eigenvalues and vectors as a unrolled vector
+    """
+    
+    # --- Solve standard eigenvalue problem (Ax = λx) ---
+    # This method uses the julia built-in eigendecomposition
+    # eigen() is a spectral decomposition
+    A = A_r + 1im * A_i
+    w, Vr = eigen(A)
+    
+    # Eigenvalues
+    w_r = real(w)
+    w_i = imag(w)
+    # Eigenvectors
+    VR_r = real(Vr)
+    VR_i = imag(Vr)
+    # and some dummy values that aren't actually right
+    VL_r = real(Vr)
+    VL_i = imag(Vr)
+    
+    # Unroll output so derivatives work
+    y_r = vec(real(w))
+    y_i = vec(imag(w))
+    Y_r = vec(real(Vr))
+    Y_i = vec(imag(Vr))
+    y = vcat(y_r, y_i, Y_r, Y_i)
+
+    return y
+end # cmplxStdEigValProb
+
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================
@@ -423,16 +469,16 @@ function argmax2d(A)
 
     Outputs
     -------
-        locs - array of indices
-    """
-    ncol = size(A)[2]
-
+    locs - array of indices
+        """
+        ncol = size(A)[2]
+        
     locs = zeros(Int64, ncol)
-
+    
     for col in 1:ncol
         locs[col] = argmax(A[:, col])
     end
-
+    
     return locs
 
 end # argmax2d
@@ -440,43 +486,43 @@ end # argmax2d
 function maxLocArr2d(A)
     """
     Find the maximum location for 2d array A
-
-    Outputs
-    -------
+        
+        Outputs
+        -------
         locs - array of indices
-    """
-    ncol = size(A)[2]
-    maxI = 1
-    maxJ = 1
-    maxVal = A[maxI, maxJ]
-
-    for jj in 1:ncol
-        for ii in 1:size(A)[1]
-            if A[ii, jj] > maxVal
-                maxI = ii
+        """
+        ncol = size(A)[2]
+        maxI = 1
+        maxJ = 1
+        maxVal = A[maxI, maxJ]
+        
+        for jj in 1:ncol
+            for ii in 1:size(A)[1]
+                if A[ii, jj] > maxVal
+                    maxI = ii
                 maxJ = jj
                 maxVal = A[ii, jj]
             end
         end
     end
-
+    
     return maxI, maxJ, maxVal
-
+    
 end # maxLocArr2d
 
 function count1d(mask)
     """
     Count number of 'true' elements in 1d array
     """
-
+    
     nTrue = 0
-
+    
     for ii in eachindex(mask)
         if mask[ii]
             nTrue += 1
         end
     end
-
+    
     return nTrue
 end # count1d
 
@@ -484,17 +530,17 @@ function ipack1d(A, mask, nFlow)
     """
     Extract elements from array A which have corresponding element in mask set to 'true'
     mask array contains boolean values
-
+    
     Outputs
     -------
-        B - subset array containing elements of A which have corresponding element in mask set to 'true'
-        nFound - number of elements in B
+    B - subset array containing elements of A which have corresponding element in mask set to 'true'
+    nFound - number of elements in B
     """
-
+    
     nTrue = count1d(mask)
     B = zeros(Int64, nFlow)
     B_z = Zygote.Buffer(B)
-
+    
     nFound = 0
     for ii in eachindex(A)
         if mask[ii]
@@ -503,8 +549,99 @@ function ipack1d(A, mask, nFlow)
         end
     end
     B = copy(B_z)
-
+    
     return B, nFound
 end # ipack1d
+
+# ==============================================================================
+#                         Custom derivative routines
+# ==============================================================================
+function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
+
+    
+    y = cmplxStdEigValProb2(A_r, A_i, n)
+    
+    function cmplxStdEigen_pullback(y)
+        """
+        See cmplxStdEigValProb_b()
+        """
+        # We unpack the y vector into the real and imaginary parts of the eigenvalues and eigenvectors
+        w̄ = y[1:n] + 1im * y[n+1:2*n]
+        vr_r = reshape(y[2*n+1:2*n+n^2], n, n)'
+        vr_i = reshape(y[2*n+n^2+1:end], n, n)'
+        VR̄ = vr_r + 1im * vr_i
+        # transpose to get the right shape since julia is column major
+        # --- Initialize matrices ---
+        E = zeros(ComplexF64, n, n)
+        F = zeros(ComplexF64, n, n)
+        A = A_r + 1im * A_i
+
+        # --- Solve standard eigenvalue problem (Ax = λx) ---
+        # This method uses the julia built-in eigendecomposition
+        # eigen() is a spectral decomposition
+        w, Vr = eigen(A)
+        
+        # ---------------------------
+        #   Hermitian transpose (U^-H) conj transpose
+        # ---------------------------
+        VrHerm = Vr'
+        VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
+        
+        # --- E ---
+        for jj in 1:n
+            for ii in 1:n
+                E[ii, jj] = w[jj] - w[ii]
+            end
+        end
+
+        # --- F ---
+        for jj in 1:n
+            for ii in 1:n
+                if ii != jj
+                    F[ii, jj] = 1.0 / E[ii, jj]
+                end
+            end
+        end
+
+        # --- Calculate F ∘ (U^H * Ū) ---
+        tmp1 = F .* (VrHerm * VR̄)
+        
+        # Add D̄
+        for ii = 1:n
+            tmp1[ii, ii] += w̄[ii]
+        end
+
+        Ā = ((VrHerminv_r + 1im * VrHerminv_i) * tmp1) * VrHerm
+        Ā_r = real(Ā)
+        Ā_i = imag(Ā)
+
+        # Return NoTangent() because
+        return (NoTangent(), Ā_r, Ā_i, NoTangent())
+        
+    end # cmplxStdEigValProb_b
+    
+
+    return y, cmplxStdEigen_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
+    # MATRIX MULTIPLY
+    function times_pullback(ΔΩ)
+        ∂A = @thunk(ΔΩ * B')
+        ∂B = @thunk(A' * ΔΩ)
+        return (NoTangent(), ∂A, ∂B)
+    end
+    return A * B, times_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
+    # MATRIX INVERSE
+    Ω = inv(A)
+    function inv_pullback(ΔΩ)
+        ∂A = -Ω' * ΔΩ * Ω'
+        return (NoTangent(), ∂A)
+    end
+    return Ω, inv_pullback
+end
 
 end # SolverRoutines

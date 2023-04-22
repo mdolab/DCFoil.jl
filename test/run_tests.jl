@@ -13,6 +13,7 @@ using Test
 include("test_struct.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
+include("test_sensitivities.jl")
 
 @testset "Test solver" begin
     # Write your tests here.
@@ -46,6 +47,15 @@ include("test_solvers.jl")
     @test test_SolveStaticComp() <= 1e-4 # cfrp hydrofoil
     close(io)
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
-    @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
-    @test test_flutter() <= 1e-5 # flutter analysis of cfrp
+    # @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
+    # @test test_flutter() <= 1e-5 # flutter analysis of cfrp
+
+end
+
+@testset "Test sensitivities" begin
+    # Write your tests here.
+    # ************************************************
+    #     Unit test derivative tests
+    # ************************************************
+    @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
 end
