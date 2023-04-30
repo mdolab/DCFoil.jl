@@ -21,6 +21,8 @@ using SpecialFunctions
 using LinearAlgebra
 using Statistics
 using Plots
+using ChainRulesCore
+using Zygote
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
 
@@ -37,7 +39,16 @@ function compute_theodorsen(k)
 
     NOTE:
     Undefined for k = ωb/Ucos(Λ) = 0 (steady aero)
-    """
+        """
+    if k < 1.11e-16
+        println("You can't use the Theodorsen function for k = 0!")
+        #     # println(k)
+        #     k += 1.11e-16 # force it to be non-zero
+        #     #     CᵣLim = 1.0
+        #     #     Cᵢ = 0.0
+        #     #     ans = [Cᵣ, Cᵢ]
+    end
+
     # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
     H₀²ᵣ = besselj0(k)
     H₀²ᵢ = -bessely0(k)
@@ -46,15 +57,69 @@ function compute_theodorsen(k)
 
     divDenom = 1 / ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
 
-    𝙲ᵣ = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
-    𝙲ᵢ = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
+    # --- These are the analytic solutions to Theodorsen's function ---
+    C_r_analytic = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
+    C_i_analytic = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
 
-    ans = [𝙲ᵣ, 𝙲ᵢ]
+    # # --- Zero frequency limit ---
+    # Cᵣ_lim = 1.0
+    # Cᵢ_lim = 0.0
+    # kSigmoid = 1000.0 # sigmoid steepness
+    # logistic = 1 / (1 + exp(-kSigmoid * -1 * (k - 0.0))) # this is a L-R flipped sigmoid so below 0 the function is 1.0
 
-    if k < 1.11e-16
-        println("You can't use the Theodorsen function for k = 0!")
-    end
+    # C_r = Cᵣ_lim * logistic + C_r_analytic
+    # C_i = Cᵢ_lim * logistic + C_i_analytic
+    ans = [C_r_analytic, C_i_analytic]
 
+    return ans
+end
+
+function compute_pade(k)
+    """
+    3-term Pade approximation of Theodorsen's function
+    Swinney 1990 'A fractional calculus model of aeroelasticity'
+    """
+    s̄ = 1im * k
+    scube = s̄^3
+    ssquare = s̄^2
+    C = (scube + 3.5 * ssquare + 2.7125 * s̄ + 0.46875) / (2 * scube + 6.5 * ssquare + 4.25 * s̄ + 0.46875)
+    C_r = real(C)
+    C_i = imag(C)
+    ans = [C_r, C_i]
+    return ans
+end
+
+function compute_fraccalc(k)
+    """
+    Fractional calculus approximation of Theodorsen's function
+    Swinney 1990 'A fractional calculus model of aeroelasticity'
+    """
+    s̄ = 1im * k
+    F = 2.19
+    β = 5 / 6
+    prod = F * s̄^β
+    C = (1 + prod) / (1 + 2 * prod)
+    C_r = real(C)
+    C_i = imag(C)
+    ans = [C_r, C_i]
+    return ans
+end
+
+function compute_fraccalc_d(k)
+    """
+    Fractional calculus approximation of Theodorsen's function
+    Swinney 1990 'A fractional calculus model of aeroelasticity'
+    Undefined at s = 0 b/c beta = 5/6 :(
+    """
+    s̄ = 1im * k
+    F = 2.19
+    β = 5 / 6
+    prod = F * s̄^β
+    prod2 = F * s̄^(β - 1)
+    C = ((1 + 2 * prod) * (β * 1im * prod2) - (1 + prod) * (2 * β * 1im * prod2)) / (1 + 2 * prod)^2
+    C_r = real(C)
+    C_i = imag(C)
+    ans = [C_r, C_i]
     return ans
 end
 
@@ -484,7 +549,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     return AIC, planformArea
 end
 
-function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, FOIL, U∞, ω, elemType="BT2")
+function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, FOIL, U∞, ω, elemType="BT2")
     """
     Compute the AIC matrix for a given mesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
@@ -516,6 +581,22 @@ function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i,
         nDOF = 4
     end
 
+    # --- Initialize global matrices ---
+    globalMf_z = Zygote.Buffer(globalMf)
+    globalCf_r_z = Zygote.Buffer(globalCf_r)
+    globalCf_i_z = Zygote.Buffer(globalCf_i)
+    globalKf_r_z = Zygote.Buffer(globalKf_r)
+    globalKf_i_z = Zygote.Buffer(globalKf_i)
+    # Zygote initialization
+    for jj in 1:size(globalMf)[1]
+        for ii in 1:size(globalMf)[1]
+            globalMf_z[ii, jj] = 0.0
+            globalCf_r_z[ii, jj] = 0.0
+            globalCf_i_z[ii, jj] = 0.0
+            globalKf_r_z[ii, jj] = 0.0
+            globalKf_i_z[ii, jj] = 0.0
+        end
+    end
     # --- Initialize planform area counter ---
     planformArea = 0.0
 
@@ -526,7 +607,6 @@ function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i,
     nNodes = length(mesh)
     for yⁿ in mesh
         # --- compute strip width ---
-        # TODO: the first and last strip have half width
         Δy = 0.0
         if jj < nNodes
             Δy = mesh[jj+1] - mesh[jj]
@@ -591,11 +671,11 @@ function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i,
         GDOFIdx::Int64 = nDOF * (jj - 1) + 1
 
         # Add local AIC to global AIC and remember to multiply by strip width to get the right result
-        globalKf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal) * Δy
-        globalKf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal) * Δy
-        globalCf_r[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal) * Δy
-        globalCf_i[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal) * Δy
-        globalMf[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal * Δy
+        globalKf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal) * Δy
+        globalKf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal) * Δy
+        globalCf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal) * Δy
+        globalCf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal) * Δy
+        globalMf_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal * Δy
 
         # Add rectangle to planform area
         planformArea += c * Δy
@@ -603,7 +683,7 @@ function compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i,
         jj += 1 # increment strip counter
     end
 
-    return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea
+    return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
 end
 
 
@@ -684,17 +764,76 @@ function apply_BCs(K, C, M, globalDOFBlankingList::Vector{Int64})
     Applies BCs for nodal displacements
 
     """
-    newK = K[
-        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    ]
-    newM = M[
-        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    ]
-    newC = C[
-        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    ]
+    # newK = K[
+    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    # ]
+    # newM = M[
+    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    # ]
+    # newC = C[
+    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    # ]
+    newK = K[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
+    newM = M[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
+    newC = C[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     return newK, newC, newM
 end
+
+# ==============================================================================
+#                         Custom derivative routines
+# ==============================================================================
+# These rules came from https://math.stackexchange.com/questions/2204475/derivative-of-bessel-function-of-second-kind-zero-order
+
+# function ChainRulesCore.rrule(::typeof(besselj0), k)
+
+#     j0 = besselj0(k)
+
+#     function besselj0_pullback(j̄0)
+#         # Pullback is function to propagate derivative info backwards
+#         ∂k = -besselj1(k) * j̄0
+#         return (NoTangent(), ∂k)
+#     end
+
+#     return j0, besselj0_pullback
+# end
+
+# function ChainRulesCore.rrule(::typeof(besselj1), k)
+
+#     j1 = besselj1(k)
+
+#     function besselj1_pullback(j̄1)
+#         # Pullback is function to propagate derivative info backwards
+#         j2 = besselj(2, k)
+#         ∂k = 0.5 * (besselj0(k) - j2) * j̄1
+#         return (NoTangent(), ∂k)
+#     end
+
+#     return j1, besselj1_pullback
+# end
+
+# function ChainRulesCore.rrule(::typeof(bessely0), k)
+
+#     y0 = bessely0(k)
+#     function bessely0_pullback(ȳ0)
+#         # Pullback is function to propagate derivative info backwards
+#         ∂k = -bessely1(k) * ȳ0
+#         return (NoTangent(), ∂k)
+#     end
+
+#     return y0, bessely0_pullback
+# end
+
+# function ChainRulesCore.rrule(::typeof(bessely1), k)
+
+#     y1 = bessely1(k)
+#     function bessely1_pullback(ȳ1)
+#         # Pullback is function to propagate derivative info backwards
+#         y2 = bessely(2, k)
+#         ∂k = 0.5 * (bessely0(k) - y2) * ȳ1
+#         return (NoTangent(), ∂k)
+#     end
+# end
+
 
 end # end module
 

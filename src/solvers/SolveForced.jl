@@ -104,11 +104,10 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         # ---------------------------
         #   Assemble hydro matrices
         # ---------------------------
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, FOIL.U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
-        # TODO: I split up the stuff before to separate imag and real math
         Cf = Cf_r + 1im * Cf_i
         Kf = Kf_r + 1im * Kf_i
 

@@ -88,11 +88,13 @@ if __name__ == "__main__":
     # ************************************************
     DVDictDict = {}
     funcsDict = {}
+    SolverOptions = {}
 
     for ii, caseDir in enumerate(caseDirs):
         key = args.cases[ii]
         # --- Read in DVDict ---
         DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        SolverOptions[key] = json.load(open(f"{caseDir}/solverOptions.json"))
         # --- Read in funcs ---
         try:
             funcsDict[key] = json.load(open(f"{caseDir}/funcs.json"))
@@ -103,7 +105,10 @@ if __name__ == "__main__":
         try:
             nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
         except KeyError:
-            nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
+            try:
+                nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
+            except KeyError:
+                nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
 
     # ************************************************
     #     Plot settings
@@ -257,8 +262,16 @@ if __name__ == "__main__":
 
             # --- Post process the solution ---
             flutterSolDict[key] = postprocess_flutterevals(
-                iblank, flowHistory[:, 1], flowHistory[:, 0], flowHistory[:, 2], eigs_r, eigs_i, evecs_r, evecs_i
+                iblank,
+                flowHistory[:, 1],
+                flowHistory[:, 0],
+                flowHistory[:, 2],
+                eigs_r,
+                eigs_i,
+                R_r=evecs_r,
+                R_i=evecs_i,
             )
+            breakpoint()
             # You only need to know the stability point on one processor really
             if comm.rank == 0:
                 instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
@@ -341,7 +354,7 @@ if __name__ == "__main__":
     for key in args.cases:
         fname = f"{outputDir}/wing-geom-{key}.pdf"
         DVDict = DVDictDict[key]
-        fig, axes = plot_wing(DVDict)
+        fig, axes = plot_wing(DVDict, nNodes=SolverOptions[key]["nNodes"])
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -501,21 +514,21 @@ if __name__ == "__main__":
                     axes,
                     flutterSol=flutterSolDict[key],
                     ls=ls[ii],
-                    units="kts",
+                    # units="kts",
                     # marker="o",
                     showRLlabels=True,
                     annotateModes=annotateModes,
-                    nShift=1000,
+                    # nShift=1000,
                 )
 
                 # # --- Set limits ---
-                axes[0, 0].set_ylim(top=1, bottom=-4)
-                axes[0, 0].set_xlim(right=50, left=5)
+                # axes[0, 0].set_ylim(top=1, bottom=-4)
+                # axes[0, 0].set_xlim(right=50, left=5)
                 # axes[0,0].set_xlim(right=40, left=25)
-                # axes[0, 0].set_ylim(top=15,bottom=-10)
-                # axes[0, 0].set_xlim(right=190, left=170)
+                axes[0, 0].set_ylim(top=60, bottom=-100)
+                axes[0, 0].set_xlim(right=190, left=170)
                 # axes[0, 0].set_ylim(top=1, bottom=-5)
-                axes[1, 1].set_xlim(right=1, left=-5)
+                # axes[1, 1].set_xlim(right=1, left=-5)
                 # axes[1, 1].set_ylim(top=20, bottom=0)
 
             dosave = not not fname

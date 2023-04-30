@@ -33,7 +33,7 @@ run_static = true
 # run_forced = true
 run_modal = true
 run_flutter = true
-debug = true
+debug = false
 # tipMass = true
 
 # ************************************************
@@ -191,49 +191,49 @@ end
 # println("FD:")
 # println("d w_r / d A_r ", fd)
 # println("d VR_r / d A_r ", fdVr)
-# # # ************************************************
-# # #     FAD checks
-# # # ************************************************
-# # SOL = 1
-# solverOptions["debug"] = false # You have to turn debug off for RAD to work
-# b_ref = sum(FOIL.c) / FOIL.nNodes # mean semichord
-# # # obj, pmG, FLUTTERSOL = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
-# SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
-# # ForwardDiff.derivative(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4), b_ref)
-# # derivs = Zygote.forwarddiff(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4), b_ref)
-# derivs = Zygote.gradient(b_ref) do x
-#     Zygote.forwarddiff(x) do x
-#         SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
-#         # Mr, Kr, Qr = SolveFlutter.compute_modalSpace(Ms, Ks; reducedSize=8)
-#         # tmpFactor = U∞ * cos(FOIL.Λ) / x
-#         # div_tmp = 1 / tmpFactor
-#         # ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
-#         # kSweep = zeros(ForwardDiff.Dual,length(ωSweep))
-#         # for i = 1:length(ωSweep)
-#         #     kSweep[i] = ωSweep[i] * div_tmp
-#         # end
-#         # SolveFlutter.compute_kCrossings(dim, kSweep, x, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1,2,3,4]; debug=debug, qiter=1)
-#     end
-# end
-# # # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="FAD", solverOptions=solverOptions)
-# save("./FADDiff.jld", "derivs", derivs[1])
-# println("deriv = ", derivs[1])
 
-# TODO: PICKUP HERE, JUST GO FOR THE RAD rrule method now. The forwardDiff.Dual is annoying
-# # # ************************************************
-# # #     RAD checks
-# # # ************************************************
-# # SOL = 1
+# ==============================================================================
+#                         FLUTTER DERIV TESTS
+# ==============================================================================
+# ************************************************
+#     RAD checks
+# ************************************************
+# SOL = 1
 solverOptions["debug"] = false # You have to turn debug off for RAD to work
 b_ref = sum(FOIL.c) / FOIL.nNodes # mean semichord
-Mr, Kr, Qr = SolveFlutter.compute_modalSpace(Ms, Ks; reducedSize=dim - 4)
+Mr, Kr, Qr = SolveFlutter.compute_modalSpace(Ms, Ks; reducedSize=dim - 4) # do it on already BC applied matrices
 tmpFactor = U∞ * cos(FOIL.Λ) / b_ref
 div_tmp = 1 / tmpFactor
 ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
 kSweep = ωSweep * div_tmp
-derivs, = Zygote.jacobian(x -> SolveFlutter.compute_kCrossings(dim, kSweep, x, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=debug, qiter=1), b_ref)
+
+# Progressively smaller unit tests!
+# TODO: PICKUP HERE WHY IS THE RAD SO SLOW??
+# globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(Mf, Cf_r, Cf_i, Kf_r, Kf_i, structMesh, FOIL.Λ, FOIL, U∞, ωSweep[1], "BT2")
+# Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, [1,2,3,4])
+# Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, [1,2,3,4])
+# # Mode space reduction
+# Kf_r = Qr' * Kffull_r * Qr
+# Kf_i = Qr' * Kffull_i * Qr
+# Cf_r = Qr' * Cffull_r * Qr
+# Cf_i = Qr' * Cffull_i * Qr
+# SolveFlutter.solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+# derivs, = Zygote.jacobian(x -> SolveFlutter.sweep_kCrossings(dim, kSweep, x, FOIL.Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000), b_ref)
+# func = SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, FOIL.Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000)
+# funcd = SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref+1e-8, FOIL.Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000)
+
+# derivs, = Zygote.jacobian(x -> SolveFlutter.compute_kCrossings(dim, kSweep, x, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1), b_ref)
+# func = SolveFlutter.compute_kCrossings(dim, kSweep, b_ref, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1)
+# funcd = SolveFlutter.compute_kCrossings(dim, kSweep, b_ref + 1e-8, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1)
+
+uRange = [187.0, 190.0] # flow speed [m/s] sweep for flutter
 # obj, pmG, FLUTTERSOL = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
-# derivs = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4), b_ref)
+derivs, = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5), b_ref)
+# true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
+
+# func = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
+# funcd = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref + 1e-8, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
+
 # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
 # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
 # println("deriv = ", derivs)
@@ -267,6 +267,8 @@ derivs, = Zygote.jacobian(x -> SolveFlutter.compute_kCrossings(dim, kSweep, x, F
 # println("RADJac=", derivs[:, 1])
 # println("FDJac = ", FDJac[:, 1])
 # println("FDJacN = ", FDJacN[:, 1])
+
+
 # # ************************************************
 # #     Forward difference checks (dumb way)
 # # ************************************************

@@ -15,6 +15,8 @@ include("../src/InitModel.jl")
 using .InitModel
 include("../src/struct/FiniteElements.jl")
 using .FEMMethods
+include("../src/solvers/SolverRoutines.jl")
+using .SolverRoutines
 
 # ==============================================================================
 #                         Test Static Solver
@@ -584,15 +586,11 @@ function test_modal()
 
     # --- Yingqian's Viscous FSI Paper (2019) ---
     DVDict = Dict(
-        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "cfrp", # preselect from material library
-        "g" => 0.04, # structural damping percentage
         "c" => 0.0925 * ones(nNodes), # chord length [m]
         "s" => 0.2438, # semispan [m]
+        "g" => 0.04, # structural damping percentage
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.03459, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
@@ -603,9 +601,13 @@ function test_modal()
         "debug" => false,
         "outputDir" => "",
         # --- General solver options ---
+        "nNodes" => nNodes,
         "tipMass" => false,
         "use_cavitation" => false,
         "use_freesurface" => false,
+        "material" => "cfrp", # preselect from material library
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
         # --- Static solve ---
         "run_static" => false,
         # --- Forced solve ---
@@ -632,4 +634,22 @@ function test_modal()
     rel_err = max(rel_err1, rel_err2)
 
     return rel_err
+end
+
+function test_eigensolve()
+    """
+    Test a simple eigenvalue solver
+    """
+    # --- A test matrix ---
+    A_r = [2.0 7.0; 1.0 8.0]
+    A_i = [1.0 1.0; 1.0 1.0]
+    n = 2
+    y = SolverRoutines.cmplxStdEigValProb2(A_r, A_i, n)
+    w_r1 = y[1:n]
+    w_i1 = y[n+1:2*n]
+    VR_r1 = reshape(y[2*n+1:2*n+n^2], n, n)
+    VR_i1 = reshape(y[2*n+n^2+1:end], n, n)
+    w_r, w_i, _, _, VR_r, VR_i = SolverRoutines.cmplxStdEigValProb(A_r, A_i, 2)
+
+    err = LinearAlgebra.norm(w_r1 - w_r, 2) + LinearAlgebra.norm(w_i1 - w_i, 2)
 end

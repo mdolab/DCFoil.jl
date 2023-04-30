@@ -95,6 +95,7 @@ function run_model(
     end
     if solverOptions["run_flutter"]
         obj, pmG, FLUTTERSOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+        SolveFlutter.write_sol(FLUTTERSOL, outputDir)
         flutterCostFuncsDict = compute_costFuncs(FLUTTERSOL, evalFuncs, solverOptions)
         costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end

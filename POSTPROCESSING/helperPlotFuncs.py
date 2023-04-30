@@ -42,7 +42,7 @@ plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
 ccm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
 
-def plot_wing(DVDict: dict):
+def plot_wing(DVDict: dict,nNodes):
     """
     Use design var dictionary to plot the wing
 
@@ -61,10 +61,6 @@ def plot_wing(DVDict: dict):
     alpha = 0.5
     fig, ax = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
 
-    try:
-        nNodes = DVDict["nNodes"]
-    except KeyError:
-        nNodes = DVDict["neval"]
     y = np.linspace(0, DVDict["s"], nNodes)
 
     # ax = axes[0]
@@ -566,6 +562,7 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
+            breakpoint()
             ax.plot(
                 vSweep,
                 gSweep,

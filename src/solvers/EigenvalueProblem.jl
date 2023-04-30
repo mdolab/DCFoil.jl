@@ -28,7 +28,6 @@ function compute_eigsolve(K, M, nEig; issym=true)
         end
     else
         # Only take positive imag value eigenvalues
-        # TODO:
         indices = findall(x -> (imag(x) > 0.0), eValsAll)
         eVals = eValsAll[indices]
         eVecs = eVecsAll[:, indices]

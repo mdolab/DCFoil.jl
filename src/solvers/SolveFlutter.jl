@@ -27,7 +27,7 @@ using Printf
 using JLD # julia data format
 using FiniteDifferences
 using Zygote
-using ChainRules
+using ChainRulesCore
 
 # --- DCFoil modules ---
 include("../InitModel.jl")
@@ -60,7 +60,8 @@ function solve(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
 
-    This acts like 'subroutine velocitySweepPkNonIter()' from Eirikur's code
+    Wrapper function to call pk flutter analysis and return the KS aggregated cost function
+    This acts like 'subroutine velocitySweepPkNonIter()' from Eirikur's code.
     """
     # to = TimerOutput() # for timing
 
@@ -236,7 +237,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("+------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL.Λ, FOIL, 0.1, 0.1, elemType)
+    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL.Λ, FOIL, 0.1, 0.1, elemType)
     _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
@@ -330,6 +331,10 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     This routine computes the eigenvector correlation matrix needed for associating converged eigenvectors
     This implementation is based on the van Zyl mode tracking method 1992. https://arc.aiaa.org/doi/abs/10.2514/3.46380
 
+        X⋅Y = √(S1² + S2²) / √(S3 * S4)
+
+    Although I think the output here is the square of the above equation.
+
     Inputs
     ------
         old_r, old_i - the real/imaginary part of the old eigenvectors from previous iteration. The size is (Mold, Mold)
@@ -341,38 +346,137 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     """
 
     M_old = size(old_r)[1] # nrows
-    N_old = size(old_r)[2] # ncols
+    N_old = size(old_r)[2] # ncols or the number of modes
     M_new = size(new_r)[1]
     N_new = size(new_r)[2]
     # normOld = zeros(N_old)
     # normNew = zeros(N_new)
     C = zeros(M_old, M_new)
 
+    # ---------------------------
+    #   Eigenvector norms
+    # ---------------------------
+    # S3 for mode
     # Norm of each eigenvector for old array is a sum over rows
     normOld = sqrt.(sum(old_r .^ 2 + old_i .^ 2, dims=1))
 
+    # S4 for mode
     # Norm of each eigenvector for new array
     normNew = sqrt.(sum(new_r .^ 2 + new_i .^ 2, dims=1))
 
-    # Dot product the arrays
+    # Old and new eigen vectors
     old = old_r + 1im * old_i
     new = new_r + 1im * new_i
+    # S1 S2 numerator
+    # Dot product the arrays
     Ctmp = abs.(transpose(conj(old)) * new)
+    # println("Ctmp")
+    # show(stdout, "text/plain", Ctmp)
+    # println("") 
+    # Ctmp is ok
 
-    # Now normalize correlation matrix Ctmp
+    # Now normalize correlation matrix Ctmp and put into output matrix C
+
+    # --- Set to zero first for Buffer ---
+    C_z = Zygote.Buffer(C)
+    for jj in 1:M_new # loop cols
+        for ii in 1:M_old # loop rows
+            C_z[ii, jj] = 0.0
+        end
+    end
+
     for jj in 1:N_new # loop cols
         for ii in 1:N_old # loop rows
-            if normOld[ii] == 0.0 || normNew[jj] == 0.0
-                C[ii, jj] = 0.0
+            if Ctmp[ii, jj] == 0.0 || normOld[ii] < SolutionConstants.mepsLarge || normNew[jj] < SolutionConstants.mepsLarge # do not allow divide by zero
+                C_z[ii, jj] = 0.0
+                # C[ii, jj] = 0.0
             else
-                C[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
+                C_z[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
+                # C[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
             end
         end
     end
 
+    C = copy(C_z)
+    # println(size(C))
+    # println("C")
+    # println("=====================================")
+    # show(stdout, "text/plain", C)
+    # println("\n=====================================")
+    # println("C_z")
+    # println("=====================================")
+    # show(stdout, "text/plain", copy(C_z))
+    # println("\n=====================================")
+    # # println(old)
+    # println(new)
+
     return C
 
 end # end function
+
+function loop_corrMat(C, N_new)
+    """
+    This loop finds the max element in the C matrix,
+    stores the row and column indices in mTmp and corrTmp,
+    then zeros out the row and column in the C matrix to continue
+
+    N_new - number of eigenvectors in latest iteration
+    """
+    corrTmp = zeros(N_new)
+    mTmp = zeros(Int64, N_new, 2)
+    corrTmp_z = Zygote.Buffer(corrTmp)
+    mTmp_z = Zygote.Buffer(mTmp)
+    for ii in 1:N_new
+        mTmp_z[ii, 1] = 0
+        mTmp_z[ii, 2] = 0
+        corrTmp_z[ii] = 0.0
+    end
+
+    isMaxValZero = true
+    C_work = C # copy C matrix to work on
+    while isMaxValZero
+
+        # --- Find max value in correlation matrix and location ---
+        maxI, maxJ, maxVal = SolverRoutines.maxLocArr2d(C_work)
+        # Now copy the C matrix into a Zygote buffer to allow mutation
+        C_z = Zygote.Buffer(C_work)
+        for jj in 1:size(C_work)[2]
+            for ii in 1:size(C_work)[1]
+                C_z[ii, jj] = C_work[ii, jj]
+            end
+        end
+
+        # --- Check if max value is zero ---
+        # println("maxVal")
+        # println(maxVal)
+        # println("maxI, maxJ")
+        # println(maxI)
+        # println(maxJ)
+        if maxVal == 0.0
+            isMaxValZero = false
+        else
+            # Store the correlation value in its proper location
+            corrTmp_z[maxJ] = maxVal
+
+            # Store where previous eigenvector was in proper spot for current eigenvector
+            mTmp_z[maxJ, 1] = maxI
+
+            # Now zero out corresponding row and column in correlation matrix
+            for jj in 1:size(C_work)[2] # loop cols
+                C_z[maxI, jj] = 0.0
+            end
+            for ii in 1:size(C_work)[1] # loop rows
+                C_z[ii, maxJ] = 0.0
+            end
+            C_work = copy(C_z) # copy back to C for the next loop
+
+        end
+    end # end while
+    mTmp = copy(mTmp_z)
+    corrTmp = copy(corrTmp_z)
+
+    return mTmp, corrTmp
+end
 
 function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i; nFlow=nothing, debug=false)
     """
@@ -406,50 +510,51 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     corr = zeros(N_old)
     m = zeros(Int64, N_old, 2)
     newModesIdx = zeros(Int64, N_old)
+    # --- Zygote init to zero ---
+    m_z = Zygote.Buffer(m)
+    corr_z = Zygote.Buffer(corr)
+    newModesIdx_z = Zygote.Buffer(newModesIdx)
+    for ii in 1:N_old
+        m_z[ii, 1] = 0
+        m_z[ii, 2] = 0
+        newModesIdx_z[ii] = 0
+        corr_z[ii] = 0.0
+    end
 
     # Working matrices
-    corrTmp = zeros(N_new)
-    mTmp = zeros(Int64, N_new, 2)
     newModesIdxTmp = zeros(Int64, N_new)
+    # --- Zygote init to zero ---
+    newModesIdxTmp_z = Zygote.Buffer(newModesIdxTmp)
+    for ii in 1:N_new
+        newModesIdxTmp_z[ii] = 0
+    end
 
     # --- Compute correlation matrix ---
+    M_old = size(old_r)[1] # nrows
+    N_old = size(old_r)[2] # ncols or the number of modes
+    M_new = size(new_r)[1]
+    N_new = size(new_r)[2]
     C = compute_correlationMatrix(old_r, old_i, new_r, new_i)
 
-    if debug # save correlation matrix
+    # save correlation matrix
+    if debug
         fname = @sprintf("./DebugOutput/corrMatrix-%03i.jld", nFlow)
         save(fname, "corrMat", C)
     end
 
     # --- Loop over corr matrix ---
     # This loop finds the max element in the C matrix,
-    # stores the row and column indices in mTmp and corrTmp,
+    # stores the row and column indices in `mTmp` and `corrTmp`,
     # then zeros out the row and column in the C matrix
-    isMaxValZero = true
-    while isMaxValZero
+    mTmp, corrTmp = loop_corrMat(C, N_new)
 
-        # --- Find max value in correlation matrix and location ---
-        maxI, maxJ, maxVal = SolverRoutines.maxLocArr2d(C)
-
-        # --- Check if max value is zero ---
-        if maxVal == 0.0
-            isMaxValZero = false
-        else
-            # Store the correlation value in its proper location
-            corrTmp[maxJ] = maxVal
-
-            # Store where previous eigenvector was in proper spot for current eigenvector
-            mTmp[maxJ, 1] = maxI
-
-            # Now zero out corresponding row and column in correlation matrix
-            C[maxI, :] .= 0.0
-            C[:, maxJ] .= 0.0
-        end
-    end # end while
-
-    # --- Add indices for location of new eigenvector ---
+    # --- Add indices for location of new eigenvector (column 2) ---
+    mTmp_z = Zygote.Buffer(mTmp)
+    mTmp_z[:, 1] = mTmp[:, 1]
     for ii in 1:N_new
-        mTmp[ii, 2] = ii
+        mTmp_z[ii, 2] = ii
     end
+    mTmp = copy(mTmp_z)
 
     # --- Find zero and nonzero elements in correlation array ---
     # Then find how many each has
@@ -459,13 +564,18 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
         if corrTmp[ii] == 0.0 # new mode?
             # If correlation is zero, then it could be a new mode
             nz += 1
-            newModesIdxTmp[nz] = mTmp[ii, 2]
+            newModesIdxTmp_z[nz] = mTmp[ii, 2]
         else # store index and correlation
             nCorrelatedModes += 1
-            m[nCorrelatedModes, :] = mTmp[ii, :]
-            corr[nCorrelatedModes] = corrTmp[ii]
+            m_z[nCorrelatedModes, :] = mTmp[ii, :]
+            corr_z[nCorrelatedModes] = corrTmp[ii]
         end
     end
+
+    # --- Copy back ---
+    newModesIdxTmp = copy(newModesIdxTmp_z)
+    m = copy(m_z)
+    corr = copy(corr_z)
 
     # --- Lower frequency modes missed? ---
     # Loop over all possible new modes and see if they are lower than some max
@@ -476,9 +586,10 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     for ii in 1:nz
         if (p_new_i[newModesIdxTmp[ii]] < maxVal / 2)
             nNewModes += 1
-            newModesIdx[nNewModes] = newModesIdxTmp[ii]
+            newModesIdx_z[nNewModes] = newModesIdxTmp[ii]
         end
     end
+    newModesIdx = copy(newModesIdx_z)
 
     # println("corr")
     # println("==============================")
@@ -552,14 +663,11 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     #   Modal method reduction
     # ---------------------------
     Mr, Kr, Qr = compute_modalSpace(Mmat, Kmat; reducedSize=Nr)
-    @printf("Modal matrix Qr ∈ (%ix%i)\n", size(Qr)[1], size(Qr)[2])
+    ChainRulesCore.ignore_derivatives() do
+        @sprintf("Modal matrix Qr ∈ (%i x %i)\n", size(Qr)[1], size(Qr)[2])
+    end
     dimwithBC = Nr
 
-    # --- Correlation arrays ---
-    m::Matrix{Int64} = zeros(Int64, nModes * 3, 2)
-    # The m matrix stores which mode is correlated with what.
-    # The first column stores indices of old m[:,1] and
-    # the second column stores indices of the newly found modes m[:,2]
     # --- Outputs ---
     p_r = zeros(3 * nModes, N_MAX_Q_ITER)
     p_i = zeros(3 * nModes, N_MAX_Q_ITER)
@@ -568,17 +676,27 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     R_eigs_r = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     R_eigs_i = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank::Matrix{Int64} = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
+    # stores [velocity, density, dynamic pressure]
+    flowHistory = zeros(N_MAX_Q_ITER, 3)
 
 
-    # --- Working vars ---
-    # Retained eigenvector matrices
-    R_eigs_r_tmp = zeros(2 * dimwithBC, 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i_tmp = zeros(2 * dimwithBC, 3 * nModes, N_MAX_Q_ITER)
-    flowHistory = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
+    # ---------------------------
+    #   Working arrays
+    # ---------------------------
+    # --- Correlation arrays ---
+    # The m matrix stores which mode is correlated with what.
+    # The first column stores indices of old m[:,1] and
+    # the second column stores indices of the newly found modes m[:,2]
+    m::Matrix{Int64} = zeros(Int64, nModes * 3, 2)
+    # --- Retained eigenvector matrices ---
+    R_eigs_r_tmp = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i_tmp = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
     ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
     p_diff_max = 0.1 # max allowed change in roots between steps
+
     if debug
         # Needed for debugging
         fs = zeros(3 * nModes)
@@ -601,15 +719,17 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     # Need to initialize some variables for the scope of the while loop
     nCorr::Int64 = 0
     NTotalModesFound::Int64 = 0 # total number of modes found over the entire simulation
-    nCorrNewModes::Int64 = 0 # number of new modes to correlate
-    is_failed::Bool = false
+    nCorrNewModes = 0 # number of new modes to correlate
+    is_failed = false
     while (nFlow <= N_MAX_Q_ITER)
 
-        # Flow condition header printout
-        if nFlow % 10 == 1 # header every 10 iterations
-            println("+--------+------------------+-----------------+-------+---------------+------------------+-----------+")
-            println("|  nFlow | Dyn. press. [Pa] | Velocity [m/s]  | nCorr | nCorrNewModes | NTotalModesFound | flow fail |")
-            println("+--------+------------------+-----------------+-------+---------------+------------------+-----------+")
+        # --- Flow condition header printout ---
+        ChainRulesCore.ignore_derivatives() do
+            if nFlow % 10 == 1 # header every 10 iterations
+                println("+--------+------------------+-----------------+-------+---------------+------------------+-----------+")
+                println("|  nFlow | Dyn. press. [Pa] | Velocity [m/s]  | nCorr | nCorrNewModes | NTotalModesFound | flow fail |")
+                println("+--------+------------------+-----------------+-------+---------------+------------------+-----------+")
+            end
         end
 
         # Set the proper fail flag
@@ -639,25 +759,36 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
             idxTmp = sortperm(p_cross_i[1:kCtr])
 
             # Populate correlation matrix
-            for ii in 1:nModes
-                m[ii, 1] = ii
-                m[ii, 2] = idxTmp[ii]
+            m_z = Zygote.Buffer(m)
+            for ii in 1:size(m)[1]
+                m_z[ii, 1] = 0
+                m_z[ii, 2] = 0
             end
+            for ii in 1:nModes
+                m_z[ii, 1] = ii
+                m_z[ii, 2] = idxTmp[ii]
+            end
+            m = copy(m_z)
 
             # --- Print out first flight condition ---
-            println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        000    |            %03d   |        %d  |",
-                nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
+            ChainRulesCore.ignore_derivatives() do
+                println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        000    |            %03d   |        %d  |",
+                    nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
+            end
         else # not first condition; apply mode tracking between flow speeds
 
-            # Compute correlation matrix btwn dynP increments
+            # --- Compute correlation matrix btwn dynP increments ---
+            # Old eigenvectors
             old_r = R_eigs_r_tmp[:, :, nFlow-1]
             old_i = R_eigs_i_tmp[:, :, nFlow-1]
+            # New eigenvectors
             new_r = R_cross_r[:, 1:kCtr]
             new_i = R_cross_i[:, 1:kCtr]
+            # Eigenvalues
             p_old_i = p_i[:, nFlow-1]
             p_new_i = p_cross_i[1:kCtr]
-            corr, m, newModesIdx, nCorr, nCorrNewModesoutput = compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i; nFlow=nFlow, debug=debug)
-            nCorrNewModes = nCorrNewModesoutput
+            corr, m, newModesIdx, nCorr, nCorrNewModes = compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i; nFlow=nFlow, debug=debug)
+
             # --- Check if eigenvalue jump is too big ---
             # If the jump is too big, we back up
             # We do this by scaling the 'p' to the true eigenvalue
@@ -666,7 +797,12 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
             # Compute difference between old and new modes
             inner = (p_r[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
                     (p_i[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
-            tmp[1:nCorr] = sqrt.(inner)
+            tmp_z = Zygote.Buffer(tmp)
+            for ii in 1:length(tmp)
+                tmp_z[ii] = 0.0
+            end
+            tmp_z[1:nCorr] = sqrt.(inner)
+            tmp = copy(tmp_z)
 
             maxVal = maximum(tmp[1:nCorr])
 
@@ -683,54 +819,70 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
             elseif !(isnothing(Δu))
                 boolCheck = U∞ - flowHistory[nFlow-1, 1] < Δu / 50
             end
+            # println("nCorrNewModes: ", nCorrNewModes)
             if (boolCheck)
                 # Let's check the fail flag, if yes then accept
                 if (is_failed)
                     # We should keep all modes that have high correlations, drop others
                     nKeep::Int64 = 0
+                    m_z = Zygote.Buffer(m)
+                    for ii in 1:size(m)[1]
+                        m_z[ii, 1] = m[ii, 1]
+                        m_z[ii, 2] = m[ii, 2]
+                    end
                     for ii in 1:nCorr
                         if corr[ii] > 0.5
                             nKeep += 1
-                            m[nKeep, :] = m[ii, :]
+                            m_z[nKeep, :] = m[ii, :]
                         end
                     end
+                    m = copy(m_z)
 
                     # We only want the first nKeep modes so we need to overwrite nCorr, which is used later in the code for indexing
                     nCorr = nKeep
 
                     is_failed = false
                 end
+                # println("nCorrNewModes: ", nCorrNewModes)
             end
-
             # Now we add in any new lower frequency modes that weren't correlated above
-            if (nCorrNewModes > 0) && !is_failed
+            if (nCorrNewModes != 0)
+                if !is_failed
 
-                # Append new modes' indices to the new 'm' array
-                for ii in 1:nCorrNewModes
-                    m[nCorr+ii, 1] = NTotalModesFound + ii
-                    m[nCorr+ii, 2] = newModesIdx[ii]
+                    # Append new modes' indices to the new 'm' array
+                    m_z = Zygote.Buffer(m)
+                    for ii in 1:size(m)[1]
+                        m_z[ii, 1] = m[ii, 1]
+                        m_z[ii, 2] = m[ii, 2]
+                    end
+                    for ii in 1:nCorrNewModes
+                        m_z[nCorr+ii, 1] = NTotalModesFound + ii
+                        m_z[nCorr+ii, 2] = newModesIdx[ii]
+                    end
+                    m = copy(m_z)
+
+                    # Increment the nCorr variable counter to include the recently added modes
+                    nCorr += nCorrNewModes
+
+                    # Increment the shift variable for the next new mode
+                    # NOTE: this shift variable has the total number of modes found over the ENTIRE simulation, not the current number of modes found
+                    NTotalModesFound += nCorrNewModes
                 end
-
-                # Increment the nCorr variable counter to include the recently added modes
-                nCorr += nCorrNewModes
-
-                # Increment the shift variable for the next new mode
-                # NOTE: this shift variable has the total number of modes found over the ENTIRE simulation, not the current number of modes found
-                NTotalModesFound += nCorrNewModes
-
             end
 
             if debug # print out correlation data
-                lineCtr = 0
-                fname = @sprintf("./DebugOutput/corrmetric-%03i.jld", nFlow)
-                save(fname, "corr", corr)
+                ChainRulesCore.ignore_derivatives() do
+                    lineCtr = 0
+                    fname = @sprintf("./DebugOutput/corrmetric-%03i.jld", nFlow)
+                    save(fname, "corr", corr)
 
-                fname = @sprintf("./DebugOutput/m-%03i.dat", nFlow)
-                open(fname, "w") do io
-                    write(io, "m\n")
-                    for ii in 1:lineCtr
-                        stringData = @sprintf("%1.9e %1.9e\n", m[ii, 1], m[ii, 2])
-                        write(io, stringData)
+                    fname = @sprintf("./DebugOutput/m-%03i.dat", nFlow)
+                    open(fname, "w") do io
+                        write(io, "m\n")
+                        for ii in 1:lineCtr
+                            stringData = @sprintf("%1.9e %1.9e\n", m[ii, 1], m[ii, 2])
+                            write(io, stringData)
+                        end
                     end
                 end
             end
@@ -739,62 +891,122 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
 
         # --- Store solution if good ---
         if is_failed # backup dynamic pressure
+
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
             U∞ = sqrt(2 * dynPTmp / flowHistory[nFlow-1, 2])
             println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp, " Pa and new U∞: ", U∞, " m/s")
-        else # store solution
-            # --- Eigenvalues ---
-            p_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
-            p_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
 
-            # --- Eigenvectors ---
-            R_eigs_r_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
-            R_eigs_i_tmp[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
+        else # Store solution
+            # --- Non-dimensional Eigenvalues ---
+            # This is a Zygote buffer on every dynamic pressure increment
+            p_r_z = Zygote.Buffer(p_r)
+            p_i_z = Zygote.Buffer(p_i)
+            for mm in 1:3*nModes
+                for qq in 1:N_MAX_Q_ITER # set rest to zeros
+                    p_r_z[mm, qq] = p_r[mm, qq]
+                    p_i_z[mm, qq] = p_i[mm, qq]
+                end
+            end
+            p_r_z[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]]
+            p_i_z[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]]
+            p_r = copy(p_r_z)
+            p_i = copy(p_i_z)
 
             # --- Dimensional eigenvalues [rad/s] ---
             # Non-dimensionalization factor
             tmpFactor = U∞ * cos(Λ) / b_ref
-            true_eigs_r[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
-            true_eigs_i[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
+            true_eigs_r_z = Zygote.Buffer(true_eigs_r)
+            true_eigs_i_z = Zygote.Buffer(true_eigs_i)
+            for qq = 1:N_MAX_Q_ITER # loop speeds
+                for mm = 1:3*nModes
+                    true_eigs_r_z[mm, qq] = true_eigs_r[mm, qq]
+                    true_eigs_i_z[mm, qq] = true_eigs_i[mm, qq]
+                end
+            end
+            true_eigs_r_z[m[1:nCorr, 1], nFlow] = p_cross_r[m[1:nCorr, 2]] * tmpFactor
+            true_eigs_i_z[m[1:nCorr, 1], nFlow] = p_cross_i[m[1:nCorr, 2]] * tmpFactor
+            true_eigs_r = copy(true_eigs_r_z)
+            true_eigs_i = copy(true_eigs_i_z)
+
+            # --- Eigenvectors ---
+            # These are the eigenvectors of the modal reduced system
+            R_eigs_r_tmp_z = Zygote.Buffer(R_eigs_r_tmp)
+            R_eigs_i_tmp_z = Zygote.Buffer(R_eigs_i_tmp)
+            for qq = 1:N_MAX_Q_ITER # loop speeds
+                for mm = 1:3*nModes
+                    for dd = 1:2*Nr # loop reduced DOFs
+                        R_eigs_r_tmp_z[dd, mm, qq] = R_eigs_r_tmp[dd, mm, qq]
+                        R_eigs_i_tmp_z[dd, mm, qq] = R_eigs_i_tmp[dd, mm, qq]
+                    end
+                end
+            end
+            R_eigs_r_tmp_z[:, m[1:nCorr, 1], nFlow] = R_cross_r[:, m[1:nCorr, 2]]
+            R_eigs_i_tmp_z[:, m[1:nCorr, 1], nFlow] = R_cross_i[:, m[1:nCorr, 2]]
+            R_eigs_r_tmp = copy(R_eigs_r_tmp_z)
+            R_eigs_i_tmp = copy(R_eigs_i_tmp_z)
+            # println("R_eigs_r_tmp_z: ")
+            # show(stdout, "text/plain", R_eigs_r_tmp_z)
+
 
             # println(true_eigs_i[m[1:nCorr, 1], nFlow])
 
-            flowHistory[nFlow, 1] = U∞
-            flowHistory[nFlow, 2] = FOIL.ρ_f
-            flowHistory[nFlow, 3] = dynPTmp
+            flowHistory_z = Zygote.Buffer(flowHistory)
+            for qq = 1:N_MAX_Q_ITER # loop speeds
+                for state in 1:3
+                    flowHistory_z[qq, state] = flowHistory[qq, state]
+                end
+            end
+            flowHistory_z[nFlow, 1] = U∞
+            flowHistory_z[nFlow, 2] = FOIL.ρ_f
+            flowHistory_z[nFlow, 3] = dynPTmp
+            flowHistory = copy(flowHistory_z)
 
             # Set value to one to store the solution
-            iblank[m[1:nCorr, 1], nFlow] .= 1
-
-            # --- Write values to file ---
-            if debug
-                dimensionalization = tmpFactor / 2π
-                gs[m[1:nCorr, 1]] = p_cross_r[m[1:nCorr, 2]] * dimensionalization
-                fs[m[1:nCorr, 1]] = p_cross_i[m[1:nCorr, 2]] * dimensionalization
-                fname = @sprintf("./DebugOutput/eigenvalues-%03i.dat", nFlow)
-                speedString = @sprintf("Flow speed [m/s]: %e\n", U∞)
-                stringData = "g_[1/s]     f_[Hz]\n"
-                open(fname, "w") do io
-                    write(io, speedString)
-                    write(io, stringData)
-                    for ii in 1:3*nModes
-                        stringData = @sprintf("%e %e\n", gs[ii], fs[ii])
-                        write(io, stringData)
-                    end
+            # --- Zygote buffers ---
+            iblank_z = Zygote.Buffer(iblank)
+            for qq = 1:N_MAX_Q_ITER # loop speeds
+                for mm = 1:3*nModes
+                    iblank_z[mm, qq] = iblank[mm, qq]
                 end
+            end
+            for idx in m[1:nCorr, 1]
+                iblank_z[idx, nFlow] = 1
+                # iblank[idx, nFlow] = 1
+            end
+            iblank = copy(iblank_z)
 
-                # Store eigenvectors as JLD
-                fname = @sprintf("./DebugOutput/sorted-eigenvectors-%03i.jld", nFlow)
-                save(fname, "evec_r", R_eigs_r_tmp[:, :, nFlow], "evec_i", R_eigs_i_tmp[:, :, nFlow])
-
-                fname = @sprintf("./DebugOutput/iblank-%03i.dat", nFlow)
-                stringData = "iblank\n"
-                open(fname, "w") do io
-                    write(io, speedString)
-                    write(io, stringData)
-                    for ii in 1:3*nModes
-                        stringData = @sprintf("%i\n", iblank[ii, nFlow])
+            # --- Write values to file for debugging---
+            if debug
+                ChainRulesCore.ignore_derivatives() do
+                    dimensionalization = tmpFactor / 2π
+                    gs[m[1:nCorr, 1]] = p_cross_r[m[1:nCorr, 2]] * dimensionalization
+                    fs[m[1:nCorr, 1]] = p_cross_i[m[1:nCorr, 2]] * dimensionalization
+                    fname = @sprintf("./DebugOutput/eigenvalues-%03i.dat", nFlow)
+                    speedString = @sprintf("Flow speed [m/s]: %e\n", U∞)
+                    stringData = "g_[1/s]     f_[Hz]\n"
+                    open(fname, "w") do io
+                        write(io, speedString)
                         write(io, stringData)
+                        for ii in 1:3*nModes
+                            stringData = @sprintf("%e %e\n", gs[ii], fs[ii])
+                            write(io, stringData)
+                        end
+                    end
+
+                    # Store eigenvectors as JLD
+                    fname = @sprintf("./DebugOutput/sorted-eigenvectors-%03i.jld", nFlow)
+                    save(fname, "evec_r", R_eigs_r_tmp_z[:, :, nFlow], "evec_i", R_eigs_i_tmp_z[:, :, nFlow])
+
+                    fname = @sprintf("./DebugOutput/iblank-%03i.dat", nFlow)
+                    stringData = "iblank\n"
+                    open(fname, "w") do io
+                        write(io, speedString)
+                        write(io, stringData)
+                        for ii in 1:3*nModes
+                            stringData = @sprintf("%i\n", iblank[ii, nFlow])
+                            # stringData = @sprintf("%i\n", iblank[ii, nFlow])
+                            write(io, stringData)
+                        end
                     end
                 end
             end
@@ -838,10 +1050,12 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
         end
 
         # --- Print out flight condition ---
-        if (nFlow != 1)
-            println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        %03d    |            %03d   |        %d  |",
-                nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalModesFound, is_failed))
-        end # end if
+        ChainRulesCore.ignore_derivatives() do
+            if (nFlow != 1)
+                println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        %03d    |            %03d   |        %d  |",
+                    nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalModesFound, is_failed))
+            end # end if
+        end
         # Uncomment here to debug
         # return true_eigs_r, true_eigs_i, R_eigs_r_tmp, R_eigs_i_tmp, iblank, flowHistory # my breakpoint
 
@@ -850,22 +1064,39 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     # Decrement flow index since it was incremented before exit
     nFlow -= 1
 
-    # --- Return displacements ---
+
+    # --- Return finished eigenvectors ---
     # We reduced the problem size using
     # {u} ≈ Qr * {q}
     # where {q} was the retained generalized coordinates
+    # --- Zygote buffers ---
+    R_eigs_r_z = Zygote.Buffer(R_eigs_r)
+    R_eigs_i_z = Zygote.Buffer(R_eigs_i)
+    for qq = 1:N_MAX_Q_ITER # loop speeds
+        for mm = 1:3*nModes
+            for dd = 1:2*(dim-length(globalDOFBlankingList))
+                R_eigs_r_z[dd, mm, qq] = 0.0
+                R_eigs_i_z[dd, mm, qq] = 0.0
+            end
+        end
+    end
     for flowIter in 1:nFlow
         for mm in 1:3*nModes
             # We need to do some magic here because our eigenvectors are actually stacked
-            # evec = [ū , pn * ū]^T
-            R_eigs_r[1:dim-length(globalDOFBlankingList), mm, flowIter] = Qr * R_eigs_r_tmp[1:Nr, mm, flowIter]
-            R_eigs_i[1:dim-length(globalDOFBlankingList), mm, flowIter] = Qr * R_eigs_i_tmp[1:Nr, mm, flowIter]
-            R_eigs_r[dim+1-length(globalDOFBlankingList):end, mm, flowIter] = Qr * R_eigs_r_tmp[Nr+1:end, mm, flowIter]
-            R_eigs_i[dim+1-length(globalDOFBlankingList):end, mm, flowIter] = Qr * R_eigs_i_tmp[Nr+1:end, mm, flowIter]
+            # evec = [ū ; pn * ū]^T
+            R_eigs_r_z[1:dim-length(globalDOFBlankingList), mm, flowIter] = Qr * R_eigs_r_tmp[1:Nr, mm, flowIter]
+            R_eigs_i_z[1:dim-length(globalDOFBlankingList), mm, flowIter] = Qr * R_eigs_i_tmp[1:Nr, mm, flowIter]
+            R_eigs_r_z[dim+1-length(globalDOFBlankingList):end, mm, flowIter] = Qr * R_eigs_r_tmp[Nr+1:end, mm, flowIter]
+            R_eigs_i_z[dim+1-length(globalDOFBlankingList):end, mm, flowIter] = Qr * R_eigs_i_tmp[Nr+1:end, mm, flowIter]
         end
     end
 
-    return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
+    # --- Copy back from zygote buffer ---
+    R_eigs_r = copy(R_eigs_r_z)
+    R_eigs_i = copy(R_eigs_i_z)
+
+    # return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
+    return true_eigs_i[:, 1]
 
 end # end function
 
@@ -981,8 +1212,8 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, MM, KK, Qr, stru
         savefig(fname)
     end
 
-    # return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
-    return p_cross_r[1,1]
+    return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
+    # return p_cross_r
 end # end function
 
 function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
@@ -1005,43 +1236,57 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
         R_eigs_i - unsorted eigenvectors of length ik [-]
         k_history - history of reduced frequencies. Actual k values that we analyzed and accepted
         ik - number of k's that were actually analyzed and accepted
-        The result is essentially 'nMode' sets of lines that the eigenvalue problem was solved for
+
+        The result is 'nMode' sets of lines that the eigenvalue problem was solved for
     """
 
     Nr = size(Qr)[2]
     # Fluid matrices
-    globalMf = zeros(dim, dim)
-    globalCf_r = zeros(dim, dim)
-    globalKf_r = zeros(dim, dim)
-    globalKf_i = zeros(dim, dim)
-    globalCf_i = zeros(dim, dim)
+    globalMf_0 = zeros(dim, dim)
+    globalCf_r_0 = zeros(dim, dim)
+    globalCf_i_0 = zeros(dim, dim)
+    globalKf_r_0 = zeros(dim, dim)
+    globalKf_i_0 = zeros(dim, dim)
     # TODO: visualization of matrix magnitudes
 
     dimwithBC = Nr
+    # ---------------------------
+    #   Outputs
+    # ---------------------------
     # Eigenvalue and vector matrices
     p_eigs_r = zeros(2 * dimwithBC, N_MAX_K_ITER)
     p_eigs_i = zeros(2 * dimwithBC, N_MAX_K_ITER)
     R_eigs_r = zeros(2 * dimwithBC, 2 * dimwithBC, N_MAX_K_ITER)
     R_eigs_i = zeros(2 * dimwithBC, 2 * dimwithBC, N_MAX_K_ITER)
     k_history = zeros(N_MAX_K_ITER)
+    p_eigs_r_z = Zygote.Buffer(p_eigs_r)
+    p_eigs_i_z = Zygote.Buffer(p_eigs_i)
+    R_eigs_r_z = Zygote.Buffer(R_eigs_r)
+    R_eigs_i_z = Zygote.Buffer(R_eigs_i)
+    k_history_z = Zygote.Buffer(k_history)
+
 
     p_diff_max = 0.2 # maximum allowed change in poles btwn two steps
 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
-    globalMf, _, _, _, _ = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
-    _, _, Mff = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+    globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
+    _, _, Mff = Hydro.apply_BCs(globalKf_r_0, globalCf_r_0, globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
+    # AR = inv(MM .+ Mf) * (KK)
+    # yQuiescent = SolverRoutines.cmplxStdEigValProb2(AR, imag(AR), Nr)
+    # omegaSquared = yQuiescent[Nr+1:2*Nr]
     Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
 
     # ************************************************
     #     Perform iterations on k values
     # ************************************************
     keepLooping = true
-    k = 1e-15 # first guess close to zero as possible
+    # first 'k' guess close to zero as possible
+    k = 1e-12 #1e-15 
     maxK = kSweep[end]
     ik = 1 # k counter
     # pkEqnType = "rodden"
@@ -1054,7 +1299,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
         # ---------------------------
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
         ω = k * U∞ * (cos(FOIL.Λ)) / b_ref
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, FOIL, U∞, ω, elemType)
+        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
         Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
         # Mode space reduction
@@ -1079,13 +1324,14 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
         if (ik > 1)
             # van Zyl tracking method: Find correlation matrix btwn current and previous eigenvectors (mode shape)
             # Rows are old eigenvector number and columns are new eigenvector number
-            corr = compute_correlationMatrix(R_eigs_r[:, :, ik-1], R_eigs_i[:, :, ik-1], R_aa_r, R_aa_i)
+            # corr = compute_correlationMatrix(R_eigs_r[:, :, ik-1], R_eigs_i[:, :, ik-1], R_aa_r, R_aa_i)
+            corr = compute_correlationMatrix(R_eigs_r_z[:, :, ik-1], R_eigs_i_z[:, :, ik-1], R_aa_r, R_aa_i)
 
             # Determine location of new eigenvectors
             idxs = SolverRoutines.argmax2d(transpose(corr))
 
             # Check if entries are missing/duplicated
-            # TODO: this might not be a problem?
+            # NOTE: this might not be a problem?
 
             # --- Order eigenvalues and eigenvectors based on correlation matrix ---
             # p_r_tmp = p_r
@@ -1096,8 +1342,11 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
             R_aa_r = R_aa_r_tmp[:, idxs]
             R_aa_i = R_aa_i_tmp[:, idxs]
 
-            # --- If too big of jump, back up ---
-            tmp_p_diff = sqrt.((p_eigs_r[:, ik-1] - p_r) .^ 2 + (p_eigs_i[:, ik-1] - p_i) .^ 2)
+            # --- If too big of jump, back up on 'k' ---
+            # println("p_r ^{k-1}")
+            # println(p_eigs_r[:,ik-1])
+            tmp_p_diff = sqrt.((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
+            # tmp_p_diff = sqrt.((p_eigs_r[:, ik-1] - p_r) .^ 2 + (p_eigs_i[:, ik-1] - p_i) .^ 2)
             p_diff = maximum(real(tmp_p_diff))
             if (p_diff > p_diff_max)
                 # println("Failed, p_diff: ", p_diff, ", p_diff_max: ", p_diff_max)
@@ -1110,14 +1359,20 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
         # ---------------------------
         if failed
             # We need to try some new k guesses. Halve the step
-            k = 0.5 * (k - k_history[ik-1]) + k_history[ik-1]
+            # k = 0.5 * (k - k_history[ik-1]) + k_history[ik-1]
+            k = 0.5 * (k - k_history_z[ik-1]) + k_history_z[ik-1]
         else # Success
             # Store solution
-            p_eigs_r[:, ik] = p_r
-            p_eigs_i[:, ik] = p_i
-            R_eigs_r[:, :, ik] = R_aa_r
-            R_eigs_i[:, :, ik] = R_aa_i
-            k_history[ik] = k
+            # p_eigs_r[:, ik] = p_r
+            # p_eigs_i[:, ik] = p_i
+            # R_eigs_r[:, :, ik] = R_aa_r
+            # R_eigs_i[:, :, ik] = R_aa_i
+            # k_history[ik] = k
+            p_eigs_r_z[:, ik] = p_r
+            p_eigs_i_z[:, ik] = p_i
+            R_eigs_r_z[:, :, ik] = R_aa_r
+            R_eigs_i_z[:, :, ik] = R_aa_i
+            k_history_z[ik] = k
 
             # increment for next k
             ik += 1
@@ -1125,7 +1380,8 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
 
             # Check if we solved the matched Im(p) = k problem
             maxImP = maximum(real(p_i))
-            if (maxImP < k_history[ik-1]) || (k > maxK)
+            # if (maxImP < k_history[ik-1]) || (k > maxK)
+            if (maxImP < k_history_z[ik-1]) || (k > maxK)
                 # Assumes highest mode does NOT cross Im(p) = k line from below later
                 # i.e. continue looping until the highest mode crosses the line or we reach maxK
                 keepLooping = false
@@ -1137,9 +1393,15 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
 
     ik = ik - 1 # Reduce counter b/c it was incremented in the last iteration
 
-    return p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik
-end # end function
+    p_eigs_r = copy(p_eigs_r_z)
+    p_eigs_i = copy(p_eigs_i_z)
+    R_eigs_r = copy(R_eigs_r_z)
+    R_eigs_i = copy(R_eigs_i_z)
+    k_history = copy(k_history_z)
 
+    return p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik
+    # return p_eigs_r[:, 1]
+end # end function
 
 function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik, N_MAX_K_ITER)
     """
@@ -1168,6 +1430,20 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
     p_cross_i = zeros(2 * dim * 5)
     R_cross_r = zeros(2 * dim, 2 * dim * 5)
     R_cross_i = zeros(2 * dim, 2 * dim * 5)
+    # --- Good practice Zygote initializations ---
+    p_cross_r_z = Zygote.Buffer(p_cross_r)
+    p_cross_i_z = Zygote.Buffer(p_cross_i)
+    R_cross_r_z = Zygote.Buffer(R_cross_r)
+    R_cross_i_z = Zygote.Buffer(R_cross_i)
+    for ii in 1:2*dim*5
+        p_cross_r_z[ii] = 0.0
+        p_cross_i_z[ii] = 0.0
+        for jj in 1:2*dim
+            R_cross_r_z[jj, ii] = 0.0
+            R_cross_i_z[jj, ii] = 0.0
+        end
+    end
+
 
     # --- Look for crossing of diagonal line Im(p) = k ---
     ctr::Int64 = 1 # counter for number of found matched points and index for arrays
@@ -1179,10 +1455,10 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
             if k_history[jj] < SolutionConstants.p_i_tol && abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol # SolutionConstants.mepsLarge # Real root
                 # There should be another real root coming up or we already processed
                 # one matching the zero freq
-                p_cross_r[ctr] = p_eigs_r[ii, jj]
-                p_cross_i[ctr] = p_eigs_i[ii, jj]
-                R_cross_r[:, ctr] = R_eigs_r[:, ii, jj]
-                R_cross_i[:, ctr] = R_eigs_i[:, ii, jj]
+                p_cross_r_z[ctr] = p_eigs_r[ii, jj]
+                p_cross_i_z[ctr] = p_eigs_i[ii, jj]
+                R_cross_r_z[:, ctr] = R_eigs_r[:, ii, jj]
+                R_cross_i_z[:, ctr] = R_eigs_i[:, ii, jj]
                 ctr += 1
 
                 # println("You found a real root!")
@@ -1202,8 +1478,8 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
                     # You want the point at which Im(p) - k = 0.0
                     factor = (0.0 - (p_eigs_i[ii, jj+1] - k_history[jj+1])) / ((p_eigs_i[ii, jj] - k_history[jj]) - (p_eigs_i[ii, jj+1] - k_history[jj+1]))
 
-                    p_cross_r[ctr] = factor * (p_eigs_r[ii, jj] - p_eigs_r[ii, jj+1]) + p_eigs_r[ii, jj+1]
-                    p_cross_i[ctr] = factor * (p_eigs_i[ii, jj] - p_eigs_i[ii, jj+1]) + p_eigs_i[ii, jj+1]
+                    p_cross_r_z[ctr] = factor * (p_eigs_r[ii, jj] - p_eigs_r[ii, jj+1]) + p_eigs_r[ii, jj+1]
+                    p_cross_i_z[ctr] = factor * (p_eigs_i[ii, jj] - p_eigs_i[ii, jj+1]) + p_eigs_i[ii, jj+1]
 
                     # --- Eigenvectors ---
                     # Look at real part of inner product of two eigenvectors m and m+1
@@ -1212,11 +1488,11 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
                         tmpSum_r += R_eigs_r[ll, ii, jj+1] * R_eigs_r[ll, ii, jj] - (-1) * R_eigs_i[ll, ii, jj+1] * R_eigs_i[ll, ii, jj]
                     end
                     if tmpSum_r > 0.0
-                        R_cross_r[:, ctr] = factor * (R_eigs_r[:, ii, jj] - R_eigs_r[:, ii, jj+1]) + R_eigs_r[:, ii, jj+1]
-                        R_cross_i[:, ctr] = factor * (R_eigs_i[:, ii, jj] - R_eigs_i[:, ii, jj+1]) + R_eigs_i[:, ii, jj+1]
+                        R_cross_r_z[:, ctr] = factor * (R_eigs_r[:, ii, jj] - R_eigs_r[:, ii, jj+1]) + R_eigs_r[:, ii, jj+1]
+                        R_cross_i_z[:, ctr] = factor * (R_eigs_i[:, ii, jj] - R_eigs_i[:, ii, jj+1]) + R_eigs_i[:, ii, jj+1]
                     else
-                        R_cross_r[:, ctr] = factor * (-R_eigs_r[:, ii, jj] - R_eigs_r[:, ii, jj+1]) + R_eigs_r[:, ii, jj+1]
-                        R_cross_i[:, ctr] = factor * (-R_eigs_i[:, ii, jj] - R_eigs_i[:, ii, jj+1]) + R_eigs_i[:, ii, jj+1]
+                        R_cross_r_z[:, ctr] = factor * (-R_eigs_r[:, ii, jj] - R_eigs_r[:, ii, jj+1]) + R_eigs_r[:, ii, jj+1]
+                        R_cross_i_z[:, ctr] = factor * (-R_eigs_i[:, ii, jj] - R_eigs_i[:, ii, jj+1]) + R_eigs_i[:, ii, jj+1]
                     end
 
                     ctr += 1
@@ -1225,6 +1501,11 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
             end
         end
     end
+    # --- Final Zygote copies ---
+    p_cross_r = copy(p_cross_r_z)
+    p_cross_i = copy(p_cross_i_z)
+    R_cross_r = copy(R_cross_r_z)
+    R_cross_i = copy(R_cross_i_z)
 
     ctr -= 1 # Decrease counter since last successful iteration incremented it
 
@@ -1373,12 +1654,17 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, 
     # --- Compute the eigenvalues ---
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb(FlutterMat_r, FlutterMat_i, 2 * dim)
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb_fad(FlutterMat_r, FlutterMat_i, 2 * dim)
+    # println("p_r orig = ", p_r)
+    # println("p_i orig = ", p_i)
     y = SolverRoutines.cmplxStdEigValProb2(FlutterMat_r, FlutterMat_i, 2 * dim)
     n = 2 * dim
     p_r = y[1:n]
     p_i = y[n+1:2*n]
-    R_aa_r = reshape(y[2*n+1:2*n+n^2], n, n)'
-    R_aa_i = reshape(y[2*n+n^2+1:end], n, n)'
+    R_aa_r = reshape(y[2*n+1:2*n+n^2], n, n)
+    R_aa_i = reshape(y[2*n+n^2+1:end], n, n)
+    # println("p_r new = ", p_r)
+    # println("p_i new = ", p_i)
+    # println("New iter")
 
     return p_r, p_i, R_aa_r, R_aa_i
 end # end solve_eigenvalueProblem

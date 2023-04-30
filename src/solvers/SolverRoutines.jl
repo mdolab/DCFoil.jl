@@ -217,7 +217,7 @@ function cmplxStdEigValProb(A_r, A_i, n)
     A_r
     A_i
     n
-    
+
     Outputs
     -------
     w_r - real part of eigenvalues
@@ -228,15 +228,15 @@ function cmplxStdEigValProb(A_r, A_i, n)
     VR_i - right eigenvectors
     We mostly care about the right eigenvectors (occuring on right of A matrix)
     """
-    
+
     # --- Initialize matrices ---
     A = A_r + 1im * A_i
-    
+
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
     w, Vr = eigen(A)
-    
+
     # Eigenvalues
     w_r = real(w)
     w_i = imag(w)
@@ -281,7 +281,7 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
     VR_id - imag right eigenvectors (derivative)
     The eigenvalue derivatives compare well with the FD check
     """
-    
+
     # --- Initialize matrices ---
     w_rd = zeros(n)
     w_id = zeros(n)
@@ -289,7 +289,7 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
     F = zeros(ComplexF64, n, n)
     A = A_r + 1im * A_i
     Ad = A_rd + 1im * A_id
-    
+
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
@@ -298,14 +298,14 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
     w_i = imag(w)
     VR_r = real(Vr)
     VR_i = imag(Vr)
-    
+
     # ---------------------------
     #   Eigenvalue derivatives Dd
     # ---------------------------
     # --- Compute eigenvector inverses U^-1 ---
     Vrinv_r, Vrinv_i = cmplxInverse(VR_r, VR_i, n)
     Vrinv = Vrinv_r + 1im * Vrinv_i
-    
+
     # --- Compute U^-1 * Ad * U ---
     tmp1 = (Vrinv * Ad) * Vr
 
@@ -324,7 +324,7 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
             E[ii, jj] = w[jj] - w[ii]
         end
     end
-    
+
     # --- F ---
     for jj in 1:n
         for ii in 1:n
@@ -333,15 +333,15 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
             end
         end
     end
-    
+
     # --- F ∘ (U^-1 * Ad * U) ---
     tmp2 = F .* tmp1
-    
+
     # --- Final U * (F ∘ (U^-1 * Ad * U)) ---
     Vrd = Vr * tmp2
     VR_rd = real(Vrd)
     VR_id = imag(Vrd)
-    
+
     return w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id
 end # cmplxStdEigValProb_d
 
@@ -368,14 +368,14 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
     VR_r - real right eigenvectors
     VR_i - imag right eigenvectors
     """
-    
+
     # --- Initialize matrices ---
     E = zeros(ComplexF64, n, n)
     F = zeros(ComplexF64, n, n)
     A = A_r + 1im * A_i
     VR̄ = VR̄_r + 1im * VR̄_i
     w̄ = w̄_r + 1im * w̄_i
-    
+
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
@@ -384,20 +384,20 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
     w_i = imag(w)
     VR_r = real(Vr)
     VR_i = imag(Vr)
-    
+
     # ---------------------------
     #   Hermitian transpose (U^-H) conj transpose
     # ---------------------------
     VrHerm = Vr'
     VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
-    
+
     # --- E ---
     for jj in 1:n
         for ii in 1:n
             E[ii, jj] = w[jj] - w[ii]
         end
     end
-    
+
     # --- F ---
     for jj in 1:n
         for ii in 1:n
@@ -414,32 +414,32 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
     for ii = 1:n
         tmp1[ii, ii] += w̄[ii]
     end
-    
+
     Ā = ((VrHerminv_r + 1im * VrHerminv_i) * tmp1) * VrHerm
     Ā_r = real(Ā)
     Ā_i = imag(Ā)
-    
+
     # Then zero seeds out
     w̄_r = zeros(n)
     w̄_i = zeros(n)
     VR̄_r = zeros(n, n)
     VR̄_i = zeros(n, n)
-    
+
     return Ā_r, Ā_i, w_r, w̄_r, w_i, w̄_i, VR_r, VR̄_r, VR_i, VR̄_i
-    
+
 end # cmplxStdEigValProb_b
 
 function cmplxStdEigValProb2(A_r, A_i, n)
     """
     Give back eigenvalues and vectors as a unrolled vector
     """
-    
+
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
     A = A_r + 1im * A_i
     w, Vr = eigen(A)
-    
+
     # Eigenvalues
     w_r = real(w)
     w_i = imag(w)
@@ -449,7 +449,7 @@ function cmplxStdEigValProb2(A_r, A_i, n)
     # and some dummy values that aren't actually right
     VL_r = real(Vr)
     VL_i = imag(Vr)
-    
+
     # Unroll output so derivatives work
     y_r = vec(real(w))
     y_i = vec(imag(w))
@@ -471,14 +471,16 @@ function argmax2d(A)
     -------
     locs - array of indices
         """
-        ncol = size(A)[2]
-        
+    ncol = size(A)[2]
+
     locs = zeros(Int64, ncol)
-    
+    locs_z = Zygote.Buffer(locs)
+
     for col in 1:ncol
-        locs[col] = argmax(A[:, col])
+        locs_z[col] = argmax(A[:, col])
     end
-    
+    locs = copy(locs_z)
+
     return locs
 
 end # argmax2d
@@ -487,42 +489,42 @@ function maxLocArr2d(A)
     """
     Find the maximum location for 2d array A
         
-        Outputs
-        -------
-        locs - array of indices
-        """
-        ncol = size(A)[2]
-        maxI = 1
-        maxJ = 1
-        maxVal = A[maxI, maxJ]
-        
-        for jj in 1:ncol
-            for ii in 1:size(A)[1]
-                if A[ii, jj] > maxVal
-                    maxI = ii
+    Outputs
+    -------
+    locs - array of indices
+    """
+    ncol = size(A)[2]
+    maxI = 1
+    maxJ = 1
+    maxVal = A[maxI, maxJ]
+
+    for jj in 1:ncol
+        for ii in 1:size(A)[1]
+            if A[ii, jj] > maxVal
+                maxI = ii
                 maxJ = jj
                 maxVal = A[ii, jj]
             end
         end
     end
-    
+
     return maxI, maxJ, maxVal
-    
+
 end # maxLocArr2d
 
 function count1d(mask)
     """
     Count number of 'true' elements in 1d array
     """
-    
+
     nTrue = 0
-    
+
     for ii in eachindex(mask)
         if mask[ii]
             nTrue += 1
         end
     end
-    
+
     return nTrue
 end # count1d
 
@@ -530,17 +532,17 @@ function ipack1d(A, mask, nFlow)
     """
     Extract elements from array A which have corresponding element in mask set to 'true'
     mask array contains boolean values
-    
+
     Outputs
     -------
     B - subset array containing elements of A which have corresponding element in mask set to 'true'
     nFound - number of elements in B
     """
-    
+
     nTrue = count1d(mask)
     B = zeros(Int64, nFlow)
     B_z = Zygote.Buffer(B)
-    
+
     nFound = 0
     for ii in eachindex(A)
         if mask[ii]
@@ -549,7 +551,7 @@ function ipack1d(A, mask, nFlow)
         end
     end
     B = copy(B_z)
-    
+
     return B, nFound
 end # ipack1d
 
@@ -558,19 +560,19 @@ end # ipack1d
 # ==============================================================================
 function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
 
-    
+
     y = cmplxStdEigValProb2(A_r, A_i, n)
-    
+
     function cmplxStdEigen_pullback(y)
         """
         See cmplxStdEigValProb_b()
         """
         # We unpack the y vector into the real and imaginary parts of the eigenvalues and eigenvectors
         w̄ = y[1:n] + 1im * y[n+1:2*n]
-        vr_r = reshape(y[2*n+1:2*n+n^2], n, n)'
-        vr_i = reshape(y[2*n+n^2+1:end], n, n)'
+        vr_r = reshape(y[2*n+1:2*n+n^2], n, n)
+        vr_i = reshape(y[2*n+n^2+1:end], n, n)
         VR̄ = vr_r + 1im * vr_i
-        # transpose to get the right shape since julia is column major
+        # No need to transpose to get the right shape even though julia is column major
         # --- Initialize matrices ---
         E = zeros(ComplexF64, n, n)
         F = zeros(ComplexF64, n, n)
@@ -580,13 +582,13 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
         # This method uses the julia built-in eigendecomposition
         # eigen() is a spectral decomposition
         w, Vr = eigen(A)
-        
+
         # ---------------------------
         #   Hermitian transpose (U^-H) conj transpose
         # ---------------------------
         VrHerm = Vr'
         VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
-        
+
         # --- E ---
         for jj in 1:n
             for ii in 1:n
@@ -605,7 +607,7 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
 
         # --- Calculate F ∘ (U^H * Ū) ---
         tmp1 = F .* (VrHerm * VR̄)
-        
+
         # Add D̄
         for ii = 1:n
             tmp1[ii, ii] += w̄[ii]
@@ -615,11 +617,11 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
         Ā_r = real(Ā)
         Ā_i = imag(Ā)
 
-        # Return NoTangent() because
+        # Return NoTangent() because??
         return (NoTangent(), Ā_r, Ā_i, NoTangent())
-        
+
     end # cmplxStdEigValProb_b
-    
+
 
     return y, cmplxStdEigen_pullback
 end
