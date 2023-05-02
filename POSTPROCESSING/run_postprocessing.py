@@ -271,7 +271,7 @@ if __name__ == "__main__":
                 R_r=evecs_r,
                 R_i=evecs_i,
             )
-            breakpoint()
+            # breakpoint()
             # You only need to know the stability point on one processor really
             if comm.rank == 0:
                 instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
@@ -526,7 +526,7 @@ if __name__ == "__main__":
                 # axes[0, 0].set_xlim(right=50, left=5)
                 # axes[0,0].set_xlim(right=40, left=25)
                 axes[0, 0].set_ylim(top=60, bottom=-100)
-                axes[0, 0].set_xlim(right=190, left=170)
+                # axes[0, 0].set_xlim(right=190, left=170)
                 # axes[0, 0].set_ylim(top=1, bottom=-5)
                 # axes[1, 1].set_xlim(right=1, left=-5)
                 # axes[1, 1].set_ylim(top=20, bottom=0)

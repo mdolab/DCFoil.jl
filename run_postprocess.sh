@@ -33,6 +33,7 @@ cd POSTPROCESSING
 # ************************************************
 # python ./run_postprocessing.py --case akcabay_f-15_w0 --is_flutter
 python ./run_postprocessing.py --case akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter
+python ./run_postprocessing.py --case akcabay_cfrp_f-15.0_w0.0 --is_flutter
 
 cd ..
 

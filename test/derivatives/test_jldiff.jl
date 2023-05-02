@@ -227,12 +227,15 @@ kSweep = ωSweep * div_tmp
 # funcd = SolveFlutter.compute_kCrossings(dim, kSweep, b_ref + 1e-8, FOIL.Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1)
 
 uRange = [187.0, 190.0] # flow speed [m/s] sweep for flutter
+N_MAX_Q_ITER = 2
 # obj, pmG, FLUTTERSOL = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
-derivs, = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5), b_ref)
+derivs, = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
 # true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
 
-# func = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
-# funcd = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref + 1e-8, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
+# func = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
+# funcd1 = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref + 1e-8, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
+# funcd2 = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref + 1e-4, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
+fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x)-> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, FOIL.Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
 
 # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
 # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)

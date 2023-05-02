@@ -19,6 +19,22 @@ DVDict = Dict(
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
 )
+# Static divergence case
+DVDict = Dict(
+    "nNodes" => nNodes,
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "material" => "cfrp", # preselect from material library
+    "g" => 0.04, # structural damping percentage
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12, # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(-15), # fiber angle global [rad]
+)
 
 # --- Blake & Maga's cantilever strut in water (1975) ---
 # Not great agreement with paper, need to test

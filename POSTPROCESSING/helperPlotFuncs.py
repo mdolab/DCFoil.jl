@@ -562,7 +562,7 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            breakpoint()
+            # breakpoint()
             ax.plot(
                 vSweep,
                 gSweep,

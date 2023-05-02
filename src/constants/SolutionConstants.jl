@@ -46,6 +46,7 @@ end
 #                         CONSTANTS
 # ==============================================================================
 const mepsLarge = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it is a more robust value for solving
-const p_i_tol = 1.11e-12 # tolerance on real root criteria NOTE: this is tested to work
+const p_i_tol = 1.11e-11 # tolerance on real root criteria 
+# NOTE: this is tested to work. Bigger values catch the real roots and too small cause them to disappear
 
 end # end module

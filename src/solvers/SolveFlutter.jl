@@ -4,6 +4,9 @@
 @Time    :   2022/10/07
 @Author  :   Galen Ng with snippets from Eirikur Jonsson
 @Desc    :   p-k method for flutter analysis, also contains modal analysis
+NOTE: if flutter solution is failing, there are 2 places to check:
+    1. starting k guess
+    2. tolerance on real root
 """
 
 module SolveFlutter
@@ -688,9 +691,11 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     # The first column stores indices of old m[:,1] and
     # the second column stores indices of the newly found modes m[:,2]
     m::Matrix{Int64} = zeros(Int64, nModes * 3, 2)
-    # --- Retained eigenvector matrices ---
+
+    # --- Retained eigenvector matrices in the speed sweep ---
     R_eigs_r_tmp = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
     R_eigs_i_tmp = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+
     # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
@@ -704,7 +709,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     end
 
     # ************************************************
-    #     Loop over velocity range
+    #     Velocity sweep loop
     # ************************************************
     # --- Initialize loop vars ---
     nFlow::Int64 = 1 # first flow iter
@@ -713,10 +718,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     U∞ = vel[1] # first velocity
     Umax = vel[end] # max velocity
     dynPMax = dynP[end] # set max dynamic pressure to last value
-    # ---------------------------
-    #   Begin loop
-    # ---------------------------
-    # Need to initialize some variables for the scope of the while loop
     nCorr::Int64 = 0
     NTotalModesFound::Int64 = 0 # total number of modes found over the entire simulation
     nCorrNewModes = 0 # number of new modes to correlate
@@ -749,7 +750,9 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
 
-        # --- Check flight condition ---
+        # ---------------------------
+        #   Mode correlations
+        # ---------------------------
         if (nFlow == 1) # first flight condition
             # Set the number of modes to correlate equal to the number of modes we're solving for
             nCorr = nModes
@@ -775,6 +778,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
                 println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        000    |            %03d   |        %d  |",
                     nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
             end
+
         else # not first condition; apply mode tracking between flow speeds
 
             # --- Compute correlation matrix btwn dynP increments ---
@@ -889,7 +893,9 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
         end # end if flight condition
 
 
-        # --- Store solution if good ---
+        # ---------------------------
+        #   Store solution
+        # ---------------------------
         if is_failed # backup dynamic pressure
 
             dynPTmp = (dynPTmp - flowHistory[nFlow-1, 3]) * 0.5 + flowHistory[nFlow-1, 3]
@@ -1065,35 +1071,35 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
     nFlow -= 1
 
 
-    # --- Return finished eigenvectors ---
-    # We reduced the problem size using
-    # {u} ≈ Qr * {q}
-    # where {q} was the retained generalized coordinates
-    # --- Zygote buffers ---
-    R_eigs_r_z = Zygote.Buffer(R_eigs_r)
-    R_eigs_i_z = Zygote.Buffer(R_eigs_i)
-    for qq = 1:N_MAX_Q_ITER # loop speeds
-        for mm = 1:3*nModes
-            for dd = 1:2*(dim-length(globalDOFBlankingList))
-                R_eigs_r_z[dd, mm, qq] = 0.0
-                R_eigs_i_z[dd, mm, qq] = 0.0
-            end
-        end
-    end
-    for flowIter in 1:nFlow
-        for mm in 1:3*nModes
-            # We need to do some magic here because our eigenvectors are actually stacked
-            # evec = [ū ; pn * ū]^T
-            R_eigs_r_z[1:dim-length(globalDOFBlankingList), mm, flowIter] = Qr * R_eigs_r_tmp[1:Nr, mm, flowIter]
-            R_eigs_i_z[1:dim-length(globalDOFBlankingList), mm, flowIter] = Qr * R_eigs_i_tmp[1:Nr, mm, flowIter]
-            R_eigs_r_z[dim+1-length(globalDOFBlankingList):end, mm, flowIter] = Qr * R_eigs_r_tmp[Nr+1:end, mm, flowIter]
-            R_eigs_i_z[dim+1-length(globalDOFBlankingList):end, mm, flowIter] = Qr * R_eigs_i_tmp[Nr+1:end, mm, flowIter]
-        end
-    end
+    # # --- Return finished eigenvectors ---
+    # # We reduced the problem size using
+    # # {u} ≈ Qr * {q}
+    # # where {q} was the retained generalized coordinates
+    # # --- Zygote buffers ---
+    # R_eigs_r_z = Zygote.Buffer(R_eigs_r)
+    # R_eigs_i_z = Zygote.Buffer(R_eigs_i)
+    # for qq = 1:N_MAX_Q_ITER # loop speeds
+    #     for mm = 1:3*nModes
+    #         for dd = 1:2*(dim-length(globalDOFBlankingList))
+    #             R_eigs_r_z[dd, mm, qq] = 0.0
+    #             R_eigs_i_z[dd, mm, qq] = 0.0
+    #         end
+    #     end
+    # end
+    # for qq in 1:N_MAX_Q_ITER
+    #     for mm in 1:3*nModes
+    #         # We need to do some magic here because our eigenvectors are actually stacked
+    #         # evec = [ū ; pn * ū]^T
+    #         R_eigs_r_z[1:dim-length(globalDOFBlankingList), mm, qq] = Qr * R_eigs_r_tmp[1:Nr, mm, qq]
+    #         R_eigs_i_z[1:dim-length(globalDOFBlankingList), mm, qq] = Qr * R_eigs_i_tmp[1:Nr, mm, qq]
+    #         R_eigs_r_z[dim+1-length(globalDOFBlankingList):end, mm, qq] = Qr * R_eigs_r_tmp[Nr+1:end, mm, qq]
+    #         R_eigs_i_z[dim+1-length(globalDOFBlankingList):end, mm, qq] = Qr * R_eigs_i_tmp[Nr+1:end, mm, qq]
+    #     end
+    # end
 
-    # --- Copy back from zygote buffer ---
-    R_eigs_r = copy(R_eigs_r_z)
-    R_eigs_i = copy(R_eigs_i_z)
+    # # --- Copy back from zygote buffer ---
+    # R_eigs_r = copy(R_eigs_r_z)
+    # R_eigs_i = copy(R_eigs_i_z)
 
     # return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
     return true_eigs_i[:, 1]
@@ -1286,7 +1292,10 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
     # ************************************************
     keepLooping = true
     # first 'k' guess close to zero as possible
-    k = 1e-12 #1e-15 
+    # NOTE: we do not want too small since AD breaks below 1e-15
+    # But we do not want to large since we want to get static div modes
+    # k = 1e-12 # don't use this
+    k = 2e-13 # this is a good value that catches static div modes
     maxK = kSweep[end]
     ik = 1 # k counter
     # pkEqnType = "rodden"
@@ -1452,7 +1461,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
             # Check if we found a real root
             # NOTE: If your flutter analyses are failing, this is probably why
-            if k_history[jj] < SolutionConstants.p_i_tol && abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol # SolutionConstants.mepsLarge # Real root
+            if (k_history[jj] < SolutionConstants.p_i_tol) && (abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol) # SolutionConstants.mepsLarge # Real root
                 # There should be another real root coming up or we already processed
                 # one matching the zero freq
                 p_cross_r_z[ctr] = p_eigs_r[ii, jj]
