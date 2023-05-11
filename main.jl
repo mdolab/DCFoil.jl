@@ -91,7 +91,7 @@ solverOptions = Dict(
     "run_flutter" => run_flutter,
     "nModes" => nModes,
     "uRange" => uRange,
-    "maxQIter" => 4000,
+    "maxQIter" => 500,
     "rhoKS" => 80.0,
 )
 

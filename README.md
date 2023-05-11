@@ -48,6 +48,11 @@ Please use this coding convention:
 * snake_case - functions (all functions should contain a verb) and non-module filenames
 * SCREAMING_SNAKE_CASE - constants
 
+### Try not to do this
+
+* `LinRange()` because it isn't easily differentiated
+* Mutating arrays
+
 ### Dependencies
 
 Add package dependencies in the REPL with

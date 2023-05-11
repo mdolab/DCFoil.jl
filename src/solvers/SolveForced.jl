@@ -61,7 +61,9 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     elemType = "BT2"
     loadType = "force"
 
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
     # ---------------------------

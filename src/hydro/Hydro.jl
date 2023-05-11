@@ -16,13 +16,12 @@ export compute_node_mass, compute_node_damp, compute_node_stiff
 export compute_AICs!, apply_BCs
 
 # --- Libraries ---
-using FLOWMath: linear
+using FLOWMath
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
 using Plots
-using ChainRulesCore
-using Zygote
+using Zygote, ChainRulesCore, FiniteDifferences
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
 
@@ -235,7 +234,7 @@ function compute_cmdROM(k, hcRatio, Fnc)
     return CForce
 end
 
-function compute_glauert_circ(; semispan, chordVec, α₀, U∞, nNodes, h=nothing, useFS=false)
+function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing, useFS=false)
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -266,6 +265,8 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, nNodes, h=nothi
     This follows the formulation in
     'Principles of Naval Architecture Series (PNA) - Propulsion 2010'
     by Justin Kerwin & Jacques Hadler
+
+    TODO: PICKUP HERE DEBUG THE DERIVATIVES OF THIS ROUTINE
     """
 
     ỹ = π / 2 * ((1:1:nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
@@ -304,9 +305,17 @@ function compute_glauert_circ(; semispan, chordVec, α₀, U∞, nNodes, h=nothi
 
     # --- Interpolate lift slopes onto domain ---
     # pGlauert = plot(LinRange(0, 2.7, 250), clα)
-    cl_α = linear(y, clα, LinRange(-semispan, 0, nNodes)) # Use BYUFLOW lab math function
+    # xq = LinRange(-semispan, 0, nNodes)
+    # cl_α = linear(y, clα, xq) # Use BYUFLOW lab math function
+    # DO NOT USE LINRANGE
+    dl = semispan / (nNodes - 1)
+    xq = -semispan:dl:0
+    if length(xq) != nNodes
+        println("ERROR: xq is not the same length as nNodes")
+    end
+    cl_α = FLOWMath.linear(y, clα, xq) # Use BYUFLOW lab math function
 
-    return reverse!(cl_α)
+    return reverse(cl_α)
 end
 
 function use_free_surface(γ, α₀, U∞, chordVec, h)
@@ -437,6 +446,7 @@ function compute_node_mass(b, ab, rho_f)
 end
 
 function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
+    # function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType="BT2")
     """
     Compute the steady aerodynamic influence coefficients (AICs) for a given mesh
     This is different from the general AIC method because there is no frequency dependence
@@ -447,7 +457,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     mesh: Array
         Mesh of the foil
     FOIL: struct
-        Struct containing the foil parameters
+        Struct containing the foil implicit constants
     elemType: String
         Element type
 
@@ -478,10 +488,17 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
     # ---------------------------
     for yⁿ ∈ mesh
         # --- compute strip width ---
+        Δy = 0.0
         if jj < FOIL.nNodes
             Δy = mesh[jj+1] - mesh[jj]
+            if jj == 1
+                Δy = Δy / 2
+            end
         else
             Δy = mesh[jj] - mesh[jj-1]
+            if jj == FOIL.nNodes
+                Δy = Δy / 2
+            end
         end
 
         # --- Initialize aero-force matrices ---
@@ -494,27 +511,34 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
         c = linear(mesh, FOIL.c, yⁿ)
         ab = linear(mesh, FOIL.ab, yⁿ)
         eb = linear(mesh, FOIL.eb, yⁿ)
+        # c = linear(mesh, chordVec, yⁿ)
+        # ab = linear(mesh, abVec, yⁿ)
+        # eb = linear(mesh, ebVec, yⁿ)
         b = 0.5 * c # semichord for more readable code
 
         # --- Compute forces ---
         # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
         k_hα = -2 * b * clα # lift due to angle of attack
         k_αα = -2 * eb * b * clα # moment due to angle of attack
-        K_f = qf * cos(FOIL.Λ)^2 *
-              [
-                  0.0 k_hα
-                  0.0 k_αα
-              ]
+        K_f =
+            qf * cos(FOIL.Λ)^2 *
+            # K_f = qf * cos(Λ)^2 *
+            [
+                0.0 k_hα
+                0.0 k_αα
+            ]
         # Sweep correction to aerodynamic stiffness
         e_hh = 2 * clα # lift due to w'
         e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
         e_αh = clα * b * (1 + ab / b) # moment due to w'
         e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
-        E_f = qf * sin(FOIL.Λ) * cos(FOIL.Λ) * b *
-              [
-                  e_hh e_hα
-                  e_αh e_αα
-              ]
+        E_f =
+            qf * sin(FOIL.Λ) * cos(FOIL.Λ) * b *
+            # E_f = qf * sin(Λ) * cos(Λ) * b *
+            [
+                e_hh e_hα
+                e_αh e_αα
+            ]
 
         # --- Compute Compute local AIC matrix for this element ---
         if elemType == "bend-twist"
@@ -550,6 +574,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
 end
 
 function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, FOIL, U∞, ω, elemType="BT2")
+    # function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
     """
     Compute the AIC matrix for a given mesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
@@ -563,7 +588,7 @@ function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, 
     mesh: Array
         Mesh of the foil
     FOIL: struct
-        Struct containing the foil parameters
+        Struct containing the foil implicit constants
     elemType: String
         Element type
 
@@ -626,6 +651,9 @@ function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, 
         b::Float64 = 0.5 * c # semichord for more readable code
         ab::Float64 = linear(mesh, FOIL.ab, yⁿ)
         eb::Float64 = linear(mesh, FOIL.eb, yⁿ)
+        # c::Float64 = linear(mesh, chordVec, yⁿ)
+        # ab::Float64 = linear(mesh, abVec, yⁿ)
+        # eb::Float64 = linear(mesh, ebVec, yⁿ)
 
         k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
 
@@ -689,6 +717,7 @@ end
 
 
 function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="bend-twist")
+    # function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType="bend-twist")
     """
     Computes the steady hydrodynamic vector loads
     given the solved hydrofoil shape (strip theory)
@@ -697,6 +726,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="b
     #   Initializations
     # ---------------------------
     foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, FOIL, elemType)
+    # foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType)
     nGDOF = FOIL.nNodes * nDOF
 
     # ---------------------------
@@ -704,6 +734,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="b
     # ---------------------------
     AIC = zeros(nGDOF, nGDOF)
     _, planformArea = compute_steady_AICs!(AIC, mesh, FOIL, elemType)
+    # _, planformArea = compute_steady_AICs!(AIC, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # --- Compute fluid tractions ---
     hydroTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
@@ -719,6 +750,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, FOIL, elemType="b
 end
 
 function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT2")
+    # function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2")
     """
     Inputs
     ------
@@ -735,6 +767,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
     foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, DFOIL, elemType)
+    # foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType)
 
     # --- Strip theory ---
     # This is the hydro force traction vector
@@ -782,6 +815,54 @@ end
 # ==============================================================================
 #                         Custom derivative routines
 # ==============================================================================
+function ChainRulesCore.rrule(::typeof(FLOWMath.linear), xdata, ydata, xq)
+
+    # Primal
+    S_O = FLOWMath.linear(xdata, ydata, xq)
+
+    function linear_pullback(S̄_O)
+        """
+        Pullback takes in the tangent of the primal output 'seed'
+        """
+        # Derivative of linear interpolation but also with the chainrule component S\bar_O
+        dydx = FLOWMath.gradient(xdata, ydata, xq) .* S̄_O
+
+        # Function return matches
+        # self, args
+        return (NoTangent(), NoTangent(), NoTangent(), dydx)
+    end
+
+    return S_O, linear_pullback
+end
+
+# function ChainRulesCore.rrule(::typeof(compute_glauert_circ), semispan, chordVec, α₀, U∞, nNodes, h, useFS)
+
+#     # Primal output
+#     y = compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h, useFS)
+
+#     function compute_glauert_circ_pullback(ȳ)
+
+#         semispan_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(x, chordVec, α₀, U∞, nNodes, h, useFS), semispan) .* ȳ
+
+#         chordvec_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(semispan, x, α₀, U∞, nNodes, h, useFS), chordVec) .* ȳ
+
+#         alfa_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(semispan, chordVec, x, U∞, nNodes, h, useFS), α₀) .* ȳ
+
+#         Uinf_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(semispan, chordVec, α₀, x, nNodes, h, useFS), U∞) .* ȳ
+
+#         nNodes_b = NoTangent()
+
+#         h_b = NoTangent()
+
+#         useFS_b = NoTangent()
+
+#         # Function return matches
+#         # self, args, kwargs
+#         return (NoTangent(), semispan_b, chordvec_b, alfa_b, Uinf_b, nNodes_b, h_b, useFS_b)
+#     end
+
+#     return y, compute_glauert_circ_pullback
+# end
 # These rules came from https://math.stackexchange.com/questions/2204475/derivative-of-bessel-function-of-second-kind-zero-order
 
 # function ChainRulesCore.rrule(::typeof(besselj0), k)

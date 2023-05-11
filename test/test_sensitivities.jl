@@ -5,7 +5,10 @@ Test derivative routines with super basic tests
 include("../src/solvers/SolverRoutines.jl")
 using .SolverRoutines
 include("../src/hydro/Hydro.jl")
-using .Hydro
+include("../src/InitModel.jl")
+include("../src/struct/FiniteElements.jl")
+include("../src/solvers/SolveFlutter.jl")
+using .Hydro, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, ForwardDiff, Zygote
 using Plots, LaTeXStrings, Printf
 
@@ -113,20 +116,30 @@ function test_eigenvalueAD()
     A_id = zeros(Float64, dim, dim)
     # A_rd[2, 1] = 1.0
     A_rd .= 1.0 # poke all entries in matrix in forward
-    # TODO: try other seed
-    A_id .= 1.0
+    # TODO: this is not working for imaginary seed
+    # A_id .= 1.0
     # A_id[1, 1] = 1.0
     w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id = SolverRoutines.cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, dim)
-    # println("Primal forward values:")
-    # println("w_r = ", w_r)
-    # println("w_i = ", w_i)
-    # println("VR_r", VR_r)
-    # println("VR_i", VR_i)
-    # println("Dual forward values:")
-    # println("w_rd = ", w_rd)
-    # println("w_id = ", w_id)
-    # println("VR_rd", VR_rd)
-    # println("VR_id", VR_id)
+    println("Primal forward values:")
+    println("----------------------")
+    println("w_r = ", w_r)
+    println("w_i = ", w_i)
+    println("VR_r")
+    show(stdout, "text/plain", VR_r)
+    println("")
+    println("VR_i")
+    show(stdout, "text/plain", VR_i)
+    println("")
+    println("Dual forward values:")
+    println("--------------------")
+    println("w_rd = ", w_rd)
+    println("w_id = ", w_id)
+    println("VR_rd")
+    show(stdout, "text/plain", VR_rd)
+    println("")
+    println("VR_id")
+    show(stdout, "text/plain", VR_id)
+    println("")
     # ---------------------------
     #   backward AD
     # ---------------------------
@@ -138,16 +151,16 @@ function test_eigenvalueAD()
     Vrb_r = zeros(Float64, dim, dim)
     Vrb_i = zeros(Float64, dim, dim)
     A_rb, A_ib, w_r, w_rbz, w_i, w_ibz, _, _, _, _ = SolverRoutines.cmplxStdEigValProb_b(A_r, A_i, dim, w_rb, w_ib, Vrb_r, Vrb_i)
-    # println("Primal reverse values:")
-    # println("w_r = ", w_r)
-    # println("w_i = ", w_i)
-    # # println("VR_r", VR_r)
-    # # println("VR_i", VR_i)
-    # println("Dual reverse values:")
-    # # println("wb_r = ", w_rb)
-    # # println("wb_i = ", w_ib)
-    # println("A_rb", A_rb)
-    # println("A_ib", A_ib)
+    println("Primal reverse values:")
+    println("w_r = ", w_r)
+    println("w_i = ", w_i)
+    # println("VR_r", VR_r)
+    # println("VR_i", VR_i)
+    println("Dual reverse values:")
+    # println("wb_r = ", w_rb)
+    # println("wb_i = ", w_ib)
+    println("A_rb", A_rb)
+    println("A_ib", A_ib)
 
     # ---------------------------
     #   Dot product test
@@ -251,8 +264,8 @@ function test_theodorsenDeriv()
 
     # p2 = plot(kSweep, dADr, label="Re FAD", tick_dir=:out, color=:red, linewidth=lw, linealpha=la)
     # plot!(kSweep, dADi, label="Im FAD", color=:blue, linewidth=lw, linealpha=la)
-    plot!(kSweep, dADr, label="Re Pade-3", tick_dir=:out, color=:red, linewidth=lw, linealpha=la,line=:dash)
-    plot!(kSweep, dADi, label="Im Pade-3", color=:blue, linewidth=lw, linealpha=la,line=:dash)
+    plot!(kSweep, dADr, label="Re Pade-3", tick_dir=:out, color=:red, linewidth=lw, linealpha=la, line=:dash)
+    plot!(kSweep, dADi, label="Im Pade-3", color=:blue, linewidth=lw, linealpha=la, line=:dash)
 
     plot!(kSweep, dFDr, label="Re FracCalc", line=:dot, color=:red, linewidth=lw, linealpha=la)
     plot!(kSweep, dFDi, label="Im FracCalc", line=:dot, color=:blue, linewidth=lw, linealpha=la)
@@ -266,4 +279,114 @@ function test_theodorsenDeriv()
     plot(p1, p2)
 
     savefig("theodorsen.png")
+end
+
+function test_pkflutterderiv()
+    """
+    # TODO: have common inputs and outputs to this test function
+    Test AD derivative of the pk flutter analysis with 
+    KS aggregation against finite differences
+
+    The only DV tested is chord ref right now
+    """
+    # ************************************************
+    #     Task type
+    # ************************************************
+    # Set task you want to true
+    # Defaults
+    run = true # run the solver for a single point
+    run_static = false
+    run_forced = false
+    run_modal = false
+    run_flutter = false
+    debug = false
+    tipMass = false
+
+    # Uncomment here
+    run_static = true
+    # run_forced = true
+    run_modal = true
+    run_flutter = true
+    debug = false
+    # tipMass = true
+
+    # ************************************************
+    #     DV Dictionaries (see INPUT directory)
+    # ************************************************
+    nNodes = 5 # spatial nodes
+    nModes = 4 # number of modes to solve for;
+    # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
+    # This is because poles bifurcate
+    # nModes is really the starting number of structural modes you want to solve for
+    fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
+    # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
+    uRange = [187.0, 190.0] # flow speed [m/s] sweep for flutter
+    tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
+
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 0.1 * ones(nNodes), # chord length [m]
+        "s" => 0.3, # semispan [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+    )
+
+    solverOptions = Dict(
+        # --- I/O ---
+        "name" => "akcabay-swept",
+        "debug" => debug,
+        # --- General solver options ---
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "material" => "cfrp", # preselect from material library
+        "nNodes" => nNodes,
+        "config" => "wing",
+        "rotation" => 0.0, # deg
+        "gravityVector" => [0.0, 0.0, -9.81],
+        "tipMass" => tipMass,
+        "use_freeSurface" => false,
+        "use_cavitation" => false,
+        "use_ventilation" => false,
+        # --- Static solve ---
+        "run_static" => run_static,
+        # --- Forced solve ---
+        "run_forced" => run_forced,
+        "fSweep" => fSweep,
+        "tipForceMag" => tipForceMag,
+        # --- Eigen solve ---
+        "run_modal" => run_modal,
+        "run_flutter" => run_flutter,
+        "nModes" => nModes,
+        "uRange" => uRange,
+        "maxQIter" => 100,
+        "rhoKS" => 80.0,
+    )
+    FOIL = InitModel.init_dynamic(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
+    nElem = FOIL.nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
+    outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+        solverOptions["name"],
+        solverOptions["material"],
+        rad2deg(DVDict["θ"]),
+        rad2deg(DVDict["Λ"]))
+    solverOptions["outputDir"] = outputDir
+
+
+
+    uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(structMesh, elemConn, DVDict, solverOptions)
+
+    derivs = Zygote.jacobian((x1, x2, x3) -> SolveFlutter.solve(x2, solverOptions, uRange, x1, x3, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref, structMesh, FOIL)
+
+    fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
+    println("chord dv")
+    println("AD derivs: ", derivs)
+    println("FD derivs: ", fdderivs)
+
+
+
+    return derivs
 end

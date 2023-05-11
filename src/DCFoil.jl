@@ -68,6 +68,7 @@ function run_model(
     FOIL = InitModel.init_static(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
+    # structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
     # --- Write mesh to tecplot for later visualization ---
     tecplotIO.write_mesh(structMesh, outputDir, "mesh.dat")
 
@@ -76,6 +77,7 @@ function run_model(
     # ==============================================================================
     if solverOptions["run_static"]
         STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
+        costFuncsDict = SolveStatic.evalFuncs(STATSOL.structStates,STATSOL.fHydro,evalFuncs)
         # costFuncsDict = merge(costFuncs, staticCostFuncs)
     end
 
@@ -94,9 +96,10 @@ function run_model(
         SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        obj, pmG, FLUTTERSOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
-        SolveFlutter.write_sol(FLUTTERSOL, outputDir)
-        flutterCostFuncsDict = compute_costFuncs(FLUTTERSOL, evalFuncs, solverOptions)
+        # obj, pmG, FLUTTERSOL = SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+        # SolveFlutter.write_sol(FLUTTERSOL, outputDir)
+        obj = SolveFlutter.evalFuncs(structMesh, elemConn, DVDict, solverOptions)
+        # flutterCostFuncsDict = compute_costFuncs(obj, evalFuncs, solverOptions)
         costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end
 
@@ -203,14 +206,14 @@ end # compute_costFuncs
 
 function compute_funcSens(SOL, DVDict, evalFuncs;
     # --- Optional args ---
-    mode = "FiDi",
+    mode="FiDi",
     solverOptions=Dict())
     # ---------------------------
     #   Mesh generation
     # ---------------------------
     FOIL = InitModel.init_static(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
     # --- Write mesh to tecplot for later visualization ---
 
     # ---------------------------

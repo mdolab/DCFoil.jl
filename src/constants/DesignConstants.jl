@@ -17,7 +17,6 @@ struct foil{T<:Float64}
     """
     Foil object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
-    TODO: Make twist a DV
     """
     c::Vector{T} # chord length vector
     t::Vector{T} # thickness vector

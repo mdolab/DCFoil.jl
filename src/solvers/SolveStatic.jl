@@ -77,12 +77,13 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     loadType = "force"
 
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
+    # globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL.ab, FOIL.x_αb, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
     # if solverOptions["tipMass"]
     #     bulbMass = 2200 #[kg]
     #     bulbInertia = 900 #[kg-m²]
     #     FOIL.x_αb[end] = -0.1 # [m]
-    #     FEMMethods.apply_tip_mass!(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
+    #     globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
     # end
 
     # --- Initialize states ---
@@ -92,6 +93,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #   Get initial fluid tracts
     # ---------------------------
     fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
+    # fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL.α₀, FOIL.c, FOIL.ab, FOIL.eb, FOIL.Λ, FOIL, elemType)
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -145,6 +147,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
 
     # --- Get hydroLoads again on solution ---
     fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
+    # fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL.α₀, FOIL.c, FOIL.ab, FOIL.eb, FOIL.Λ, FOIL, elemType)
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -245,12 +248,12 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(states, forces, evalFuncs)
+function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL)
     """
     Given {u} and the forces, compute the cost functions
     """
 
-    if CONSTANTS.elemType == "BT2"
+    if constants.elemType == "BT2"
         nDOF = 4
         Ψ = states[3:nDOF:end]
         Moments = forces[3:nDOF:end]
@@ -281,11 +284,11 @@ function evalFuncs(states, forces, evalFuncs)
         costFuncs["moment"] = TotalMoment
     end
     if "cl" in evalFuncs
-        CL = TotalLift / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea)
+        CL = TotalLift / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea)
         costFuncs["cl"] = CL
     end
     if "cmy" in evalFuncs
-        CM = TotalMoment / (0.5 * FOIL.ρ_f * FOIL.U∞^2 * CONSTANTS.planformArea * mean(FOIL.c))
+        CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(foil.c))
         costFuncs["cmy"] = CM
     end
 
@@ -347,6 +350,7 @@ function compute_residuals(structuralStates)
     elseif CONSTANTS.elemType == "BT2" # knock off root element
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
         foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL, CONSTANTS.elemType)
+        # foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     else

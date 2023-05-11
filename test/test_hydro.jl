@@ -3,14 +3,17 @@ Run tests on hydro module file
 """
 
 using LinearAlgebra
-
+using Printf
 include("../src/hydro/Hydro.jl")
 using .Hydro # Using the Hydro module
-
+include("../src/solvers/DCFoilSolution.jl")
+include("../src/constants/SolutionConstants.jl")
 include("../src/struct/FiniteElements.jl")
 include("../src/InitModel.jl")
+include("../src/solvers/SolveStatic.jl")
 using .FEMMethods # Using the FEMMethods module just for some mesh gen methods
 using .InitModel # Using the InitModel module
+using .SolutionConstants, .SolveStatic
 
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -144,7 +147,7 @@ end
 # ==============================================================================
 function test_hydroLoads()
     """
-    Need to test mesh independance of hydro loads on a rigid hydrofoil
+    Need to test mesh independence of hydro loads on a rigid hydrofoil
     """
 
     # --- Reference value ---
@@ -152,36 +155,48 @@ function test_hydroLoads()
     ref_sol = vec([])
 
     elemType = "BT2"
+    evalFuncs = ["lift", "moment", "cl", "cmy"]
 
-    nNodess = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120]
+    nNodess = [10, 20, 40, 80, 160, 320]
     liftData = zeros(length(nNodess))
     momData = zeros(length(nNodess))
+    clData = zeros(length(nNodess))
+    cmyData = zeros(length(nNodess))
     meshlvl = 1
 
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => 30.0 * π / 180, # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 1 * ones(nNodess[1]), # chord length [m]
+        "s" => 1.0, # semispan [m]
+        "ab" => zeros(nNodess[1]), # dist from midchord to EA [m]
+        "toc" => 1, # thickness-to-chord ratio
+        "x_αb" => zeros(nNodess[1]), # static imbalance [m]
+        "θ" => 0 * π / 180, # fiber angle global [rad]
+    )
+    solverOptions = Dict(
+        "outputDir" => "test_out/",
+        "nNodes" => nNodess[1],
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "material" => "test-comp", # preselect from material library
+    )
+    mkpath(solverOptions["outputDir"])
     for nNodes in nNodess
+        solverOptions["nNodes"] = nNodes
+        DVDict["c"] = 1 * ones(nNodes)
+        DVDict["ab"] = zeros(nNodes)
+        DVDict["x_αb"] = zeros(nNodes)
 
-        DVDict = Dict(
-            "nNodes" => nNodes,
-            "α₀" => 6.0, # initial angle of attack [deg]
-            "U∞" => 5.0, # free stream velocity [m/s]
-            "Λ" => 30.0 * π / 180, # sweep angle [rad]
-            "ρ_f" => 1000.0, # fluid density [kg/m³]
-            "material" => "test-comp", # preselect from material library
-            "g" => 0.04, # structural damping percentage
-            "c" => 1 * ones(nNodes), # chord length [m]
-            "s" => 1.0, # semispan [m]
-            "ab" => zeros(nNodes), # dist from midchord to EA [m]
-            "toc" => 1, # thickness-to-chord ratio
-            "x_αb" => zeros(nNodes), # static imbalance [m]
-            "θ" => 0 * π / 180, # fiber angle global [rad]
-        )
-        FOIL = InitModel.init_static(nNodes, DVDict)
-
+        FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
         constitutive = FOIL.constitutive
         structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
 
+        # _, _, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, constitutive)
         _, _, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+
 
         # --- Initialize states ---
         u = copy(globalF)
@@ -192,29 +207,40 @@ function test_hydroLoads()
         # ---------------------------
         fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
         forces = fTractions
+        CONSTANTS = SolutionConstants.DCFoilConstants(zeros(2, 2), zeros(2, 2), elemType, structMesh, AIC, "RAD", planformArea)
 
-        # ---------------------------
-        #   Force integration
-        # ---------------------------
-        if elemType == "BT2"
-            nDOF = 4
-            Moments = forces[3:nDOF:end]
-            Lift = forces[1:nDOF:end]
-        else
-            println("Invalid element type")
-        end
-        TotalLift = sum(Lift)
-        TotalMoment = sum(Moments)
+        costFuncs = SolveStatic.evalFuncs(forces, forces, evalFuncs; constants=CONSTANTS, foil=FOIL)
 
-        liftData[meshlvl] = TotalLift
-        momData[meshlvl] = TotalMoment
+        liftData[meshlvl] = costFuncs["lift"]
+        momData[meshlvl] = costFuncs["moment"]
+        clData[meshlvl] = costFuncs["cl"]
+        cmyData[meshlvl] = costFuncs["cmy"]
 
         meshlvl += 1
     end
 
-    # # --- Print hydro loads ---
-    # println("Lift: ", liftData)
-    # println("Moment: ", momData)
+    # ************************************************
+    #     Write results to test output file
+    # ************************************************
+    # NOTE: this assumes you're running the test from the run_tests.jl file
+    fname = solverOptions["outputDir"] * "test_hydroLoads.out"
+    meshlvl = 1
+    open(fname, "a") do io
+        write(io, "+---------------------------------------+\n")
+        write(io, "|    test_hydroLoads\n")
+        write(io, "+---------------------------------------+\n")
+        write(io, "  meshlvl   | lift [N] | mom. [N-m] |  cl   |  cmy   |\n")
+        for lift in liftData
+            mom = momData[meshlvl]
+            cl = clData[meshlvl]
+            cmy = cmyData[meshlvl]
+            line = @sprintf("%i (%i nodes)   %.16f    %.16f   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], lift, mom, cl, cmy)
+            write(io, line)
+            meshlvl += 1
+        end
+    end
+
+    return 0
 end
 
 

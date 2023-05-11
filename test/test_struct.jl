@@ -173,12 +173,8 @@ function test_FiniteElementIso()
     """
     nNodes = 30
     DVDict = Dict(
-        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 30.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "test-iso", # preselect from material library
         "g" => 0.04, # structural damping percentage
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
@@ -186,19 +182,28 @@ function test_FiniteElementIso()
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
+        )
+        solverOptions = Dict(
+            "nNodes" => nNodes,
+            "material" => "test-iso", # preselect from material library
+            "U∞" => 5.0, # free stream velocity [m/s]
+            "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
-    foil = InitModel.init_static(nNodes, DVDict)
+    FOIL = InitModel.init_static(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     # ************************************************
     #     bend element
     # ************************************************
     elemType = "bend"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
 
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    # abVec = DVDict["ab"]
+    # x_αbVec = DVDict["x_αb"]
+    # globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, constitutive)
     globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
     u = copy(globalF)
 
@@ -214,7 +219,7 @@ function test_FiniteElementIso()
     # ---------------------------
     elemType = "bend-twist"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -226,7 +231,7 @@ function test_FiniteElementIso()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -252,12 +257,8 @@ function test_FiniteElementComp()
     """
     nNodes = 30
     DVDict = Dict(
-        "nNodes" => nNodes,
         "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 5.0, # free stream velocity [m/s]
         "Λ" => 30.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "test-comp", # preselect from material library
         "g" => 0.04, # structural damping percentage
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
@@ -265,12 +266,18 @@ function test_FiniteElementComp()
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
+        )
+        solverOptions = Dict(
+            "material" => "test-comp", # preselect from material library
+            "nNodes" => nNodes,
+            "U∞" => 5.0, # free stream velocity [m/s]
+            "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
-    foil = InitModel.init_static(nNodes, DVDict)
+    FOIL = InitModel.init_static(DVDict, solverOptions)
 
     nElem = nNodes - 1
-    constitutive = foil.constitutive
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, foil)
+    constitutive = FOIL.constitutive
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
     # ************************************************
     #     bend-twist
     # ************************************************
@@ -279,7 +286,7 @@ function test_FiniteElementComp()
     # ---------------------------
     elemType = "bend-twist"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -293,7 +300,7 @@ function test_FiniteElementComp()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -309,7 +316,7 @@ function test_FiniteElementComp()
     # ---------------------------
     elemType = "BT2"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     globalF[end-3] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -323,7 +330,7 @@ function test_FiniteElementComp()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, foil, elemType, constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
     globalF[end-1] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 

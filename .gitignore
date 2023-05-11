@@ -10,6 +10,7 @@ POSTPROCESSING/PLOTS/
 
 # Test files
 *.out
+test_out/
 DebugOutput/
 validations/*.pdf
 

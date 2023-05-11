@@ -47,11 +47,13 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
 end # converge_r
 
 function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
+# function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
     """
     Returns the deflected + rigid shape of the foil
     """
 
     alfaRad = FOIL.α₀ * π / 180
+    # alfaRad = deg2rad(α₀)
 
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
@@ -560,6 +562,8 @@ end # ipack1d
 # ==============================================================================
 function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
 
+    # TODO: redo using Sicheng and Eirikur's eigenvalue derivative method 
+    # that does not require the full eigenvalue solve
 
     y = cmplxStdEigValProb2(A_r, A_i, n)
 
@@ -627,7 +631,9 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
 end
 
 function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
-    # MATRIX MULTIPLY
+    """ 
+    MATRIX MULTIPLY
+    """
     function times_pullback(ΔΩ)
         ∂A = @thunk(ΔΩ * B')
         ∂B = @thunk(A' * ΔΩ)
@@ -637,12 +643,18 @@ function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix
 end
 
 function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
-    # MATRIX INVERSE
+    """
+    MATRIX INVERSE
+    """
     Ω = inv(A)
+
     function inv_pullback(ΔΩ)
+
         ∂A = -Ω' * ΔΩ * Ω'
+        
         return (NoTangent(), ∂A)
     end
+
     return Ω, inv_pullback
 end
 
