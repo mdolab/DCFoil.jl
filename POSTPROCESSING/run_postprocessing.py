@@ -31,7 +31,21 @@ from mpi4py import MPI  # for the flutter processing only
 # ==============================================================================
 import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals, find_DivAndFlutterPoints
-from helperPlotFuncs import plot_naturalModeShapes, plot_modeShapes, plot_vg_vf_rl, plot_wing, plot_dlf, plot_forced
+from helperPlotFuncs import (
+    plot_naturalModeShapes,
+    plot_modeShapes,
+    plot_vg_vf_rl,
+    plot_wing,
+    plot_dlf,
+    plot_forced,
+    set_my_plot_settings,
+)
+
+# ==============================================================================
+#                         COMMON PLOT SETTINGS
+# ==============================================================================
+dataDir = "../OUTPUT/"
+cm, fs_lgd, fs, ls, markers = set_my_plot_settings()
 
 # ==============================================================================
 #                         Main driver
@@ -68,7 +82,6 @@ if __name__ == "__main__":
     #     I/O
     # ************************************************
     # Input data read directory
-    dataDir = "../OUTPUT/"
     caseDirs = []
     if args.cases is not None:
         for case in args.cases:
@@ -113,22 +126,6 @@ if __name__ == "__main__":
     # ************************************************
     #     Plot settings
     # ************************************************
-    plt.style.use(niceplots.get_style("doumont-light"))  # all settings
-    # --- Adjust default options for matplotlib ---
-    myOptions = {
-        "font.size": 25,
-        "font.family": "sans-serif",
-        # "font.sans-serif": ["Helvetica"],
-        # "text.usetex": True,
-        "text.latex.preamble": [
-            r"\usepackage{lmodern}",
-            r"\usepackage{amsmath}",
-            r"\usepackage{helvet}",
-            r"\usepackage{sansmath}",
-            r"\sansmath",
-        ],
-    }
-    plt.rcParams.update(myOptions)
 
     # Linestyles
     ls = ["-", "--", "-.", ":"]
@@ -297,9 +294,9 @@ if __name__ == "__main__":
 
                 nModes = len(lines) - 2
 
-                speed = lines[0].split(":")[1].rstrip("\n")
+                critSpeed = lines[0].split(":")[1].rstrip("\n")
 
-                vSweep.append(float(speed))
+                vSweep.append(float(critSpeed))
                 for jj in range(nModes):
                     line = lines[jj + 2]
                     iblankLine = iblankLines[jj + 2]
@@ -514,22 +511,25 @@ if __name__ == "__main__":
                     axes,
                     flutterSol=flutterSolDict[key],
                     ls=ls[ii],
-                    # units="kts",
+                    units="kts",
                     # marker="o",
                     showRLlabels=True,
                     annotateModes=annotateModes,
-                    # nShift=1000,
+                    nShift=2000,
+                    instabPts=instabPtsDict[key],
                 )
 
                 # # --- Set limits ---
                 # axes[0, 0].set_ylim(top=1, bottom=-4)
                 # axes[0, 0].set_xlim(right=50, left=5)
                 # axes[0,0].set_xlim(right=40, left=25)
-                axes[0, 0].set_ylim(top=60, bottom=-100)
+                # axes[0, 0].set_ylim(top=60, bottom=-100)
                 # axes[0, 0].set_xlim(right=190, left=170)
                 # axes[0, 0].set_ylim(top=1, bottom=-5)
                 # axes[1, 1].set_xlim(right=1, left=-5)
                 # axes[1, 1].set_ylim(top=20, bottom=0)
+                # axes[0, 0].set_xticks([10, 55] + [instabPtsDict[key][0][0] * 1.9438])
+                # axes[0, 0].set_xticks([10, 55])
 
             dosave = not not fname
             plt.show(block=(not dosave))

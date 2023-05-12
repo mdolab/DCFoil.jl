@@ -25,7 +25,7 @@ import tecplot as tp
 # ==============================================================================
 # Extension modules
 # ==============================================================================
-import niceplots
+import niceplots as nplt
 from helperFuncs import get_bendingtwisting, compute_normFactorModeShape
 
 # import nicetecplots as ntp
@@ -42,7 +42,7 @@ plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
 ccm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
 
-def plot_wing(DVDict: dict,nNodes):
+def plot_wing(DVDict: dict, nNodes):
     """
     Use design var dictionary to plot the wing
 
@@ -157,7 +157,7 @@ def plot_wing(DVDict: dict,nNodes):
     plt.tight_layout()
 
     # for ax in axes.flatten():
-    niceplots.adjust_spines(ax, outward=True)
+    nplt.adjust_spines(ax, outward=True)
 
     return fig, ax
 
@@ -223,7 +223,7 @@ def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fn
     ax.set_xlabel(xLabel)
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
 
     fig.suptitle("Frequency response spectra")
 
@@ -387,7 +387,7 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
     fig.suptitle("Normalized mode shapes", fontsize=40)
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
         ax.set_ylim([-1.1, 1.1])
     return fig, axes
 
@@ -483,7 +483,7 @@ def plot_modeShapes(comm, vRange, y, flutterSol: dict, fact: float, ls="-", alph
                     plt.tight_layout()
 
                     for ax in axes.flatten():
-                        niceplots.adjust_spines(ax, outward=True)
+                        nplt.adjust_spines(ax, outward=True)
                         ax.set_ylim([-1.1, 1.1])
                         ax.set_xlim([0, 1.05])
                     plt.savefig(f"{outputDir}/mode{mm+1}-{jj:04d}.png", dpi=200)
@@ -501,6 +501,7 @@ def plot_vg_vf_rl(
     showRLlabels=False,
     annotateModes=False,
     nShift=0,
+    instabPts=None,
 ):
     """
     Plot the V-g, V-f, and R-L diagrams
@@ -523,6 +524,12 @@ def plot_vg_vf_rl(
         marker for line plots to see points, by default None
     showRLlabels : bool, optional
         show R-L speed labels, by default True
+    annotateModes : bool, optional
+        annotate modes on plots, by default False
+    nShift : int, optional
+        number of points to shift labels, by default 0
+    instabPts : list, optional
+        list of points to mark instability
     """
 
     # Sort keys to get consistent plotting
@@ -608,6 +615,19 @@ def plot_vg_vf_rl(
         "Hydroelastic instability", xy=(0.5, 0.9), ha="center", xycoords="axes fraction", size=legfs, color=flutterColor
     )
     # ax.set_yticks(yticks + [0])
+
+    # --- Instability points ---
+    if instabPts is not None:
+        for pt in instabPts:
+            iic = (int(pt[2]) - 1) % len(cm)
+            if units =="kts":
+                critSpeed = 1.94384 * pt[0]
+            elif units == "m/s":
+                critSpeed = pt[0]
+            else:
+                print(f"Unsupported units: {units}")
+            ax.scatter(critSpeed, pt[1], c=cm[iic], marker="x", s=100)
+
     # ************************************************
     #     V-f diagram
     # ************************************************
@@ -777,7 +797,7 @@ def plot_vg_vf_rl(
     )
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
 
     return fig, axes
 
@@ -916,7 +936,7 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
     plt.suptitle("Damping loss factor trends")
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
 
     return fig, axes
 
@@ -926,3 +946,33 @@ def pytecplot_plotmesh(args, fname: str):
         tp.session.connect()
 
     lay = ntp.Layout()
+
+
+def set_my_plot_settings():
+    fs_lgd = 20
+    fs = 25
+    plt.style.use(nplt.get_style())  # all settings
+    myOptions = {
+        "font.size": fs,
+        "font.family": "sans-serif",  # set to "serif" to get the same as latex
+        # "font.sans-serif": ["Helvetica"],  # this does not work on all systems
+        "text.usetex": False,
+        "text.latex.preamble": [
+            r"\usepackage{lmodern}",  # latin modern font
+            r"\usepackage{amsmath}",  # for using equation commands
+            r"\usepackage{helvet}",  # should make latex serif in helvet now
+            r"\usepackage{sansmath}",
+            r"\sansmath",  # supposed to force math to be rendered in serif font
+        ],
+    }
+    plt.rcParams.update(myOptions)
+
+    # colormap
+    niceColors = sns.color_palette("tab10")
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
+    cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    ls = ["-", "--", "-.", ":"]
+    markers = ["o", "^", "v", "s"]
+
+    return cm, fs_lgd, fs, ls, markers
