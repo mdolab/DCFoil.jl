@@ -367,7 +367,7 @@ function test_pkflutterderiv()
     )
     FOIL = InitModel.init_dynamic(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
     nElem = FOIL.nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL; config=solverOptions["config"])
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
     outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
         solverOptions["name"],
         solverOptions["material"],
@@ -377,16 +377,59 @@ function test_pkflutterderiv()
 
 
 
-    uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(structMesh, elemConn, DVDict, solverOptions)
-
-    derivs = Zygote.jacobian((x1, x2, x3) -> SolveFlutter.solve(x2, solverOptions, uRange, x1, x3, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref, structMesh, FOIL)
-
-    fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
-    println("chord dv")
-    println("AD derivs: ", derivs)
-    println("FD derivs: ", fdderivs)
+    uRange, b_ref, chordVec, abVec, _, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(structMesh, elemConn, DVDict, solverOptions)
 
 
+    derivs = Zygote.jacobian((x1, x2, x3, x4, x5, x6) -> SolveFlutter.solve(
+            x1, solverOptions, uRange, x2, x3, x4, x5, x6, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        structMesh, b_ref, chordVec, abVec, ebVec, Λ)
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x1) -> SolveFlutter.solve(
+            x1, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        structMesh)
+
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x2) -> SolveFlutter.solve(
+            structMesh, solverOptions, uRange, x2, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        b_ref)
+
+    fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x3) -> SolveFlutter.solve(
+            structMesh, solverOptions, uRange, b_ref, x3, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        chordVec)
+
+
+    fdderivs4, = FiniteDifferences.jacobian(central_fdm(3, 1), (x4) -> SolveFlutter.solve(
+            structMesh, solverOptions, uRange, b_ref, chordVec, x4, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        abVec)
+
+
+    fdderivs5, = FiniteDifferences.jacobian(central_fdm(3, 1), (x5) -> SolveFlutter.solve(
+            structMesh, solverOptions, uRange, b_ref, chordVec, abVec, x5, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        ebVec)
+
+
+    fdderivs6, = FiniteDifferences.jacobian(central_fdm(3, 1), (x6) -> SolveFlutter.solve(
+            structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, x6, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+        Λ)
+
+    println("struct mesh dv")
+    println("AD derivs: ", derivs[1])
+    println("FD derivs: ", fdderivs1)
+    println("semichord dv")
+    println("AD derivs: ", derivs[2])
+    println("FD derivs: ", fdderivs2)
+    println("chord vec dv")
+    println("AD derivs: ", derivs[3])
+    println("FD derivs: ", fdderivs3)
+    println("ab vec dv")
+    println("AD derivs: ", derivs[4])
+    println("FD derivs: ", fdderivs4)
+    println("eb vec dv")
+    println("AD derivs: ", derivs[5])
+    println("FD derivs: ", fdderivs5)
+    println("sweep dv")
+    println("AD derivs: ", derivs[6])
+    println("FD derivs: ", fdderivs6)
 
     return derivs
 end
+
+derivs = test_pkflutterderiv()

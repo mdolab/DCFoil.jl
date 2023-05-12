@@ -217,7 +217,7 @@ function test_SolveStaticIso()
         # --- Mesh ---
         FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
         # --- Solve ---
         STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
         costFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
@@ -330,7 +330,7 @@ function test_SolveStaticComp()
         # --- Mesh ---
         FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL;)
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];)
         # --- Solve ---
         STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
         costFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
@@ -440,7 +440,7 @@ function test_SolveForcedComp()
         # --- Mesh ---
         FOIL = InitModel.init_static(DVDict, solverOptions)
         nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
         # --- Solve ---
         TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
         tipBendData[meshlvl] = TipBendDyn[1]
@@ -569,8 +569,7 @@ function test_flutter()
     )
     FOIL = InitModel.init_static(DVDict, solverOptions)
     nElem = nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
-    SolveFlutter.solve(structMesh, elemConn, DVDict, solverOptions)
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];)
 
     return 0.0
 end

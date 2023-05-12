@@ -21,7 +21,7 @@ struct FlutterSolution
     NTotalModesFound
     N_MAX_Q_ITER
     flowHistory
-    nFlow
+    nFlow::Int64
     iblank
 end
 end

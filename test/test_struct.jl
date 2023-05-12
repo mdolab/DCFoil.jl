@@ -193,17 +193,18 @@ function test_FiniteElementIso()
 
     nElem = nNodes - 1
     constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
     # ************************************************
     #     bend element
     # ************************************************
     elemType = "bend"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
 
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
-    # abVec = DVDict["ab"]
-    # x_αbVec = DVDict["x_αb"]
-    # globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
     u = copy(globalF)
 
@@ -219,7 +220,9 @@ function test_FiniteElementIso()
     # ---------------------------
     elemType = "bend-twist"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -231,7 +234,11 @@ function test_FiniteElementIso()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -277,7 +284,7 @@ function test_FiniteElementComp()
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, FOIL)
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
     # ************************************************
     #     bend-twist
     # ************************************************
@@ -286,7 +293,11 @@ function test_FiniteElementComp()
     # ---------------------------
     elemType = "bend-twist"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -300,7 +311,11 @@ function test_FiniteElementComp()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -316,7 +331,11 @@ function test_FiniteElementComp()
     # ---------------------------
     elemType = "BT2"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-3] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -330,7 +349,11 @@ function test_FiniteElementComp()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-1] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 

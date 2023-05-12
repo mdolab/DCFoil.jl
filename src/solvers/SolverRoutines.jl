@@ -46,13 +46,12 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, FOIL, elemType="BT2")
-# function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
+function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
     """
     Returns the deflected + rigid shape of the foil
     """
 
-    alfaRad = FOIL.α₀ * π / 180
+    alfaRad = α₀ * π / 180
     # alfaRad = deg2rad(α₀)
 
     if elemType == "bend"

@@ -317,8 +317,8 @@ include("../constants/SolutionConstants.jl")
 using .SolverRoutines
 using .SolutionConstants
 
-function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
-# function make_mesh(nElem::Int64, span; config="wing", rotation=0.0)
+# function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
+function make_mesh(nElem::Int64, span; config="wing", rotation=0.0)
     """
     Makes a mesh and element connectivity
     First element is always origin
@@ -341,16 +341,14 @@ function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
     if config == "wing"
         if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
             println("Right now only 1D mesh in y dir...")
-            mesh = LinRange(0, FOIL.s, nElem + 1)
-            # mesh = LinRange(0, span, nElem + 1)
+            mesh = collect(LinRange(0, span, nElem + 1))
             for ii ∈ 1:nElem
                 elemConn[ii, 1] = ii
                 elemConn[ii, 2] = ii + 1
             end
         else
             # Set up a line mesh
-            mesh[:, 1] = LinRange(0, FOIL.s, nElem + 1)
-            # mesh[:, 1] = LinRange(0, span, nElem + 1)
+            mesh[:, 1] = collect(LinRange(0, span, nElem + 1))
             for nodeIdx in 1:nElem+1 # loop nodes and rotate
                 mesh[nodeIdx, :] = rotate3d(mesh[nodeIdx, :], rot; axis="x")
             end
@@ -382,8 +380,7 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function assemble(coordMat, elemConn, FOIL, elemType="bend-twist", constitutive="isotropic")
-# function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
+function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
     """
     Generic function to assemble the mass and stiffness matrices
 
@@ -452,10 +449,8 @@ function assemble(coordMat, elemConn, FOIL, elemType="bend-twist", constitutive=
         mₛ::Float64 = FOIL.mₛ[elemIdx]
         iₛ::Float64 = FOIL.Iₛ[elemIdx]
         # These are currently DVs
-        ab::Float64 = FOIL.ab[elemIdx]
-        x_αb::Float64 = FOIL.x_αb[elemIdx]
-        # ab::Float64 = abVec[elemIdx]
-        # x_αb::Float64 = x_αbVec[elemIdx]
+        ab::Float64 = abVec[elemIdx]
+        x_αb::Float64 = x_αbVec[elemIdx]
 
         # ---------------------------
         #   Local stiffness matrix
@@ -539,7 +534,7 @@ function apply_tip_load!(globalF, elemType, loadType="force")
     end
 end
 
-function apply_tip_mass(globalM, mass, inertia, elemLength, foil, elemType="BT2")
+function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="BT2")
     """
     Apply a tip mass to the global mass matrix
 
@@ -560,9 +555,9 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, foil, elemType="BT2"
         # --- Get sectional properties ---
         ms = mass / elemLength
         # Parallel axis theorem
-        Iea = inertia + mass * (foil.x_αb[end])^2
+        Iea = inertia + mass * (x_αbVec[end])^2
         is = Iea / elemLength
-        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, foil.x_αb[end], elemType)
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbVec[end], elemType)
 
         # --- Assemble into global matrix ---
         globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
@@ -572,7 +567,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, foil, elemType="BT2"
         println("+------------------------------------+")
         println("|    Tip mass added!                 |")
         println("+------------------------------------+")
-        println("Dist. CG is aft of EA: ", foil.x_αb[end], " [m]")
+        println("Dist. CG is aft of EA: ", x_αbVec[end], " [m]")
     end
     return copy(globalM_z)
 end

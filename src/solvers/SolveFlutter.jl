@@ -58,7 +58,7 @@ loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(structMesh, solverOptions, uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
     """
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
@@ -72,7 +72,10 @@ function solve(structMesh, solverOptions, uRange, b_ref, FOIL, dim, N_R, globalD
         uRange,
         structMesh,
         b_ref,
-        FOIL.Λ,
+        Λ,
+        chordVec,
+        abVec,
+        ebVec,
         FOIL,
         dim,
         N_R,
@@ -139,12 +142,17 @@ function setup_solver(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # ---------------------------
 
     # @timeit to "FEM assembly"
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    Λ = DVDict["Λ"]
+    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
-        FOIL.x_αb[end] = -0.1 # [m]
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
+        x_αbVec[end] = -0.1 # [m]
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], x_αbVec, elemType)
     end
 
     # ---------------------------
@@ -171,9 +179,9 @@ function setup_solver(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # ************************************************
     N_MAX_Q_ITER = solverOptions["maxQIter"] # TEST VALUE
     N_R = 8 # reduced problem size (Nr x Nr)
-    b_ref = sum(FOIL.c) / FOIL.nNodes # mean semichord
+    b_ref = sum(chordVec) / FOIL.nNodes # mean semichord
 
-    return uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
+    return uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
 end
 
 function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
@@ -207,13 +215,18 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     elemType = "BT2"
     loadType = "force"
 
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    Λ = DVDict["Λ"]
+    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
-        FOIL.x_αb[end] = -0.1 # [m]
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
+        x_αbVec[end] = -0.1 # [m]
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], x_αbVec, elemType)
     end
 
     # ---------------------------
@@ -253,7 +266,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("+------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL.Λ, FOIL, 0.1, 0.1, elemType)
+    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
     _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
@@ -625,7 +638,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     return corr, m, newModesIdx, nCorrelatedModes, nNewModes
 end # end function
 
-function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, globalDOFBlankingList, N_MAX_Q_ITER, nModes, Mmat, Kmat; ΔdynP=nothing, Δu=nothing, debug=false)
+function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr, globalDOFBlankingList, N_MAX_Q_ITER, nModes, Mmat, Kmat; ΔdynP=nothing, Δu=nothing, debug=false)
     """
     Non-iterative flutter solution following van Zyl https://arc.aiaa.org/doi/abs/10.2514/2.2806
     Everything from here on is based on the FORTRAN code written by Eirikur Jonsson.
@@ -799,7 +812,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
         div_tmp = 1 / tmpFactor
         kSweep = ωSweep * div_tmp
         # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
-        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
+        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
         # ---------------------------
         #   Mode correlations
@@ -1153,7 +1166,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, FOIL, dim, Nr, gl
 
 end # end function
 
-function compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, MM, KK, Qr, structMesh, globalDOFBlankingList; debug=false, qiter=1)
+function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, MM, KK, Qr, structMesh, globalDOFBlankingList; debug=false, qiter=1)
     """
     # This routine solves an eigenvalue problem over a range of reduced frequencies k searches for the
     # intersection of each mode with the diagonal line Im(p) = k and then does a linear interpolation
@@ -1173,7 +1186,7 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, MM, KK, Qr, stru
     N_MAX_K_ITER = 5000 # max k iterations before code breaks
 
     # --- Loop over reduced frequency search range to construct lines ---
-    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
     if (debug) # && qiter > 52 && qiter < 54
         nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
@@ -1269,7 +1282,8 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, MM, KK, Qr, stru
     # return p_cross_r
 end # end function
 
-function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    # function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
     """
     Solve the eigenvalue problem over a range of reduced frequencies (k)
 
@@ -1324,7 +1338,8 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
-    globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
+    # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
+    globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
     _, _, Mff = Hydro.apply_BCs(globalKf_r_0, globalCf_r_0, globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf in loop)
     Mf = Qr' * Mff * Qr
@@ -1357,10 +1372,11 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
         #   Compute hydrodynamics
         # ---------------------------
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
-        ω = k * U∞ * (cos(FOIL.Λ)) / b_ref
-        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
-        Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
-        Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
+        ω = k * U∞ * (cos(Λ)) / b_ref
+        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
+        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
+        Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
         # Mode space reduction
         Kf_r = Qr' * Kffull_r * Qr
         Kf_i = Qr' * Kffull_i * Qr
@@ -1369,7 +1385,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, 
 
         # --- Solve eigenvalue problem ---
         # println(k)
-        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
         # --- Sort eigenvalues from small to large ---
         p_r = sort(real(p_r_tmp))
         idxs = sortperm(real(p_r_tmp))
@@ -1573,7 +1589,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
 end # end extract_kCrossings
 
-function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
     # """
     # This routine solves the following eigenvalue problem.
     #   [ (U/b)^2 * p^2 * M + (U/b) * C + K - F_aero ] * u = 0
@@ -1638,7 +1654,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, FOIL, Mf, Cf_r, Cf_i, 
     # NOTE: Ok, so I've actually realized that the 'Hassig' form and 'Rodden' form here are moot points
     # because I have broken up the generalized hydrodynamic forces in mass, damping, and stiffness matrices
     # As a result, the eigenvalue problem is technically in a modified 'Rodden' form that has fluid-added mass.
-    nonDimFactor = (U∞ * cos(FOIL.Λ) / b)
+    nonDimFactor = (U∞ * cos(Λ) / b)
     if pkEqnType == "ng"
         # --- Form A matrix ---
         # A - real part
@@ -1885,9 +1901,9 @@ function evalFuncs(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     """
 
     # Setup
-    uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solver(structMesh, elemConn, DVDict, solverOptions)
+    uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solver(structMesh, elemConn, DVDict, solverOptions)
     # Solve
-    obj = solve(structMesh, solverOptions, uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
 
     return obj
 end

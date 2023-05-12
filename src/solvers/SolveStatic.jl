@@ -76,15 +76,14 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     elemType = "BT2"
     loadType = "force"
 
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
-    # globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL.ab, FOIL.x_αb, FOIL, elemType, FOIL.constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    global chordVec = DVDict["c"] # need for evalFuncs
+    ebVec = 0.25 * chordVec .+ abVec
+    Λ = DVDict["Λ"]
+    α₀ = DVDict["α₀"]
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
-    # if solverOptions["tipMass"]
-    #     bulbMass = 2200 #[kg]
-    #     bulbInertia = 900 #[kg-m²]
-    #     FOIL.x_αb[end] = -0.1 # [m]
-    #     globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], FOIL, elemType)
-    # end
 
     # --- Initialize states ---
     u = copy(globalF)
@@ -92,8 +91,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
-    fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
-    # fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL.α₀, FOIL.c, FOIL.ab, FOIL.eb, FOIL.Λ, FOIL, elemType)
+    # fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
+    fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -146,8 +145,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
     # --- Get hydroLoads again on solution ---
-    fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
-    # fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL.α₀, FOIL.c, FOIL.ab, FOIL.eb, FOIL.Λ, FOIL, elemType)
+    # fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
+    fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -248,7 +247,7 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL)
+function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, chordVec=chordVec)
     """
     Given {u} and the forces, compute the cost functions
     """
@@ -288,7 +287,7 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL)
         costFuncs["cl"] = CL
     end
     if "cmy" in evalFuncs
-        CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(foil.c))
+        CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(chordVec))
         costFuncs["cmy"] = CM
     end
 
@@ -349,8 +348,7 @@ function compute_residuals(structuralStates)
         exit()
     elseif CONSTANTS.elemType == "BT2" # knock off root element
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
-        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL, CONSTANTS.elemType)
-        # foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     else

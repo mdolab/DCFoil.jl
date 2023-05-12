@@ -45,6 +45,7 @@ include("test_sensitivities.jl")
     @test test_SolveStaticRigid() <= 1e-2 # rigid hydrofoil solve
     @test test_SolveStaticIso() <= 1e-2 # ss hydrofoil solve
     @test test_SolveStaticComp() <= 1e-2 # cfrp hydrofoil
+    # @test test_hydroLoads() <= 1e-2
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     # @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
     # @test test_flutter() <= 1e-5 # flutter analysis of cfrp
@@ -57,5 +58,5 @@ end
     #     Unit test derivative tests
     # ************************************************
     @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
-    # @test test_pkflutterderiv()
+    @test test_pkflutterderiv()
 end

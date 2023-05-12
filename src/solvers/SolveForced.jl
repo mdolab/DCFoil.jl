@@ -63,6 +63,9 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
 
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
@@ -106,7 +109,8 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         # ---------------------------
         #   Assemble hydro matrices
         # ---------------------------
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
+        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
