@@ -14,7 +14,6 @@ Static hydroelastic solver
 export solve, do_newton_rhapson
 
 # --- Libraries ---
-using FLOWMath: linear, akima
 using FiniteDifferences
 using LinearAlgebra, Statistics
 using JSON

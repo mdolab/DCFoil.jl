@@ -15,7 +15,6 @@ Frequency domain hydroelastic solver
 export solve
 
 # --- Libraries ---
-using FLOWMath: linear, akima
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
@@ -110,7 +109,8 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         #   Assemble hydro matrices
         # ---------------------------
         # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 

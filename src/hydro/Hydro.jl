@@ -313,7 +313,8 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
     if length(xq) != nNodes
         println("ERROR: xq is not the same length as nNodes")
     end
-    cl_α = FLOWMath.linear(y, clα, xq) # Use BYUFLOW lab math function
+    cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
+    # cl_α = FLOWMath.linear(y, clα, xq) # Use BYUFLOW lab math function
 
     return reverse(cl_α)
 end
@@ -506,11 +507,21 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
         E_f = copy(K_f)  # Sweep correction matrix
 
 
-        # --- Linearly interpolate values based on y loc ---
-        clα = linear(mesh, FOIL.clα, yⁿ)
-        c = linear(mesh, chordVec, yⁿ)
-        ab = linear(mesh, abVec, yⁿ)
-        eb = linear(mesh, ebVec, yⁿ)
+        # # --- Linearly interpolate values based on y loc ---
+        # clα = FLOWMath.linear(mesh, FOIL.clα, yⁿ)
+        # c = FLOWMath.linear(mesh, chordVec, yⁿ)
+        # ab = FLOWMath.linear(mesh, abVec, yⁿ)
+        # eb = FLOWMath.linear(mesh, ebVec, yⁿ)
+        # # --- Interpolate values based on y loc ---
+        # clα = SolverRoutines.do_akima_interp(mesh, FOIL.clα, yⁿ)
+        # c = SolverRoutines.do_akima_interp(mesh, chordVec, yⁿ)
+        # ab = SolverRoutines.do_akima_interp(mesh, abVec, yⁿ)
+        # eb = SolverRoutines.do_akima_interp(mesh, ebVec, yⁿ)
+        # --- Interpolate values based on y loc ---
+        clα = SolverRoutines.do_linear_interp(mesh, FOIL.clα, yⁿ)
+        c = SolverRoutines.do_linear_interp(mesh, chordVec, yⁿ)
+        ab = SolverRoutines.do_linear_interp(mesh, abVec, yⁿ)
+        eb = SolverRoutines.do_linear_interp(mesh, ebVec, yⁿ)
         b = 0.5 * c # semichord for more readable code
 
         # --- Compute forces ---
@@ -567,7 +578,8 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
 end
 
 # function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, FOIL, U∞, ω, elemType="BT2")
-function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
+# function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
+function compute_AICs(dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
     """
     Compute the AIC matrix for a given mesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
@@ -600,14 +612,14 @@ function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, 
     end
 
     # --- Initialize global matrices ---
-    globalMf_z = Zygote.Buffer(globalMf)
-    globalCf_r_z = Zygote.Buffer(globalCf_r)
-    globalCf_i_z = Zygote.Buffer(globalCf_i)
-    globalKf_r_z = Zygote.Buffer(globalKf_r)
-    globalKf_i_z = Zygote.Buffer(globalKf_i)
+    globalMf_z = Zygote.Buffer(zeros(dim, dim))
+    globalCf_r_z = Zygote.Buffer(zeros(dim, dim))
+    globalCf_i_z = Zygote.Buffer(zeros(dim, dim))
+    globalKf_r_z = Zygote.Buffer(zeros(dim, dim))
+    globalKf_i_z = Zygote.Buffer(zeros(dim, dim))
     # Zygote initialization
-    for jj in 1:size(globalMf)[1]
-        for ii in 1:size(globalMf)[1]
+    for jj in 1:dim
+        for ii in 1:dim
             globalMf_z[ii, jj] = 0.0
             globalCf_r_z[ii, jj] = 0.0
             globalCf_i_z[ii, jj] = 0.0
@@ -639,10 +651,10 @@ function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, 
         end
 
         # --- Linearly interpolate values based on y loc ---
-        clα::Float64 = linear(mesh, FOIL.clα, yⁿ)
-        c::Float64 = linear(mesh, chordVec, yⁿ)
-        ab::Float64 = linear(mesh, abVec, yⁿ)
-        eb::Float64 = linear(mesh, ebVec, yⁿ)
+        clα::Float64 = SolverRoutines.do_linear_interp(mesh, FOIL.clα, yⁿ)
+        c::Float64 = SolverRoutines.do_linear_interp(mesh, chordVec, yⁿ)
+        ab::Float64 = SolverRoutines.do_linear_interp(mesh, abVec, yⁿ)
+        eb::Float64 = SolverRoutines.do_linear_interp(mesh, ebVec, yⁿ)
         b::Float64 = 0.5 * c # semichord for more readable code
 
         k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
@@ -802,25 +814,6 @@ end
 # ==============================================================================
 #                         Custom derivative routines
 # ==============================================================================
-function ChainRulesCore.rrule(::typeof(FLOWMath.linear), xdata, ydata, xq)
-
-    # Primal
-    S_O = FLOWMath.linear(xdata, ydata, xq)
-
-    function linear_pullback(S̄_O)
-        """
-        Pullback takes in the tangent of the primal output 'seed'
-        """
-        # Derivative of linear interpolation but also with the chainrule component S\bar_O
-        dydx = FLOWMath.gradient(xdata, ydata, xq) .* S̄_O
-
-        # Function return matches
-        # self, args
-        return (NoTangent(), NoTangent(), NoTangent(), dydx)
-    end
-
-    return S_O, linear_pullback
-end
 
 # function ChainRulesCore.rrule(::typeof(compute_glauert_circ), semispan, chordVec, α₀, U∞, nNodes, h, useFS)
 

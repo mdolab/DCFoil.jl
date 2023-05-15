@@ -241,11 +241,11 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     u = copy(globalF)
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
-    globalMf = copy(globalMs) * 0
-    globalCf_r = copy(globalKs) * 0
-    globalKf_r = copy(globalKs) * 0
-    globalKf_i = copy(globalKs) * 0
-    globalCf_i = copy(globalKs) * 0
+    # globalMf = copy(globalMs) * 0
+    # globalCf_r = copy(globalKs) * 0
+    # globalKf_r = copy(globalKs) * 0
+    # globalKf_i = copy(globalKs) * 0
+    # globalCf_i = copy(globalKs) * 0
     derivMode = "RAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
@@ -266,7 +266,8 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("+------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
+    # globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
+    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
     _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
@@ -1162,7 +1163,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     # because the derivatives were only correct for nondim 'p'
     # return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
     return p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
-    # return p_r[:,1]
+    # return p_r[:, 1]
 
 end # end function
 
@@ -1189,30 +1190,32 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
     p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
     if (debug) # && qiter > 52 && qiter < 54
-        nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
-        # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k
-        marker = false
-        plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[9, 1:ik], label="mode 9", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[10, 1:ik], label="mode 10", marker=marker)
-        plot!(k_history[1:ik], p_eigs_i[11, 1:ik], label="mode 11", marker=marker)
-        plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
-        ylims!((-5, 30.0))
-        xlims!((-5, 30.0))
-        plotTitle = @sprintf("U = %.3f m/s", U∞)
-        title!(plotTitle)
-        xlabel!("k")
-        ylabel!("Im(p)")
-        fname = @sprintf("./DebugOutput/kCross-qiter-%03i.png", qiter)
-        # println("Saving figure to: ", fname)
-        savefig(fname)
+        ChainRulesCore.ignore_derivatives() do
+            nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
+            # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k
+            marker = false
+            plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[3, 1:ik], label="mode 3", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[4, 1:ik], label="mode 4", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[5, 1:ik], label="mode 5", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[6, 1:ik], label="mode 6", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[7, 1:ik], label="mode 7", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[8, 1:ik], label="mode 8", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[9, 1:ik], label="mode 9", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[10, 1:ik], label="mode 10", marker=marker)
+            plot!(k_history[1:ik], p_eigs_i[11, 1:ik], label="mode 11", marker=marker)
+            plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
+            ylims!((-5, 30.0))
+            xlims!((-5, 30.0))
+            plotTitle = @sprintf("U = %.3f m/s", U∞)
+            title!(plotTitle)
+            xlabel!("k")
+            ylabel!("Im(p)")
+            fname = @sprintf("./DebugOutput/kCross-qiter-%03i.png", qiter)
+            # println("Saving figure to: ", fname)
+            savefig(fname)
+        end
     end
 
     # --- Extract valid solutions through interpolation ---
@@ -1222,60 +1225,62 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
     p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr = extract_kCrossings(dimwithBC, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik, N_MAX_K_ITER)
 
     if debug
-        # Plot all extracted kCrossings as a root-locus
-        scatter([p_cross_r[1]], [p_cross_i[1]], label="mode 1")
-        scatter!([p_cross_r[2]], [p_cross_i[2]], label="mode 2")
-        scatter!([p_cross_r[3]], [p_cross_i[3]], label="mode 3")
-        scatter!([p_cross_r[4]], [p_cross_i[4]], label="mode 4")
-        scatter!([p_cross_r[5]], [p_cross_i[5]], label="mode 5")
-        scatter!([p_cross_r[6]], [p_cross_i[6]], label="mode 6")
-        scatter!([p_cross_r[7]], [p_cross_i[7]], label="mode 7")
-        scatter!([p_cross_r[8]], [p_cross_i[8]], label="mode 8")
-        ylims!((-10.0, 100.0))
-        xlims!((-20.0, 10.0))
-        plotTitle = @sprintf("U = %.3f m/s", U∞)
-        title!(plotTitle)
-        xlabel!("Re(p)")
-        ylabel!("Im(p)")
-        fname = @sprintf("./DebugOutput/RL-qiter-%03i.png", qiter)
-        # println("Saving figure to: ", fname)
-        savefig(fname)
-        # Plot all extracted kCrossings as a V-f
-        scatter([U∞], [p_cross_i[1]], label="mode 1")
-        scatter!([U∞], [p_cross_i[2]], label="mode 2")
-        scatter!([U∞], [p_cross_i[3]], label="mode 3")
-        scatter!([U∞], [p_cross_i[4]], label="mode 4")
-        scatter!([U∞], [p_cross_i[5]], label="mode 5")
-        scatter!([U∞], [p_cross_i[6]], label="mode 6")
-        scatter!([U∞], [p_cross_i[7]], label="mode 7")
-        scatter!([U∞], [p_cross_i[8]], label="mode 8")
-        xlims!((2, 30))
-        ylims!((-10.0, 100.0))
-        plotTitle = @sprintf("U = %.3f m/s", U∞)
-        title!(plotTitle)
-        xlabel!("V [m/s]")
-        ylabel!("Im(p)")
-        fname = @sprintf("./DebugOutput/Vf-qiter-%03i.png", qiter)
-        # println("Saving figure to: ", fname)
-        savefig(fname)
-        # Plot all extracted kCrossings as a V-g
-        scatter([U∞], [p_cross_r[1]], label="mode 1")
-        scatter!([U∞], [p_cross_r[2]], label="mode 2")
-        scatter!([U∞], [p_cross_r[3]], label="mode 3")
-        scatter!([U∞], [p_cross_r[4]], label="mode 4")
-        scatter!([U∞], [p_cross_r[5]], label="mode 5")
-        scatter!([U∞], [p_cross_r[6]], label="mode 6")
-        scatter!([U∞], [p_cross_r[7]], label="mode 7")
-        scatter!([U∞], [p_cross_r[8]], label="mode 8")
-        xlims!((2, 30))
-        ylims!((-10.0, 0.0))
-        plotTitle = @sprintf("U = %.3f m/s", U∞)
-        title!(plotTitle)
-        xlabel!("V [m/s]")
-        ylabel!("Re(p)")
-        fname = @sprintf("./DebugOutput/Vg-qiter-%03i.png", qiter)
-        # println("Saving figure to: ", fname)
-        savefig(fname)
+        ChainRulesCore.ignore_derivatives() do
+            # Plot all extracted kCrossings as a root-locus
+            scatter([p_cross_r[1]], [p_cross_i[1]], label="mode 1")
+            scatter!([p_cross_r[2]], [p_cross_i[2]], label="mode 2")
+            scatter!([p_cross_r[3]], [p_cross_i[3]], label="mode 3")
+            scatter!([p_cross_r[4]], [p_cross_i[4]], label="mode 4")
+            scatter!([p_cross_r[5]], [p_cross_i[5]], label="mode 5")
+            scatter!([p_cross_r[6]], [p_cross_i[6]], label="mode 6")
+            scatter!([p_cross_r[7]], [p_cross_i[7]], label="mode 7")
+            scatter!([p_cross_r[8]], [p_cross_i[8]], label="mode 8")
+            ylims!((-10.0, 100.0))
+            xlims!((-20.0, 10.0))
+            plotTitle = @sprintf("U = %.3f m/s", U∞)
+            title!(plotTitle)
+            xlabel!("Re(p)")
+            ylabel!("Im(p)")
+            fname = @sprintf("./DebugOutput/RL-qiter-%03i.png", qiter)
+            # println("Saving figure to: ", fname)
+            savefig(fname)
+            # Plot all extracted kCrossings as a V-f
+            scatter([U∞], [p_cross_i[1]], label="mode 1")
+            scatter!([U∞], [p_cross_i[2]], label="mode 2")
+            scatter!([U∞], [p_cross_i[3]], label="mode 3")
+            scatter!([U∞], [p_cross_i[4]], label="mode 4")
+            scatter!([U∞], [p_cross_i[5]], label="mode 5")
+            scatter!([U∞], [p_cross_i[6]], label="mode 6")
+            scatter!([U∞], [p_cross_i[7]], label="mode 7")
+            scatter!([U∞], [p_cross_i[8]], label="mode 8")
+            xlims!((2, 30))
+            ylims!((-10.0, 100.0))
+            plotTitle = @sprintf("U = %.3f m/s", U∞)
+            title!(plotTitle)
+            xlabel!("V [m/s]")
+            ylabel!("Im(p)")
+            fname = @sprintf("./DebugOutput/Vf-qiter-%03i.png", qiter)
+            # println("Saving figure to: ", fname)
+            savefig(fname)
+            # Plot all extracted kCrossings as a V-g
+            scatter([U∞], [p_cross_r[1]], label="mode 1")
+            scatter!([U∞], [p_cross_r[2]], label="mode 2")
+            scatter!([U∞], [p_cross_r[3]], label="mode 3")
+            scatter!([U∞], [p_cross_r[4]], label="mode 4")
+            scatter!([U∞], [p_cross_r[5]], label="mode 5")
+            scatter!([U∞], [p_cross_r[6]], label="mode 6")
+            scatter!([U∞], [p_cross_r[7]], label="mode 7")
+            scatter!([U∞], [p_cross_r[8]], label="mode 8")
+            xlims!((2, 30))
+            ylims!((-10.0, 0.0))
+            plotTitle = @sprintf("U = %.3f m/s", U∞)
+            title!(plotTitle)
+            xlabel!("V [m/s]")
+            ylabel!("Re(p)")
+            fname = @sprintf("./DebugOutput/Vg-qiter-%03i.png", qiter)
+            # println("Saving figure to: ", fname)
+            savefig(fname)
+        end
     end
 
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
@@ -1309,11 +1314,11 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
 
     Nr = size(Qr)[2]
     # Fluid matrices
-    globalMf_0 = zeros(dim, dim)
-    globalCf_r_0 = zeros(dim, dim)
-    globalCf_i_0 = zeros(dim, dim)
-    globalKf_r_0 = zeros(dim, dim)
-    globalKf_i_0 = zeros(dim, dim)
+    # globalMf_0 = zeros(dim, dim)
+    # globalCf_r_0 = zeros(dim, dim)
+    # globalCf_i_0 = zeros(dim, dim)
+    # globalKf_r_0 = zeros(dim, dim)
+    # globalKf_i_0 = zeros(dim, dim)
     # TODO: visualization of matrix magnitudes
 
     dimwithBC = Nr
@@ -1339,18 +1344,19 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
     # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
-    globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
-    _, _, Mff = Hydro.apply_BCs(globalKf_r_0, globalCf_r_0, globalMf, globalDOFBlankingList)
+    # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
+    globalMf, _, _, _, _ = Hydro.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
+    _, _, Mff = Hydro.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
     # AR = inv(MM .+ Mf) * (KK)
     # yQuiescent = SolverRoutines.cmplxStdEigValProb2(AR, imag(AR), Nr)
     # omegaSquared = yQuiescent[Nr+1:2*Nr]
-    Δk = 0.0 # step size
-    ChainRulesCore.ignore_derivatives() do
-        Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
-    end
+    # Δk = 0.0 # step size
+    # ChainRulesCore.ignore_derivatives() do
+    Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
+    # end
 
     # ************************************************
     #     Perform iterations on k values
@@ -1374,7 +1380,8 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
         ω = k * U∞ * (cos(Λ)) / b_ref
         # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
-        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
         Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
         # Mode space reduction
@@ -1898,6 +1905,7 @@ end # compute_KS
 function evalFuncs(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     """
     Wrapper to solve and compute the cost func
+    This is the primal solver
     """
 
     # Setup
@@ -1914,15 +1922,18 @@ function evalFuncsSens(structMesh, elemConn, DVDict::Dict, solverOptions::Dict; 
     Wrapper to compute the total sensitivities for this evalFunc
     """
 
+    if mode == "FiDi" # use finite differences the stupid way
+        meshDerivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(x, elemConn, DVDict, solverOptions),
+            structMesh)
+        DVderivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(structMesh, elemConn, x, solverOptions),
+            DVDict)
 
+    elseif mode == "RAD" # use automatic differentiation
     # uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solver(structMesh, elemConn, DVDict, solverOptions)
-    # if mode == "FiDi" # use finite differences
-    #     derivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
-    # elseif mode == "RAD" # use automatic differentiation
-    #     # derivs = Zygote.jacobi
-    # elseif mode == "FAD"
-    #     error("FAD not implemented yet")
-    # end
+    # derivs = Zygote.jacobi
+    elseif mode == "FAD"
+        error("FAD not implemented yet")
+    end
 
     return funcsSens
 

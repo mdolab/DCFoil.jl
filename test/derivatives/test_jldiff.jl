@@ -203,12 +203,13 @@ end
 # ************************************************
 # SOL = 1
 # solverOptions["debug"] = false # You have to turn debug off for RAD to work
-# b_ref = sum(FOIL.c) / FOIL.nNodes # mean semichord
 # Mr, Kr, Qr = SolveFlutter.compute_modalSpace(Ms, Ks; reducedSize=dim - 4) # do it on already BC applied matrices
-# tmpFactor = U∞ * cos(Λ) / b_ref
+# tmpFactor = U∞ * cos(DVDict["Λ"]) / b_ref
 # div_tmp = 1 / tmpFactor
 # ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
 # kSweep = ωSweep * div_tmp
+
+# uRange, b_ref, chordVec, abVec, _, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(structMesh, elemConn, DVDict, solverOptions)
 
 # --- Progressively smaller unit tests! ---
 # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(Mf, Cf_r, Cf_i, Kf_r, Kf_i, structMesh, Λ, FOIL, U∞, ωSweep[1], "BT2")
@@ -220,61 +221,103 @@ end
 # Cf_r = Qr' * Cffull_r * Qr
 # Cf_i = Qr' * Cffull_i * Qr
 # SolveFlutter.solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, FOIL, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
-# derivs, = Zygote.jacobian(x -> SolveFlutter.sweep_kCrossings(dim, kSweep, x, Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000), b_ref)
-# func = SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000)
-# funcd = SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref+1e-8, Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000)
+# derivs = Zygote.jacobian((x1, x2, x3, x4, x5, x6) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, x1, x2, x3, x4, x5, U∞, Mr, Kr, Qr, x6, FOIL, [1, 2, 3, 4], 100),
+#     b_ref, Λ, chordVec, abVec, ebVec, structMesh)
+# fdderivs1, = Zygote.jacobian((x) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, x, Λ, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000),
+#     b_ref) # good
+# fdderivs2, = Zygote.jacobian((x) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, x, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 5000),
+#     Λ) # good
+# fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, Λ, x, abVec, ebVec, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 100),
+#     chordVec) # bad
+# fdderivs4, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, x, ebVec, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 100),
+#     abVec) # bad
+# fdderivs5, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, x, U∞, Mr, Kr, Qr, structMesh, FOIL, [1, 2, 3, 4], 100),
+#     ebVec) # bad
+# fdderivs6, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, Mr, Kr, Qr, x, FOIL, [1, 2, 3, 4], 100),
+#     structMesh) # kind of off?
 
-# THESE ARE GOOD
-# derivs, = Zygote.jacobian(x -> SolveFlutter.compute_kCrossings(dim, kSweep, x, Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1), b_ref)
-# # func = SolveFlutter.compute_kCrossings(dim, kSweep, b_ref, Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1)
-# # funcd = SolveFlutter.compute_kCrossings(dim, kSweep, b_ref + 1e-8, Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1)
-# fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x)-> SolveFlutter.compute_kCrossings(dim, kSweep, x, Λ, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1), b_ref)
 
-uRange, b_ref, chordVec, abVec, _, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(structMesh, elemConn, DVDict, solverOptions)
+# # ---------------------------
+# #   Compute_kcrossing
+# # ---------------------------
+# derivs = Zygote.jacobian((x1, x2, x3, x4, x5, x6) ->
+#         SolveFlutter.compute_kCrossings(
+#             dim, kSweep, x1, x2, x3, x4, x5, FOIL, U∞, Mr, Kr, Qr, x6, [1, 2, 3, 4]; debug=false, qiter=1),
+#     b_ref, Λ, chordVec, abVec, ebVec, structMesh)
+# fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.compute_kCrossings(dim, kSweep, x, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1),
+#     b_ref)
+# fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.compute_kCrossings(dim, kSweep, b_ref, x, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1),
+#     Λ)
+# fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.compute_kCrossings(dim, kSweep, b_ref, Λ, x, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1),
+#     chordVec) # bad
+# fdderivs4, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, x, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1),
+#     abVec) # bad
+# fdderivs5, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, x, FOIL, U∞, Mr, Kr, Qr, structMesh, [1, 2, 3, 4]; debug=false, qiter=1),
+#     ebVec) # bad
 
 # # ************************************************
 # #     pk flutter derivatives
 # # ************************************************
 # # NOTE: why can't I compile this by itself? ANS: correlation mat deriv but it's fixed now
-# N_MAX_Q_ITER = 500 #so why does it break on two q iterations
-# # # obj, pmG, FLUTTERSOL = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, FOIL, dim, 8, [1, 2, 3, 4], 1000, 3, Ms, Ks; Δu=0.4)
-derivs, = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
-# # derivs, = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
-# # # true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, FOIL, dim, 8, [1, 2, 3, 4], 100, 3, Ms, Ks; Δu=0.5)
-# # func = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
-# # funcd1 = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref + 1e-8, Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
-# # funcd2 = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref + 1e-4, Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
-fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
-# # # fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, Λ, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
+# # derivs, = Zygote.jacobian(x -> SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, x, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5), b_ref)
+# primal = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
+# derivs = Zygote.jacobian((x1, x2, x3, x4, x5, x6) ->
+#         SolveFlutter.compute_pkFlutterAnalysis(
+#             uRange, x1, x2, x3, x4, x5, x6, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, Ms, Ks; Δu=0.5),
+#     structMesh, b_ref, Λ, chordVec, abVec, ebVec)
+# fdderivs1, = FiniteDifferences.jacobian(central_fdm(2, 1), (x) ->
+#         SolveFlutter.compute_pkFlutterAnalysis(
+#             uRange, x, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5),
+#     structMesh)
+# fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         SolveFlutter.compute_pkFlutterAnalysis(
+#             uRange, structMesh, x, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5),
+#     b_ref)
 
+
+# # ************************************************
+# #     KS aggregation derivatives
+# # ************************************************
+
+
+# p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
+# derivs, = Zygote.jacobian((x) -> SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, x, iblank, 80), p_r)
+# fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, x, iblank, 80), p_r)
+# # f1 = SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, true_eigs_r, iblank, 80)
+# # f2 = SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, true_eigs_r .+ 1e-8, iblank, 80)
+
+# derivs = Zygote.jacobian((x1, x2, x3) -> SolveFlutter.solve(
+#         x1, solverOptions, uRange, x2, x3, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
+#     structMesh, b_ref, chordVec)
+# fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x1) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x1, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
+# # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
+# # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
+# # println("deriv = ", derivs)
+
+# THIS IS THE FINAL STEP
 # ************************************************
-#     KS aggregation derivatives
+#     Full evalFunc call
 # ************************************************
-
-
-p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
-derivs, = Zygote.jacobian((x) -> SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, x, iblank, 80), p_r)
-fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, x, iblank, 80), p_r)
-# f1 = SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, true_eigs_r, iblank, 80)
-# f2 = SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, true_eigs_r .+ 1e-8, iblank, 80)
-
-derivs = Zygote.jacobian((x1, x2, x3) -> SolveFlutter.solve(
-        x1, solverOptions, uRange, x2, x3, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-    structMesh, b_ref, chordVec)
-fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x1) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x1, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
-# derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
-# save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
-# println("deriv = ", derivs)
-
-# ---------------------------
-#   Full evalFunc call
-# ---------------------------
-Zygote.jacobian((x) -> Hydro.compute_glauert_circ(4.0, ones(5) * x, 0.2, 6.0, 5, nothing, false), 1.0)
-derivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Hydro.compute_glauert_circ(4.0, ones(5) * x, 0.2, 6, 5), 1.0)
-test = Hydro.compute_glauert_circ(4.0, ones(5) * 1, 0.2, 6, 5)
-test1 = Hydro.compute_glauert_circ(4.0, ones(5) * (1 + 1e-8), 0.2, 6, 5)
+derivs = Zygote.jacobian((x) -> Hydro.compute_glauert_circ(4.0, ones(5) * x, 0.2, 6.0, 5, nothing, false), 1.0)
+fdderivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Hydro.compute_glauert_circ(4.0, ones(5) * x, 0.2, 6, 5), 1.0)
+# test = Hydro.compute_glauert_circ(4.0, ones(5) * 1, 0.2, 6, 5)
+# test1 = Hydro.compute_glauert_circ(4.0, ones(5) * (1 + 1e-8), 0.2, 6, 5)
 derivs, = Zygote.jacobian((x) -> SolveFlutter.evalFuncs(x, elemConn, DVDict, solverOptions), structMesh)
-
+derivs, = Zygote.jacobian((x) -> SolveFlutter.evalFuncs(structMesh, elemConn, x, solverOptions), DVDict)
+fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(x, elemConn, DVDict, solverOptions), structMesh)
+fdderivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(structMesh, elemConn, x, solverOptions), DVDict)
 
 # # ---------------------------
 # #   Test simple matrix operations for 3x3 matrices

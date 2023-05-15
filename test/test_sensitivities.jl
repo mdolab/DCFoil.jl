@@ -10,93 +10,147 @@ include("../src/struct/FiniteElements.jl")
 include("../src/solvers/SolveFlutter.jl")
 using .Hydro, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, ForwardDiff, Zygote
-using Plots, LaTeXStrings, Printf
+using Plots, LaTeXStrings, Printf, LinearAlgebra
 
-function test_jacobian()
-    """
-    Test the Jacobian construction using values from
+# ==============================================================================
+#                         Aero-node tests
+# ==============================================================================
+function test_hydromass()
 
-    'Engineering Design Optimization' by Martins and Ning 2021
-    Example 6.11 Differentiating an implicit function
+    # Test values
+    rho_f = 1000 # kg/m^3 FW
+    b = 2.0
+    ab = 3.0
 
-    Natural frequency of a beam is
-        f = λm²
-    and λ is related to m through
-        λ/m + cos(λ) = 0.
-    we want
-        df/dm
-    so
-        ∂f/∂x = ∂f/∂m = 2λm
-        ∂r/∂x = ∂r/∂m = -λ/m²
-        ∂f/∂u = ∂f/∂λ = m²
-        ∂r/∂u = ∂r/∂λ = 1/m - sin(λ)
-    and the final answer is
-        df/dm = 2λm - λ / (1/m - sin(λ))
+    derivs = Zygote.jacobian((x1, x2) -> Hydro.compute_node_mass(x1, x2, rho_f),
+        b, ab)
 
-    For this test, to make it a system, we try two cases so
-        f₁, x₁, u₁
-        f₂, x₂, u₂
-    """
-    # ************************************************
-    #     Reference values
-    # ************************************************
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Hydro.compute_node_mass(x, ab, rho_f),
+        b)
 
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Hydro.compute_node_mass(b, x, rho_f),
+        ab)
 
-    # ************************************************
-    #     Call our routine
-    # ************************************************
-    # ---------------------------
-    #   Some inputs
-    # ---------------------------
-    # DVs (x)
-    m = [1.0, 2.0]
-    # States (u)
-    λ = [1.0, 2.0]
+    test1 = derivs[1] - fdderivs1
+    test2 = derivs[2] - fdderivs2
 
-    # ---------------------------
-    #   Partials
-    # ---------------------------
-    evalFuncs = ["f1", "f2"]
-    # Build up partials
-    ∂f∂x = Dict(
-        "f1" => 2 * λ[1] * m[1],
-        "f2" => 2 * λ[2] * m[2],
-    )
-    ∂r∂x = Dict(
-        "f1" => -λ[1] / m[1]^2,
-        "f2" => -λ[2] / m[2]^2,
-    )
-    ∂f∂u = Dict(
-        "f1" => m[1]^2,
-        "f2" => m[2]^2,
-    )
-    ∂r∂u = Dict(
-        "f1" => 1 / m[1] - sin(λ[1]),
-        "f2" => 1 / m[2] - sin(λ[2]),
-    )
-    partials = Dict(
-        "∂f∂x" => Dict(),
-        "∂r∂x" => Dict(),
-        "∂f∂u" => Dict(),
-        "∂r∂u" => Dict(),
-        "ψ" => Dict(),
-        "ϕ" => Dict(),
-    )
-    for func in evalFuncs
-        partials["∂f∂x"][func] = ∂f∂x[func]
-        partials["∂r∂x"][func] = ∂r∂x[func]
-        partials["∂f∂u"][func] = ∂f∂u[func]
-        partials["∂r∂u"][func] = ∂r∂u[func]
-        partials["ψ"][func] = transpose(∂f∂u[func]) / transpose(∂r∂u[func])
-        partials["ϕ"][func] = ∂r∂x[func] / ∂r∂u[func]
-    end
-    methods = ["adjoint", "direct"]
-    for method in methods
-        funcsSens = SolverRoutines.compute_jacobian(partials, evalFuncs; method=method)
+    # Get norms
+    test1 = norm(test1, 2)
+    test2 = norm(test2, 2)
+    return min(test1, test2)
+end # end function
 
+function test_hydrodamp()
+    # Test values
+    rho_f = 1000 # kg/m^3 FW
+    clalfa = 6.0
+    b = 2.0
+    eb = 0.5
+    ab = 3.0
+    k = 0.1
+    Cklist = Hydro.compute_theodorsen(k)
+    Ck = Cklist[1] + Cklist[2] * im
+    U∞ = 10.0
+    Λ = 0.0
+
+    function my_compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
+        Cf, Cfhat = Hydro.compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
+
+        return imag(Cf)
     end
 
-    return
+    derivs = Zygote.jacobian((x1, x2, x3, x4) -> my_compute_node_damp(x1, b, x2, x3, U∞, Λ, rho_f, x4),
+        clalfa, eb, ab, Ck)
+
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_node_damp(x, b, eb, ab, U∞, Λ, rho_f, Ck),
+        clalfa)
+
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_node_damp(clalfa, b, x, ab, U∞, Λ, rho_f, Ck),
+        eb)
+
+    fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_node_damp(clalfa, b, eb, x, U∞, Λ, rho_f, Ck),
+        ab)
+
+    fdderivs4, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_node_damp(clalfa, b, eb, ab, U∞, Λ, rho_f, x),
+        Ck)
+
+    test1 = derivs[1] - fdderivs1
+    test2 = derivs[2] - fdderivs2
+    test3 = derivs[3] - fdderivs3
+
+    return max(norm(test1, 2), norm(test2, 2), norm(test3, 2))
+end # end function
+
+function test_interp()
+    """Test the my linear interpolation"""
+    mesh = collect(0:0.1:2)
+    yVec = Hydro.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
+    xq = 0.5
+
+    derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
+        mesh, yVec, xq)
+
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolverRoutines.do_linear_interp(x, yVec, xq),
+        mesh)
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolverRoutines.do_linear_interp(mesh, x, xq),
+        yVec)
+    fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolverRoutines.do_linear_interp(mesh, yVec, x),
+        xq)
+
+    return max(norm(test1, 2), norm(test2, 2), norm(test3, 2))
+end
+
+function test_hydroderiv(DVDict, solverOptions)
+    """
+    Test the assembly of hydro matrices
+    """
+
+    nElem = solverOptions["nNodes"] - 1
+    mesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+    _, _, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(mesh, elemConn, DVDict, solverOptions)
+    globalKs, _, _ = FEMMethods.assemble(mesh, elemConn, abVec, x_αbVec, FOIL, "BT2", FOIL.constitutive)
+
+    dim = size(globalKs, 1) # big problem
+    ω = 0.1
+    b = 1.0
+    U∞ = 1.0
+
+    function my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω)
+        """Simple wrapper"""
+
+        Mf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω, "BT2")
+
+        # Select the fluid matrix you want to verify derivatives for
+        return Mf
+        # return globalCf_r
+    end
+
+
+    # --- AD ---
+    derivs = Zygote.jacobian((x1, x2, x3, x4, x5) -> my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω),
+        mesh, Λ, chordVec, abVec, ebVec)
+
+    # --- FD ---
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, x, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω),
+        mesh) # good
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, mesh, x, chordVec, abVec, ebVec, FOIL, U∞, ω),
+        Λ) # good
+    fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, mesh, Λ, x, abVec, ebVec, FOIL, U∞, ω),
+        chordVec) # not good
+    fdderivs4, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, mesh, Λ, chordVec, x, ebVec, FOIL, U∞, ω),
+        abVec) # not good
+    fdderivs5, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, mesh, Λ, chordVec, abVec, x, FOIL, U∞, ω),
+        ebVec)
+
+    test1 = derivs[1] - fdderivs1
+    test2 = derivs[2] - fdderivs2
+    test3 = derivs[3] - fdderivs3
+    test4 = derivs[4] - fdderivs4
+    test5 = derivs[5] - fdderivs5
+
+    # Stack derivs
+    return max(norm(test1, 2), norm(test2, 2), norm(test3, 2), norm(test4, 2), norm(test5, 2))
+    # return derivs, fdderivs1, fdderivs2, fdderivs3, fdderivs4, fdderivs5
 end
 
 function test_eigenvalueAD()
@@ -281,7 +335,7 @@ function test_theodorsenDeriv()
     savefig("theodorsen.png")
 end
 
-function test_pkflutterderiv()
+function test_pkflutterderiv(DVDict, solverOptions)
     """
     # TODO: have common inputs and outputs to this test function
     Test AD derivative of the pk flutter analysis with 
@@ -323,48 +377,7 @@ function test_pkflutterderiv()
     uRange = [187.0, 190.0] # flow speed [m/s] sweep for flutter
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
-    DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(-15.0), # sweep angle [rad]
-        "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
-    )
 
-    solverOptions = Dict(
-        # --- I/O ---
-        "name" => "akcabay-swept",
-        "debug" => debug,
-        # --- General solver options ---
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "cfrp", # preselect from material library
-        "nNodes" => nNodes,
-        "config" => "wing",
-        "rotation" => 0.0, # deg
-        "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => tipMass,
-        "use_freeSurface" => false,
-        "use_cavitation" => false,
-        "use_ventilation" => false,
-        # --- Static solve ---
-        "run_static" => run_static,
-        # --- Forced solve ---
-        "run_forced" => run_forced,
-        "fSweep" => fSweep,
-        "tipForceMag" => tipForceMag,
-        # --- Eigen solve ---
-        "run_modal" => run_modal,
-        "run_flutter" => run_flutter,
-        "nModes" => nModes,
-        "uRange" => uRange,
-        "maxQIter" => 100,
-        "rhoKS" => 80.0,
-    )
     FOIL = InitModel.init_dynamic(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
@@ -383,53 +396,113 @@ function test_pkflutterderiv()
     derivs = Zygote.jacobian((x1, x2, x3, x4, x5, x6) -> SolveFlutter.solve(
             x1, solverOptions, uRange, x2, x3, x4, x5, x6, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
         structMesh, b_ref, chordVec, abVec, ebVec, Λ)
+
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x1) -> SolveFlutter.solve(
             x1, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-        structMesh)
+        structMesh) # good
 
     fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x2) -> SolveFlutter.solve(
             structMesh, solverOptions, uRange, x2, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-        b_ref)
+        b_ref)  # good
 
     fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x3) -> SolveFlutter.solve(
             structMesh, solverOptions, uRange, b_ref, x3, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-        chordVec)
+        chordVec) # good
 
 
     fdderivs4, = FiniteDifferences.jacobian(central_fdm(3, 1), (x4) -> SolveFlutter.solve(
             structMesh, solverOptions, uRange, b_ref, chordVec, x4, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-        abVec)
+        abVec) # good
 
 
     fdderivs5, = FiniteDifferences.jacobian(central_fdm(3, 1), (x5) -> SolveFlutter.solve(
             structMesh, solverOptions, uRange, b_ref, chordVec, abVec, x5, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-        ebVec)
+        ebVec) # good
 
 
     fdderivs6, = FiniteDifferences.jacobian(central_fdm(3, 1), (x6) -> SolveFlutter.solve(
             structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, x6, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug),
-        Λ)
+        Λ) # good
 
-    println("struct mesh dv")
-    println("AD derivs: ", derivs[1])
-    println("FD derivs: ", fdderivs1)
-    println("semichord dv")
-    println("AD derivs: ", derivs[2])
-    println("FD derivs: ", fdderivs2)
-    println("chord vec dv")
-    println("AD derivs: ", derivs[3])
-    println("FD derivs: ", fdderivs3)
-    println("ab vec dv")
-    println("AD derivs: ", derivs[4])
-    println("FD derivs: ", fdderivs4)
-    println("eb vec dv")
-    println("AD derivs: ", derivs[5])
-    println("FD derivs: ", fdderivs5)
-    println("sweep dv")
-    println("AD derivs: ", derivs[6])
-    println("FD derivs: ", fdderivs6)
+    # println("struct mesh dv")
+    # println("AD derivs: ", derivs[1])
+    # println("FD derivs: ", fdderivs1)
+    # println("semichord dv")
+    # println("AD derivs: ", derivs[2])
+    # println("FD derivs: ", fdderivs2)
+    # println("chord vec dv")
+    # println("AD derivs: ", derivs[3])
+    # println("FD derivs: ", fdderivs3)
+    # println("ab vec dv")
+    # println("AD derivs: ", derivs[4])
+    # println("FD derivs: ", fdderivs4)
+    # println("eb vec dv")
+    # println("AD derivs: ", derivs[5])
+    # println("FD derivs: ", fdderivs5)
+    # println("sweep dv")
+    # println("AD derivs: ", derivs[6])
+    # println("FD derivs: ", fdderivs6)
+    test1 = derivs[1] - fdderivs1
+    test2 = derivs[2] - fdderivs2
+    test3 = derivs[3] - fdderivs3
+    test4 = derivs[4] - fdderivs4
+    test5 = derivs[5] - fdderivs5
+    test6 = derivs[6] - fdderivs6
 
-    return derivs
+    return max(norm(test1, 2), norm(test2, 2), norm(test3, 2), norm(test4, 2), norm(test5, 2), norm(test6, 2))
 end
 
-derivs = test_pkflutterderiv()
+
+# ==============================================================================
+#                         MAIN DRIVER
+# ==============================================================================
+nNodes = 4
+DVDict = Dict(
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "g" => 0.04, # structural damping percentage
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12, # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(15), # fiber angle global [rad]
+)
+
+solverOptions = Dict(
+    # --- I/O ---
+    "name" => "test",
+    "debug" => false,
+    "outputDir" => "./test_out/",
+    # --- General solver options ---
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "material" => "cfrp", # preselect from material library
+    "nNodes" => nNodes,
+    "config" => "wing",
+    "rotation" => 0.0, # deg
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "tipMass" => false,
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # --- Static solve ---
+    "run_static" => false,
+    # --- Forced solve ---
+    "run_forced" => false,
+    "fSweep" => range(0.1, 1000.0, 1000),
+    "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
+    # --- Eigen solve ---
+    "run_modal" => false,
+    "run_flutter" => true,
+    "nModes" => 4,
+    "uRange" => [187.0, 190.0],
+    "maxQIter" => 100,
+    "rhoKS" => 80.0,
+)
+
+derivs = test_pkflutterderiv(DVDict, solverOptions)
+
+
+# derivs, fdderivs1, fdderivs2, fdderivs3, fdderivs4, fdderivs5 = test_hydroderiv(DVDict, solverOptions)
+# test = test_hydroderiv(DVDict, solverOptions)

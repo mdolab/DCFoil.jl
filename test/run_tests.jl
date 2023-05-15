@@ -57,6 +57,10 @@ end
     # ************************************************
     #     Unit test derivative tests
     # ************************************************
+    # @test test_hydromass() <=1e-4 # hydrodynamic mass
+    # @test test_hydrodamp() <= 1e-4
+    @test test_interp() <= 1e-1
+    @test test_hydroderiv() <= 1e-4
     @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
     @test test_pkflutterderiv()
 end

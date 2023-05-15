@@ -555,7 +555,219 @@ function ipack1d(A, mask, nFlow)
 
     return B, nFound
 end # ipack1d
+# ==============================================================================
+#                         INTERPOLATION ROUTINES
+# ==============================================================================
+# The following functions are based off of Andrew Ning's publicly available akima spline code
+# Except the derivatives are generated implicitly using Zygote RAD
+function abs_smooth(x, Δx)
+    """
+    Absolute value function with quadratic in valley for C1 continuity
+    """
+    y = 0.0
+    if (x >= Δx)
+        y = x
+    elseif (x <= -Δx)
+        y = -x
+    else
+        y = x^2 / (2.0 * Δx) + Δx / 2.0
+    end
 
+    return y
+end
+
+function setup_akima(npt, xpt, ypt, Δx)
+    """
+    Setup for the akima spline
+    Returns spline coefficients
+    """
+    eps = 1e-30
+
+    # --- Output ---
+    p0 = zeros(npt - 1)
+    p1 = zeros(npt - 1)
+    p2 = zeros(npt - 1)
+    p3 = zeros(npt - 1)
+
+    # --- Local working vars ---
+    t = zeros(npt)
+    m = zeros(npt + 3) # segment slopes
+    # There are two extra end points and beginning and end
+    # x---x---o--....--o---x---x
+    # estimate             estimate
+
+    # Zygote buffers
+    p0_z = Zygote.Buffer(p0)
+    p1_z = Zygote.Buffer(p1)
+    p2_z = Zygote.Buffer(p2)
+    p3_z = Zygote.Buffer(p3)
+    t_z = Zygote.Buffer(t)
+    m_z = Zygote.Buffer(m)
+
+    # --- Compute segment slopes ---
+    for ii in 1:npt-1
+        m_z[ii+2] = (ypt[ii+1] - ypt[ii]) / (xpt[ii+1] - xpt[ii])
+    end
+    # Estimations
+    m_z[2] = 2.0 * m_z[3] - m_z[4]
+    m_z[1] = 2.0 * m_z[2] - m_z[3]
+    m_z[npt+2] = 2.0 * m_z[npt+1] - m_z[npt]
+    m_z[npt+3] = 2.0 * m_z[npt+2] - m_z[npt+1]
+    m = copy(m_z)
+
+    # --- Slope at points ---
+    for ii in 1:npt
+        m1 = m[ii]
+        m2 = m[ii+1]
+        m3 = m[ii+2]
+        m4 = m[ii+3]
+        w1 = abs_smooth(m4 - m3, Δx)
+        w2 = abs_smooth(m2 - m1, Δx)
+        if (w1 < eps && w2 < eps)
+            t_z[ii] = 0.5 * (m2 + m3)  # special case to avoid divide by zero
+        else
+            t_z[ii] = (w1 * m2 + w2 * m3) / (w1 + w2)
+        end
+    end
+    t = copy(t_z)
+
+    # --- Polynomial coefficients ---
+    for ii in 1:npt-1
+        dx = xpt[ii+1] - xpt[ii]
+        t1 = t[ii]
+        t2 = t[ii+1]
+        p0_z[ii] = ypt[ii]
+        p1_z[ii] = t1
+        p2_z[ii] = (3.0 * m[ii+2] - 2.0 * t1 - t2) / dx
+        p3_z[ii] = (t1 + t2 - 2.0 * m[ii+2]) / dx^2
+    end
+
+    return copy(p0_z), copy(p1_z), copy(p2_z), copy(p3_z)
+end
+
+function interp_akima(npt, n, x, xpt, p0, p1, p2, p3,
+    dp0dxpt, dp1dxpt, dp2dxpt, dp3dxpt, dp0dypt, dp1dypt, dp2dypt, dp3dypt,
+)
+    """
+    Evaluate Akima spline and its derivatives
+
+    Returns
+    y - interpolated value
+    dydx - derivative of y wrt x
+    dydxpt, dydypt - derivative of y wrt xpt and ypt
+    """
+    # --- Outputs ---
+    y = zeros(n)
+    dydx = zeros(n)
+    dydxpt = zeros(n, npt)
+    dydypt = zeros(n, npt)
+    # Zygote buffers
+    y_z = Zygote.Buffer(y)
+    dydx_z = Zygote.Buffer(dydx)
+    dydxpt_z = Zygote.Buffer(dydxpt)
+    dydypt_z = Zygote.Buffer(dydypt)
+
+
+    # --- Interpolate at each point ---
+    for ii in 1:n
+
+        # --- Find location of spline in array (uses end segments if out of bounds) ---
+        jj = 1 # give jj an initial value
+        if x[ii] < xpt[1]
+            jj = 1
+        else
+            # Linear search
+            for jj in npt-1:-1:1
+                if x[ii] >= xpt[jj]
+                    break
+                end
+            end
+        end
+
+        # --- Evaluate poly and derivative ---
+        dx = (x[ii] - xpt[jj])
+        y_z[ii] = p0[jj] + p1[jj] * dx + p2[jj] * dx^2 + p3[jj] * dx^3
+        dydx_z[ii] = p1[jj] + 2.0 * p2[jj] * dx + 3.0 * p3[jj] * dx^2
+
+
+        for kk in 1:npt
+            dydxpt_z[ii, kk] = dp0dxpt[jj, kk] + dp1dxpt[jj, kk] * dx + dp2dxpt[jj, kk] * dx^2 + dp3dxpt[jj, kk] * dx^3
+            if (kk == jj)
+                dydxpt_z[ii, kk] = dydxpt[ii, kk] - dydx_z[ii]
+            end
+            dydypt_z[ii, kk] = dp0dypt[jj, kk] + dp1dypt[jj, kk] * dx + dp2dypt[jj, kk] * dx^2 + dp3dypt[jj, kk] * dx^3
+        end
+    end
+
+    return copy(y_z), copy(dydx_z), copy(dydxpt_z), copy(dydypt_z)
+end
+
+function do_akima_interp(xpt, ypt, xq, Δx=1e-7)
+    npt = length(xpt)
+    n = length(xq)
+    p0, p1, p2, p3 = setup_akima(npt, xpt, ypt, Δx)
+    zeros_in = zeros(npt - 1, npt)
+    y, _, _, _ = interp_akima(npt, n, xq, xpt, p0, p1, p2, p3, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in)
+
+    if n == 1 # need it returned as a float
+        return y[1]
+    else
+        return y
+    end
+end
+
+function do_linear_interp(xpt, ypt, xqvec)
+    npt = length(xpt)
+    n = length(xqvec)
+    y = zeros(n)
+    y_z = Zygote.Buffer(y)
+
+    if length(xpt) != length(ypt)
+        throw(ArgumentError("xpt and ypt must be the same length"))
+    end
+
+
+    for jj in 1:n
+
+        xq = xqvec[jj]
+
+        # Catch cases in case we're just outside the domain
+        # This extends the slope of the first/last segment
+        if xq <= xpt[1]
+            x0 = xpt[1]
+            x1 = xpt[2]
+            y0 = ypt[1]
+            y1 = ypt[2]
+        elseif xq >= xpt[npt]
+            x0 = xpt[npt-1]
+            x1 = xpt[npt]
+            y0 = ypt[npt-1]
+            y1 = ypt[npt]
+        else
+            # Perform search
+            ii = 1
+            while xq > xpt[ii+1]
+                ii += 1
+            end
+
+            x0 = xpt[ii]
+            x1 = xpt[ii+1]
+            y0 = ypt[ii]
+            y1 = ypt[ii+1]
+
+        end
+
+        m = (y1 - y0) / (x1 - x0) # slope
+        y_z[jj] = y0 + m * (xq - x0)
+    end
+    y = copy(y_z)
+
+    if n == 1 # need it returned as a float
+        return y[1]
+    else
+        return y
+    end
+end
 # ==============================================================================
 #                         Custom derivative routines
 # ==============================================================================
@@ -650,7 +862,7 @@ function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
     function inv_pullback(ΔΩ)
 
         ∂A = -Ω' * ΔΩ * Ω'
-        
+
         return (NoTangent(), ∂A)
     end
 

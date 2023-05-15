@@ -106,10 +106,11 @@ function init_dynamic(DVDict::Dict, solverOptions::Dict; fSweep=0.1:0.1:1, uRang
   """
   Perform much of the same initializations as init_static() except with other features
   """
-  staticModel = init_static(DVDict, solverOptions)
+  statModel = init_static(DVDict, solverOptions)
 
   # model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
-  model = DesignConstants.dynamicFoil(staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
+  model = DesignConstants.dynamicFoil(
+    statModel.mₛ, statModel.Iₛ, statModel.EIₛ, statModel.GJₛ, statModel.Kₛ, statModel.Sₛ, statModel.α₀, statModel.U∞, statModel.g, statModel.clα, statModel.ρ_f, statModel.nNodes, statModel.constitutive, fSweep, uRange)
 
   return model
 end
