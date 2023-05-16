@@ -371,12 +371,6 @@ git-tree-sha1 = "74faea50c1d007c85837327f6775bea60b5492dd"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.2+2"
 
-[[deps.FLOWMath]]
-deps = ["LinearAlgebra", "OffsetArrays"]
-git-tree-sha1 = "347009fd95657ce9f8a472d0ea6db09b4b223693"
-uuid = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
-version = "0.3.3"
-
 [[deps.FastBroadcast]]
 deps = ["ArrayInterface", "LinearAlgebra", "Polyester", "Static", "StaticArrayInterface", "StrideArraysCore"]
 git-tree-sha1 = "d1248fceea0b26493fd33e8e9e8c553270da03bd"
@@ -1201,12 +1195,6 @@ deps = ["StaticArrays"]
 git-tree-sha1 = "256eeeec186fa7f26f2801732774ccf277f05db9"
 uuid = "ae5879a3-cd67-5da8-be7f-38c6eb64a37b"
 version = "1.1.1"
-
-[[deps.ReverseDiff]]
-deps = ["ChainRulesCore", "DiffResults", "DiffRules", "ForwardDiff", "FunctionWrappers", "LinearAlgebra", "LogExpFunctions", "MacroTools", "NaNMath", "Random", "SpecialFunctions", "StaticArrays", "Statistics"]
-git-tree-sha1 = "a8d90f5bf4880df810a13269eb5e3e29f22cbd96"
-uuid = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
-version = "1.14.5"
 
 [[deps.Richardson]]
 deps = ["LinearAlgebra"]

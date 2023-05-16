@@ -48,9 +48,13 @@ Please use this coding convention:
 * snake_case - functions (all functions should contain a verb) and non-module filenames
 * SCREAMING_SNAKE_CASE - constants
 
-### Try not to do this
+### Sensitivites
+#### Adding new cost functions or design variables
 
-* `LinRange()` because it isn't easily differentiated
+* For the given solver you're adding the DV or cost func to, check its `.evalFuncsSens()`
+#### Try not to do this
+
+* `LinRange()` because it isn't easily differentiated. Do something like `start:step:end`
 * Mutating arrays
 
 ### Dependencies
@@ -68,6 +72,7 @@ To update all dependencies (be careful with this in case it breaks tests)
 `Pkg.update(level=UPLEVEL_PATCH)`
 
 NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last change (also see `help <your-command>`).
+Use `Pkg.rm(<module-name>)` to remove a package.
 
 #### Python dependencies from the MACH framework
 

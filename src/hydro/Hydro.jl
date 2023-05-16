@@ -16,7 +16,6 @@ export compute_node_mass, compute_node_damp, compute_node_stiff
 export compute_AICs, apply_BCs
 
 # --- Libraries ---
-using FLOWMath
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
@@ -265,8 +264,6 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
     This follows the formulation in
     'Principles of Naval Architecture Series (PNA) - Propulsion 2010'
     by Justin Kerwin & Jacques Hadler
-
-    TODO: PICKUP HERE DEBUG THE DERIVATIVES OF THIS ROUTINE
     """
 
     ỹ = π / 2 * ((1:1:nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
@@ -297,12 +294,12 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
     γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise distribution of free vortex strength (Γ(y) in textbook)
 
     if useFS
-        γ = use_free_surface(γ, α₀, U∞, chordVec, h)
+        γ_FS = use_free_surface(γ, α₀, U∞, chordVec, h)
     end
 
     cl = (2 * γ) ./ (U∞ * chordVec) # sectional lift coefficient cl(y) = cl_α*α
     clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
-
+    
     # --- Interpolate lift slopes onto domain ---
     # pGlauert = plot(LinRange(0, 2.7, 250), clα)
     # xq = LinRange(-semispan, 0, nNodes)
@@ -310,11 +307,12 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
     # DO NOT USE LINRANGE
     dl = semispan / (nNodes - 1)
     xq = -semispan:dl:0
-    if length(xq) != nNodes
-        println("ERROR: xq is not the same length as nNodes")
-    end
+    # if length(xq) != nNodes
+    #     println("ERROR: xq is not the same length as nNodes")
+    # end
+    
+    # TODO: THERE IS A BUG ON THIS LINE THAT MAKES THE DERIVATIVES WRT SPAN FOR THE WHOLE CODE WRONG
     cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
-    # cl_α = FLOWMath.linear(y, clα, xq) # Use BYUFLOW lab math function
 
     return reverse(cl_α)
 end
@@ -507,16 +505,6 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
         E_f = copy(K_f)  # Sweep correction matrix
 
 
-        # # --- Linearly interpolate values based on y loc ---
-        # clα = FLOWMath.linear(mesh, FOIL.clα, yⁿ)
-        # c = FLOWMath.linear(mesh, chordVec, yⁿ)
-        # ab = FLOWMath.linear(mesh, abVec, yⁿ)
-        # eb = FLOWMath.linear(mesh, ebVec, yⁿ)
-        # # --- Interpolate values based on y loc ---
-        # clα = SolverRoutines.do_akima_interp(mesh, FOIL.clα, yⁿ)
-        # c = SolverRoutines.do_akima_interp(mesh, chordVec, yⁿ)
-        # ab = SolverRoutines.do_akima_interp(mesh, abVec, yⁿ)
-        # eb = SolverRoutines.do_akima_interp(mesh, ebVec, yⁿ)
         # --- Interpolate values based on y loc ---
         clα = SolverRoutines.do_linear_interp(mesh, FOIL.clα, yⁿ)
         c = SolverRoutines.do_linear_interp(mesh, chordVec, yⁿ)

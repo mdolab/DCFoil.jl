@@ -48,7 +48,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL = InitModel.init_dynamic(DVDict, solverOptions; fSweep=fSweep)
+    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")

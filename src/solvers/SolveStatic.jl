@@ -61,7 +61,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     outputDir = solverOptions["outputDir"]
     nNodes = solverOptions["nNodes"]
-    global FOIL = InitModel.init_static(DVDict, solverOptions) # seems to only be global in this module
+    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
 
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")

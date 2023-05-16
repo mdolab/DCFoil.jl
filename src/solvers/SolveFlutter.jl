@@ -111,7 +111,7 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     return obj
 end # end solve
 
-function setup_solver(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
+function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
     """
     Setup function to be called before solve()
     """
@@ -124,7 +124,12 @@ function setup_solver(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     nModes = solverOptions["nModes"]
     tipMass = solverOptions["tipMass"]
     debug = solverOptions["debug"]
-    global FOIL = InitModel.init_dynamic(DVDict, solverOptions; uRange=uRange, fSweep=fSweep)
+
+    global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions; uRange=uRange, fSweep=fSweep)
+
+    # --- Create mesh ---
+    nElem = FOIL.nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, span; config=solverOptions["config"])
 
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
@@ -142,11 +147,11 @@ function setup_solver(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     # ---------------------------
 
     # @timeit to "FEM assembly"
-    abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
-    chordVec = DVDict["c"]
+    abVec = ab
+    x_αbVec = x_αb
+    chordVec = c
     ebVec = 0.25 * chordVec .+ abVec
-    Λ = DVDict["Λ"]
+
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     if tipMass
         bulbMass = 2200 #[kg]
@@ -181,7 +186,7 @@ function setup_solver(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
     N_R = 8 # reduced problem size (Nr x Nr)
     b_ref = sum(chordVec) / FOIL.nNodes # mean semichord
 
-    return uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
+    return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
 end
 
 function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
@@ -197,7 +202,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     tipMass = solverOptions["tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
-    global FOIL = InitModel.init_static(DVDict, solverOptions)
+    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -1902,38 +1907,90 @@ end # compute_KS
 #                         Cost func and sensitivity routines
 # ==============================================================================
 # All of these routines have to take the exact same inputs
-function evalFuncs(structMesh, elemConn, DVDict::Dict, solverOptions::Dict)
+function evalFuncs(DVDict::Dict, solverOptions::Dict)
     """
     Wrapper to solve and compute the cost func
     This is the primal solver
     """
 
-    # Setup
-    uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solver(structMesh, elemConn, DVDict, solverOptions)
-    # Solve
-    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+    obj = eval_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
 
     return obj
 end
 
+function eval_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+    """
+    This does the primal solve but with a function signature compatible with Zygote
+    """
 
-function evalFuncsSens(structMesh, elemConn, DVDict::Dict, solverOptions::Dict; mode="FiDi")
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+        setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+
+    # Solve
+    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+    return obj
+end
+
+function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
     """
     Wrapper to compute the total sensitivities for this evalFunc
     """
 
+    # Initialize output dictionary
+    funcsSens = Dict()
+
     if mode == "FiDi" # use finite differences the stupid way
-        meshDerivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(x, elemConn, DVDict, solverOptions),
-            structMesh)
-        DVderivs = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(structMesh, elemConn, x, solverOptions),
+
+        sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(x, solverOptions),
             DVDict)
 
-    elseif mode == "RAD" # use automatic differentiation
-    # uRange, b_ref, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solver(structMesh, elemConn, DVDict, solverOptions)
-    # derivs = Zygote.jacobi
+        # --- Iterate over DVDict keys ---
+        dv_ctr = 1 # counter for total DVs
+        for (key_ctr, pair) in enumerate(DVDict)
+            key = pair[1]
+            val = pair[2]
+            x_len = length(val)
+            if x_len == 1
+                funcsSens[key] = sensitivities[dv_ctr]
+                dv_ctr += 1
+            elseif x_len > 1
+                funcsSens[key] = sensitivities[dv_ctr:(dv_ctr+x_len-1)]
+                dv_ctr += x_len
+            end
+        end
+
+    elseif mode == "RAD" # use automatic differentiation via Zygote
+
+
+        sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
+                eval_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
+            DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"])
+
+        # --- Order the sensitivities properly ---
+        funcsSens["α₀"] = sensitivities[1]
+        funcsSens["Λ"] = sensitivities[2]
+        funcsSens["s"] = sensitivities[3]
+        funcsSens["c"] = sensitivities[4]
+        funcsSens["toc"] = sensitivities[5]
+        funcsSens["ab"] = sensitivities[6]
+        funcsSens["x_αb"] = sensitivities[7]
+        funcsSens["g"] = sensitivities[8]
+        funcsSens["θ"] = sensitivities[9]
+
     elseif mode == "FAD"
         error("FAD not implemented yet")
     end
+
+    # ************************************************
+    #     Sort the sensitivities by key (alphabetical)
+    # ************************************************
+    sorted_keys = sort(collect(keys(funcsSens)))
+    sorted_dict = Dict()
+    for key in sorted_keys
+        sorted_dict[key] = funcsSens[key]
+    end
+    funcsSens = sorted_dict
 
     return funcsSens
 

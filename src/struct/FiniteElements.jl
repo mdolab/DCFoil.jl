@@ -337,26 +337,30 @@ function make_mesh(nElem::Int64, span; config="wing", rotation=0.0)
     """
     mesh = Array{Float64}(undef, nElem + 1, 3)
     elemConn = Array{Int64}(undef, nElem, 2)
+    mesh_z = Zygote.Buffer(mesh)
+    elemConn_z = Zygote.Buffer(elemConn)
     rot = deg2rad(rotation)
     if config == "wing"
         if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
             println("Right now only 1D mesh in y dir...")
-            mesh = collect(LinRange(0, span, nElem + 1))
+            dl = span / (nElem) # dist btwn nodes
+            mesh_z = collect((0:dl:span))
             for ii ∈ 1:nElem
-                elemConn[ii, 1] = ii
-                elemConn[ii, 2] = ii + 1
+                elemConn_z[ii, 1] = ii
+                elemConn_z[ii, 2] = ii + 1
             end
         else
             # Set up a line mesh
-            mesh[:, 1] = collect(LinRange(0, span, nElem + 1))
+            dl = span / (nElem) # dist btwn nodes
+            mesh_z[:, 1] = collect((0:dl:span))
             for nodeIdx in 1:nElem+1 # loop nodes and rotate
-                mesh[nodeIdx, :] = rotate3d(mesh[nodeIdx, :], rot; axis="x")
+                mesh_z[nodeIdx, :] = rotate3d(mesh_z[nodeIdx, :], rot; axis="x")
             end
         end
     elseif config == "t-foil"
-        mesh
+        mesh_z
     end
-    return mesh, elemConn
+    return copy(mesh_z), copy(elemConn_z)
 
 end
 

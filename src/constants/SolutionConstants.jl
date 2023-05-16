@@ -25,7 +25,7 @@ mutable struct DCFoilConstants{T<:Float64}
     Kmat::Matrix{T} # structural stiffness matrix (after BC blanking)
     Mmat::Matrix{T} # structural mass matrix (after BC blanking)
     elemType::String
-    mesh::Vector{T} # TODO: this might change
+    mesh::Vector{T} 
     AICmat::Matrix{T} # Aero influence coeff matrix
     mode::String # type of derivative for drdu
     planformArea::T
@@ -37,8 +37,8 @@ mutable struct DCFoilDynamicConstants{T<:Float64}
     """
     elemType::String
     mesh::Vector{T}
-    Dmat::Matrix{ComplexF64} # dynamic matrix # TODO: these might change
-    AICmat::Matrix{ComplexF64} # just the aero part of Dmat # TODO: these might change
+    Dmat::Matrix{ComplexF64} # dynamic matrix 
+    AICmat::Matrix{ComplexF64} # just the aero part of Dmat 
     extForceVec::Vector{T} # external force vector excluding BC nodes
 end
 

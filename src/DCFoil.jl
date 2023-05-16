@@ -26,11 +26,7 @@ using .tecplotIO
 using .InitModel
 using .FEMMethods
 
-function run_model(
-    DVDict, evalFuncs;
-    # --- Optional args ---
-    solverOptions=Dict()
-)
+function run_model(DVDict, evalFuncs; solverOptions=Dict())
     """
     The interface into the source code
     """
@@ -65,7 +61,7 @@ function run_model(
     # ---------------------------
     #   Mesh generation
     # ---------------------------
-    FOIL = InitModel.init_static(DVDict, solverOptions)
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
     # --- Write mesh to tecplot for later visualization ---
@@ -76,8 +72,7 @@ function run_model(
     # ==============================================================================
     if solverOptions["run_static"]
         STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncsDict = SolveStatic.evalFuncs(STATSOL.structStates,STATSOL.fHydro,evalFuncs)
-        # costFuncsDict = merge(costFuncs, staticCostFuncs)
+        costFuncsDict = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
     end
 
     # ==============================================================================
@@ -85,7 +80,6 @@ function run_model(
     # ==============================================================================
     if solverOptions["run_forced"]
         forcedCostFuncs = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
-        # costFuncs = merge(costFuncs, forcedCostFuncs) TODO: costFuncs
     end
 
     # ==============================================================================
@@ -95,8 +89,12 @@ function run_model(
         SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        obj = SolveFlutter.evalFuncs(structMesh, elemConn, DVDict, solverOptions)
-        # flutterCostFuncsDict = compute_costFuncs(obj, evalFuncs, solverOptions)
+        obj = SolveFlutter.evalFuncs(DVDict, solverOptions)
+        flutterCostFuncsDict = Dict(
+            "ksflutter" => obj,
+            # "lockin" => obj.lockin,
+            # "gap" => obj.gap
+        )
         costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end
 
@@ -190,7 +188,6 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
             # Unpack solver data
             ρKS = solverOptions["rhoKS"]
             # Get flutter evalFunc and stick into solver evalFuncs
-            # TODO: doesn't work but ok for now while I sort out sensitivities
             # flutterEvalFuncs = SolveFlutter.evalFuncs(x, SOL, ρKS)
             flutterEvalFuncs, _ = SolveFlutter.postprocess_damping(SOL.N_MAX_Q_ITER, SOL.flowHistory, SOL.NTotalModesFound, SOL.nFlow, SOL.eigs_r, SOL.iblank, ρKS)
             evalFuncsDict[k] = flutterEvalFuncs
@@ -208,7 +205,7 @@ function compute_funcSens(SOL, DVDict, evalFuncs;
     # ---------------------------
     #   Mesh generation
     # ---------------------------
-    FOIL = InitModel.init_static(DVDict, solverOptions)
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
     # --- Write mesh to tecplot for later visualization ---
@@ -227,51 +224,5 @@ function compute_funcSens(SOL, DVDict, evalFuncs;
 
     return costFuncsSensDict
 end
-
-# function compute_jacobian(partials::Dict, evalFuncs; method="adjoint")
-#     """
-#     Evaluate the sensitivity of the cost functions in evalFuncs
-
-#     Inputs
-#     ------
-#     partials : Dict()
-#         Dictionary containing the partial derivatives of the total derivative equation
-#             df/dx = ∂f/∂x + ∂f/∂u * du/dx
-#         in the context of adjoint or direct methods
-#     evalFuncs : Array{String}
-#         List of what cost functions to evaluate
-#     method : String
-#         Method to use to compute the sensitivity
-#             "adjoint" : Use the adjoint method
-#             "direct" : Use the direct method
-#     Outputs
-#     -------
-#     funcsSens : Dict()
-#         Dictionary containing the sensitivity of the cost functions
-#     """
-
-#     funcsSens = Dict()
-
-#     for func in evalFuncs
-
-#         ∂f∂x = partials["∂f∂x"][func]
-
-#         stateSens = zeros(size(∂f∂x)) # initialize -1 * (∂f/∂u * du/dx)
-#         if method == "adjoint"
-#             ∂r∂x = partials["∂r∂x"][func]
-#             ψ = partials["ψ"][func] # adjoint vector
-#             stateSens = transpose(ψ) * ∂r∂x
-#         elseif method == "direct"
-#             ∂f∂u = partials["∂f∂u"][func]
-#             ϕ = partials["ϕ"][func] # direct vector
-#             stateSens = ∂f∂u * ϕ
-#         end
-
-#         # Compute sensitivity
-#         funcsSens[func] = ∂f∂x - stateSens
-#     end
-
-#     return funcsSens
-# end # compute_jacobian
 
 end # module

@@ -189,7 +189,7 @@ function test_FiniteElementIso()
             "U∞" => 5.0, # free stream velocity [m/s]
             "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
-    FOIL = InitModel.init_static(DVDict, solverOptions)
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
@@ -280,7 +280,7 @@ function test_FiniteElementComp()
             "U∞" => 5.0, # free stream velocity [m/s]
             "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
-    FOIL = InitModel.init_static(DVDict, solverOptions)
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
