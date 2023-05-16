@@ -17,23 +17,23 @@ struct foil{T<:Float64}
     """
     Foil object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
-    TODO: Make twist a DV
+    DO NOT STORE DVS HERE
     """
-    c::Vector{T} # chord length vector
-    t::Vector{T} # thickness vector
-    s::T # semispan [m]
-    ab::Vector{T} # dist from midchord to EA vector (+ve for EA aft) [m]
-    eb::Vector{T} # dist from CP to EA (+ve for EA aft) [m]
-    x_αb::Vector{T} # static imbalance (+ve for CG aft) [m]
+    # c::Vector{T} # chord length vector
+    # t::Vector{T} # thickness vector
+    # s::T # semispan [m]
+    # ab::Vector{T} # dist from midchord to EA vector (+ve for EA aft) [m]
+    # eb::Vector{T} # dist from CP to EA (+ve for EA aft) [m]
+    # x_αb::Vector{T} # static imbalance (+ve for CG aft) [m]
     mₛ::Vector{T} # structural mass vector [kg/m]
     Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
     EIₛ::Vector{T} # bending stiffness vector [N-m²]
     GJₛ::Vector{T} # torsion stiffness vector [N-m²]
     Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
     Sₛ::Vector{T} # warping resistance vector [N-m⁴]
-    α₀::T # rigid initial angle of attack [deg]
+    α₀::T # rigid initial angle of attack [deg] THE ONLY TIME THIS IS USED IS WHEN A DERIVATIVE WRT ALPHA IS NOT NEEDED
     U∞::T # flow speed [m/s]
-    Λ::T # sweep angle [rad]
+    # Λ::T # sweep angle [rad]
     g::T # structural damping percentage
     clα::Vector{T} # lift slopes [1/rad]
     ρ_f::T # fluid density [kg/m³]
@@ -45,12 +45,12 @@ struct dynamicFoil{T<:Float64}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
-    c::Vector{T} # chord length vector
-    t::Vector{T} # thickness vector
-    s::T # semispan [m]
-    ab::Vector{T} # dist from midchord to EA vector (+ve for EA aft) [m]
-    eb::Vector{T} # dist from CP to EA (+ve for EA aft) [m]
-    x_αb::Vector{T} # static imbalance (+ve for CG aft) [m]
+    # c::Vector{T} # chord length vector
+    # t::Vector{T} # thickness vector
+    # s::T # semispan [m]
+    # ab::Vector{T} # dist from midchord to EA vector (+ve for EA aft) [m]
+    # eb::Vector{T} # dist from CP to EA (+ve for EA aft) [m]
+    # x_αb::Vector{T} # static imbalance (+ve for CG aft) [m]
     mₛ::Vector{T} # structural mass vector [kg/m]
     Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
     EIₛ::Vector{T} # bending stiffness vector [N-m²]
@@ -59,14 +59,14 @@ struct dynamicFoil{T<:Float64}
     Sₛ::Vector{T} # warping resistance vector [N-m⁴]
     α₀::T # rigid initial angle of attack [deg]
     U∞::T # flow speed [m/s]
-    Λ::T # sweep angle [rad]
+    # Λ::T # sweep angle [rad]
     g::T # structural damping percentage
     clα::Vector{T} # lift slopes [1/rad]
     ρ_f::T # fluid density [kg/m³]
     nNodes::Int64 # number of evaluation points on span
     constitutive::String # constitutive model
     # --- Only things different for the dynamic foil ---
-    fSweep::StepRangeLen{T,Base.TwicePrecision{T},Base.TwicePrecision{T},Int64} # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    fSweep # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
     uRange::Vector{T} # forward speed sweep [m/s] (for flutter solution)
 end
 

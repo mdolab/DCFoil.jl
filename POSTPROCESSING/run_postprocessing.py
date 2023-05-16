@@ -14,21 +14,38 @@ Use this file as a starting template for your own postprocessing scripts.
 import json
 import argparse
 from pathlib import Path
+import os
 
 # ==============================================================================
 # External Python modules
 # ==============================================================================
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from tabulate import tabulate
+from mpi4py import MPI  # for the flutter processing only
+
+# import seaborn as sns
+# from tabulate import tabulate
 
 # ==============================================================================
 # Extension modules
 # ==============================================================================
 import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals, find_DivAndFlutterPoints
-from helperPlotFuncs import plot_mode_shapes, plot_vg_vf_rl, plot_wing, plot_dlf, plot_forced
+from helperPlotFuncs import (
+    plot_naturalModeShapes,
+    plot_modeShapes,
+    plot_vg_vf_rl,
+    plot_wing,
+    plot_dlf,
+    plot_forced,
+    set_my_plot_settings,
+)
+
+# ==============================================================================
+#                         COMMON PLOT SETTINGS
+# ==============================================================================
+dataDir = "../OUTPUT/"
+cm, fs_lgd, fs, ls, markers = set_my_plot_settings()
 
 # ==============================================================================
 #                         Main driver
@@ -42,21 +59,29 @@ if __name__ == "__main__":
     parser.add_argument("--is_forced", action="store_true", default=False)
     parser.add_argument("--is_modal", action="store_true", default=False)
     parser.add_argument("--is_flutter", action="store_true", default=False)
+    parser.add_argument(
+        "--make_eigenvectors",
+        help="Do you want to make the hydroelastic mode shape plots and movie?",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
     parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
     args = parser.parse_args()
-    # Echo the args
-    print(30 * "-")
-    print("Arguments are", flush=True)
-    for arg in vars(args):
-        print(arg, ":", getattr(args, arg))
-    print(30 * "-")
+
+    comm = MPI.COMM_WORLD
+    if comm.rank == 0:
+        # Echo the args
+        print(30 * "-")
+        print("Arguments are", flush=True)
+        for arg in vars(args):
+            print(arg, ":", getattr(args, arg))
+        print(30 * "-")
 
     # ************************************************
     #     I/O
     # ************************************************
     # Input data read directory
-    dataDir = "../OUTPUT/"
     caseDirs = []
     if args.cases is not None:
         for case in args.cases:
@@ -68,18 +93,21 @@ if __name__ == "__main__":
     if args.output is not None:
         outputDir += args.output
     # Create output directory if it doesn't exist
-    Path(outputDir).mkdir(parents=True, exist_ok=True)
+    if comm.rank == 0:
+        Path(outputDir).mkdir(parents=True, exist_ok=True)
 
     # ************************************************
     #     Read in results
     # ************************************************
     DVDictDict = {}
     funcsDict = {}
+    SolverOptions = {}
 
     for ii, caseDir in enumerate(caseDirs):
         key = args.cases[ii]
         # --- Read in DVDict ---
         DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        SolverOptions[key] = json.load(open(f"{caseDir}/solverOptions.json"))
         # --- Read in funcs ---
         try:
             funcsDict[key] = json.load(open(f"{caseDir}/funcs.json"))
@@ -87,27 +115,17 @@ if __name__ == "__main__":
             funcs = None
             print("No funcs.json file found...")
 
-        nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
+        try:
+            nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
+        except KeyError:
+            try:
+                nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
+            except KeyError:
+                nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
 
     # ************************************************
     #     Plot settings
     # ************************************************
-    plt.style.use(niceplots.get_style("doumont-light"))  # all settings
-    # --- Adjust default options for matplotlib ---
-    myOptions = {
-        "font.size": 25,
-        "font.family": "sans-serif",
-        # "font.sans-serif": ["Helvetica"],
-        # "text.usetex": True,
-        "text.latex.preamble": [
-            r"\usepackage{lmodern}",
-            r"\usepackage{amsmath}",
-            r"\usepackage{helvet}",
-            r"\usepackage{sansmath}",
-            r"\sansmath",
-        ],
-    }
-    plt.rcParams.update(myOptions)
 
     # Linestyles
     ls = ["-", "--", "-.", ":"]
@@ -197,10 +215,17 @@ if __name__ == "__main__":
             # Turn into the right states
             nModes = structModes.shape[0]
             nDOF = 4  # TODO: should be an option somehow
-            structBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
-            structTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
-            wetBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
-            wetTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+            try:
+                structBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+                structTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+                wetBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+                wetTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
+            except KeyError:
+                print("WARNING: nNodes not found, using neval instead...")
+                structBendModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                structTwistModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                wetBendModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                wetTwistModesDict[key] = np.zeros((nModes, DVDict["neval"]))
             for ii in range(nModes):
                 structBendModesDict[key][ii, :], structTwistModesDict[key][ii, :] = get_bendingtwisting(
                     structModes[ii, :], nDOF=nDOF
@@ -213,7 +238,8 @@ if __name__ == "__main__":
         # ************************************************
         #     Read in data
         # ************************************************
-        print("Reading in flutter data...")
+        if comm.rank == 0:
+            print("Reading in flutter data...")
 
         flutterSolDict = {}
         instabPtsDict = {}
@@ -231,10 +257,21 @@ if __name__ == "__main__":
             flowHistory = np.asarray(load_jld(f"{caseDir}/pkFlutter/flowHistory.jld")["data"]).T
             iblank = np.asarray(load_jld(f"{caseDir}/pkFlutter/iblank.jld")["data"]).T
 
+            # --- Post process the solution ---
             flutterSolDict[key] = postprocess_flutterevals(
-                iblank, flowHistory[:, 1], flowHistory[:, 0], flowHistory[:, 2], eigs_r, eigs_i
+                iblank,
+                flowHistory[:, 1],
+                flowHistory[:, 0],
+                flowHistory[:, 2],
+                eigs_r,
+                eigs_i,
+                R_r=evecs_r,
+                R_i=evecs_i,
             )
-            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
+            # breakpoint()
+            # You only need to know the stability point on one processor really
+            if comm.rank == 0:
+                instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
         # ************************************************
         #     Debug code
         # ************************************************
@@ -257,9 +294,9 @@ if __name__ == "__main__":
 
                 nModes = len(lines) - 2
 
-                speed = lines[0].split(":")[1].rstrip("\n")
+                critSpeed = lines[0].split(":")[1].rstrip("\n")
 
-                vSweep.append(float(speed))
+                vSweep.append(float(critSpeed))
                 for jj in range(nModes):
                     line = lines[jj + 2]
                     iblankLine = iblankLines[jj + 2]
@@ -314,7 +351,7 @@ if __name__ == "__main__":
     for key in args.cases:
         fname = f"{outputDir}/wing-geom-{key}.pdf"
         DVDict = DVDictDict[key]
-        fig, axes = plot_wing(DVDict)
+        fig, axes = plot_wing(DVDict, nNodes=SolverOptions[key]["nNodes"])
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -324,7 +361,7 @@ if __name__ == "__main__":
         plt.close()
 
     if args.is_static:
-        fname = f"{outputDir}/static_spanwise.pdf"
+        fname = f"{outputDir}/static-spanwise.pdf"
         dosave = not not fname
 
         cl = funcs["cl"]
@@ -380,7 +417,7 @@ if __name__ == "__main__":
 
     if args.is_forced:
         # --- File name ---
-        fname = f"{outputDir}/forced_dynamics.pdf"
+        fname = f"{outputDir}/forced-dynamics.pdf"
 
         # --- Plot ---
         fig, axes = plot_forced(
@@ -429,7 +466,7 @@ if __name__ == "__main__":
             }
 
             # --- Plot ---
-            fig, axes = plot_mode_shapes(
+            fig, axes = plot_naturalModeShapes(
                 fig,
                 axes,
                 y=nodes,
@@ -446,82 +483,125 @@ if __name__ == "__main__":
             print("Saved to:", fname)
         plt.close()
 
+    # NOTE: This is the only post processing code that is parallel
     if args.is_flutter:
-        # ---------------------------
-        #   Standard v-g, v-f, R-L plots
-        # ---------------------------
-        # --- File name ---
-        fname = f"{outputDir}/vg_vf_rl.pdf"
 
-        # Create figure object
-        fact = 1  # scale size
-        figsize = (18 * fact, 13 * fact)
-        fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
-        for ii, key in enumerate(args.cases):
-            if ii == 0:
-                annotateModes = True
-            else:
-                annotateModes = False
-            # --- Plot ---
-            fig, axes = plot_vg_vf_rl(
-                fig,
-                axes,
-                flutterSol=flutterSolDict[key],
-                ls=ls[ii],
-                # units="kts",
-                # marker="o",
-                showRLlabels=True,
-                annotateModes=annotateModes,
-                nShift=50,
+        # ************************************************
+        #       Standard v-g, v-f, R-L plots
+        # ************************************************
+        if comm.rank == 0:
+            # --- File name ---
+            fname = f"{outputDir}/vg-vf-rl.pdf"
+
+            # --- Create figure object ---
+            fact = 0.85  # scale size
+            figsize = (18 * fact, 13 * fact)
+            fig, axes = plt.subplots(
+                nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize
             )
 
-            # # --- Set limits ---
-            # axes[0,0].set_ylim(top=20)
-            # axes[0,0].set_xlim(right=40, left=25)
-            axes[0, 0].set_ylim(top=10)
-            axes[0, 0].set_xlim(right=190, left=170)
-            # axes[0, 0].set_ylim(top=1, bottom=-5)
-            # axes[0, 0].set_xlim(right=50, left=5)
-            # axes[1, 1].set_xlim(right=1, left=-5)
-            # axes[1, 1].set_ylim(top=20, bottom=0)
+            for ii, key in enumerate(args.cases):
+                if ii == 0:
+                    annotateModes = True
+                else:
+                    annotateModes = False
+                # --- Plot ---
+                fig, axes = plot_vg_vf_rl(
+                    fig,
+                    axes,
+                    flutterSol=flutterSolDict[key],
+                    ls=ls[ii],
+                    units="kts",
+                    # marker="o",
+                    showRLlabels=True,
+                    annotateModes=annotateModes,
+                    nShift=2000,
+                    instabPts=instabPtsDict[key],
+                )
 
-        dosave = not not fname
-        plt.show(block=(not dosave))
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+                # # --- Set limits ---
+                # axes[0, 0].set_ylim(top=1, bottom=-4)
+                # axes[0, 0].set_xlim(right=50, left=5)
+                # axes[0,0].set_xlim(right=40, left=25)
+                # axes[0, 0].set_ylim(top=60, bottom=-100)
+                # axes[0, 0].set_xlim(right=190, left=170)
+                # axes[0, 0].set_ylim(top=1, bottom=-5)
+                # axes[1, 1].set_xlim(right=1, left=-5)
+                # axes[1, 1].set_ylim(top=20, bottom=0)
+                # axes[0, 0].set_xticks([10, 55] + [instabPtsDict[key][0][0] * 1.9438])
+                # axes[0, 0].set_xticks([10, 55])
 
-        # ---------------------------
-        #   Damping loss plots
-        # ---------------------------
-        # --- File name ---
-        fname = f"{outputDir}/dlf.pdf"
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()
 
-        # Create figure object
-        fact = 1  # scale size
-        figsize = (18 * fact, 6 * fact)
-        fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
-        for ii, key in enumerate(args.cases):
-            # --- Plot ---
-            fig, axes = plot_dlf(
-                fig,
-                axes,
-                flutterSol=flutterSolDict[key],
-                semichord=0.5 * np.mean(DVDictDict[key]["c"]),
-                sweepAng=DVDictDict[key]["Λ"],
-                ls="-",
-                units="kts",
-                nShift=500,
-            )
-            axes[0].set_ylim(-0.1, 0.8)
-            axes[0].set_xlim(right=50, left=5)
-            # axes[1].set_ylim(-0.1, 1.2)
-            # axes[1].set_xlim(left=10)
+        # ************************************************
+        #     Damping loss plots
+        # ************************************************
+        if comm.rank == 0:
+            # --- File name ---
+            fname = f"{outputDir}/dlf.pdf"
 
-        dosave = not not fname
-        plt.show(block=(not dosave))
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+            # --- Create figure ---
+            fact = 0.85  # scale size
+            figsize = (18 * fact, 6 * fact)
+            fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
+            for ii, key in enumerate(args.cases):
+                # --- Plot ---
+                fig, axes = plot_dlf(
+                    fig,
+                    axes,
+                    flutterSol=flutterSolDict[key],
+                    semichord=0.5 * np.mean(DVDictDict[key]["c"]),
+                    sweepAng=DVDictDict[key]["Λ"],
+                    ls=ls[ii],
+                    units="kts",
+                    nShift=500,
+                )
+                axes[0].set_ylim(-0.1, 0.8)
+                axes[0].set_xlim(right=50, left=5)
+                # axes[1].set_ylim(-0.1, 1.2)
+                # axes[1].set_xlim(left=10)
+
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()
+
+        comm.barrier()
+
+        # ************************************************
+        #     Hydroelastic mode shapes
+        # ************************************************
+        # These plots can only work for one case
+        if args.make_eigenvectors:
+            # --- File dirname ---
+            dirname = f"{outputDir}/hydroelastic-mode-shapes/"
+            # Create output directory if it doesn't exist
+            Path(dirname).mkdir(parents=True, exist_ok=True)
+
+            vRange = [0.20, 50.0]  # set the speed range to plot in whatever units you choose
+            fact = 0.85  # scale size
+            for ii, key in enumerate(args.cases):
+                # --- Plot ---
+                plot_modeShapes(
+                    comm,
+                    vRange=vRange,
+                    fact=fact,
+                    y=nodes / nodes[-1],
+                    flutterSol=flutterSolDict[key],
+                    ls="-",
+                    units="kts",
+                    outputDir=dirname,
+                )
+            fps = 50
+            if comm.rank == 0:
+                os.system(f"mkdir -p ./MOVIES/")
+            mm = comm.rank  # mode number
+            os.system(f"ffmpeg -r {fps} -i ./{dirname}/mode{mm}_%04d.png movie.mp4")
+            os.system(f"mv movie.mp4 ./MOVIES/{args.cases[0]}/mode{mm}.mp4")

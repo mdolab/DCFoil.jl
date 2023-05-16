@@ -25,7 +25,8 @@ import tecplot as tp
 # ==============================================================================
 # Extension modules
 # ==============================================================================
-import niceplots
+import niceplots as nplt
+from helperFuncs import get_bendingtwisting, compute_normFactorModeShape
 
 # import nicetecplots as ntp
 
@@ -41,7 +42,7 @@ plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
 ccm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
 
-def plot_wing(DVDict: dict):
+def plot_wing(DVDict: dict, nNodes):
     """
     Use design var dictionary to plot the wing
 
@@ -60,7 +61,6 @@ def plot_wing(DVDict: dict):
     alpha = 0.5
     fig, ax = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
 
-    nNodes = DVDict["nNodes"]
     y = np.linspace(0, DVDict["s"], nNodes)
 
     # ax = axes[0]
@@ -157,7 +157,7 @@ def plot_wing(DVDict: dict):
     plt.tight_layout()
 
     # for ax in axes.flatten():
-    niceplots.adjust_spines(ax, outward=True)
+    nplt.adjust_spines(ax, outward=True)
 
     return fig, ax
 
@@ -223,16 +223,16 @@ def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fn
     ax.set_xlabel(xLabel)
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
 
     fig.suptitle("Frequency response spectra")
 
     return fig, axes
 
 
-def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12):
+def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12):
     """
-        Plot the mode shapes for the structural and wet modes
+    Plot the mode shapes for the structural and wet modes in quiescent fluid (U = 0 m/s)
 
     Parameters
     ----------
@@ -275,18 +275,11 @@ def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dic
     for ii in range(nModes):
         ax = axes[0, 0]
 
-        # Normalize by maximum value, if negative then flip sign
-        maxValList = [np.max(abs(structBM[ii, :])), np.max(abs(structTM[ii, :]))]
-        maxValListNoabs = [np.max((structBM[ii, :])), np.max((structTM[ii, :]))]
-        argmax = np.argmax(maxValList)
-        maxVal = maxValList[argmax]
-        if maxVal != maxValListNoabs[argmax]:
-            maxVal *= -1
-
-        # maxVal = np.max(abs(structBM[ii, :]))
-        # maxValNoabs = np.max((structBM[ii, :]))
-        # if maxVal != maxValNoabs:
-        #     maxVal *= -1.0
+        modeShapeDict = {
+            "structBM": structBM[ii, :],
+            "structTM": structTM[ii, :],
+        }
+        maxVal = compute_normFactorModeShape(modeShapeDict)
 
         structBM[ii, :] /= maxVal
 
@@ -320,18 +313,11 @@ def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dic
     for ii in range(nModes):
         ax = axes[1, 0]
 
-        # Normalize by maximum value, if negative then flip sign
-        maxValList = [np.max(abs(structBM[ii, :])), np.max(abs(structTM[ii, :]))]
-        maxValListNoabs = [np.max((structBM[ii, :])), np.max((structTM[ii, :]))]
-        argmax = np.argmax(maxValList)
-        maxVal = maxValList[argmax]
-        if maxVal != maxValListNoabs[argmax]:
-            maxVal *= -1
-
-        # maxVal = np.max(abs(structTM[ii, :]))
-        # maxValNoabs = np.max((structTM[ii, :]))
-        # if maxVal != maxValNoabs:
-        #     maxVal *= -1.0
+        modeShapeDict = {
+            "structBM": structBM[ii, :],
+            "structTM": structTM[ii, :],
+        }
+        maxVal = compute_normFactorModeShape(modeShapeDict)
 
         structTM[ii, :] /= maxVal
 
@@ -349,11 +335,11 @@ def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dic
     for ii in range(nModes):
         ax = axes[0, 1]
 
-        # Normalize by maximum value, if negative then flip sign
-        maxVal = np.max(abs(wetBM[ii, :]))
-        maxValNoabs = np.max((wetBM[ii, :]))
-        if maxVal != maxValNoabs:
-            maxVal *= -1.0
+        modeShapeDict = {
+            "wetBM": wetBM[ii, :],
+            "wetTM": wetTM[ii, :],
+        }
+        maxVal = compute_normFactorModeShape(modeShapeDict)
 
         wetBM[ii, :] /= maxVal
 
@@ -384,10 +370,11 @@ def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dic
     for ii in range(nModes):
         ax = axes[1, 1]
 
-        maxVal = np.max(abs(wetTM[ii, :]))
-        maxValNoabs = np.max((wetTM[ii, :]))
-        if maxVal != maxValNoabs:
-            maxVal *= -1.0
+        modeShapeDict = {
+            "wetBM": wetBM[ii, :],
+            "wetTM": wetTM[ii, :],
+        }
+        maxVal = compute_normFactorModeShape(modeShapeDict)
 
         wetTM[ii, :] /= maxVal
 
@@ -400,9 +387,107 @@ def plot_mode_shapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dic
     fig.suptitle("Normalized mode shapes", fontsize=40)
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
         ax.set_ylim([-1.1, 1.1])
     return fig, axes
+
+
+def plot_modeShapes(comm, vRange, y, flutterSol: dict, fact: float, ls="-", alpha=1.0, units="m/s", outputDir=None):
+    """
+    Plot the hydroelastic mode shapes where each processor has its own mode
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        figure to plot on
+    axes : matplotlib.axes._subplots.AxesSubplot
+        axes to plot on, 2
+    y : array_like
+        spanwise location
+    flutterSol : dict
+        see 'postprocess_flutterevals()' for data structure
+    ls : str, optional
+        line style for plots, by default "-"
+    alpha : float, optional
+        alpha for plots, by default 1.0
+    """
+
+    # Sort keys to get consistent plotting
+    sortedModesNumbers = sorted(flutterSol.keys(), key=int)
+
+    labelpad = 40
+    legfs = 20
+    xLabel = r"$\widebar{y}$ [-]"
+
+    figDict = {}
+    axesDict = {}
+    vLow = vRange[0]
+    vHigh = vRange[1]
+
+    # ************************************************
+    #     Loop over modes
+    # ************************************************
+    for mm, key in enumerate(sortedModesNumbers):
+        if comm.rank == mm:
+            iic = mm % len(cm)  # color index
+            vSweep = flutterSol[key]["U"]
+            gSweep = flutterSol[key]["pvals_r"]
+            fSweep = flutterSol[key]["pvals_i"]
+            if units == "kts":
+                vSweep = 1.94384 * np.array(vSweep)  # kts
+            elif units == "m/s":
+                pass
+            else:
+                raise ValueError(f"Unsupported units: {units}")
+            # ---------------------------
+            #   Loop speeds
+            # ---------------------------
+            for jj, v in enumerate(vSweep):
+                # Only plot if in speed range of interest
+                if v < vLow or v > vHigh:
+                    continue
+                else:
+                    figsize = (8 * fact, 10 * fact)
+                    fig, axes = plt.subplots(nrows=2, ncols=1, sharey="row", constrained_layout=True, figsize=figsize)
+
+                    # --- Pull out shapes and normalize ---
+                    w_r, psi_r = get_bendingtwisting(flutterSol[key]["R_r"][:, jj], nDOF=4)
+                    w_i, psi_i = get_bendingtwisting(flutterSol[key]["R_i"][:, jj], nDOF=4)
+                    w_mag = np.sqrt(w_r**2 + w_i**2)
+                    psi_mag = np.sqrt(psi_r**2 + psi_i**2)
+
+                    modeShapes = {
+                        "w": w_mag,
+                        "psi": psi_mag,
+                    }
+                    maxVal = compute_normFactorModeShape(modeShapes)
+
+                    labelString = f"({fSweep[jj]:.2f}" + " Hz)"
+
+                    # --- Bending ---
+                    ax = axes[0]
+                    mShape = np.hstack([0.0, w_mag / maxVal])  # add zero at root
+                    ax.plot(y, mShape, label=f"Mode {mm+1} {labelString}", ls=ls, c=cm[iic])
+                    ax.set_ylabel("OOP\nBending", rotation=0, labelpad=labelpad)
+                    ax.legend(labelcolor="linecolor", loc="best", frameon=False)
+
+                    # --- Twisting ---
+                    ax = axes[1]
+                    mShape = np.hstack([0.0, psi_mag / maxVal])  # add zero at root
+                    ax.plot(y, mShape, ls=ls, c=cm[iic])
+                    ax.set_ylabel("Twist", rotation=0, labelpad=labelpad)
+                    ax.set_xlabel(xLabel)
+
+                    mathStr = "$U_{\infty} = %.1f$" % v
+                    axes[0].set_title(f"Hydroelastic mode\n{mathStr} {units}")
+                    plt.tight_layout()
+
+                    for ax in axes.flatten():
+                        nplt.adjust_spines(ax, outward=True)
+                        ax.set_ylim([-1.1, 1.1])
+                        ax.set_xlim([0, 1.05])
+                    plt.savefig(f"{outputDir}/mode{mm+1}-{jj:04d}.png", dpi=200)
+                    plt.close()
 
 
 def plot_vg_vf_rl(
@@ -416,6 +501,7 @@ def plot_vg_vf_rl(
     showRLlabels=False,
     annotateModes=False,
     nShift=0,
+    instabPts=None,
 ):
     """
     Plot the V-g, V-f, and R-L diagrams
@@ -438,6 +524,12 @@ def plot_vg_vf_rl(
         marker for line plots to see points, by default None
     showRLlabels : bool, optional
         show R-L speed labels, by default True
+    annotateModes : bool, optional
+        annotate modes on plots, by default False
+    nShift : int, optional
+        number of points to shift labels, by default 0
+    instabPts : list, optional
+        list of points to mark instability
     """
 
     # Sort keys to get consistent plotting
@@ -477,6 +569,7 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
+            # breakpoint()
             ax.plot(
                 vSweep,
                 gSweep,
@@ -522,6 +615,19 @@ def plot_vg_vf_rl(
         "Hydroelastic instability", xy=(0.5, 0.9), ha="center", xycoords="axes fraction", size=legfs, color=flutterColor
     )
     # ax.set_yticks(yticks + [0])
+
+    # --- Instability points ---
+    if instabPts is not None:
+        for pt in instabPts:
+            iic = (int(pt[2]) - 1) % len(cm)
+            if units =="kts":
+                critSpeed = 1.94384 * pt[0]
+            elif units == "m/s":
+                critSpeed = pt[0]
+            else:
+                print(f"Unsupported units: {units}")
+            ax.scatter(critSpeed, pt[1], c=cm[iic], marker="x", s=100)
+
     # ************************************************
     #     V-f diagram
     # ************************************************
@@ -691,7 +797,7 @@ def plot_vg_vf_rl(
     )
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
 
     return fig, axes
 
@@ -830,7 +936,7 @@ def plot_dlf(fig, axes, flutterSol: dict, semichord: float, sweepAng: float, ls=
     plt.suptitle("Damping loss factor trends")
 
     for ax in axes.flatten():
-        niceplots.adjust_spines(ax, outward=True)
+        nplt.adjust_spines(ax, outward=True)
 
     return fig, axes
 
@@ -840,3 +946,33 @@ def pytecplot_plotmesh(args, fname: str):
         tp.session.connect()
 
     lay = ntp.Layout()
+
+
+def set_my_plot_settings():
+    fs_lgd = 20
+    fs = 25
+    plt.style.use(nplt.get_style())  # all settings
+    myOptions = {
+        "font.size": fs,
+        "font.family": "sans-serif",  # set to "serif" to get the same as latex
+        # "font.sans-serif": ["Helvetica"],  # this does not work on all systems
+        "text.usetex": False,
+        "text.latex.preamble": [
+            r"\usepackage{lmodern}",  # latin modern font
+            r"\usepackage{amsmath}",  # for using equation commands
+            r"\usepackage{helvet}",  # should make latex serif in helvet now
+            r"\usepackage{sansmath}",
+            r"\sansmath",  # supposed to force math to be rendered in serif font
+        ],
+    }
+    plt.rcParams.update(myOptions)
+
+    # colormap
+    niceColors = sns.color_palette("tab10")
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
+    cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    ls = ["-", "--", "-.", ":"]
+    markers = ["o", "^", "v", "s"]
+
+    return cm, fs_lgd, fs, ls, markers

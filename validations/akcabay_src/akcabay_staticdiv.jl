@@ -45,7 +45,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [20.0, 40.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************
@@ -54,19 +54,19 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # Anything in DVDict is what we calculate derivatives wrt
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
     "g" => 0.04, # structural damping percentage
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "θ" => deg2rad(-15), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
     # --- I/O ---
-    "name" => "akcabay-swept",
+    "name" => "akcabay",
     "debug" => debug,
     # --- General solver options ---
     "config" => "wing",

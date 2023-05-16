@@ -19,7 +19,7 @@ function print_solver_history(iterNum, resNorm, stepNorm)
     println()
 end
 
-function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200, tol=1e-12, is_verbose=true, mode="FAD", is_cmplx=false)
+function do_newton_rhapson(compute_residuals, compute_∂r∂u, u0, maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false)
     """
     Simple Newton-Rhapson solver
 

@@ -27,7 +27,7 @@ debug = false
 tipMass = false
 
 # Uncomment here
-# run_static = true
+run_static = true
 # run_forced = true
 run_modal = true
 run_flutter = true
@@ -48,15 +48,13 @@ fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
-
+# ************************************************
+#     Setup solver options
+# ************************************************
+# Anything in DVDict is what we calculate derivatives wrt
 DVDict = Dict(
-    "name" => "akcabay-swept",
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
@@ -66,34 +64,17 @@ DVDict = Dict(
     "θ" => deg2rad(15), # fiber angle global [rad]
 )
 
-# ************************************************
-#     Cost functions
-# ************************************************
-evalFuncs = ["w_tip", "psi_tip", "cl", "cmy", "lift", "moment"]
-
-# ************************************************
-#     I/O
-# ************************************************
-# The file directory has the convention:
-# <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
-# But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
-    DVDict["name"],
-    DVDict["material"],
-    rad2deg(DVDict["θ"]),
-    rad2deg(DVDict["Λ"]))
-mkpath(outputDir)
-
-# ************************************************
-#     Set solver options
-# ************************************************
 solverOptions = Dict(
     # --- I/O ---
+    "name" => "akcabay-swept",
     "debug" => debug,
-    "outputDir" => outputDir,
     # --- General solver options ---
     "config" => "wing",
+    "nNodes" => nNodes,
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
     "rotation" => 0.0, # deg
+    "material" => "cfrp", # preselect from material library
     "gravityVector" => [0.0, 0.0, -9.81],
     "tipMass" => tipMass,
     "use_freeSurface" => false,
@@ -110,7 +91,30 @@ solverOptions = Dict(
     "run_flutter" => run_flutter,
     "nModes" => nModes,
     "uRange" => uRange,
+    "maxQIter" => 500,
+    "rhoKS" => 80.0,
 )
+
+# ************************************************
+#     Cost functions
+# ************************************************
+evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
+
+# ************************************************
+#     I/O
+# ************************************************
+# The file directory has the convention:
+# <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
+# But we write the DVDict to a human readable file in the directory anyway so you can double check
+outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    solverOptions["name"],
+    solverOptions["material"],
+    rad2deg(DVDict["θ"]),
+    rad2deg(DVDict["Λ"]))
+mkpath(outputDir)
+
+solverOptions["outputDir"] = outputDir
+
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================

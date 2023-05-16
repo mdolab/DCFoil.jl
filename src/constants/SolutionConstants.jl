@@ -25,7 +25,7 @@ mutable struct DCFoilConstants{T<:Float64}
     Kmat::Matrix{T} # structural stiffness matrix (after BC blanking)
     Mmat::Matrix{T} # structural mass matrix (after BC blanking)
     elemType::String
-    mesh::LinRange{T,Int64} # TODO: this might change
+    mesh::Vector{T} 
     AICmat::Matrix{T} # Aero influence coeff matrix
     mode::String # type of derivative for drdu
     planformArea::T
@@ -36,9 +36,9 @@ mutable struct DCFoilDynamicConstants{T<:Float64}
     For the dynamic hydroelastic solve, there are more constants to store
     """
     elemType::String
-    mesh::LinRange{T,Int64}
-    Dmat::Matrix{ComplexF64} # dynamic matrix # TODO: these might change
-    AICmat::Matrix{ComplexF64} # just the aero part of Dmat # TODO: these might change
+    mesh::Vector{T}
+    Dmat::Matrix{ComplexF64} # dynamic matrix 
+    AICmat::Matrix{ComplexF64} # just the aero part of Dmat 
     extForceVec::Vector{T} # external force vector excluding BC nodes
 end
 
@@ -46,6 +46,9 @@ end
 #                         CONSTANTS
 # ==============================================================================
 const mepsLarge = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it is a more robust value for solving
-const p_i_tol = 1.11e-12 # tolerance on real root criteria NOTE: this is tested to work
+const p_i_tol = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on static div # tolerance on real root criteria 
+# NOTE: this is tested to work. 
+# Bigger values catch the real roots and too small cause them to disappear
+# You just don't want them too big that they pick up wrong roots 
 
 end # end module

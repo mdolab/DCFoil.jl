@@ -15,7 +15,6 @@ Frequency domain hydroelastic solver
 export solve
 
 # --- Libraries ---
-using FLOWMath: linear, akima
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
@@ -49,7 +48,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL = InitModel.init_dynamic(DVDict; fSweep=fSweep)
+    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -61,7 +60,12 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     elemType = "BT2"
     loadType = "force"
 
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, FOIL, elemType, FOIL.constitutive)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    Λ = DVDict["Λ"]
+    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
     # ---------------------------
@@ -91,7 +95,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
-    idxNotBlanked = [x for x ∈ 1:length(u) if x ∉ globalDOFBlankingList] # list comprehension
+    idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
 
     # ************************************************
@@ -104,11 +108,12 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         # ---------------------------
         #   Assemble hydro matrices
         # ---------------------------
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs!(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, FOIL, FOIL.U∞, ω, elemType)
+        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
+        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
-        # TODO: I split up the stuff before to separate imag and real math
         Cf = Cf_r + 1im * Cf_i
         Kf = Kf_r + 1im * Kf_i
 
@@ -198,7 +203,7 @@ end
 # # ==============================================================================
 # #                         Solver routines
 # # ==============================================================================
-# function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="FAD")
+# function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="RAD")
 #     """
 #     Simple complex data type Newton-Rhapson solver
 
@@ -264,7 +269,7 @@ end
 #     return converged_u, converged_r
 # end
 
-# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="FAD")
+# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="RAD")
 #     """
 #     Given initial input u0, solve system r(u) = 0 with complex Newton
 #     """
@@ -330,7 +335,7 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         # First derivative using 3 stencil points
         ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
-    elseif mode == "FAD" # Forward automatic differentiation
+    elseif mode == "RAD" # Forward automatic differentiation
         ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif mode == "RAD" # Reverse automatic differentiation

@@ -50,7 +50,26 @@ def get_bendingtwisting(states, nDOF=4):
     return w, psi
 
 
-def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i):
+def compute_normFactorModeShape(modeShape: dict):
+    """
+    Normalize the mode shape so max magnitude is 1
+    """
+    maxValList = []
+    maxValListNoabs = []
+    for k, v in modeShape.items():
+        maxValList.append(np.max(abs(v)))
+        maxValListNoabs.append(np.max((v)))
+
+    # Normalize by maximum value, if negative then flip sign
+    argmax = np.argmax(maxValList)
+    maxVal = maxValList[argmax]
+    if maxVal != maxValListNoabs[argmax]:
+        maxVal *= -1
+
+    return maxVal
+
+
+def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i, R_r, R_i):
     """
     Process the raw arrays with eigenvalues so they can be written out.
     Use the blanking array to create new modes
@@ -65,12 +84,14 @@ def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i):
                         "pvals_i"  : [],       # Frequency (omega, dimensional)
                         "pmG"      : [],       # If safety window is enabled then pmG = pvals_r - G else pmG = pvals_r
                         "N"        : [],       # Size of the arrays
-                        "KS_pmG    : [],       # KS aggregated damping values
+                        "KS_pmG"   : [],       # KS aggregated damping values
+                        "R_r"      : [],       # Real part of eigenvector hydroelastic mode
+                        "R_i"      : [],       # Imaginary part of eigenvector hydroelastic mode
                         },
                 "2": {},
                 ...etc
             }
-    from Eirikur Jonsson with modifications by Galen Ng
+    from Eirikur Jonsson with modifications by Galen Ng to plot flutter modes
     """
 
     # Dictionary to store all results
@@ -79,12 +100,19 @@ def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i):
     # Turn integer 'iblank' into a boolean array for indexing
     iblank = np.array(iblankIn, dtype=bool)
 
-    # Loop over all the modes
+    # Length of state vector
+    ndof = R_r.shape[0] // 2
+
+    # ---------------------------
+    #   Loop over modes
+    # ---------------------------
     for mm in range(pvals_r.shape[0]):
         key = f"{mm+1}"  # one-based indexing for key
 
-        # Initialize mode dictionary
+        # --- Initialize mode dictionary ---
         dataDict[key] = {}
+
+        # --- Pack up values ---
         # dataDict[key]["rho"] = rho[iblank[mm, :]]
         dataDict[key]["U"] = U[iblank[mm, :]]
         # dataDict[key]{"dynP"} = dynP[iblank[mm,:]]
@@ -94,6 +122,9 @@ def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i):
         dataDict[key]["pvals_i"] = pvals_i[mm, iblank[mm, :]]
         # dataDict[key]{"pmG"} = pmG[mm, iblank[mm,:]]
         dataDict[key]["N"] = iblank[mm, :].shape[0]
+        # We only index into the first half
+        dataDict[key]["R_r"] = R_r[:ndof, mm, iblank[mm, :]]
+        dataDict[key]["R_i"] = R_i[:ndof, mm, iblank[mm, :]]
 
     return dataDict
 

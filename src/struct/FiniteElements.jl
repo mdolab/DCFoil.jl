@@ -309,6 +309,7 @@ Module with generic FEM methods
 """
 
 # --- Libraries ---
+using Zygote, ChainRulesCore
 using LinearAlgebra
 using ..LinearBeamElem
 include("../solvers/SolverRoutines.jl")
@@ -316,7 +317,8 @@ include("../constants/SolutionConstants.jl")
 using .SolverRoutines
 using .SolutionConstants
 
-function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
+# function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
+function make_mesh(nElem::Int64, span; config="wing", rotation=0.0)
     """
     Makes a mesh and element connectivity
     First element is always origin
@@ -335,26 +337,30 @@ function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
     """
     mesh = Array{Float64}(undef, nElem + 1, 3)
     elemConn = Array{Int64}(undef, nElem, 2)
+    mesh_z = Zygote.Buffer(mesh)
+    elemConn_z = Zygote.Buffer(elemConn)
     rot = deg2rad(rotation)
     if config == "wing"
         if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
             println("Right now only 1D mesh in y dir...")
-            mesh = LinRange(0, FOIL.s, nElem + 1)
+            dl = span / (nElem) # dist btwn nodes
+            mesh_z = collect((0:dl:span))
             for ii ∈ 1:nElem
-                elemConn[ii, 1] = ii
-                elemConn[ii, 2] = ii + 1
+                elemConn_z[ii, 1] = ii
+                elemConn_z[ii, 2] = ii + 1
             end
         else
             # Set up a line mesh
-            mesh[:, 1] = LinRange(0, FOIL.s, nElem + 1)
+            dl = span / (nElem) # dist btwn nodes
+            mesh_z[:, 1] = collect((0:dl:span))
             for nodeIdx in 1:nElem+1 # loop nodes and rotate
-                mesh[nodeIdx, :] = rotate3d(mesh[nodeIdx, :], rot; axis="x")
+                mesh_z[nodeIdx, :] = rotate3d(mesh_z[nodeIdx, :], rot; axis="x")
             end
         end
     elseif config == "t-foil"
-        mesh
+        mesh_z
     end
-    return mesh, elemConn
+    return copy(mesh_z), copy(elemConn_z)
 
 end
 
@@ -378,7 +384,7 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive="isotropic")
+function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
     """
     Generic function to assemble the mass and stiffness matrices
 
@@ -395,6 +401,8 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
         nnd = 3
     elseif elemType == "BT2"
         nnd = 4
+    else
+        println(elemType, " element type not implemented")
     end
     qLocal = zeros(nnd * 2)
 
@@ -405,34 +413,48 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
     globalM::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
     globalF::Vector{Float64} = zeros(nnd * (nNodes))
 
+
     # --- Debug printout for initialization ---
-    # TODO: probabl a better way to pretty print this
-    println("+", "-"^50, "+")
-    println("|   Assembling global stiffness and mass matrices  |")
-    println("+", "-"^50, "+")
-    println("Default 2 nodes per elem, nothing else will work")
-    println("Using ", constitutive, " constitutive relations...")
-    println(nElem, " elements")
-    println(nNodes, " nodes")
-    println(nnd * nNodes, " total DOFs")
+    ChainRulesCore.ignore_derivatives() do
+        println("+", "-"^50, "+")
+        println("|   Assembling global stiffness and mass matrices  |")
+        println("+", "-"^50, "+")
+        println("Default 2 nodes per elem, nothing else will work")
+        println("Using ", constitutive, " constitutive relations...")
+        println(nElem, " elements")
+        println(nNodes, " nodes")
+        println(nnd * nNodes, " total DOFs")
+    end
 
     # ************************************************
     #     Element loop
     # ************************************************
+    # --- Zygote buffers ---
+    globalK_z = Zygote.Buffer(globalK)
+    globalM_z = Zygote.Buffer(globalM)
+    globalF_z = Zygote.Buffer(globalF)
+    for jj in 1:nnd*nNodes
+        globalF_z[jj] = 0.0
+        for ii in 1:nnd*nNodes
+            globalK_z[jj, ii] = 0.0
+            globalM_z[jj, ii] = 0.0
+        end
+    end
     for elemIdx ∈ 1:nElem
         # ---------------------------
         #   Extract element info
         # ---------------------------
         lᵉ::Float64 = norm(coordMat[elemIdx+1] - coordMat[elemIdx], 2) # length of elem
         nVec::Float64 = (coordMat[elemIdx+1] - coordMat[elemIdx]) / lᵉ # unit normal vector
-        EIₛ::Float64 = foil.EIₛ[elemIdx]
-        GJₛ::Float64 = foil.GJₛ[elemIdx]
-        Kₛ::Float64 = foil.Kₛ[elemIdx]
-        Sₛ::Float64 = foil.Sₛ[elemIdx]
-        ab::Float64 = foil.ab[elemIdx]
-        mₛ::Float64 = foil.mₛ[elemIdx]
-        iₛ::Float64 = foil.Iₛ[elemIdx]
-        x_αb::Float64 = foil.x_αb[elemIdx]
+        EIₛ::Float64 = FOIL.EIₛ[elemIdx]
+        GJₛ::Float64 = FOIL.GJₛ[elemIdx]
+        Kₛ::Float64 = FOIL.Kₛ[elemIdx]
+        Sₛ::Float64 = FOIL.Sₛ[elemIdx]
+        mₛ::Float64 = FOIL.mₛ[elemIdx]
+        iₛ::Float64 = FOIL.Iₛ[elemIdx]
+        # These are currently DVs
+        ab::Float64 = abVec[elemIdx]
+        x_αb::Float64 = x_αbVec[elemIdx]
 
         # ---------------------------
         #   Local stiffness matrix
@@ -458,7 +480,7 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
                 idxRowₑ = (nodeIdx - 1) * nnd + dofIdx
 
                 # --- Assemble RHS ---
-                globalF[idxRow] = fLocal[idxRowₑ]
+                globalF_z[idxRow] = fLocal[idxRowₑ]
 
                 # --- Assemble LHS ---
                 for nodeColIdx ∈ 1:2 # loop over nodes in element
@@ -466,13 +488,16 @@ function assemble(coordMat, elemConn, foil, elemType="bend-twist", constitutive=
                         idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nnd + dofColIdx # idx of global dof (col of global matrix)
                         idxColₑ = (nodeColIdx - 1) * nnd + dofColIdx
 
-                        globalK[idxRow, idxCol] += kLocal[idxRowₑ, idxColₑ]
-                        globalM[idxRow, idxCol] += mLocal[idxRowₑ, idxColₑ]
+                        globalK_z[idxRow, idxCol] += kLocal[idxRowₑ, idxColₑ]
+                        globalM_z[idxRow, idxCol] += mLocal[idxRowₑ, idxColₑ]
                     end
                 end
             end
         end
     end
+    globalK = copy(globalK_z)
+    globalM = copy(globalM_z)
+    globalF = copy(globalF_z)
 
     return globalK, globalM, globalF
 end
@@ -513,13 +538,20 @@ function apply_tip_load!(globalF, elemType, loadType="force")
     end
 end
 
-function apply_tip_mass!(globalM, mass, inertia, elemLength, foil, elemType="BT2")
+function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="BT2")
     """
     Apply a tip mass to the global mass matrix
 
     mass: mass of the tip [kg]
     inertia: moment of inertia of the tip about C.G. [kg-m^2]
     """
+
+    globalM_z = Zygote.Buffer(globalM)
+    for jj in eachindex(globalM[:, 1])
+        for ii in eachindex(globalM[1, :])
+            globalM_z[jj, ii] = globalM[jj, ii]
+        end
+    end
     if elemType == "bend-twist"
         println("Does not work")
     elseif elemType == "BT2"
@@ -527,19 +559,21 @@ function apply_tip_mass!(globalM, mass, inertia, elemLength, foil, elemType="BT2
         # --- Get sectional properties ---
         ms = mass / elemLength
         # Parallel axis theorem
-        Iea = inertia + mass * (foil.x_αb[end])^2
+        Iea = inertia + mass * (x_αbVec[end])^2
         is = Iea / elemLength
-        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, foil.x_αb[end], elemType)
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbVec[end], elemType)
 
         # --- Assemble into global matrix ---
-        globalM[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
+        globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
     end
 
-    println("+------------------------------------+")
-    println("|    Tip mass added!                 |")
-    println("+------------------------------------+")
-    println("Dist. CG is aft of EA: ", foil.x_αb[end], " [m]")
-
+    ChainRulesCore.ignore_derivatives() do
+        println("+------------------------------------+")
+        println("|    Tip mass added!                 |")
+        println("+------------------------------------+")
+        println("Dist. CG is aft of EA: ", x_αbVec[end], " [m]")
+    end
+    return copy(globalM_z)
 end
 
 function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
@@ -557,13 +591,17 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     Applies BCs for nodal displacements and blanks them
     """
 
-    newK = K[
-        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    ]
-    newM = M[
-        setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    ]
-    newF = F[setdiff(1:end, (globalDOFBlankingList))]
+    # newK = K[
+    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    # ]
+    # newM = M[
+    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
+    # ]
+    # newF = F[setdiff(1:end, (globalDOFBlankingList))]
+
+    newK = K[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
+    newM = M[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
+    newF = F[1:end.∉[globalDOFBlankingList]]
 
     return newK, newM, newF
 end
@@ -593,8 +631,7 @@ function solve_structure(K, M, F)
     Solve the structural system
     """
 
-    println("FEM solve took")
-    @time q = K \ F # TODO: should probably replace this with an iterative solver
+    q = K \ F # TODO: should probably replace this with an iterative solver
 
     return q
 end
