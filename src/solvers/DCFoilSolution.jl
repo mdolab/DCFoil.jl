@@ -14,8 +14,8 @@ struct StaticSolution
     fHydro
 end
 struct FlutterSolution
-    eigs_r
-    eigs_i
+    eigs_r # dimensional eigvals
+    eigs_i # dimensional eigvals
     R_eigs_r
     R_eigs_i
     NTotalModesFound

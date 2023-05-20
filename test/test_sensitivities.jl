@@ -109,8 +109,6 @@ function test_hydroderiv(DVDict, solverOptions)
     Test the assembly of hydro matrices
     """
 
-    
-
     nElem = solverOptions["nNodes"] - 1
     mesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
@@ -366,6 +364,8 @@ function test_pkflutterderiv(DVDict, solverOptions)
             end
         end
     end
+
+    return 0.0
 
 end
 

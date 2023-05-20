@@ -5,7 +5,6 @@
 @Author  :   Galen Ng, Sicheng He
 @Desc    :   Run the test files
 Some big picture notes:
-TODO: look into setting up inital data for these tests?
 """
 
 using Test
@@ -17,7 +16,7 @@ include("test_sensitivities.jl")
 
 
 # ==============================================================================
-#                         Common input
+#                         COMMON INPUT
 # ==============================================================================
 nNodes = 4
 DVDict = Dict(
@@ -99,7 +98,7 @@ solverOptions = Dict(
     @test test_SolveStaticComp() <= 1e-2 # cfrp hydrofoil
     # @test test_hydroLoads() <= 1e-2
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
-    # @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
+    @test test_modal() <= 1e-5 # dry and wet modal analysis of cfrp
     # @test test_flutter() <= 1e-5 # flutter analysis of cfrp
 
 end
@@ -119,5 +118,5 @@ end
 
 @testset "Larger scale local test" begin
     # Write your tests here.
-    @test test_pkflutterderiv(DVDict, solverOptions)
+    @test test_pkflutterderiv(DVDict, solverOptions) <= 1e-4
 end

@@ -101,7 +101,8 @@ function test_SolveStaticRigid()
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
 
-        costFuncs = DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
@@ -133,9 +134,6 @@ function test_SolveStaticRigid()
     answers = vec(tipTwistData) # put computed solutions here
     rel_err2 = LinearAlgebra.norm(answers - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
     rel_err = max(rel_err1, rel_err2)
-
-    # println("Relative error: ", rel_err1)
-    # println("Relative error: ", rel_err2)
 
     return rel_err
 
@@ -192,6 +190,7 @@ function test_SolveStaticIso()
         "run_flutter" => false,
         "nModes" => 5,
         "uRange" => nothing,
+        "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
 
@@ -214,13 +213,10 @@ function test_SolveStaticIso()
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
-        # --- Mesh ---
-        FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-        nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
-        # --- Solve ---
-        STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
+
+        DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
@@ -306,6 +302,7 @@ function test_SolveStaticComp()
         "run_flutter" => false,
         "nModes" => 5,
         "uRange" => nothing,
+        "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
 
@@ -327,13 +324,10 @@ function test_SolveStaticComp()
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
-        # --- Mesh ---
-        FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-        nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];)
-        # --- Solve ---
-        STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
+
+        DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
@@ -364,9 +358,6 @@ function test_SolveStaticComp()
     rel_err2 = LinearAlgebra.norm(tipTwistData - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
     rel_err = max(rel_err1, rel_err2)
 
-    # println("Relative error: ", rel_err1)
-    # println("Relative error: ", rel_err2)
-
     return rel_err
 
 end # test_SolveStaticComp
@@ -376,155 +367,14 @@ end # test_SolveStaticComp
 # ==============================================================================
 function test_SolveForcedComp()
     """
-    Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
-    nNodess = [10, 20, 40] # list of number of nodes to test
-    # ************************************************
-    #     DV Dictionaries (see INPUT directory)
-    # ************************************************
-    nNodes = nNodess[1] # spatial nodes
-    # --- Foil from Deniz Akcabay's 2020 paper ---
-    fSweep = 0.01:0.1:10
-    tipForceMag = 1.0
-    DVDict = Dict(
-        "name" => "akcabay",
-        "nNodes" => nNodes,
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 6.0, # free stream velocity [m/s]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "cfrp", # preselect from material library
-        "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
-    )
-
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "",
-        # --- General solver options ---
-        "tipMass" => false,
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => true,
-        "fSweep" => fSweep,
-        "tipForceMag" => tipForceMag,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => false,
-        "nModes" => 5,
-        "uRange" => nothing,
-    )
-    # ==============================================================================
-    #                         Call Forced Vibration Solver
-    # ==============================================================================
-    # Call it for different mesh levels
-    tipBendData = zeros(length(nNodess))
-    tipTwistData = zeros(length(nNodess))
-    meshlvl = 1
-    for nNodes in nNodess
-        # --- Resize some stuff ---
-        DVDict["nNodes"] = nNodes
-        DVDict["c"] = 0.1 * ones(nNodes)
-        DVDict["ab"] = 0 * ones(nNodes)
-        DVDict["x_αb"] = 0 * ones(nNodes)
-        # --- Mesh ---
-        FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-        nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
-        # --- Solve ---
-        TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
-        tipBendData[meshlvl] = TipBendDyn[1]
-        tipTwistData[meshlvl] = TipTwistDyn[1]
-        meshlvl += 1
-    end
-
-    meshlvl = 1
-
-    # ************************************************
-    #     Write results to test output file
-    # ************************************************
-    # NOTE: this assumes you're running the test from the run_tests.jl file
-    fname = "test.out"
-    open(fname, "a") do io
-        write(io, "+---------------------------------------+\n")
-        write(io, "|    test_SolveForcedComp\n")
-        write(io, "+---------------------------------------+\n")
-        write(io, "f = 0 [Hz]")
-        write(io, "  meshlvl   | tip bend [m] | tip twist [rad] |\n")
-        for tip in tipBendData
-            tipTwist = tipTwistData[meshlvl]
-            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], tip, tipTwist)
-            write(io, line)
-            meshlvl += 1
-        end
-    end
-
-    # --- Relative error ---
 
 end # end test_SolveForcedComp
 
 # ==============================================================================
 #                         Test Flutter Solver
 # ==============================================================================
-
-# function test_correlationMatrix()
-#     """
-#     Test the correlation method of van Zyl between k increments
-#     """
-
-#     # --- k^(n) data ---
-#     R_old = [
-#         0.0 0.0 0.0 0.0
-#         0.0 0.0 0.0 0.0
-#         0.0 0.0 0.0 0.0
-#         0.0 0.0 0.0 0.0
-#     ]
-#     # --- k^(n+1) data ---
-#     R_new = []
-
-#     old_r = real(R_old)
-#     old_i = imag(R_old)
-#     new_r = real(R_new)
-#     new_i = imag(R_new)
-#     SolverFlutter.compute_correlationMatrix(old_r, old_i, new_r, new_i)
-# end
-
-# function test_correlationMetrics()
-#     """
-#     Test the correlation method of van Zyl when new modes are found between dynP increments
-#     It uses the eigenvalues to help decide if a new mode is found
-#     """
-
-#     # --- q^(n) data ---
-#     p_old = []
-#     R_old = []
-#     # --- q^(n+1) data ---
-#     p_new = []
-#     R_new = []
-
-#     old_r = real(R_old)
-#     old_i = imag(R_old)
-#     new_r = real(R_new)
-#     new_i = imag(R_new)
-#     p_old_i = imag(p_old)
-#     p_new_i = imag(p_new)
-#     SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
-# end
-
-# function test_modeSpace()
-#     """
-#     """
-# end
 function test_flutter()
     """
     Test flutter solver

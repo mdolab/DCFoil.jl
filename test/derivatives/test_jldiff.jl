@@ -46,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 # nModes is really the starting number of structural modes you want to solve for
 fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [187.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 
@@ -122,13 +122,13 @@ dvKey = "θ" # dv to test deriv
 evalFunc = "ksflutter"
 
 # # Right now, we require a complete solve to get the derivatives
-# include("../../src/solvers/SolveFlutter.jl")
-# include("../../src/InitModel.jl")
-# include("../../src/struct/FiniteElements.jl")
-# include("../../src/solvers/SolverRoutines.jl")
-# include("../../src/hydro/Hydro.jl")
-# include("../../src/constants/SolutionConstants.jl")
-# using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .SolutionConstants
+include("../../src/solvers/SolveFlutter.jl")
+include("../../src/InitModel.jl")
+include("../../src/struct/FiniteElements.jl")
+include("../../src/solvers/SolverRoutines.jl")
+include("../../src/hydro/Hydro.jl")
+include("../../src/constants/SolutionConstants.jl")
+using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .SolutionConstants
 # FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
 # nElem = FOIL.nNodes - 1
 # structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
@@ -234,27 +234,21 @@ evalFunc = "ksflutter"
 # # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
 # # println("deriv = ", derivs)
 
-# THIS IS THE FINAL STEP
-# ************************************************
-#     are the hydro slopes correct?
-# ************************************************
-# TODO: no they are not, this test shows that
-derivs, = Zygote.jacobian((x) ->
-        Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5, nothing, false), 1.0)
-fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
-        Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5), 1.0)
-
+# # THIS IS THE FINAL STEP
 # # ************************************************
-# #     Does it all work?
+# #     are the hydro slopes correct?
 # # ************************************************
-# funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-# funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+# # TODO: no they are not, this test shows that
+# derivs, = Zygote.jacobian((x) ->
+#         Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5, nothing, false), 1.0)
+# fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5), 1.0)
 
 # ************************************************
 #     Forward difference checks (dumb way)
 # ************************************************
-funcVal = 0.0f0
 derivs = zeros(length(steps))
+funcVal = 0.0f0
 for (ii, dh) in enumerate(steps)
     costFuncs = DCFoil.run_model(
         DVDict,
@@ -280,3 +274,10 @@ for (ii, dh) in enumerate(steps)
 end
 
 save("./FWDDiff.jld", "derivs", derivs, "steps", steps, "funcVal", funcVal)
+
+# ************************************************
+#     Does it all work?
+# ************************************************
+funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
+funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+save("./RAD.jld", "derivs", funcsSensAD, "funcVal", funcVal)

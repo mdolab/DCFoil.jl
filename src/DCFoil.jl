@@ -19,16 +19,16 @@ include("./io/tecplotIO.jl")
 include("./InitModel.jl")
 include("./struct/FiniteElements.jl")
 using JSON
-using .SolveStatic
-using .SolveForced
-using .SolveFlutter
-using .tecplotIO
 using .InitModel
+using .tecplotIO
 using .FEMMethods
+using .SolveStatic, .SolveForced, .SolveFlutter
 
 function run_model(DVDict, evalFuncs; solverOptions=Dict())
     """
-    The interface into the source code
+    Runs the model but does not return anything.
+    The solution structures hang around as global variables.
+
     """
     # ==============================================================================
     #                         Initializations
@@ -64,6 +64,7 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
+
     # --- Write mesh to tecplot for later visualization ---
     tecplotIO.write_mesh(structMesh, outputDir, "mesh.dat")
 
@@ -71,15 +72,14 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     #                         Static hydroelastic solution
     # ==============================================================================
     if solverOptions["run_static"]
-        STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncsDict = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
+        global STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
     end
 
     # ==============================================================================
     #                         Forced vibration solution
     # ==============================================================================
     if solverOptions["run_forced"]
-        forcedCostFuncs = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
+        global forcedCostFuncs = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
     end
 
     # ==============================================================================
@@ -92,20 +92,15 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
         obj = SolveFlutter.evalFuncs(DVDict, solverOptions)
         flutterCostFuncsDict = Dict(
             "ksflutter" => obj,
-            # "lockin" => obj.lockin,
-            # "gap" => obj.gap
         )
         costFuncsDict = merge(costFuncsDict, flutterCostFuncsDict)
     end
-
-    return costFuncsDict
 end
 
 function set_defaultOptions()
     """
     Set the default solver options
     Case sensitive
-    TODO: maybe move this to a defaultOptions file
     """
     solverOptions = Dict(
         # --- I/O ---
@@ -138,14 +133,12 @@ end # set_defaultOptions
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function compute_costFuncs(SOL, evalFuncs, solverOptions)
+function evalFuncs(evalFuncs, solverOptions)
     """
     Common interface to compute cost functions
 
     Inputs
     ------
-    sol : Dict()
-        Dictionary containing solution data
     evalFuncs : 1d array
         List of what cost functions to evaluate
     """
@@ -154,12 +147,12 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
 
     # --- Solver cost funcs ---
     staticCostFuncs = [
-    # "psitip"
-    # "wtip"
-    # "lift"
-    # "moment"
-    # "cl"
-    # "cmy"
+        "psitip"
+        "wtip"
+        "lift"
+        "moment"
+        "cl"
+        "cmy"
     ]
     forcedCostFuncs = [
         "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
@@ -173,17 +166,21 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
         "gap" # mode gap width
     ]
 
-    # # Assemble all possible
-    # allCostFuncs = hcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
+    # Assemble all possible
+    allCostFuncs = vcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
 
-    # Loop over all evalFuncs
+    # ************************************************
+    #     Loop over all evalFuncs
+    # ************************************************
     for k in evalFuncs
 
         if k in staticCostFuncs
-            staticEvalFuncs = SolveStatic.evalFuncs(states, forces, k)
+            staticEvalFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
             evalFuncsDict[k] = staticEvalFuncs[k]
+
         elseif k in forcedCostFuncs
             SolveForced.evalFuncs()
+
         elseif k in flutterCostFuncs
             # Unpack solver data
             ρKS = solverOptions["rhoKS"]
@@ -191,24 +188,22 @@ function compute_costFuncs(SOL, evalFuncs, solverOptions)
             # flutterEvalFuncs = SolveFlutter.evalFuncs(x, SOL, ρKS)
             flutterEvalFuncs, _ = SolveFlutter.postprocess_damping(SOL.N_MAX_Q_ITER, SOL.flowHistory, SOL.NTotalModesFound, SOL.nFlow, SOL.eigs_r, SOL.iblank, ρKS)
             evalFuncsDict[k] = flutterEvalFuncs
+
         else
             println("Unsupported cost function: ", k)
         end
     end
     return evalFuncsDict
-end # compute_costFuncs
+end # evalFuncs
 
-function compute_funcSens(SOL, DVDict, evalFuncs;
-    # --- Optional args ---
-    mode="FiDi",
-    solverOptions=Dict())
-    # ---------------------------
-    #   Mesh generation
-    # ---------------------------
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-    nElem = FOIL.nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
-    # --- Write mesh to tecplot for later visualization ---
+function evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="FiDi")
+
+    # # ---------------------------
+    # #   Mesh generation
+    # # ---------------------------
+    # FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    # nElem = FOIL.nNodes - 1
+    # structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"]; config=solverOptions["config"])
 
     # ---------------------------
     #   Cost functions
@@ -216,10 +211,10 @@ function compute_funcSens(SOL, DVDict, evalFuncs;
     costFuncsSensDict = Dict()
 
     # ==============================================================================
-    #                         Flutter solution
+    #                         Cost functions
     # ==============================================================================
     if solverOptions["run_flutter"]
-        costFuncsSensDict = SolveFlutter.evalFuncsSens(SOL, structMesh, elemConn, DVDict, solverOptions, evalFuncs; mode=mode)
+        costFuncsSensDict = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
     end
 
     return costFuncsSensDict

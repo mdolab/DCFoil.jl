@@ -24,6 +24,9 @@ using Zygote, ChainRulesCore, FiniteDifferences
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
 
+# ==============================================================================
+#                         Unsteady hydro functions
+# ==============================================================================
 function compute_theodorsen(k)
     """
     Theodorsen's transfer function for unsteady aero/hydrodynamics
@@ -180,6 +183,7 @@ function compute_cldROM(k, hcRatio, Fnc)
     CForce = p00 + p10 * hcRatio + p01 * k + p20 * hcRatio * hcRatio + p11 * hcRatio * k + p02 * kSquared + p12 * hcRatio * kSquared + p03 * kSquared * k
     return CForce
 end
+
 #  NOTE: the moments are about the elastic axis
 function compute_cmsROM(k, hcRatio, Fnc)
     """
@@ -299,18 +303,11 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
 
     cl = (2 * γ) ./ (U∞ * chordVec) # sectional lift coefficient cl(y) = cl_α*α
     clα = cl / (α₀ + 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
-    
+
     # --- Interpolate lift slopes onto domain ---
-    # pGlauert = plot(LinRange(0, 2.7, 250), clα)
-    # xq = LinRange(-semispan, 0, nNodes)
-    # cl_α = linear(y, clα, xq) # Use BYUFLOW lab math function
-    # DO NOT USE LINRANGE
     dl = semispan / (nNodes - 1)
     xq = -semispan:dl:0
-    # if length(xq) != nNodes
-    #     println("ERROR: xq is not the same length as nNodes")
-    # end
-    
+
     # TODO: THERE IS A BUG ON THIS LINE THAT MAKES THE DERIVATIVES WRT SPAN FOR THE WHOLE CODE WRONG
     cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
 
@@ -355,10 +352,9 @@ function use_free_surface(γ, α₀, U∞, chordVec, h)
     return γ_FS
 end
 
-
-# ************************************************
-#     Hydrodynamic strip forces
-# ************************************************
+# ==============================================================================
+#                         Hydrodynamic strip forces
+# ==============================================================================
 function compute_node_stiff(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     """
     Hydrodynamic stiffness force
@@ -444,7 +440,6 @@ function compute_node_mass(b, ab, rho_f)
     return M_f
 end
 
-# function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, FOIL, elemType="BT2")
 function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType="BT2")
     """
     Compute the steady aerodynamic influence coefficients (AICs) for a given mesh
@@ -565,8 +560,6 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
     return AIC, planformArea
 end
 
-# function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, FOIL, U∞, ω, elemType="BT2")
-# function compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
 function compute_AICs(dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
     """
     Compute the AIC matrix for a given mesh using LHS convention
@@ -721,7 +714,6 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     #   Strip theory
     # ---------------------------
     AIC = zeros(nGDOF, nGDOF)
-    # _, planformArea = compute_steady_AICs!(AIC, mesh, FOIL, elemType)
     _, planformArea = compute_steady_AICs!(AIC, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # --- Compute fluid tractions ---
@@ -782,107 +774,14 @@ end
 function apply_BCs(K, C, M, globalDOFBlankingList::Vector{Int64})
     """
     Applies BCs for nodal displacements
-
     """
-    # newK = K[
-    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    # ]
-    # newM = M[
-    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    # ]
-    # newC = C[
-    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    # ]
+
     newK = K[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newM = M[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newC = C[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
+
     return newK, newC, newM
 end
-
-# ==============================================================================
-#                         Custom derivative routines
-# ==============================================================================
-
-# function ChainRulesCore.rrule(::typeof(compute_glauert_circ), semispan, chordVec, α₀, U∞, nNodes, h, useFS)
-
-#     # Primal output
-#     y = compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h, useFS)
-
-#     function compute_glauert_circ_pullback(ȳ)
-
-#         semispan_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(x, chordVec, α₀, U∞, nNodes, h, useFS), semispan) .* ȳ
-
-#         chordvec_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(semispan, x, α₀, U∞, nNodes, h, useFS), chordVec) .* ȳ
-
-#         alfa_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(semispan, chordVec, x, U∞, nNodes, h, useFS), α₀) .* ȳ
-
-#         Uinf_b, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> compute_glauert_circ(semispan, chordVec, α₀, x, nNodes, h, useFS), U∞) .* ȳ
-
-#         nNodes_b = NoTangent()
-
-#         h_b = NoTangent()
-
-#         useFS_b = NoTangent()
-
-#         # Function return matches
-#         # self, args, kwargs
-#         return (NoTangent(), semispan_b, chordvec_b, alfa_b, Uinf_b, nNodes_b, h_b, useFS_b)
-#     end
-
-#     return y, compute_glauert_circ_pullback
-# end
-# These rules came from https://math.stackexchange.com/questions/2204475/derivative-of-bessel-function-of-second-kind-zero-order
-
-# function ChainRulesCore.rrule(::typeof(besselj0), k)
-
-#     j0 = besselj0(k)
-
-#     function besselj0_pullback(j̄0)
-#         # Pullback is function to propagate derivative info backwards
-#         ∂k = -besselj1(k) * j̄0
-#         return (NoTangent(), ∂k)
-#     end
-
-#     return j0, besselj0_pullback
-# end
-
-# function ChainRulesCore.rrule(::typeof(besselj1), k)
-
-#     j1 = besselj1(k)
-
-#     function besselj1_pullback(j̄1)
-#         # Pullback is function to propagate derivative info backwards
-#         j2 = besselj(2, k)
-#         ∂k = 0.5 * (besselj0(k) - j2) * j̄1
-#         return (NoTangent(), ∂k)
-#     end
-
-#     return j1, besselj1_pullback
-# end
-
-# function ChainRulesCore.rrule(::typeof(bessely0), k)
-
-#     y0 = bessely0(k)
-#     function bessely0_pullback(ȳ0)
-#         # Pullback is function to propagate derivative info backwards
-#         ∂k = -bessely1(k) * ȳ0
-#         return (NoTangent(), ∂k)
-#     end
-
-#     return y0, bessely0_pullback
-# end
-
-# function ChainRulesCore.rrule(::typeof(bessely1), k)
-
-#     y1 = bessely1(k)
-#     function bessely1_pullback(ȳ1)
-#         # Pullback is function to propagate derivative info backwards
-#         y2 = bessely(2, k)
-#         ∂k = 0.5 * (bessely0(k) - y2) * ȳ1
-#         return (NoTangent(), ∂k)
-#     end
-# end
-
 
 end # end module
 
