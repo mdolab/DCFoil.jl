@@ -7,9 +7,9 @@
 
 
 module Hull
-    function compute_freqs()
-        """
-        Compute the hull's rigid body natural frequencies
-        """
-    end
+    # function compute_freqs()
+    #     """
+    #     Compute the hull's rigid body natural frequencies
+    #     """
+    # end
 end

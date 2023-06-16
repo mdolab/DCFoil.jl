@@ -6,7 +6,7 @@
 # @Desc    :   Derivatives wrt fiber angle
 
 using Printf # for better file name
-using JLD
+using FileIO
 using ForwardDiff, FiniteDifferences, Zygote
 include("../../src/DCFoil.jl")
 
@@ -231,7 +231,7 @@ using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .Solution
 #     structMesh, b_ref, chordVec)
 # fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x1) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x1, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
 # # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
-# # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
+# # save("./RADDiff.jld2", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
 # # println("deriv = ", derivs)
 
 # # THIS IS THE FINAL STEP
@@ -273,11 +273,11 @@ for (ii, dh) in enumerate(steps)
     DVDict[dvKey] -= dh
 end
 
-save("./FWDDiff.jld", "derivs", derivs, "steps", steps, "funcVal", funcVal)
+save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
 
 # ************************************************
 #     Does it all work?
 # ************************************************
 funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
 funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
-save("./RAD.jld", "derivs", funcsSensAD, "funcVal", funcVal)
+save("./RAD.jld2", "derivs", funcsSensAD, "funcVal", funcVal)

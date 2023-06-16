@@ -36,13 +36,14 @@ from helperFuncs import get_bendingtwisting, compute_normFactorModeShape
 niceColors = sns.color_palette("tab10")
 plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
 cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
 # Continuous colormap
 niceColors = sns.color_palette("cool")
 plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
 ccm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
 
-def plot_wing(DVDict: dict, nNodes):
+def plot_wingPlanform(DVDict: dict, nNodes):
     """
     Use design var dictionary to plot the wing
 
@@ -162,7 +163,137 @@ def plot_wing(DVDict: dict, nNodes):
     return fig, ax
 
 
-def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fname=None):
+def plot_deformedShape(fig, ax, DVDict: dict, bending, twisting):
+    """
+    Creates a 3D surface visualization of the deformed wing with nodes as dots
+
+    Parameters
+    ----------
+    ax : _type_
+        _description_
+    DVDict : dict
+        _description_
+    u : _type_
+        _description_
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+
+    # ************************************************
+    #     Helper functions
+    # ************************************************
+    def get_LETE(twist: float, semichord: float):
+        """
+        Returns LE and TE height deltas from midchord
+
+          /|
+         / |
+        /  | angle
+        -------
+
+        """
+        le_dz = semichord * np.sin(twist)
+        le_dx = semichord - semichord * np.cos(twist)
+        te_dz = -le_dz
+        te_dx = le_dx
+        return le_dx, le_dz, te_dx, te_dz
+
+    # ************************************************
+    #     Determine points to plot
+    # ************************************************
+    semispan = DVDict["s"]
+    semichords = np.divide(DVDict["c"], 2)
+    nNodes = len(bending)
+
+    # Make dummy Z value first
+    X = np.linspace(-1, 1, 2)
+    Y = np.linspace(0, semispan, nNodes)
+    X, Y = np.meshgrid(X, Y)
+    Z = np.sin(X**2, Y**2)
+    for ii, twist in enumerate(twisting):
+        le_dx, le_dz, te_dx, te_dz = get_LETE(twist, semichords[ii])
+        Z[ii, :] = bending[ii] * le_dz / semispan + le_dx
+
+    from matplotlib import cm
+
+    # --- Plot the surface in 3D ---
+    surf = ax.plot_surface(
+        X,
+        Y,
+        Z,
+        cmap=cm.coolwarm,
+        antialiased=False,
+        # vmin=-bendLim,
+        # vmax=bendLim,
+        alpha=0.8,
+        zorder=1,
+    )
+
+    # --- Set labels and axes ---
+    ax.set_xlabel(r"$x$", labelpad=30)
+    ax.set_ylabel(r"$y$", labelpad=20)
+    ax.set_zlabel(r"$w(y)$ [in]", labelpad=20)
+    ax.view_init(20, 25)  # [elevtion, azimuthal]
+    cbar = fig.colorbar(surf, shrink=0.5, aspect=7)
+    cbar.ax.set_ylabel(r"$w(y)$ [in]", rotation=360)
+    cbar.ax.get_yaxis().labelpad = 25
+    ax.tick_params(pad=10)
+
+    return fig, ax
+
+
+def plot_static2d(
+    fig,
+    axes,
+    nodes,
+    bending,
+    twisting,
+    spanLift,
+    spanMoment,
+    funcs,
+    label,
+    lc,
+    fs_lgd: float,
+    iic: int,
+):
+
+    lpad = 40
+
+    cl = funcs["cl"]
+    lift = funcs["lift"]
+    mom = funcs["moment"]
+    cmy = funcs["cmy"]
+
+    ax = axes[0, 0]
+    ax.plot(nodes, bending, c=lc, label=label)
+    ax.set_ylabel("$w$ [m]", rotation=0, labelpad=lpad)
+
+    ax = axes[0, 1]
+    ax.plot(nodes, twisting, c=lc, label=label)
+    ax.set_ylabel("$\psi$ [$^{\\circ}$]", rotation=0, labelpad=lpad)
+
+    liftTitle = f"Lift ({lift:0.1e}N, $C_L$={cl:.2f})"
+    momTitle = f"Mom. ({mom:0.1e}N-m," + " $C_{My}$=" + f"{cmy:.2f})"
+
+    ax = axes[1, 0]
+    ax.plot(nodes, spanLift, c=lc, label=label)
+    ax.set_ylabel("$L$ [N]", rotation=0, labelpad=lpad)
+    ax.set_xlabel("$y$ [m]")
+    ax.annotate(liftTitle, xy=(0, 0.1 * iic), color=lc, xycoords="axes fraction", fontsize=fs_lgd)
+
+    ax = axes[1, 1]
+    ax.plot(nodes, spanMoment, c=lc, label=label)
+    ax.set_ylabel("$M_y$\n[N-m/m]", rotation=0, labelpad=lpad)
+    ax.set_xlabel("$y$ [m]")
+    ax.annotate(momTitle, xy=(0, 0.1 * iic), color=lc, xycoords="axes fraction", fontsize=fs_lgd)
+
+    return fig, axes
+
+
+def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, rao, flowSpeed, fs_lgd):
     """
     Plot forced response of the tip of the wing
 
@@ -180,52 +311,84 @@ def plot_forced(fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, fn
         frequency response of moment [N-m] about the midchord
     """
 
-    # Create figure object
-    labelpad = 30
-    legfs = 15
-    nrows = 2
-    ncols = 2
-    figsize = (6 * ncols, 6 * nrows)
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
     xLabel = "$f_{ext}$ [Hz]"
     # ************************************************
     #     Plot tip deflections
     # ************************************************
     ax = axes[0, 0]
-    yLabel = r"$\frac{w}{w(f_{ext}=0)}$"
+    yLabel = r"$\frac{w}{w_{f0}}$"
     nondim = dynTipBending[0]  # nondimensionalize by the static value
-    ax.plot(fExtSweep, dynTipBending / nondim, c=cm[0])
-    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    # ax.plot(fExtSweep, dynTipBending / nondim, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+
+    yLabel = r"$\left|H_{ww}(\omega)\right|$"
+    realRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(rao[:, -4, -4]):
+        realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    # ax.annotate("$U_{\infty}=$%.1f" % (flowSpeed), xy=(0.8, 0.9), xycoords="axes fraction", color=cm[0])
+    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
     ax.set_xlabel(xLabel)
 
     ax = axes[0, 1]
-    yLabel = r"$\frac{\psi}{\psi(f_{ext}=0)}$"
-    nondim = dynTipTwisting[0]  # nondimensionalize by the static value
-    ax.plot(fExtSweep, dynTipTwisting / nondim, c=cm[0])
-    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    # yLabel = r"$\frac{\psi}{\psi_{f0}}$"
+    # nondim = dynTipTwisting[0]  # nondimensionalize by the static value
+    # ax.plot(fExtSweep, dynTipTwisting / nondim, c=cm[0])
+    yLabel = r"$\left|H_{\psi\psi}(\omega)\right|$"
+    realRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(rao[:, -2, -2]):
+        realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
     ax.set_xlabel(xLabel)
 
-    # ************************************************
-    #     Plot forces
-    # ************************************************
     ax = axes[1, 0]
-    yLabel = r"$\frac{L}{L(f_{ext}=0)}$"  # Lift
-    nondim = dynLift[0]  # nondimensionalize by the static value
-    ax.plot(fExtSweep, dynLift / nondim, c=cm[0])
-    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
+    yLabel = r"$\frac{w}{w_{f0}}$"
+    nondim = dynTipBending[0]  # nondimensionalize by the static value
+
+    yLabel = r"$\left|H_{w\psi}(\omega)\right|$"
+    realRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(rao[:, -4, -2]):
+        realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
     ax.set_xlabel(xLabel)
 
-    ax = axes[1, 1]
-    yLabel = r"$\frac{M_y}{M_y(f_{ext}=0)}$"  # Moment
-    nondim = dynMoment[0]  # nondimensionalize by the static value
-    ax.plot(fExtSweep, dynMoment / nondim, c=cm[0])
-    ax.set_ylabel(yLabel, labelpad=labelpad, rotation=0)
-    ax.set_xlabel(xLabel)
+    # ax = axes[1, 1]
+    # # yLabel = r"$\frac{\psi}{\psi_{f0}}$"
+    # # nondim = dynTipTwisting[0]  # nondimensionalize by the static value
+    # # ax.plot(fExtSweep, dynTipTwisting / nondim, c=cm[0])
+    # yLabel = r"$\left|H_{\psi w}(\omega)\right|$"
+    # realRAO = np.zeros_like(fExtSweep)
+    # for ii, entry in enumerate(rao[:, -4, -2]):
+    #     realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    # ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    # ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    # ax.set_xlabel(xLabel)
+
+    # NOTE: TBH these are not terribly useful unless you're looking at transmitted force into the hull of the boat
+    # which you should not, because you want to couple the foil to the ship model!
+    # # ************************************************
+    # #     Plot forces
+    # # ************************************************
+    # ax = axes[1, 0]
+    # yLabel = r"$\frac{|L|}{L_{f0}}$"  # Lift
+    # nondim = dynLift[0]  # nondimensionalize by the static value
+    # ax.plot(fExtSweep, dynLift / nondim, c=cm[0])
+    # ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    # ax.set_xlabel(xLabel)
+
+    # ax = axes[1, 1]
+    # yLabel = r"$\frac{M_y}{M_{y_{f0}}}$"  # Moment
+    # nondim = dynMoment[0]  # nondimensionalize by the static value
+    # ax.plot(fExtSweep, dynMoment / nondim, c=cm[0])
+    # ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    # ax.set_xlabel(xLabel)
 
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
-
-    fig.suptitle("Frequency response spectra")
 
     return fig, axes
 
@@ -392,7 +555,9 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
     return fig, axes
 
 
-def plot_modeShapes(comm, vRange, y, flutterSol: dict, fact: float, ls="-", alpha=1.0, units="m/s", outputDir=None):
+def plot_modeShapes(
+    comm, vRange, y, chordVec, flutterSol: dict, fact: float, ls="-", alpha=1.0, units="m/s", outputDir=None
+):
     """
     Plot the hydroelastic mode shapes where each processor has its own mode
 
@@ -419,8 +584,6 @@ def plot_modeShapes(comm, vRange, y, flutterSol: dict, fact: float, ls="-", alph
     legfs = 20
     xLabel = r"$\widebar{y}$ [-]"
 
-    figDict = {}
-    axesDict = {}
     vLow = vRange[0]
     vHigh = vRange[1]
 
@@ -620,7 +783,7 @@ def plot_vg_vf_rl(
     if instabPts is not None:
         for pt in instabPts:
             iic = (int(pt[2]) - 1) % len(cm)
-            if units =="kts":
+            if units == "kts":
                 critSpeed = 1.94384 * pt[0]
             elif units == "m/s":
                 critSpeed = pt[0]
@@ -955,7 +1118,7 @@ def set_my_plot_settings():
     myOptions = {
         "font.size": fs,
         "font.family": "sans-serif",  # set to "serif" to get the same as latex
-        # "font.sans-serif": ["Helvetica"],  # this does not work on all systems
+        "font.sans-serif": ["Helvetica"],  # this does not work on all systems
         "text.usetex": False,
         "text.latex.preamble": [
             r"\usepackage{lmodern}",  # latin modern font

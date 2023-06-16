@@ -18,7 +18,7 @@ export solve
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
-using JLD
+using FileIO
 
 # --- DCFoil modules ---
 # First include them
@@ -65,6 +65,8 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
+    U∞ = solverOptions["U∞"]
+    α₀ = DVDict["α₀"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
@@ -83,10 +85,12 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     globalCf_i = copy(globalKs) * 0
     extForceVec = copy(F) * 0 # this is a vector excluded the BC nodes
     extForceVec[end-1] = tipForceMag # this is applying a tip twist
+    extForceVec[end-3] = tipForceMag # this is applying a tip lift
     LiftDyn = zeros(length(fSweep)) # * 0im
     MomDyn = zeros(length(fSweep)) # * 0im
     TipBendDyn = zeros(length(fSweep)) # * 0im
     TipTwistDyn = zeros(length(fSweep)) # * 0im
+    RAO = zeros(ComplexF64, length(fSweep), length(F), length(F))
 
     # ---------------------------
     #   Pre-solve system
@@ -130,22 +134,25 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         # ---------------------------
         #   Solve for dynamic states
         # ---------------------------
-        # qSol, _ = converge_r(q)
-        qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
+        # The below way is the numerical way to do it but might skip if this doesntwork
+        # qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
+        H = inv(D) # RAO
+        qSol = real(H * extForceVec)
         uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
         # ---------------------------
         #   Get hydroloads at freq
         # ---------------------------
         fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-        fDynamic, DynLift, DynMoment = Hydro.integrate_hydroLoads(uSol, fullAIC, DFOIL, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
+        fDynamic, DynLift, DynMoment = Hydro.integrate_hydroLoads(uSol, fullAIC, α₀, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
 
         # --- Store total force and tip deflection values ---
-        global LiftDyn[f_ctr] = abs(DynLift[end])
-        global MomDyn[f_ctr] = abs(DynMoment[end])
+        LiftDyn[f_ctr] = (DynLift)
+        MomDyn[f_ctr] = (DynMoment)
+        RAO[f_ctr, :, :] = H
         if elemType == "BT2"
-            global TipBendDyn[f_ctr] = abs(uSol[end-3])
-            global TipTwistDyn[f_ctr] = abs(uSol[end-1])
+            TipBendDyn[f_ctr] = (uSol[end-3])
+            TipTwistDyn[f_ctr] = (uSol[end-1])
             phaseAngle = angle(uSol[end-3])
         end
 
@@ -158,7 +165,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ************************************************
     #     Write solution out to files
     # ************************************************
-    write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir)
+    write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO, outputDir)
 
     # TODO:
     costFuncs = nothing
@@ -167,7 +174,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     return costFuncs
 end
 
-function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="./OUTPUT/")
+function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO, outputDir="./OUTPUT/")
     """
     Write out the dynamic results
     """
@@ -183,20 +190,23 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, outputDir="
     close(outfile)
 
     # --- Write tip bending ---
-    fname = workingOutput * "tipBendDyn.jld"
+    fname = workingOutput * "tipBendDyn.jld2"
     save(fname, "data", TipBendDyn)
 
     # --- Write tip twist ---
-    fname = workingOutput * "tipTwistDyn.jld"
+    fname = workingOutput * "tipTwistDyn.jld2"
     save(fname, "data", TipTwistDyn)
 
     # --- Write dynamic lift ---
-    fname = workingOutput * "totalLiftDyn.jld"
+    fname = workingOutput * "totalLiftDyn.jld2"
     save(fname, "data", LiftDyn)
 
     # --- Write dynamic moment ---
-    fname = workingOutput * "totalMomentDyn.jld"
+    fname = workingOutput * "totalMomentDyn.jld2"
     save(fname, "data", MomDyn)
+
+    fname = workingOutput * "RAO.jld2"
+    save(fname, "data", RAO)
 
 end
 
@@ -340,6 +350,8 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
 
         # elseif mode == "RAD" # Reverse automatic differentiation
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
+    elseif mode == "Analytical"
+        ∂r∂u = CONSTANTS.Dmat
     else
         error("Invalid mode")
     end

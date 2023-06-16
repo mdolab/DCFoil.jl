@@ -17,7 +17,6 @@ include("./NewtonRhapson.jl")
 include("./EigenvalueProblem.jl")
 using .NewtonRhapson, .EigenvalueProblem
 using Zygote
-using ForwardDiff
 
 const RealOrComplex = Union{Real,Complex}
 
@@ -61,14 +60,17 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
         staticOffset = [0, 0, alfaRad]
     elseif elemType == "BT2"
         nDOF = 4
+        nGDOF = 6 # number of DOFs on node in global coordinates
         staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
+        staticOffset = [0, 0, 0, 0, alfaRad, 0]
     end
 
     # Add static angle of attack to deflected foil
     w = foilStructuralStates[1:nDOF:end]
+    w = foilStructuralStates[1:nGDOF:end]
     foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
 
-    return foilTotalStates, nDOF
+    return foilTotalStates, nGDOF
 end # return_totalStates
 
 # ==============================================================================

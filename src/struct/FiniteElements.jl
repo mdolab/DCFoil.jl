@@ -12,12 +12,12 @@
 module LinearBeamElem
 """
 
-    2-noded linear beam element
+    2-noded 2nd order linear beam element
 
         o---------o
         1  E,ρₛ,I  2
 
-        {q} = [q₁, q₂, q₃, q₄, q₅, q₆]
+        {q} = [q₁, q₂, q₃, q₄, q₅, q₆, q₇, q₈]ᵀ
 
     The shape function for the element with the {q} vector) is
         w(x, t) = <something-already-derived-in-textbooks>
@@ -317,23 +317,31 @@ include("../constants/SolutionConstants.jl")
 using .SolverRoutines
 using .SolutionConstants
 
-# function make_mesh(nElem::Int64, FOIL; config="wing", rotation=0.0)
-function make_mesh(nElem::Int64, span; config="wing", rotation=0.0)
+# --- Globals ---
+global XDIM = 1
+global YDIM = 2
+global ZDIM = 3
+
+function make_mesh(nElem::Int64, span; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
     """
     Makes a mesh and element connectivity
-    First element is always origin
+    First element is always origin (x,y,z) = (0,0,0)
+    You do not necessarily have to make this mesh yourself every run
+
     Inputs
     ------
-    nElem: number of elements
-    FOIL: struct with foil properties
-    config: "wing" or "t-foil"
-    rotation: rotation of the foil in degrees
+    nElem: 
+        number of elements
+    config: 
+        "wing" or "t-foil"
+    rotation: 
+        rotation of the foil in degrees where 0 is lifting up in 'z'
     Outputs
     -------
     mesh
         (nNodes, nDim) array
     elemConn
-        (nElem, nNodesPerElem) array
+        (nElem, nNodesPerElem) array saying which elements hold which nodes
     """
     mesh = Array{Float64}(undef, nElem + 1, 3)
     elemConn = Array{Int64}(undef, nElem, 2)
@@ -352,21 +360,59 @@ function make_mesh(nElem::Int64, span; config="wing", rotation=0.0)
         else
             # Set up a line mesh
             dl = span / (nElem) # dist btwn nodes
-            mesh_z[:, 1] = collect((0:dl:span))
+            mesh_z[:, YDIM] = collect((0:dl:span))
             for nodeIdx in 1:nElem+1 # loop nodes and rotate
                 mesh_z[nodeIdx, :] = rotate3d(mesh_z[nodeIdx, :], rot; axis="x")
             end
+            for ee in 1:nElem
+                elemConn_z[ee, 1] = ee
+                elemConn_z[ee, 2] = ee + 1
+            end
         end
     elseif config == "t-foil"
-        mesh_z
+        mesh = Array{Float64}(undef, nElem + nElStrut + 1, 3)
+        elemConn = Array{Int64}(undef, nElem + nElStrut, 2)
+        # Simple meshes starting from junction at zero
+        # Mesh foil wing
+        dl = span / (nElem) # dist btwn nodes
+        foilwingMesh = collect(0:dl:span)
+        # Mesh strut
+        dlStrut = spanStrut / (nElStrut - 1)
+        strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
+        # This is basically avoiding double counting the nodes
+        if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
+            println("Default rotation of zero")
+            nodeCtr = 1
+            # Add foil wing first
+            for nodeIdx in 1:nElem+1
+                mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeCtr
+                elemConn[nodeCtr, 2] = nodeCtr + 1
+                nodeCtr += 1
+            end
+            for nodeIdx in 1:nElStrut # loop elem, not nodes
+                if nodeIdx <= nElStrut - 1
+                    mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[nodeIdx]]
+                    elemConn[nodeCtr, 1] = nodeCtr
+                    elemConn[nodeCtr, 2] = nodeCtr + 1
+                end
+                nodeCtr += 1
+            end
+        else
+
+        end
+
+        return mesh, elemConn
+
     end
+
     return copy(mesh_z), copy(elemConn_z)
 
 end
 
 function rotate3d(dataVec, rot; axis="x")
     """
-    Rotates a 3D vector about x-axis by rot radians
+    Rotates a 3D vector about axis by rot radians (RH rule!)
     """
     rotMat = Array{Float64}(undef, 3, 3)
     c = cos(rot)
@@ -377,21 +423,54 @@ function rotate3d(dataVec, rot; axis="x")
             0 c -s
             0 s c
         ]
+    elseif axis == "y"
+        rotMat = [
+            c 0 s
+            0 1 0
+            -s 0 c
+        ]
+    elseif axis == "z"
+        rotMat = [
+            c -s 0
+            s c 0
+            0 0 1
+        ]
     else
-        println("Only x-axis rotation implemented")
+        println("Only axis rotation implemented")
     end
     transformedVec = rotMat * dataVec
     return transformedVec
 end
 
+function get_transMat(nVec, elemType="BT2")
+    """
+    Returns the transformation matrix for a given element type
+    """
+    if elemType == "BT2"
+        Γ = [
+            # Node 1
+            nVec[1] nVec[2] nVec[3] 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # w1
+            0.00000 0.00000 0.00000 1.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # w1'
+            0.00000 0.00000 0.00000 0.0 1.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # ψ1
+            0.00000 0.00000 0.00000 0.0 0.0 1.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # ψ1'
+            # Node 2
+            0.00000 0.00000 0.00000 0.0 0.0 0.0 nVec[1] nVec[2] nVec[3] 0.0 0.0 0.0 # w2
+            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 1.0 0.0 0.0 # w2'
+            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 1.0 0.0 # ψ2
+            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 1.0 # ψ2'
+        ]
+    end
+    return Γ
+end
+
 function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
     """
-    Generic function to assemble the mass and stiffness matrices
+    Generic function to assemble the global mass and stiffness matrices
 
     Inputs
     ------
-    coordMat: 2D array of coordinates of nodes
-    elemConn: 2D array of element connectivity (nElem x 2)
+        coordMat: 2D array of coordinates of nodes
+        elemConn: 2D array of element connectivity (nElem x 2)
     """
 
     # --- Initialize the local DOF vector ---
@@ -401,6 +480,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         nnd = 3
     elseif elemType == "BT2"
         nnd = 4
+        nndG = 6
     else
         println(elemType, " element type not implemented")
     end
@@ -409,9 +489,10 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     # --- Initialize matrices ---
     nElem::Int64 = size(elemConn)[1]
     nNodes = nElem + 1
-    globalK::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
-    globalM::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
-    globalF::Vector{Float64} = zeros(nnd * (nNodes))
+    ndim = ndims(coordMat[1, :])
+    globalK::Matrix{Float64} = zeros(nndG * (nNodes), nndG * (nNodes))
+    globalM::Matrix{Float64} = zeros(nndG * (nNodes), nndG * (nNodes))
+    globalF::Vector{Float64} = zeros(nndG * (nNodes))
 
 
     # --- Debug printout for initialization ---
@@ -429,7 +510,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     # ************************************************
     #     Element loop
     # ************************************************
-    # --- Zygote buffers ---
+    # --- Zygote buffer initializations ---
     globalK_z = Zygote.Buffer(globalK)
     globalM_z = Zygote.Buffer(globalM)
     globalF_z = Zygote.Buffer(globalF)
@@ -444,8 +525,9 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # ---------------------------
         #   Extract element info
         # ---------------------------
-        lᵉ::Float64 = norm(coordMat[elemIdx+1] - coordMat[elemIdx], 2) # length of elem
-        nVec::Float64 = (coordMat[elemIdx+1] - coordMat[elemIdx]) / lᵉ # unit normal vector
+        nVec::Vector{Float64} = (coordMat[elemIdx+1, :] - coordMat[elemIdx, :])
+        lᵉ::Float64 = norm(nVec, 2) # length of elem
+        nVec = nVec / lᵉ # normalize
         EIₛ::Float64 = FOIL.EIₛ[elemIdx]
         GJₛ::Float64 = FOIL.GJₛ[elemIdx]
         Kₛ::Float64 = FOIL.Kₛ[elemIdx]
@@ -472,24 +554,37 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         fLocal::Vector{Float64} = zeros(nnd * 2)
 
         # ---------------------------
+        #   Transform from local to global
+        # ---------------------------
+        # The local coordinate system is {u} while the global is {U}
+        # {u} = [Γ] * {U}
+        # where [Γ] is the transformation matrix
+        Γ = get_transMat(nVec, elemType)
+        kElem = Γ' * kLocal * Γ
+        mElem = Γ' * mLocal * Γ
+        fElem = Γ' * fLocal
+
+        # ---------------------------
         #   Assemble into global matrices
         # ---------------------------
+        # The following procedure generally follows:
+        #  AEROSP510 notes and python code, Engineering Vibration Chapter 8 (Inman 2014)
         for nodeIdx ∈ 1:2 # loop over nodes in element
-            for dofIdx ∈ 1:nnd # loop over DOFs in node
-                idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * nnd + dofIdx) # idx of global dof (row of global matrix)
-                idxRowₑ = (nodeIdx - 1) * nnd + dofIdx
+            for dofIdx ∈ 1:nndG # loop over DOFs in node
+                idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * nndG + dofIdx) # idx of global dof (row of global matrix)
+                idxRowₑ = (nodeIdx - 1) * nndG + dofIdx
 
                 # --- Assemble RHS ---
-                globalF_z[idxRow] = fLocal[idxRowₑ]
+                globalF_z[idxRow] = fElem[idxRowₑ]
 
                 # --- Assemble LHS ---
                 for nodeColIdx ∈ 1:2 # loop over nodes in element
-                    for dofColIdx ∈ 1:nnd # loop over DOFs in node
-                        idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nnd + dofColIdx # idx of global dof (col of global matrix)
-                        idxColₑ = (nodeColIdx - 1) * nnd + dofColIdx
+                    for dofColIdx ∈ 1:nndG # loop over DOFs in node
+                        idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nndG + dofColIdx # idx of global dof (col of global matrix)
+                        idxColₑ = (nodeColIdx - 1) * nndG + dofColIdx
 
-                        globalK_z[idxRow, idxCol] += kLocal[idxRowₑ, idxColₑ]
-                        globalM_z[idxRow, idxCol] += mLocal[idxRowₑ, idxColₑ]
+                        globalK_z[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
+                        globalM_z[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
                     end
                 end
             end

@@ -7,7 +7,7 @@ set -e
 #                             Plots
 # ==============================================================================
 # Run post processing
-cd POSTPROCESSING
+cd postprocessing
 
 # python ./run_postprocessing.py --case testModal
 # python ./run_postprocessing.py --case testWater --debug_plots --is_modal
@@ -17,10 +17,12 @@ cd POSTPROCESSING
 # # ************************************************
 # #     IMOCA cases
 # # ************************************************
-# python ./run_postprocessing.py --case IMOCA60KeelSS --is_flutter
-# python ./run_postprocessing.py --case IMOCA60Keel_ss_f15.0_w0.0 --is_modal
-# python ./run_postprocessing.py --case IMOCA60KeelCFRP --is_flutter
+# python ./run_postprocessing.py --case IMOCA60Keel_ss_f0.0_w0.0 --is_flutter --is_static
+# # python ./run_postprocessing.py --case IMOCA60Keel_ss_f15.0_w0.0 --is_modal
+# python ./run_postprocessing.py --case IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced
 # python ./run_postprocessing.py --case IMOCA60Keel_cfrp_f15.0_w0.0 --is_modal
+# python ./run_postprocessing.py --case IMOCA60Keel_ss_f0.0_w0.0 IMOCA60Keel_cfrp_f15.0_w0.0 --is_static
+
 
 # # ---------------------------
 # #     No bulb IMOCA
@@ -32,8 +34,8 @@ cd POSTPROCESSING
 #     Akcabay plots
 # ************************************************
 # python ./run_postprocessing.py --case akcabay_f-15_w0 --is_flutter
-python ./run_postprocessing.py --case akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter
-python ./run_postprocessing.py --case akcabay_cfrp_f-15.0_w0.0 --is_flutter
+# python ./run_postprocessing.py --case akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_static --is_forced
+python ./run_postprocessing.py --case akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_forced
 
 cd ..
 

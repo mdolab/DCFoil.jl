@@ -23,5 +23,6 @@ struct FlutterSolution
     flowHistory
     nFlow::Int64
     iblank
+    p_r # nondim eigvals (for obj)
 end
 end

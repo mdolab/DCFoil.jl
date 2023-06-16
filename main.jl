@@ -2,8 +2,7 @@
 
 # @File    :   main.jl
 # @Time    :   2022/06/16
-# @Author  :   Galen Ng
-# @Desc    :   Main executable for the project
+# @Desc    :   Main executable for running DCFoil
 
 using Printf # for better file name
 include("src/DCFoil.jl")
@@ -28,10 +27,10 @@ tipMass = false
 
 # Uncomment here
 run_static = true
-# run_forced = true
+run_forced = true
 run_modal = true
 run_flutter = true
-debug = true
+# debug = true
 # tipMass = true
 
 # ************************************************
@@ -62,36 +61,53 @@ DVDict = Dict(
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+    "strut" => 0.4, # from Yingqian
 )
 
 solverOptions = Dict(
-    # --- I/O ---
-    "name" => "akcabay-swept",
+    # ---------------------------
+    #   I/O
+    # ---------------------------
+    # "name" => "akcabay-swept",
+    "name" => "t-foil",
     "debug" => debug,
-    # --- General solver options ---
+    # ---------------------------
+    #   General appendage options
+    # ---------------------------
     "config" => "wing",
-    "nNodes" => nNodes,
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "rotation" => 0.0, # deg
-    "material" => "cfrp", # preselect from material library
+    # "config" => "t-foil",
+    "nNodes" => nNodes, # number of nodes on foil half wing
+    "nNodeStrut" => 10, # nodes on strut
+    "rotation" => 45.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
     "tipMass" => tipMass,
+    # ---------------------------
+    #   Flow
+    # ---------------------------
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
+    # ---------------------------
+    #   Structure
+    # ---------------------------
+    "material" => "cfrp", # preselect from material library
+    # ---------------------------
+    #   Solver modes
+    # ---------------------------
     # --- Static solve ---
     "run_static" => run_static,
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fSweep" => fSweep,
     "tipForceMag" => tipForceMag,
-    # --- Eigen solve ---
+    # --- p-k (Eigen) solve ---
     "run_modal" => run_modal,
     "run_flutter" => run_flutter,
     "nModes" => nModes,
     "uRange" => uRange,
-    "maxQIter" => 500,
+    "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 80.0,
 )
 
@@ -118,10 +134,6 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-costFuncs = DCFoil.run_model(
-    DVDict,
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
-)
-
+DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+# costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")

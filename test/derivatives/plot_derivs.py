@@ -42,7 +42,7 @@ def load_jld(filename: str):
 #                         Main driver
 # ==============================================================================
 
-derivs = load_jld("../../eigenDerivs.jld")
+derivs = load_jld("../../eigenDerivs.jld2")
 breakpoint()
 if __name__ == "__main__":
     fname = "derivs.pdf"
@@ -73,17 +73,17 @@ if __name__ == "__main__":
     #   Load data
     # ---------------------------
     table = []
-    data = load_jld("FWDDiff.jld")
+    data = load_jld("FWDDiff.jld2")
     derivs = np.asarray(data["derivs"])
     steps = np.asarray(data["steps"])
     funcVal = np.asarray(data["funcVal"])
 
-    data = load_jld("CENTDiff.jld")
+    data = load_jld("CENTDiff.jld2")
     cderivs = np.asarray(data["derivs"])
     csteps = np.asarray(data["steps"])
     cfuncVal = np.asarray(data["funcVal"])
 
-    data = load_jld("FINDiff.jld")
+    data = load_jld("FINDiff.jld2")
     diffderivs = np.asarray(data["derivs"])
 
     # Put it into the table

@@ -21,13 +21,14 @@ export solve
 # --- Libraries ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote, FiniteDifferences, ForwardDiff
+using Zygote, FiniteDifferences
 using BenchmarkTools
 using TimerOutputs
 # using Profile # for profiling
 using Plots # for debugging
 using Printf
-using JLD # julia data format
+# using JLD2 # julia data format
+using FileIO
 using FiniteDifferences
 using Zygote
 using ChainRulesCore
@@ -91,7 +92,7 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     )
 
     # --- Store solution in struct ---
-    global FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank)
+    global FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank, p_r)
 
 
     # ************************************************
@@ -107,8 +108,8 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
         write_sol(FLUTTERSOL, solverOptions["outputDir"])
     end
 
-    # return obj, pmG, FLUTTERSOL
-    return obj
+    return obj, pmG, FLUTTERSOL
+    # return obj
 end # end solve
 
 function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
@@ -166,7 +167,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
     ChainRulesCore.ignore_derivatives() do
-        fname = @sprintf("%s/structMatrices.jld", outputDir)
+        fname = @sprintf("%s/structMatrices.jld2", outputDir)
         save(fname, "Ks", Ks, "Ms", Ms)
     end
 
@@ -208,7 +209,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("        BEGINNING MODAL SOLUTION")
     println("====================================================================================")
     if debug
-        rm("DebugOutput/", recursive=true)
+        rm("DebugOutput/", recursive=true, force=true) # remove the debug folder even if it doesn't exist
         mkpath("DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
@@ -317,23 +318,23 @@ function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     mkpath(workingOutput)
 
     # --- Store eigenvalues ---
-    fname = workingOutput * "eigs_r.jld"
+    fname = workingOutput * "eigs_r.jld2"
     save(fname, "data", true_eigs_r)
-    fname = workingOutput * "eigs_i.jld"
+    fname = workingOutput * "eigs_i.jld2"
     save(fname, "data", true_eigs_i)
 
     # --- Store eigenvectors ---
-    fname = workingOutput * "eigenvectors_r.jld"
+    fname = workingOutput * "eigenvectors_r.jld2"
     save(fname, "data", R_eigs_r)
-    fname = workingOutput * "eigenvectors_i.jld"
+    fname = workingOutput * "eigenvectors_i.jld2"
     save(fname, "data", R_eigs_i)
 
     # --- Store blanking ---
-    fname = workingOutput * "iblank.jld"
+    fname = workingOutput * "iblank.jld2"
     save(fname, "data", iblank)
 
     # --- Store flow history ---
-    fname = workingOutput * "flowHistory.jld"
+    fname = workingOutput * "flowHistory.jld2"
     save(fname, "data", flowHistory)
 end # end write_sol
 
@@ -347,11 +348,11 @@ function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeSh
     mkpath(workingOutput)
 
     # --- Store structural dynamics analysis ---
-    fname = workingOutput * "structModal.jld"
+    fname = workingOutput * "structModal.jld2"
     save(fname, "structNatFreqs", structNatFreqs, "structModeShapes", structModeShapes)
 
     # --- Store wetted modal analysis ---
-    fname = workingOutput * "wetModal.jld"
+    fname = workingOutput * "wetModal.jld2"
     save(fname, "wetNatFreqs", wetNatFreqs, "wetModeShapes", wetModeShapes)
 
 end # end function
@@ -574,7 +575,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     # save correlation matrix
     if debug
         ChainRulesCore.ignore_derivatives() do
-            fname = @sprintf("./DebugOutput/corrMatrix-%03i.jld", nFlow)
+            fname = @sprintf("./DebugOutput/corrMatrix-%03i.jld2", nFlow)
             save(fname, "corrMat", C)
         end
     end
@@ -958,7 +959,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
             if debug
                 ChainRulesCore.ignore_derivatives() do
                     lineCtr = 0
-                    fname = @sprintf("./DebugOutput/corrmetric-%03i.jld", nFlow)
+                    fname = @sprintf("./DebugOutput/corrmetric-%03i.jld2", nFlow)
                     save(fname, "corr", corr)
 
                     fname = @sprintf("./DebugOutput/m-%03i.dat", nFlow)
@@ -1043,7 +1044,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     end
 
                     # Store eigenvectors as JLD
-                    fname = @sprintf("./DebugOutput/sorted-eigenvectors-%03i.jld", nFlow)
+                    fname = @sprintf("./DebugOutput/sorted-eigenvectors-%03i.jld2", nFlow)
                     save(fname, "evec_r", R_eigs_r_tmp_z[:, :, nFlow], "evec_i", R_eigs_i_tmp_z[:, :, nFlow])
 
                     fname = @sprintf("./DebugOutput/iblank-%03i.dat", nFlow)
@@ -1907,18 +1908,35 @@ end # compute_KS
 #                         Cost func and sensitivity routines
 # ==============================================================================
 # All of these routines have to take the exact same inputs
-function evalFuncs(DVDict::Dict, solverOptions::Dict)
+function compute_costFuncs(DVDict::Dict, solverOptions::Dict)
     """
     Wrapper to solve and compute the cost func
     This is the primal solver
     """
 
-    obj = eval_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+    obj = cost_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
 
     return obj
 end
 
-function eval_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+function get_sol(DVDict::Dict, solverOptions::Dict)
+    """
+    This does the primal solve and returns the solution
+    It is used in the top-level evalFuncs call in DCFoil 
+    to return the sol struct
+    """
+
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+        setup_solver(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+
+    # Solve
+    obj, _, SOL = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
+    return SOL
+end
+
+function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
     """
     This does the primal solve but with a function signature compatible with Zygote
     """
@@ -1928,7 +1946,8 @@ function eval_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solve
         setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
 
     # Solve
-    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+    obj, _, _ = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
     return obj
 end
 
@@ -1942,7 +1961,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     if mode == "FiDi" # use finite differences the stupid way
 
-        sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(x, solverOptions),
+        sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
             DVDict)
 
         # --- Iterate over DVDict keys ---
@@ -1964,7 +1983,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
 
         sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
-                eval_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
+                cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
             DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"])
 
         # --- Order the sensitivities properly ---

@@ -17,8 +17,6 @@ export solve, do_newton_rhapson
 using FiniteDifferences
 using LinearAlgebra, Statistics
 using JSON
-# using ForwardDiff
-# using ReverseDiff
 using Zygote
 
 # --- DCFoil modules ---

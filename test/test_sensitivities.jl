@@ -9,8 +9,8 @@ include("../src/InitModel.jl")
 include("../src/struct/FiniteElements.jl")
 include("../src/solvers/SolveFlutter.jl")
 using .Hydro, .InitModel, .FEMMethods, .SolveFlutter
-using FiniteDifferences, ForwardDiff, Zygote
-using Plots, LaTeXStrings, Printf, LinearAlgebra
+using FiniteDifferences, Zygote
+using Plots,  Printf, LinearAlgebra
 
 # ==============================================================================
 #                         Aero-node tests
@@ -316,7 +316,7 @@ function test_theodorsenDeriv()
     plot!(kSweep, datai3, label="Im FracCalc", line=:dot, color=:blue, linewidth=lw, linealpha=la)
 
     plot!(title="Theodorsen function")
-    plot!(xlabel=L"k", ylabel=L"C(k)")
+    plot!(xlabel="k", ylabel="C(k)")
 
     # --- Plot derivatives ---
     p2 = plot(kSweep, dRD_r, label="Real RD", color=:red, linewidth=lw, linealpha=la)
@@ -334,8 +334,8 @@ function test_theodorsenDeriv()
     ylims!(-10, 2.0)
     xlims!(-0.1, 1.1)
     plot!(title="RAD wrt k")
-    xlabel!(L"k")
-    ylabel!(L"\partial C(k)/ \partial k")
+    xlabel!("k")
+    ylabel!("partial C(k)/ partial k")
     plot(p1, p2)
 
     savefig("theodorsen.png")
@@ -348,9 +348,9 @@ function test_pkflutterderiv(DVDict, solverOptions)
     TODO: every derivatives is good except span because of a bug in the spanwise lift slope, which should be superceded anyway
     """
 
-
-    funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-    funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+    @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
+    @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
+    @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 
     # Print it out
     for (k, v) in funcsSensAD
@@ -370,53 +370,53 @@ function test_pkflutterderiv(DVDict, solverOptions)
 end
 
 
-# # ==============================================================================
-# #                         MAIN DRIVER
-# # ==============================================================================
-# nNodes = 4
-# DVDict = Dict(
-#     "α₀" => 6.0, # initial angle of attack [deg]
-#     "Λ" => deg2rad(-15.0), # sweep angle [rad]
-#     "g" => 0.04, # structural damping percentage
-#     "c" => 0.1 * ones(nNodes), # chord length [m]
-#     "s" => 0.3, # semispan [m]
-#     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-#     "toc" => 0.12, # thickness-to-chord ratio
-#     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-#     "θ" => deg2rad(15), # fiber angle global [rad]
-# )
+# ==============================================================================
+#                         MAIN DRIVER
+# ==============================================================================
+nNodes = 4
+DVDict = Dict(
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "g" => 0.04, # structural damping percentage
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12, # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(15), # fiber angle global [rad]
+)
 
-# solverOptions = Dict(
-#     # --- I/O ---
-#     "name" => "test",
-#     "debug" => false,
-#     "outputDir" => "./test_out/",
-#     # --- General solver options ---
-#     "U∞" => 5.0, # free stream velocity [m/s]
-#     "ρ_f" => 1000.0, # fluid density [kg/m³]
-#     "material" => "cfrp", # preselect from material library
-#     "nNodes" => nNodes,
-#     "config" => "wing",
-#     "rotation" => 0.0, # deg
-#     "gravityVector" => [0.0, 0.0, -9.81],
-#     "tipMass" => false,
-#     "use_freeSurface" => false,
-#     "use_cavitation" => false,
-#     "use_ventilation" => false,
-#     # --- Static solve ---
-#     "run_static" => false,
-#     # --- Forced solve ---
-#     "run_forced" => false,
-#     "fSweep" => range(0.1, 1000.0, 1000),
-#     "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
-#     # --- Eigen solve ---
-#     "run_modal" => false,
-#     "run_flutter" => true,
-#     "nModes" => 4,
-#     "uRange" => [187.0, 190.0],
-#     "maxQIter" => 100,
-#     "rhoKS" => 80.0,
-# )
+solverOptions = Dict(
+    # --- I/O ---
+    "name" => "test",
+    "debug" => false,
+    "outputDir" => "./test_out/",
+    # --- General solver options ---
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "material" => "cfrp", # preselect from material library
+    "nNodes" => nNodes,
+    "config" => "wing",
+    "rotation" => 0.0, # deg
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "tipMass" => false,
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # --- Static solve ---
+    "run_static" => false,
+    # --- Forced solve ---
+    "run_forced" => false,
+    "fSweep" => range(0.1, 1000.0, 1000),
+    "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
+    # --- Eigen solve ---
+    "run_modal" => false,
+    "run_flutter" => true,
+    "nModes" => 4,
+    "uRange" => [187.0, 190.0],
+    "maxQIter" => 100,
+    "rhoKS" => 80.0,
+)
 
-# derivs = test_pkflutterderiv(DVDict, solverOptions)
+derivs = test_pkflutterderiv(DVDict, solverOptions)
 

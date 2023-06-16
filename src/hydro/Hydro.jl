@@ -19,18 +19,26 @@ export compute_AICs, apply_BCs
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
-using Plots
-using Zygote, ChainRulesCore, FiniteDifferences
+using Zygote, ChainRulesCore
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
+include("../struct/FiniteElements.jl")
+using .FEMMethods
+
+# --- Globals ---
+global XDIM = 1
+global YDIM = 2
+global ZDIM = 3
 
 # ==============================================================================
 #                         Unsteady hydro functions
 # ==============================================================================
 function compute_theodorsen(k)
     """
-    Theodorsen's transfer function for unsteady aero/hydrodynamics
-    w/ separate real and imaginary parts. This is potential flow theory.
+    Theodorsen's transfer function for unsteady aero/hydrodynamics of a sinusoidally oscillating foil.
+    w/ separate real and imaginary parts. 
+    This is potential flow theory.
+    This form is also wrong for k < 0 and should use the modified bessel funcs
 
     Inputs:
         k: float, reduced frequency of oscillation (a.k.a. Strouhal number)
@@ -73,6 +81,30 @@ function compute_theodorsen(k)
     ans = [C_r_analytic, C_i_analytic]
 
     return ans
+end
+
+function compute_sears(k)
+    """
+    Sears transfer function for an airfoil subject to sinusoidal gusts.
+    This is potential flow theory.
+    """
+
+    # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
+    H₀²ᵣ = besselj0(k)
+    H₀²ᵢ = -bessely0(k)
+    H₁²ᵣ = besselj1(k)
+    H₁²ᵢ = -bessely1(k)
+
+    # TODO: do in real data type only
+    # divDenom = 1 / ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
+
+    # S_r = divDenom
+
+    H02 = H₀²ᵣ + 1im * H₀²ᵢ
+    H12 = H₁²ᵣ + 1im * H₁²ᵢ
+    S = 2 * 1im / (π * k) / (H12 + 1im * H02)
+
+    return S
 end
 
 function compute_pade(k)
@@ -310,8 +342,23 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
 
     # TODO: THERE IS A BUG ON THIS LINE THAT MAKES THE DERIVATIVES WRT SPAN FOR THE WHOLE CODE WRONG
     cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
+    # If this is fully ventilated, can divide the slope by 4
 
     return reverse(cl_α)
+end
+
+function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
+    """
+    Slope of the 3D lift coefficient with respect to the angle of attack considering surface-piercing vertical strut
+    From Harwood 2019 Part 1
+
+    a0 = π/2 * (1 - √(1 - (2 * submergedDepth / semispan)^2))
+    """
+    # TODO: get Lc from Casey's paper
+    Lc_c = Lc / c
+
+    a0 = ((π / 2) * (Lc_c^3) - 2 * (Lc_c^2) + 4.5 * Lc_c + 1) / ((Lc_c^3) - (Lc_c^2) + 0.75 * Lc_c + 1 / (2π))
+    return a0
 end
 
 function use_free_surface(γ, α₀, U∞, chordVec, h)
@@ -440,7 +487,7 @@ function compute_node_mass(b, ab, rho_f)
     return M_f
 end
 
-function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType="BT2")
+function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, elemType="BT2")
     """
     Compute the steady aerodynamic influence coefficients (AICs) for a given mesh
     This is different from the general AIC method because there is no frequency dependence
@@ -448,7 +495,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
     ------
     AIC: Matrix
         Aerodynamic influence coefficient matrix
-    mesh: Array
+    aeroMesh: Array
         Mesh of the foil
     FOIL: struct
         Struct containing the foil implicit constants
@@ -467,6 +514,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
         nDOF = 3
     elseif elemType == "BT2"
         nDOF = 4
+        nDOF = 6
     end
 
     # fluid dynamic pressure
@@ -480,81 +528,172 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, mesh, chordVec, abVec, ebVec
     # ---------------------------
     #   Loop over strips (nodes)
     # ---------------------------
-    for yⁿ ∈ mesh
-        # --- compute strip width ---
-        Δy = 0.0
-        if jj < FOIL.nNodes
-            Δy = mesh[jj+1] - mesh[jj]
-            if jj == 1
-                Δy = Δy / 2
+    if ndims(aeroMesh) == 1
+        for yⁿ ∈ aeroMesh
+            # --- compute strip width ---
+            Δy = 0.0
+            if jj < FOIL.nNodes
+                Δy = aeroMesh[jj+1] - aeroMesh[jj]
+                if jj == 1
+                    Δy = Δy / 2
+                end
+            else
+                Δy = aeroMesh[jj] - aeroMesh[jj-1]
+                if jj == FOIL.nNodes
+                    Δy = Δy / 2
+                end
             end
-        else
-            Δy = mesh[jj] - mesh[jj-1]
-            if jj == FOIL.nNodes
-                Δy = Δy / 2
+
+            # --- Initialize aero-force matrices ---
+            K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
+            E_f = copy(K_f)  # Sweep correction matrix
+
+
+            # --- Interpolate values based on y loc ---
+            clα = SolverRoutines.do_linear_interp(aeroMesh, FOIL.clα, yⁿ)
+            c = SolverRoutines.do_linear_interp(aeroMesh, chordVec, yⁿ)
+            ab = SolverRoutines.do_linear_interp(aeroMesh, abVec, yⁿ)
+            eb = SolverRoutines.do_linear_interp(aeroMesh, ebVec, yⁿ)
+            b = 0.5 * c # semichord for more readable code
+
+            # --- Compute forces ---
+            # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
+            k_hα = -2 * b * clα # lift due to angle of attack
+            k_αα = -2 * eb * b * clα # moment due to angle of attack
+            K_f = qf * cos(Λ)^2 *
+                  [
+                      0.0 k_hα
+                      0.0 k_αα
+                  ]
+            # Sweep correction to aerodynamic stiffness
+            e_hh = 2 * clα # lift due to w'
+            e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
+            e_αh = clα * b * (1 + ab / b) # moment due to w'
+            e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
+            E_f = qf * sin(Λ) * cos(Λ) * b *
+                  [
+                      e_hh e_hα
+                      e_αh e_αα
+                  ]
+
+            # --- Compute Compute local AIC matrix for this element ---
+            if elemType == "bend-twist"
+                println("These aerodynamics are all wrong BTW...")
+                AICLocal = -1 * [
+                    0.00000000 0.0 K_f[1, 2] # Lift
+                    0.00000000 0.0 0.00000000
+                    0.00000000 0.0 K_f[2, 2] # Pitching moment
+                ]
+            elseif elemType == "BT2"
+                AICLocal = [
+                    0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+            else
+                println("nothing else works")
             end
+
+            GDOFIdx = nDOF * (jj - 1) + 1
+
+            # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+            AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal * Δy
+
+            # Add rectangle to planform area
+            planformArea += c * Δy
+
+            jj += 1 # increment strip counter
         end
+    elseif ndims(aeroMesh) == 2
+        for yⁿ in aeroMesh[:, YDIM]
+            # --- compute strip width ---
+            Δy = 0.0
+            if jj < FOIL.nNodes
+                Δy = aeroMesh[jj+1, YDIM] - aeroMesh[jj, YDIM]
+                if jj == 1
+                    Δy = Δy / 2
+                end
+            else
+                Δy = aeroMesh[jj, YDIM] - aeroMesh[jj-1, YDIM]
+                if jj == FOIL.nNodes
+                    Δy = Δy / 2
+                end
+            end
+            nVec::Vector{Float64} = (aeroMesh[jj+1, :] - aeroMesh[jj, :])
+            lᵉ::Float64 = norm(nVec, 2) # length of elem
+            nVec = nVec / lᵉ # normalize
+            # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
 
-        # --- Initialize aero-force matrices ---
-        K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
-        E_f = copy(K_f)  # Sweep correction matrix
+            # --- Initialize aero-force matrices ---
+            K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
+            E_f = copy(K_f)  # Sweep correction matrix
 
 
-        # --- Interpolate values based on y loc ---
-        clα = SolverRoutines.do_linear_interp(mesh, FOIL.clα, yⁿ)
-        c = SolverRoutines.do_linear_interp(mesh, chordVec, yⁿ)
-        ab = SolverRoutines.do_linear_interp(mesh, abVec, yⁿ)
-        eb = SolverRoutines.do_linear_interp(mesh, ebVec, yⁿ)
-        b = 0.5 * c # semichord for more readable code
+            # --- Interpolate values based on y loc ---
+            clα = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], FOIL.clα, yⁿ)
+            c = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], chordVec, yⁿ)
+            ab = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], abVec, yⁿ)
+            eb = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], ebVec, yⁿ)
+            b = 0.5 * c # semichord for more readable code
 
-        # --- Compute forces ---
-        # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
-        k_hα = -2 * b * clα # lift due to angle of attack
-        k_αα = -2 * eb * b * clα # moment due to angle of attack
-        K_f = qf * cos(Λ)^2 *
-              [
-                  0.0 k_hα
-                  0.0 k_αα
-              ]
-        # Sweep correction to aerodynamic stiffness
-        e_hh = 2 * clα # lift due to w'
-        e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
-        e_αh = clα * b * (1 + ab / b) # moment due to w'
-        e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
-        E_f = qf * sin(Λ) * cos(Λ) * b *
-              [
-                  e_hh e_hα
-                  e_αh e_αα
-              ]
+            # --- Compute forces ---
+            # Aerodynamic stiffness (1st row is lift, 2nd row is pitching moment)
+            k_hα = -2 * b * clα # lift due to angle of attack
+            k_αα = -2 * eb * b * clα # moment due to angle of attack
+            K_f = qf * cos(Λ)^2 *
+                  [
+                      0.0 k_hα
+                      0.0 k_αα
+                  ]
+            # Sweep correction to aerodynamic stiffness
+            e_hh = 2 * clα # lift due to w'
+            e_hα = -clα * b * (1 - ab / b) # lift due to ψ'
+            e_αh = clα * b * (1 + ab / b) # moment due to w'
+            e_αα = π * b^2 - 0.5 * clα * b^2 * (1 - (ab / b)^2) # moment due to ψ'
+            E_f = qf * sin(Λ) * cos(Λ) * b *
+                  [
+                      e_hh e_hα
+                      e_αh e_αα
+                  ]
 
-        # --- Compute Compute local AIC matrix for this element ---
-        if elemType == "bend-twist"
-            println("These aerodynamics are all wrong BTW...")
-            AICLocal = -1 * [
-                0.00000000 0.0 K_f[1, 2] # Lift
-                0.00000000 0.0 0.00000000
-                0.00000000 0.0 K_f[2, 2] # Pitching moment
-            ]
-        elseif elemType == "BT2"
-            AICLocal = [
-                0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
-                0.0 0.0 0.0 0.0
-                0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
-                0.0 0.0 0.0 0.0
-            ]
-        else
-            println("nothing else works")
+            # --- Compute Compute local AIC matrix for this element ---
+            if elemType == "bend-twist"
+                println("These aerodynamics are all wrong BTW...")
+                AICLocal = -1 * [
+                    0.00000000 0.0 K_f[1, 2] # Lift
+                    0.00000000 0.0 0.00000000
+                    0.00000000 0.0 K_f[2, 2] # Pitching moment
+                ]
+            elseif elemType == "BT2"
+                AICLocal = [
+                    0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+            else
+                println("nothing else works")
+            end
+            # ---------------------------
+            #   Transform from local to global
+            # ---------------------------
+            # The local coordinate system is {u} while the global is {U}
+            # {u} = [Γ] * {U}
+            # where [Γ] is the transformation matrix
+            Γ = FEMMethods.get_transMat(nVec, elemType)
+            AICStrip = Γ' * AICLocal * Γ
+
+            GDOFIdx = nDOF * (jj - 1) + 1
+
+            # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+            AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICStrip * Δy
+
+            # Add rectangle to planform area
+            planformArea += c * Δy
+
+            jj += 1 # increment strip counter
         end
-
-        GDOFIdx = nDOF * (jj - 1) + 1
-
-        # Add local AIC to global AIC and remember to multiply by strip width to get the right result
-        AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal * Δy
-
-        # Add rectangle to planform area
-        planformArea += c * Δy
-
-        jj += 1 # increment strip counter
     end
 
     return AIC, planformArea
@@ -719,6 +858,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     # --- Compute fluid tractions ---
     hydroTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
 
+    # TODO: PICKUP HERE
     # # --- Debug printout ---
     # println("AIC")
     # show(stdout, "text/plain", AIC)
@@ -729,8 +869,8 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     return hydroTractions, AIC, planformArea
 end
 
-function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT2")
-    # function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2")
+# function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT2")
+function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2")
     """
     Inputs
     ------
@@ -750,7 +890,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT
 
     # --- Strip theory ---
     # This is the hydro force traction vector
-    ForceVector = fullAIC * foilTotalStates
+    ForceVector = (fullAIC * (foilTotalStates))
 
 
     if elemType == "bend-twist"
@@ -765,8 +905,14 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT
     Lift = ForceVector[1:nDOF:end]
 
     # --- Total dynamic hydro force calcs ---
-    TotalLift = sum(Lift)
-    TotalMoment = sum(Moments)
+    TotalLift = 0
+    for secLift in Lift
+        TotalLift += abs(secLift)
+    end
+    TotalMoment = 0
+    for secMom in Moments
+        TotalMoment += abs(secMom)
+    end
 
     return ForceVector, TotalLift, TotalMoment
 end
