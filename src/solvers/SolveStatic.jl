@@ -82,6 +82,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
+    # TODO: PICKUP HERE AND FIND NaNs!!
     # --- Initialize states ---
     u = copy(globalF)
 

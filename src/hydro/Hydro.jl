@@ -22,8 +22,6 @@ using Statistics
 using Zygote, ChainRulesCore
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
-include("../struct/FiniteElements.jl")
-using .FEMMethods
 
 # --- Globals ---
 global XDIM = 1
@@ -513,7 +511,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
     elseif elemType == "bend-twist"
         nDOF = 3
     elseif elemType == "BT2"
-        nDOF = 4
+        nLocDOF = 4
         nDOF = 6
     end
 
@@ -611,19 +609,20 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             Δy = 0.0
             if jj < FOIL.nNodes
                 Δy = aeroMesh[jj+1, YDIM] - aeroMesh[jj, YDIM]
+                nVec = (aeroMesh[jj+1, :] - aeroMesh[jj, :])
                 if jj == 1
                     Δy = Δy / 2
                 end
             else
                 Δy = aeroMesh[jj, YDIM] - aeroMesh[jj-1, YDIM]
+                nVec = (aeroMesh[jj, :] - aeroMesh[jj-1, :])
                 if jj == FOIL.nNodes
                     Δy = Δy / 2
                 end
             end
-            nVec::Vector{Float64} = (aeroMesh[jj+1, :] - aeroMesh[jj, :])
+            # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
             lᵉ::Float64 = norm(nVec, 2) # length of elem
             nVec = nVec / lᵉ # normalize
-            # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
 
             # --- Initialize aero-force matrices ---
             K_f = zeros(2, 2) # Fluid de-stiffening (disturbing) matrix
@@ -681,7 +680,8 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             # The local coordinate system is {u} while the global is {U}
             # {u} = [Γ] * {U}
             # where [Γ] is the transformation matrix
-            Γ = FEMMethods.get_transMat(nVec, elemType)
+            ΓFull = SolverRoutines.get_transMat(nVec, elemType)
+            Γ = ΓFull[1:nLocDOF, 1:nDOF]
             AICStrip = Γ' * AICLocal * Γ
 
             GDOFIdx = nDOF * (jj - 1) + 1
@@ -858,7 +858,6 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     # --- Compute fluid tractions ---
     hydroTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
 
-    # TODO: PICKUP HERE
     # # --- Debug printout ---
     # println("AIC")
     # show(stdout, "text/plain", AIC)
