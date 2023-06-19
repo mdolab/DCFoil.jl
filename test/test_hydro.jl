@@ -147,5 +147,82 @@ end
 # ==============================================================================
 
 
+function test_AICs()
+    AIC = zeros(24, 24)
+    aeroMesh = [
+        0.0 0.0 0.0
+        0.0 1.0 0.0
+    ]
+    chordVec = [1.0, 1.0]
+    abVec = [0.0, 0.0]
+    ebVec = [0.5, 0.5]
+    Λ = 0.0
+    nNodes = 2
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 0.1 * ones(nNodes), # chord length [m]
+        "s" => 0.3, # semispan [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
+    )
 
+    solverOptions = Dict(
+        # ---------------------------
+        #   I/O
+        # ---------------------------
+        # "name" => "akcabay-swept",
+        "name" => "t-foil",
+        "debug" => false,
+        # ---------------------------
+        #   General appendage options
+        # ---------------------------
+        "config" => "wing",
+        # "config" => "t-foil",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "rotation" => 45.0, # deg
+        "gravityVector" => [0.0, 0.0, -9.81],
+        "tipMass" => false,
+        # ---------------------------
+        #   Flow
+        # ---------------------------
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "use_freeSurface" => false,
+        "use_cavitation" => false,
+        "use_ventilation" => false,
+        # ---------------------------
+        #   Structure
+        # ---------------------------
+        "material" => "cfrp", # preselect from material library
+        # ---------------------------
+        #   Solver modes
+        # ---------------------------
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 1:2,
+        "tipForceMag" => 1,
+        # --- p-k (Eigen) solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 1,
+        "uRange" => [1,2],
+        "maxQIter" => 100, # that didn't fix the slow run time...
+        "rhoKS" => 80.0,
+    )
 
+    FOIL = InitModel.init_model_wrapper(DVDict,solverOptions)
+
+    AIC, planformArea = Hydro.compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, "BT2")
+
+    return AIC
+end
+
+AIC = test_AICs()

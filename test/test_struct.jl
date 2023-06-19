@@ -182,12 +182,12 @@ function test_FiniteElementIso()
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
-        )
-        solverOptions = Dict(
-            "nNodes" => nNodes,
-            "material" => "test-iso", # preselect from material library
-            "U∞" => 5.0, # free stream velocity [m/s]
-            "ρ_f" => 1000.0, # fluid density [kg/m³]
+    )
+    solverOptions = Dict(
+        "nNodes" => nNodes,
+        "material" => "test-iso", # preselect from material library
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
@@ -273,12 +273,12 @@ function test_FiniteElementComp()
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => 0 * π / 180, # fiber angle global [rad]
-        )
-        solverOptions = Dict(
-            "material" => "test-comp", # preselect from material library
-            "nNodes" => nNodes,
-            "U∞" => 5.0, # free stream velocity [m/s]
-            "ρ_f" => 1000.0, # fluid density [kg/m³]
+    )
+    solverOptions = Dict(
+        "material" => "test-comp", # preselect from material library
+        "nNodes" => nNodes,
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
@@ -385,3 +385,105 @@ function test_FiniteElementComp()
 
     return rel_err
 end
+
+function test_FiniteElementComp3D()
+    """
+    Test the finite elements with unit loads, thickness, length, and structural moduli
+    """
+    nNodes = 3
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 0.1 * ones(nNodes), # chord length [m]
+        "s" => 0.3, # semispan [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
+    )
+    solverOptions = Dict(
+        # ---------------------------
+        #   I/O
+        # ---------------------------
+        "name" => "t-foil",
+        "debug" => false,
+        # ---------------------------
+        #   General appendage options
+        # ---------------------------
+        "config" => "wing",
+        # "config" => "t-foil",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "rotation" => 0.0, # deg
+        "gravityVector" => [0.0, 0.0, -9.81],
+        "tipMass" => false,
+        # ---------------------------
+        #   Flow
+        # ---------------------------
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "use_freeSurface" => false,
+        "use_cavitation" => false,
+        "use_ventilation" => false,
+        # ---------------------------
+        #   Structure
+        # ---------------------------
+        "material" => "cfrp", # preselect from material library
+        # ---------------------------
+        #   Solver modes
+        # ---------------------------
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 1:2,
+        "tipForceMag" => 1,
+        # --- p-k (Eigen) solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 1,
+        "uRange" => [1, 2],
+        "maxQIter" => 100, # that didn't fix the slow run time...
+        "rhoKS" => 80.0,
+    )
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+    nElem = nNodes - 1
+    constitutive = FOIL.constitutive
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+
+    # ************************************************
+    #     BT2
+    # ************************************************
+    dim = 3
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "BT2"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
+    # globalF[end-2*dim+1] = 1.0 # 0 Newton tip force
+    globalF[end-4*dim+2] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+    # TODO: pickup here and debug coordinate transform
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q1 = FEMMethods.solve_structure(K, M, F)
+
+    writedlm("DebugKMatrix.csv", K, ',')
+    writedlm("DebugMMatrix.csv", M, ',')
+
+    return q1
+
+end
+
+using DelimitedFiles
+
+displ = test_FiniteElementComp3D()

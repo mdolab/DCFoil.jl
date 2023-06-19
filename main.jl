@@ -36,7 +36,7 @@ run_flutter = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 20 # spatial nodes
+nNodes = 3 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -78,7 +78,7 @@ solverOptions = Dict(
     # "config" => "t-foil",
     "nNodes" => nNodes, # number of nodes on foil half wing
     "nNodeStrut" => 10, # nodes on strut
-    "rotation" => 45.0, # deg
+    "rotation" => 0.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
     "tipMass" => tipMass,
     # ---------------------------

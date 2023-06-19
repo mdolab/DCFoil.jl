@@ -349,25 +349,15 @@ function make_mesh(nElem::Int64, span; config="wing", rotation=0.000, nElStrut=0
     elemConn_z = Zygote.Buffer(elemConn)
     rot = deg2rad(rotation)
     if config == "wing"
-        if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
-            println("Right now only 1D mesh in y dir...")
-            dl = span / (nElem) # dist btwn nodes
-            mesh_z = collect((0:dl:span))
-            for ii ∈ 1:nElem
-                elemConn_z[ii, 1] = ii
-                elemConn_z[ii, 2] = ii + 1
-            end
-        else
-            # Set up a line mesh
-            dl = span / (nElem) # dist btwn nodes
-            mesh_z[:, YDIM] = collect((0:dl:span))
-            for nodeIdx in 1:nElem+1 # loop nodes and rotate
-                mesh_z[nodeIdx, :] = rotate3d(mesh_z[nodeIdx, :], rot; axis="x")
-            end
-            for ee in 1:nElem
-                elemConn_z[ee, 1] = ee
-                elemConn_z[ee, 2] = ee + 1
-            end
+        # Set up a line mesh
+        dl = span / (nElem) # dist btwn nodes
+        mesh_z[:, YDIM] = collect((0:dl:span))
+        for nodeIdx in 1:nElem+1 # loop nodes and rotate
+            mesh_z[nodeIdx, :] = rotate3d(mesh_z[nodeIdx, :], rot; axis="x")
+        end
+        for ee in 1:nElem
+            elemConn_z[ee, 1] = ee
+            elemConn_z[ee, 2] = ee + 1
         end
     elseif config == "t-foil"
         mesh = Array{Float64}(undef, nElem + nElStrut + 1, 3)
@@ -442,28 +432,50 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function get_transMat(nVec, elemType="BT2")
+function get_transMat(nVec, elemType="BT2", dim=3)
     """
-    Returns the transformation matrix for a given element type
+    Returns the transformation matrix for a given element type into 3D space
     """
     if elemType == "BT2"
-        Γ = [
-            # Node 1
-            nVec[1] nVec[2] nVec[3] 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # w1
-            0.00000 0.00000 0.00000 1.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # w1'
-            0.00000 0.00000 0.00000 0.0 1.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # ψ1
-            0.00000 0.00000 0.00000 0.0 0.0 1.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # ψ1'
-            # Node 2
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 nVec[1] nVec[2] nVec[3] 0.0 0.0 0.0 # w2
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 1.0 0.0 0.0 # w2'
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 1.0 0.0 # ψ2
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 1.0 # ψ2'
-        ]
+        if dim == 3
+            # 8x24
+            Γ = [
+                # x     y       z       x       y       z       x       y       z       x       y       z
+                nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1
+                0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1'
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1'
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3]
+            ]
+        elseif dim == 2
+            # 8x16
+            Γ = [
+                nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1
+                0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1'
+                0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1'
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000
+                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2]
+            ]
+        end
+    end
+
+    for ii in eachindex(Γ[:, 1])
+        for jj in eachindex(Γ[1, :])
+            if abs(Γ[ii, jj]) < 1e-16
+                Γ[ii, jj] = 0.0
+            end
+        end
     end
     return Γ
 end
 
-function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
+function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic", dim=3)
     """
     Generic function to assemble the global mass and stiffness matrices
 
@@ -480,7 +492,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         nnd = 3
     elseif elemType == "BT2"
         nnd = 4
-        nndG = 6
+        nndG = nnd * dim # number of global DOF per node (multiply by 3 for xyz)
     else
         println(elemType, " element type not implemented")
     end
@@ -514,9 +526,9 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     globalK_z = Zygote.Buffer(globalK)
     globalM_z = Zygote.Buffer(globalM)
     globalF_z = Zygote.Buffer(globalF)
-    for jj in 1:nnd*nNodes
+    for jj in 1:nndG*nNodes
         globalF_z[jj] = 0.0
-        for ii in 1:nnd*nNodes
+        for ii in 1:nndG*nNodes
             globalK_z[jj, ii] = 0.0
             globalM_z[jj, ii] = 0.0
         end
@@ -556,6 +568,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # ---------------------------
         #   Transform from local to global
         # ---------------------------
+        #  AEROSP510 notes and python code, Engineering Vibration Chapter 8 (Inman 2014)
         # The local coordinate system is {u} while the global is {U}
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
@@ -563,16 +576,24 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         kElem = Γ' * kLocal * Γ
         mElem = Γ' * mLocal * Γ
         fElem = Γ' * fLocal
+        println("Gamma:")
+        show(stdout, "text/plain", Γ)
+        println()
+        println("kElem: ")
+        show(stdout, "text/plain", kElem)
+        println()
+        println("mElem: ")
+        show(stdout, "text/plain", mElem)
+        println()
 
         # ---------------------------
         #   Assemble into global matrices
         # ---------------------------
         # The following procedure generally follows:
-        #  AEROSP510 notes and python code, Engineering Vibration Chapter 8 (Inman 2014)
         for nodeIdx ∈ 1:2 # loop over nodes in element
             for dofIdx ∈ 1:nndG # loop over DOFs in node
                 idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * nndG + dofIdx) # idx of global dof (row of global matrix)
-                idxRowₑ = (nodeIdx - 1) * nndG + dofIdx
+                idxRowₑ = (nodeIdx - 1) * nndG + dofIdx # idx of dof within this element
 
                 # --- Assemble RHS ---
                 globalF_z[idxRow] = fElem[idxRowₑ]
@@ -581,7 +602,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
                 for nodeColIdx ∈ 1:2 # loop over nodes in element
                     for dofColIdx ∈ 1:nndG # loop over DOFs in node
                         idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nndG + dofColIdx # idx of global dof (col of global matrix)
-                        idxColₑ = (nodeColIdx - 1) * nndG + dofColIdx
+                        idxColₑ = (nodeColIdx - 1) * nndG + dofColIdx # idx of dof within this element (column)
 
                         globalK_z[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
                         globalM_z[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
@@ -597,7 +618,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     return globalK, globalM, globalF
 end
 
-function get_fixed_nodes(elemType::String, BCCond="clamped")
+function get_fixed_nodes(elemType::String, BCCond="clamped", dim=3)
     """
     Depending on the elemType, return the indices of fixed nodes
     """
@@ -608,6 +629,13 @@ function get_fixed_nodes(elemType::String, BCCond="clamped")
             fixedNodes = [1, 2, 3]
         elseif elemType == "BT2"
             fixedNodes = [1, 2, 3, 4]
+            if dim == 3
+                # now the fixed nodes are [wx, wy, wz, ∂wx, ∂wy, ∂wz, θx, θy, θz, ∂θx, ∂θy, ∂θz]
+                fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+            elseif dim == 2
+                # now the fixed nodes are [wx, wy, ∂wx, ∂wy, θx, ∂θx, θy, ∂θy]
+                fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8]
+            end
         end
     else
         error("BCCond not recognized")
@@ -710,6 +738,7 @@ function put_BC_back(q, elemType::String, BCType="clamped")
     if BCType == "clamped"
         if elemType == "BT2"
             uSol = vcat([0, 0, 0, 0], q)
+            uSol = vcat([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], q) # global now
         else
             println("Not working")
             exit()

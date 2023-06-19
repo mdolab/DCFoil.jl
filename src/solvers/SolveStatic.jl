@@ -71,7 +71,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # elemType = "bend"
     # elemType = "bend-twist"
     elemType = "BT2"
-    loadType = "force"
+    # loadType = "force" # doesn't work with xyz global yet
+    loadType = "torque"
 
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
@@ -82,10 +83,9 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, loadType)
 
-    # TODO: PICKUP HERE AND FIND NaNs!!
     # --- Initialize states ---
-    u = copy(globalF)
-
+    u = copy(globalF) 
+    
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
@@ -98,14 +98,14 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # println("------------------------")
     # show(stdout, "text/plain", globalK)
     # println("")
-    # # println("Global mass matrix:")
-    # # println("-------------------")
-    # # show(stdout, "text/plain", globalM)
+    # println("Global mass matrix:")
+    # println("-------------------")
+    # show(stdout, "text/plain", globalM)
 
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", true)
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---

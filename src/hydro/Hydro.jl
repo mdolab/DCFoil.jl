@@ -512,7 +512,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
         nDOF = 3
     elseif elemType == "BT2"
         nLocDOF = 4
-        nDOF = 6
+        nDOF = nLocDOF # number of global DOFs at 1 node
     end
 
     # fluid dynamic pressure
@@ -608,20 +608,17 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             # --- compute strip width ---
             Δy = 0.0
             if jj < FOIL.nNodes
-                Δy = aeroMesh[jj+1, YDIM] - aeroMesh[jj, YDIM]
                 nVec = (aeroMesh[jj+1, :] - aeroMesh[jj, :])
-                if jj == 1
-                    Δy = Δy / 2
-                end
             else
-                Δy = aeroMesh[jj, YDIM] - aeroMesh[jj-1, YDIM]
                 nVec = (aeroMesh[jj, :] - aeroMesh[jj-1, :])
-                if jj == FOIL.nNodes
-                    Δy = Δy / 2
-                end
             end
             # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
             lᵉ::Float64 = norm(nVec, 2) # length of elem
+            Δy = lᵉ
+            if jj == 1 || jj == FOIL.nNodes
+                Δy = Δy / 2
+            end
+
             nVec = nVec / lᵉ # normalize
 
             # --- Initialize aero-force matrices ---
@@ -630,6 +627,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
 
 
             # --- Interpolate values based on y loc ---
+            # TODO: you will need to fix this later
             clα = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], FOIL.clα, yⁿ)
             c = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], chordVec, yⁿ)
             ab = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], abVec, yⁿ)
@@ -660,34 +658,36 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             if elemType == "bend-twist"
                 println("These aerodynamics are all wrong BTW...")
                 AICLocal = -1 * [
-                    0.00000000 0.0 K_f[1, 2] # Lift
-                    0.00000000 0.0 0.00000000
-                    0.00000000 0.0 K_f[2, 2] # Pitching moment
+                    0.0 0.0 K_f[1, 2] # Lift
+                    0.0 0.0 0.00000000
+                    0.0 0.0 K_f[2, 2] # Pitching moment
                 ]
             elseif elemType == "BT2"
                 AICLocal = [
                     0.0 E_f[1, 1] K_f[1, 2] E_f[1, 2]  # Lift
-                    0.0 0.0 0.0 0.0
+                    0.0 0.0000000 0.0000000 0.0000000
                     0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
-                    0.0 0.0 0.0 0.0
+                    0.0 0.0000000 0.0000000 0.0000000
                 ]
             else
                 println("nothing else works")
             end
-            # ---------------------------
-            #   Transform from local to global
-            # ---------------------------
-            # The local coordinate system is {u} while the global is {U}
-            # {u} = [Γ] * {U}
-            # where [Γ] is the transformation matrix
-            ΓFull = SolverRoutines.get_transMat(nVec, elemType)
-            Γ = ΓFull[1:nLocDOF, 1:nDOF]
-            AICStrip = Γ' * AICLocal * Γ
+            # # ---------------------------
+            # #   Transform from local to global
+            # # ---------------------------
+            # # The local coordinate system is {u} while the global is {U}
+            # # {u} = [Γ] * {U}
+            # # where [Γ] is the transformation matrix
+            # ΓFull = SolverRoutines.get_transMat(nVec, elemType)
+            # Γ = ΓFull[1:nLocDOF, 1:nDOF]
+            # AICStrip = Γ' * AICLocal * Γ'
+            # NOTE: We will do the hydro calc in local coords to build the traction vector and then transform that result
 
             GDOFIdx = nDOF * (jj - 1) + 1
 
             # Add local AIC to global AIC and remember to multiply by strip width to get the right result
-            AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICStrip * Δy
+            # AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICStrip * Δy
+            AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICLocal * Δy
 
             # Add rectangle to planform area
             planformArea += c * Δy
@@ -852,7 +852,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     # ---------------------------
     #   Strip theory
     # ---------------------------
-    AIC = zeros(nGDOF, nGDOF)
+    AIC = zeros(nGDOF ÷ 3, nGDOF ÷ 3)
     _, planformArea = compute_steady_AICs!(AIC, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # --- Compute fluid tractions ---

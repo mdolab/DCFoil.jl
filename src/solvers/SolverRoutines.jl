@@ -60,9 +60,9 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
         staticOffset = [0, 0, alfaRad]
     elseif elemType == "BT2"
         nDOF = 4
-        nGDOF = 6 # number of DOFs on node in global coordinates
+        nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
         staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
-        staticOffset = [0, 0, 0, 0, alfaRad, 0]
+        staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
     end
 
     # Add static angle of attack to deflected foil
