@@ -21,10 +21,12 @@ struct foil{T<:Float64}
     """
     mₛ::Vector{T} # structural mass vector [kg/m]
     Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
-    EIₛ::Vector{T} # bending stiffness vector [N-m²]
+    EIₛ::Vector{T} # OOP bending stiffness vector [N-m²]
+    EIIPₛ::Vector{T} # IP bending stiffness vector [N-m²]
     GJₛ::Vector{T} # torsion stiffness vector [N-m²]
     Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
     Sₛ::Vector{T} # warping resistance vector [N-m⁴]
+    EAₛ::Vector{T} # axial stiffness vector [N-m²]
     α₀::T # rigid initial angle of attack [deg] THE ONLY TIME THIS IS USED IS WHEN A DERIVATIVE WRT ALPHA IS NOT NEEDED
     U∞::T # flow speed [m/s]
     g::T # structural damping percentage
@@ -40,10 +42,12 @@ struct dynamicFoil{T<:Float64}
     """
     mₛ::Vector{T} # structural mass vector [kg/m]
     Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
-    EIₛ::Vector{T} # bending stiffness vector [N-m²]
+    EIₛ::Vector{T} # OOP bending stiffness vector [N-m²]
+    EIIPₛ::Vector{T} # IP bending stiffness vector [N-m²]
     GJₛ::Vector{T} # torsion stiffness vector [N-m²]
     Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
     Sₛ::Vector{T} # warping resistance vector [N-m⁴]
+    EAₛ::Vector{T} # axial stiffness vector [N-m²]
     α₀::T # rigid initial angle of attack [deg]
     U∞::T # flow speed [m/s]
     g::T # structural damping percentage

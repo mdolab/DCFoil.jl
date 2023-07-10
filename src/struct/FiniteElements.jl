@@ -11,6 +11,8 @@
 # ==============================================================================
 module LinearBeamElem
 """
+    ELEMENTS THAT WORK IN 3D SPACE
+     - BEAM3D
 
     2-noded 2nd order linear beam element
 
@@ -18,6 +20,14 @@ module LinearBeamElem
         1  E,ρₛ,I  2
 
         {q} = [q₁, q₂, q₃, q₄, q₅, q₆, q₇, q₈]ᵀ
+
+    2-noded 1st order linear beam spatial element with 12 DOF (BEAM3D)
+                               z ^ y
+                                 |/
+            o------------o       +----> x (local coords)
+            1  E,ρₛ,A,I  2
+    
+        {q} = [q₁, q₂, q₃, q₄, q₅, q₆, ...,q12 ]ᵀ
 
     The shape function for the element with the {q} vector) is
         w(x, t) = <something-already-derived-in-textbooks>
@@ -29,7 +39,7 @@ module LinearBeamElem
 
 """
 
-function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
+function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
     """
     The internal strain energy of a beam is
         U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
@@ -42,7 +52,9 @@ function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="be
     Inputs
     ------
     EIᵉ : Float64
-        bending stiffness of the element [N m²]
+        out-of-plane (OOP) bending stiffness of the element [N m²]
+    EIIPᵉ : Float64
+        in-plane (IP) bending stiffness of the element [N m²]
     GJᵉ : Float64
         torsional stiffness of the element [N-m²]
     BTᵉ : Float64
@@ -143,7 +155,7 @@ function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="be
         println("Axial elements not implemented")
     elseif elemType == "BT2" # Higher order beam element
         # 8x8 matrix
-        coeff::Float64 = 1 / lᵉ^3
+        coeff = 1 / lᵉ^3
         # row 1
         k11_11::Float64 = 12 * EIᵉ
         k11_12::Float64 = 6 * EIᵉ * lᵉ
@@ -187,6 +199,58 @@ function compute_elem_stiff(EIᵉ, GJᵉ, BTᵉ, Sᵉ, lᵉ, abᵉ, elemType="be
         Ktop = hcat(K11, K12)
         Kbot = hcat(K12', K22)
         Kᵉ = vcat(Ktop, Kbot)
+    elseif elemType == "BEAM3D" # 1st order 12 DOF spatial beam element
+        if constitutive == "isotropic"
+            # 12x12 elem stiffness matrix
+            coeff = 1 / lᵉ^3
+            EIᵉOOP = EIᵉ
+            EIᵉIP = EIIPᵉ
+            k11_11 = EAᵉ * lᵉ^2
+            k11_22 = 12 * EIᵉOOP
+            k11_26 = 6 * EIᵉOOP * lᵉ
+            k11_33 = 12 * EIᵉIP
+            k11_35 = -6 * EIᵉIP * lᵉ
+            k11_44 = GJᵉ * lᵉ^2
+            k11_55 = 4 * EIᵉIP * lᵉ^2
+            k11_66 = 4 * EIᵉOOP * lᵉ^2
+            K11 = coeff * [
+                k11_11 000000 000000 000000 000000 000000
+                000000 k11_22 000000 000000 000000 k11_26
+                000000 000000 k11_33 000000 k11_35 000000
+                000000 000000 000000 k11_44 000000 000000
+                000000 000000 k11_35 000000 k11_55 000000
+                000000 k11_26 000000 000000 000000 k11_66
+            ]
+            k12_11 = -k11_11
+            k12_22 = -k11_22
+            k12_26 = k11_26
+            k12_33 = -k11_33
+            k12_35 = k11_35
+            k12_44 = -k11_44
+            k12_55 = 2 * EIᵉIP * lᵉ^2
+            k12_66 = 2 * EIᵉOOP * lᵉ^2
+            K12 = coeff * [
+                k12_11 000000 000000 000000 000000 000000
+                000000 k12_22 000000 000000 000000 k12_26
+                000000 000000 k12_33 000000 k12_35 000000
+                000000 000000 000000 k12_44 000000 000000
+                000000 000000 -k12_35 000000 k12_55 000000
+                000000 -k12_26 000000 000000 000000 k12_66
+            ]
+            K22 = coeff * [
+                k11_11 000000 000000 000000 000000 000000
+                000000 k11_22 000000 000000 000000 -k11_26
+                000000 000000 k11_33 000000 -k11_35 000000
+                000000 000000 000000 k11_44 000000 000000
+                000000 000000 -k11_35 000000 k11_55 000000
+                000000 -k11_26 000000 000000 000000 k11_66
+            ]
+            Ktop = hcat(K11, K12)
+            Kbot = hcat(K12', K22)
+            Kᵉ = vcat(Ktop, Kbot)
+        elseif constitutive == "orthotropic"
+            println("Orthotropic not implemented")
+        end
     end
 
     return Kᵉ
@@ -289,6 +353,50 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
             -m11_12 m11_22 -m11_14 m11_24
             m11_13 -m11_14 m11_33 -m11_34
             -m11_14 m11_24 -m11_34 m11_44
+        ]
+        Mtop = hcat(M11, M12)
+        Mbot = hcat(M12', M22)
+        Mᵉ = vcat(Mtop, Mbot)
+    elseif elemType == "BEAM3D"
+        m11_11 = 2 * mᵉ * lᵉ / 6
+        m11_22 = 156 * mᵉ * lᵉ / 420
+        m11_26 = 22 * mᵉ * lᵉ^2 / 420
+        m11_33 = m11_22
+        m11_35 = m11_26
+        m11_44 = 2 * iᵉ * lᵉ / 6
+        m11_55 = 4 * mᵉ * lᵉ^3 / 420
+        m11_66 = m11_55
+        M11 = [
+            m11_11 000000 000000 000000 000000 000000
+            000000 m11_22 000000 000000 000000 m11_26
+            000000 000000 m11_33 000000 m11_35 000000
+            000000 000000 000000 m11_44 000000 000000
+            000000 000000 m11_35 000000 m11_55 000000
+            000000 m11_26 000000 000000 000000 m11_66
+        ]
+        m12_11 = 0.5 * m11_11
+        m12_22 = 54 * mᵉ * lᵉ / 420
+        m12_26 = -13 * mᵉ * lᵉ^2 / 420
+        m12_33 = m12_22
+        m12_35 = m12_26
+        m12_44 = 0.5 * m11_44
+        m12_55 = -3 * mᵉ * lᵉ^2 / 420
+        m12_66 = m12_55
+        M12 = [
+            m12_11 000000 000000 000000 000000 000000
+            000000 m12_22 000000 000000 000000 m12_26
+            000000 000000 m12_33 000000 m12_35 000000
+            000000 000000 000000 m12_44 000000 000000
+            000000 000000 -m12_35 000000 m12_55 000000
+            000000 -m12_26 000000 000000 000000 m12_66
+        ]
+        M22 = [
+            m11_11 000000 000000 000000 000000 000000
+            000000 m11_22 000000 000000 000000 -m11_26
+            000000 000000 m11_33 000000 -m11_35 000000
+            000000 000000 000000 m11_44 000000 000000
+            000000 000000 -m11_35 000000 m11_55 000000
+            000000 -m11_26 000000 000000 000000 m11_66
         ]
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
@@ -432,37 +540,53 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function get_transMat(nVec, elemType="BT2", dim=3)
+function get_transMat(dR, l, elemType="BT2", dim=3)
     """
     Returns the transformation matrix for a given element type into 3D space
     """
+
     if elemType == "BT2"
         if dim == 3
             # 8x24
             Γ = [
-                # x     y       z       x       y       z       x       y       z       x       y       z
-                nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1
-                0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1'
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1'
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3] 0.00000 0.00000 0.00000
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] nVec[3]
+            # TODO:this is wrong
             ]
-        elseif dim == 2
-            # 8x16
-            Γ = [
-                nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1
-                0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # w1'
-                0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 # ψ1'
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000 0.00000 0.00000
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2] 0.00000 0.00000
-                0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 nVec[1] nVec[2]
-            ]
+        else
+            error("Only 3D BT2 implemented")
         end
+
+    elseif elemType == "bend"
+        if dim == 3
+            # 4x12
+            Γ = [
+            ]
+        else
+            error("Only 3D bend implemented")
+        end
+    elseif elemType == "BEAM3D"
+        rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
+        if dim == 3
+            # 12x12
+            calpha = dR[1] * rxy_div
+            salpha = dR[2] * rxy_div
+            cbeta = 1 / rxy_div / l
+            sbeta = dR[3] / l
+            T = [
+                calpha*cbeta salpha calpha*sbeta
+                -salpha*cbeta calpha -salpha*sbeta
+                -sbeta 0 cbeta
+            ]
+            Γ = [
+                T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+                zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+                zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+                zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+            ]
+        else
+            error("Unsupported dimension")
+        end
+    else
+        error("Unsupported element type")
     end
 
     for ii in eachindex(Γ[:, 1])
@@ -472,6 +596,7 @@ function get_transMat(nVec, elemType="BT2", dim=3)
             end
         end
     end
+    # show(stdout, "text/plain", Γ)
     return Γ
 end
 
@@ -485,17 +610,19 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         elemConn: 2D array of element connectivity (nElem x 2)
     """
 
-    # --- Initialize the local DOF vector ---
+    # --- Local nodal DOF vector ---
     if elemType == "bend"
         nnd = 2
     elseif elemType == "bend-twist"
         nnd = 3
     elseif elemType == "BT2"
         nnd = 4
-        nndG = nnd * dim # number of global DOF per node (multiply by 3 for xyz)
+    elseif elemType == "BEAM3D"
+        nnd = 6
     else
-        println(elemType, " element type not implemented")
+        error(elemType, " element type not implemented")
     end
+    nndG = nnd # number of global DOF per node (multiply by 3 for xyz)
     qLocal = zeros(nnd * 2)
 
     # --- Initialize matrices ---
@@ -537,10 +664,12 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # ---------------------------
         #   Extract element info
         # ---------------------------
-        nVec::Vector{Float64} = (coordMat[elemIdx+1, :] - coordMat[elemIdx, :])
-        lᵉ::Float64 = norm(nVec, 2) # length of elem
-        nVec = nVec / lᵉ # normalize
+        dR::Vector{Float64} = (coordMat[elemIdx+1, :] - coordMat[elemIdx, :])
+        lᵉ::Float64 = norm(dR, 2) # length of elem
+        nVec = dR / lᵉ # normalize
         EIₛ::Float64 = FOIL.EIₛ[elemIdx]
+        EIIPₛ::Float64 = FOIL.EIIPₛ[elemIdx]
+        EAₛ::Float64 = FOIL.EAₛ[elemIdx]
         GJₛ::Float64 = FOIL.GJₛ[elemIdx]
         Kₛ::Float64 = FOIL.Kₛ[elemIdx]
         Sₛ::Float64 = FOIL.Sₛ[elemIdx]
@@ -553,7 +682,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, GJₛ, Kₛ, Sₛ, lᵉ, ab, elemType, constitutive)
+        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive)
 
         # ---------------------------
         #   Local mass matrix
@@ -566,24 +695,24 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         fLocal::Vector{Float64} = zeros(nnd * 2)
 
         # ---------------------------
-        #   Transform from local to global
+        #   Transform from local to global coordinates
         # ---------------------------
         #  AEROSP510 notes and python code, Engineering Vibration Chapter 8 (Inman 2014)
         # The local coordinate system is {u} while the global is {U}
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
-        Γ = get_transMat(nVec, elemType)
+        Γ = get_transMat(dR, lᵉ, elemType, dim)
         kElem = Γ' * kLocal * Γ
         mElem = Γ' * mLocal * Γ
         fElem = Γ' * fLocal
-        println("Gamma:")
-        show(stdout, "text/plain", Γ)
+        # println("T:")
+        # show(stdout, "text/plain", Γ[1:3, 1:3])
+        # println()
+        println("kLocal: ")
+        show(stdout, "text/plain", kLocal)
         println()
-        println("kElem: ")
-        show(stdout, "text/plain", kElem)
-        println()
-        println("mElem: ")
-        show(stdout, "text/plain", mElem)
+        println("mLocal: ")
+        show(stdout, "text/plain", mLocal)
         println()
 
         # ---------------------------
@@ -625,18 +754,32 @@ function get_fixed_nodes(elemType::String, BCCond="clamped", dim=3)
     if BCCond == "clamped"
         if elemType == "bend"
             fixedNodes = [1, 2]
+            if dim == 2
+                fixedNodes = [1, 2, 3, 4]
+            elseif dim == 3
+                fixedNodes = [1, 2, 3, 4, 5, 6]
+            end
+
         elseif elemType == "bend-twist"
             fixedNodes = [1, 2, 3]
+
         elseif elemType == "BT2"
             fixedNodes = [1, 2, 3, 4]
-            if dim == 3
-                # now the fixed nodes are [wx, wy, wz, ∂wx, ∂wy, ∂wz, θx, θy, θz, ∂θx, ∂θy, ∂θz]
-                fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-            elseif dim == 2
+            if dim == 2
                 # now the fixed nodes are [wx, wy, ∂wx, ∂wy, θx, ∂θx, θy, ∂θy]
                 fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8]
+            elseif dim == 3
+                # now the fixed nodes are [wx, wy, wz, ∂wx, ∂wy, ∂wz, θx, θy, θz, ∂θx, ∂θy, ∂θz]
+                fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
             end
+
+        elseif elemType == "BEAM3D"
+            fixedNodes = [1, 2, 3, 4, 5, 6]
+        else
+            error("elemType not recognized")
+
         end
+
     else
         error("BCCond not recognized")
     end
@@ -644,21 +787,42 @@ function get_fixed_nodes(elemType::String, BCCond="clamped", dim=3)
     return fixedNodes
 end
 
-function apply_tip_load!(globalF, elemType, loadType="force")
+function apply_tip_load!(globalF, elemType, transMat, loadType="force")
+    """
+    Routine for applying unit tip load to the end node
+    """
+
+    MAG = 1.0
+    m, n = size(transMat)
 
     if loadType == "force"
-        if elemType == "bend-twist"
-            globalF[end-2] = 1.0
+        if elemType == "bend"
+            FLocalVec = [1.0, 0.0]
+        elseif elemType == "bend-twist"
+            FLocalVec = [1.0, 0.0, 0.0]
         elseif elemType == "BT2"
-            globalF[end-3] = 3000.0 / 2
+            FLocalVec = [1.0, 0.0, 0.0, 0.0]
+        elseif elemType == "BEAM3D"
+            FLocalVec = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        else
+            error("element not defined")
         end
     elseif loadType == "torque"
         if elemType == "bend-twist"
-            globalF[end] = 1.0
+            FLocalVec = [0.0, 0.0, 1.0]
         elseif elemType == "BT2"
-            globalF[end-1] = 1.0
+            FLocalVec = [0.0, 0.0, 1.0, 0.0]
+        elseif elemType == "BEAM3D"
+            FLocalVec = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        else
+            error("element not defined")
         end
     end
+
+    # --- Transform to global then add into vector ---
+    FLocalVec = transMat[1:m÷2, 1:n÷2]' * FLocalVec
+    globalF[end-n÷2+1:end] = FLocalVec * MAG
+
 end
 
 function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="BT2")

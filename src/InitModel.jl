@@ -69,6 +69,8 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
   mₛ = zeros(Float64, nNodes)
   # --- Loop over the span ---
   EI_z = Zygote.Buffer(EIₛ)
+  EIIP_z = Zygote.Buffer(EIₛ)
+  EA_z = Zygote.Buffer(EIₛ)
   K_z = Zygote.Buffer(Kₛ)
   GJ_z = Zygote.Buffer(GJₛ)
   S_z = Zygote.Buffer(Sₛ)
@@ -77,11 +79,12 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
   for ii in 1:nNodes
     section = StructProp.section_property(c[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ)
 
-    # EIₛ[ii], Kₛ[ii], GJₛ[ii], Sₛ[ii], Iₛ[ii], mₛ[ii] = StructProp.compute_section_property(section, constitutive)
-    EI_z[ii], K_z[ii], GJ_z[ii], S_z[ii], I_z[ii], m_z[ii] = StructProp.compute_section_property(section, constitutive)
+    EI_z[ii], EIIP_z[ii], K_z[ii], GJ_z[ii], S_z[ii], EA_z[ii], I_z[ii], m_z[ii] = StructProp.compute_section_property(section, constitutive)
   end
 
   EIₛ = copy(EI_z)
+  EIIPₛ = copy(EIIP_z)
+  EAₛ = copy(EA_z)
   Kₛ = copy(K_z)
   GJₛ = copy(GJ_z)
   Sₛ = copy(S_z)
@@ -97,7 +100,7 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
   # ---------------------------
   #   Build final model
   # ---------------------------
-  model = DesignConstants.foil(mₛ, Iₛ, EIₛ, GJₛ, Kₛ, Sₛ, α₀, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], solverOptions["nNodes"], constitutive)
+  model = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, α₀, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], solverOptions["nNodes"], constitutive)
 
   return model
 
@@ -113,7 +116,7 @@ function init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict
 
   # model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
   model = DesignConstants.dynamicFoil(
-    statModel.mₛ, statModel.Iₛ, statModel.EIₛ, statModel.GJₛ, statModel.Kₛ, statModel.Sₛ, statModel.α₀, statModel.U∞, statModel.g, statModel.clα, statModel.ρ_f, statModel.nNodes, statModel.constitutive, fSweep, uRange)
+    statModel.mₛ, statModel.Iₛ, statModel.EIₛ, statModel.EIIPₛ, statModel.GJₛ, statModel.Kₛ, statModel.Sₛ, statModel.EAₛ, statModel.α₀, statModel.U∞, statModel.g, statModel.clα, statModel.ρ_f, statModel.nNodes, statModel.constitutive, fSweep, uRange)
 
   return model
 end

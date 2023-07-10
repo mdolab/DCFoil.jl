@@ -13,7 +13,7 @@ using Plots
 # ==============================================================================
 function test_struct()
     """
-    Test the constitutive relations
+    Test the constitutive relations (the beam stiffnesses)
     """
     # ************************************************
     #     Setup the test problem
@@ -31,6 +31,8 @@ function test_struct()
     N = 100
     θₐ = range(-pi / 2, stop=pi / 2, length=N)
     EIₛₐ = zeros(Float64, N)
+    EIIPₛₐ = zeros(Float64, N)
+    EAₛₐ = zeros(Float64, N)
     Kₛₐ = zeros(Float64, N)
     GJₛₐ = zeros(Float64, N)
     Sₛₐ = zeros(Float64, N)
@@ -38,9 +40,11 @@ function test_struct()
     for i in 1:N
         θₗ = θₐ[i]
         section = StructProp.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
-        EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ = StructProp.compute_section_property(section, "orthotropic")
+        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = StructProp.compute_section_property(section, "orthotropic")
 
         EIₛₐ[i] = EIₛ
+        EIIPₛₐ[i] = EIIP
+        EAₛₐ[i] = EAₛ
         Kₛₐ[i] = Kₛ
         GJₛₐ[i] = GJₛ
         Sₛₐ[i] = Sₛ
@@ -378,29 +382,31 @@ function test_FiniteElementComp()
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
     # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
     ref_sol = [4, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 2.56699]
-
+    
     # --- Relative error ---
     answers = [bt_Ftip_wtip, bt_Ftip_psitip, bt_Ttip_wtip, bt_Ttip_psitip, BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-
+    
     return rel_err
 end
 
-function test_FiniteElementComp3D()
+using DelimitedFiles
+
+function test_FiniteElementIso3D()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
     nNodes = 3
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "Λ" => deg2rad(0.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
+        "c" => 1 * ones(nNodes), # chord length [m]
+        "s" => 1.0, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
+        "toc" => 1.0, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
+        "θ" => deg2rad(0.0), # fiber angle global [rad]
         "strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
@@ -430,7 +436,7 @@ function test_FiniteElementComp3D()
         # ---------------------------
         #   Structure
         # ---------------------------
-        "material" => "cfrp", # preselect from material library
+        "material" => "test-iso3d", # preselect from material library
         # ---------------------------
         #   Solver modes
         # ---------------------------
@@ -451,7 +457,6 @@ function test_FiniteElementComp3D()
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
     nElem = nNodes - 1
-    constitutive = FOIL.constitutive
     structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
 
     # ************************************************
@@ -461,29 +466,60 @@ function test_FiniteElementComp3D()
     # ---------------------------
     #   Tip force only
     # ---------------------------
-    elemType = "BT2"
+    elemType = "BEAM3D"
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
-    # globalF[end-2*dim+1] = 1.0 # 0 Newton tip force
-    globalF[end-4*dim+2] = 1.0 # 0 Newton tip force
+    T = [
+        0 -1 0
+        1 0 0
+        0 0 1
+    ]
+    transMat = [
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+    ]
+    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "force")
     u = copy(globalF)
 
-    # TODO: pickup here and debug coordinate transform
+    # println("Global matrices")
+    # println("globalK = ")
+    # show(stdout, "text/plain", globalK)
+    # println()
+    # # println("globalM = ")
+    # # show(stdout, "text/plain", globalM)
+    # # println()
+    # println("globalF = ")
+    # println(globalF)
+
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
+    # println("Blanked matrices")
+    # println("K = ")
+    # show(stdout, "text/plain", K)
+    # println()
+    # # println("globalM = ")
+    # # show(stdout, "text/plain", globalM)
+    # # println()
+    # println("F = ")
+    # println(F)
+    # # return K, F
     q1 = FEMMethods.solve_structure(K, M, F)
 
     writedlm("DebugKMatrix.csv", K, ',')
     writedlm("DebugMMatrix.csv", M, ',')
 
-    return q1
+    # TODO:MORE THOROUGH CHECKING OF TRANSFORMATIONS AND NATURAL FREQUENCIES!!
+
+    return q1, K, F
 
 end
 
-using DelimitedFiles
 
-displ = test_FiniteElementComp3D()
+q1, K, F = test_FiniteElementIso3D()
+println("tip deflection = ", q1[end-3], " m")

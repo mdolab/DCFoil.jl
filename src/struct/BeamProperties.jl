@@ -36,7 +36,7 @@ end
 function compute_section_property(section::section_property, constitutive)
 
     """
-    Classic laminate theory (CLT) for composite cross section property computation.
+    Orthotropic material uses classic laminate theory (CLT) for composite cross section property computation.
     returns:
         EIₛ: scalar, bending stiffness.
         Kₛ: scalar, bend-twist coupling
@@ -64,44 +64,47 @@ function compute_section_property(section::section_property, constitutive)
     # Compute nu_21 by E2 * nu12 = E1 * nu12
     ν₂₁ = (E₂ / E₁) * ν₁₂
 
-    # Fiber frame
-    divPoissonsRatio = 1 / (1 - ν₁₂ * ν₂₁)
-    q₁₁ = E₁ * divPoissonsRatio
-    q₂₂ = E₂ * divPoissonsRatio
-    q₁₂ = q₂₂ * ν₁₂
-    q₆₆ = G₁₂
-
-    # Convert to physical frame
-    m = cos(θ)
-    n = sin(θ)
-    q₁₁ₚ = q₁₁ * m^4 + q₂₂ * n^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
-    q₂₂ₚ = q₁₁ * n^4 + q₂₂ * m^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
-    q₁₂ₚ = (q₁₁ + q₂₂ - 4 * q₆₆) * m^2 * n^2 + q₁₂ * (m^4 + n^4)
-    q₁₆ₚ = m * n * (q₁₁ * m^2 - q₂₂ * n^2 - (q₁₂ + 2 * q₆₆) * (m^2 - n^2))
-    q₂₆ₚ = m * n * (q₁₁ * n^2 - q₂₂ * m^2 + (q₁₂ + 2 * q₆₆) * (m^2 - n^2))
-    q₆₆ₚ = (q₁₁ + q₂₂ - 2 * q₁₂) * m^2 * n^2 + q₆₆ * (m^2 - n^2)^2
-
-    # Flexural stiffnesses D_ij for single layer laminate
-    d₁₁ = q₁₁ₚ / 12
-    d₂₂ = q₂₂ₚ / 12
-    d₁₂ = q₁₂ₚ / 12
-    d₁₆ = q₁₆ₚ / 12
-    d₂₆ = q₂₆ₚ / 12
-    d₆₆ = q₆₆ₚ / 12
-
-
     # Compute sectional properties output
     mₛ = ρₛ * c * t # [kg/m]
     Iₛ = ρₛ * (c * t^3 / 12 + c^3 * t / 12) # [kg-m^2/m]
     EIₛ = 0.0
+    EIₛIP = 0.0
+    EAₛ = 0.0
     Kₛ = 0.0
     GJₛ = 0.0
     if (constitutive == "orthotropic")
+        # Fiber frame
+        divPoissonsRatio = 1 / (1 - ν₁₂ * ν₂₁)
+        q₁₁ = E₁ * divPoissonsRatio
+        q₂₂ = E₂ * divPoissonsRatio
+        q₁₂ = q₂₂ * ν₁₂
+        q₆₆ = G₁₂
+
+        # Convert to physical frame
+        m = cos(θ)
+        n = sin(θ)
+        q₁₁ₚ = q₁₁ * m^4 + q₂₂ * n^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
+        q₂₂ₚ = q₁₁ * n^4 + q₂₂ * m^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
+        q₁₂ₚ = (q₁₁ + q₂₂ - 4 * q₆₆) * m^2 * n^2 + q₁₂ * (m^4 + n^4)
+        q₁₆ₚ = m * n * (q₁₁ * m^2 - q₂₂ * n^2 - (q₁₂ + 2 * q₆₆) * (m^2 - n^2))
+        q₂₆ₚ = m * n * (q₁₁ * n^2 - q₂₂ * m^2 + (q₁₂ + 2 * q₆₆) * (m^2 - n^2))
+        q₆₆ₚ = (q₁₁ + q₂₂ - 2 * q₁₂) * m^2 * n^2 + q₆₆ * (m^2 - n^2)^2
+
+        # Flexural stiffnesses D_ij for single layer laminate
+        d₁₁ = q₁₁ₚ / 12
+        d₂₂ = q₂₂ₚ / 12
+        d₁₂ = q₁₂ₚ / 12
+        d₁₆ = q₁₆ₚ / 12
+        d₂₆ = q₂₆ₚ / 12
+        d₆₆ = q₆₆ₚ / 12
+
         EIₛ = (d₁₁ - d₁₂^2 / d₂₂) * c * t^3
         Kₛ = 2 * (d₁₆ - d₁₂ * d₂₆ / d₂₂) * c * t^3
         GJₛ = 4 * (d₆₆ - d₂₆^2 / d₂₂) * c * t^3
     elseif (constitutive == "isotropic")
-        EIₛ = E₁ * c * t^3 / 12
+        EIₛ = E₁ * c * t^3 / 12 # EI for a rectangle
+        EIₛIP = E₁ * c^3 * t / 12 # EI for a rectangle
+        EAₛ = E₁ * c * t # EA for a rectangle
         GJₛ = G₁₂ * π * c^3 * t^3 / (c^2 + t^2) # GJ for an ellipse
     end
     Sₛ = EIₛ * ((0.5 * ab)^2 + (c^2 / 12.0))
@@ -109,8 +112,9 @@ function compute_section_property(section::section_property, constitutive)
     # if (Kₛ < 1e-5)
     #     Kₛ = Kₛ + 1e-5
     # end
+    println(EIₛ )
 
-    return EIₛ, Kₛ, GJₛ, Sₛ, Iₛ, mₛ
+    return EIₛ, EIₛIP, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 
 end
 
