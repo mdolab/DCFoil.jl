@@ -39,7 +39,7 @@ module LinearBeamElem
 
 """
 
-function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
+function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false, dim=1)
     """
     The internal strain energy of a beam is
         U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
@@ -109,6 +109,25 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
             k13 k23 k33 k34
             k14 k24 k34 k44
         ]
+        if dim == 3
+            # NOTE: This test failed and gives a singular matrix. You have to be more careful
+            inf = 1e4 * k11
+            Kᵉ = kb * [
+                # u  v  w   θx  θy  θz  u   v   w   θx  θy  θz
+                inf 000 000 000 000 000 -inf 00 000 000 000 000
+                000 inf 000 000 000 inf 000 -inf 00 000 000 inf
+                000 000 k11 000 k12 000 000 000 k13 000 k14 000
+                000 000 000 inf 000 000 000 000 000 -inf 00 000
+                000 000 k12 000 k22 000 000 000 k23 000 k24 000
+                000 inf 000 000 000 inf 000 -inf 00 000 000 inf
+                -inf 00 000 000 000 000 inf 000 000 000 000 000
+                000 -inf 00 000 000 -inf 00 inf 000 000 000 -inf
+                000 000 k13 000 k23 000 000 000 k33 000 k34 000
+                000 000 000 -inf 00 000 000 000 000 inf 000 000
+                000 000 k14 000 k24 000 000 000 k34 000 k44 000
+                000 inf 000 000 000 inf 000 -inf 00 000 000 inf
+            ]
+        end
 
     elseif elemType == "bend-twist"
         # 6x6 elem stiffness matrix
@@ -151,7 +170,6 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         ]
 
     elseif elemType == "bend-twist-axial"
-        # TODO: can do this but only interesting if composite propeller looking at extension-twist coupling
         println("Axial elements not implemented")
     elseif elemType == "BT2" # Higher order beam element
         # 8x8 matrix
@@ -204,15 +222,16 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
             # 12x12 elem stiffness matrix
             coeff = 1 / lᵉ^3
             EIᵉOOP = EIᵉ
-            EIᵉIP = EIIPᵉ
+            EIᵉIP = EIIPᵉ * 1e2
+            EAᵉ *= 1e2
             k11_11 = EAᵉ * lᵉ^2
-            k11_22 = 12 * EIᵉOOP
-            k11_26 = 6 * EIᵉOOP * lᵉ
-            k11_33 = 12 * EIᵉIP
-            k11_35 = -6 * EIᵉIP * lᵉ
+            k11_22 = 12 * EIᵉIP
+            k11_26 = 6 * EIᵉIP * lᵉ
+            k11_33 = 12 * EIᵉOOP
+            k11_35 = -6 * EIᵉOOP * lᵉ
             k11_44 = GJᵉ * lᵉ^2
-            k11_55 = 4 * EIᵉIP * lᵉ^2
-            k11_66 = 4 * EIᵉOOP * lᵉ^2
+            k11_55 = 4 * EIᵉOOP * lᵉ^2
+            k11_66 = 4 * EIᵉIP * lᵉ^2
             K11 = coeff * [
                 k11_11 000000 000000 000000 000000 000000
                 000000 k11_22 000000 000000 000000 k11_26
@@ -227,8 +246,8 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
             k12_33 = -k11_33
             k12_35 = k11_35
             k12_44 = -k11_44
-            k12_55 = 2 * EIᵉIP * lᵉ^2
-            k12_66 = 2 * EIᵉOOP * lᵉ^2
+            k12_55 = 2 * EIᵉOOP * lᵉ^2
+            k12_66 = 2 * EIᵉIP * lᵉ^2
             K12 = coeff * [
                 k12_11 000000 000000 000000 000000 000000
                 000000 k12_22 000000 000000 000000 k12_26
@@ -251,12 +270,105 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         elseif constitutive == "orthotropic"
             println("Orthotropic not implemented")
         end
+    elseif elemType == "BT3" # higher order composite beam 10 DOF
+        coeff = 1 / lᵉ^3
+        az = 12 * EIᵉ
+        bz = 6 * EIᵉ * lᵉ
+        cz = 1200 * EIᵉ / 70
+        dz = 600 * EIᵉ * lᵉ / 70
+        ez = 4 * EIᵉ * lᵉ^2
+        fz = 2 * EIᵉ * lᵉ^2
+        gz = 192 * EIᵉ * lᵉ^2 / 35
+        hz = 216 * EIᵉ * lᵉ^2 / 70
+        iz = 30 * EIᵉ * lᵉ^2 / 70
+        jz = 22 * EIᵉ * lᵉ^3 / 70
+        kz = 8 * EIᵉ * lᵉ^3 / 70
+        lz = 6 * EIᵉ * lᵉ^4 / 70
+        mz = EIᵉ * lᵉ^4 / 70
+        atau = 0.2 * (6 * GJᵉ * lᵉ^2 + 60 * Sᵉ)
+        btau = 0.1 * (GJᵉ * lᵉ^3 + 60 * Sᵉ * lᵉ)
+        ctau = (GJᵉ * lᵉ^4 - 60 * Sᵉ * lᵉ^2) / 30
+        dtau = (2 * GJᵉ * lᵉ^4 + 60 * Sᵉ * lᵉ^2) / 15
+        atheta = BTᵉ * lᵉ^2
+        btheta = 0.2 * 6 * BTᵉ * lᵉ^2
+        ctheta = 0.05 * BTᵉ * lᵉ^4
+        dtheta = abᵉ * BTᵉ * lᵉ^3
+        etheta = 0.2 * 3 * BTᵉ * lᵉ^3
+        ftheta = 0.2 * 2 * BTᵉ * lᵉ^3
+        gtheta = 0.1 * BTᵉ * lᵉ^3
+        K11 = coeff * [
+            cz dz iz -abᵉ*az -(abᵉ * bz + atheta)
+            dz gz jz -(bz - btheta) (-ftheta-abᵉ*ez)
+            iz jz lz gtheta ctheta
+            -abᵉ*az -(bz - btheta) gtheta atau btau
+            -(abᵉ * bz + atheta) (-ftheta-abᵉ*ez) ctheta btau dtau+dtheta
+        ]
+        K12 = coeff * [
+            -cz dz -iz abᵉ*az -(abᵉ * bz - atheta)
+            -dz hz -kz (bz-btheta) etheta-abᵉ*fz
+            -iz kz mz -gtheta ctheta
+            abᵉ*az -(bz + btheta) gtheta -atau btau
+            (abᵉ*bz+atheta) (-etheta-abᵉ*fz) ctheta -btau -ctau
+        ]
+        K22 = coeff * [
+            cz -dz iz -abᵉ*az (abᵉ*bz-atheta)
+            -dz gz -jz (bz+btheta) (ftheta-abᵉ*ez)
+            iz -jz lz -gtheta ctheta
+            -abᵉ*az (bz+btheta) -gtheta atau -btau
+            (abᵉ*bz-atheta) (ftheta-abᵉ*ez) ctheta -btau dtau-dtheta
+        ]
+        Ktop = hcat(K11, K12)
+        Kbot = hcat(K12', K22)
+        Kᵉ = vcat(Ktop, Kbot)
+    elseif elemType == "COMP2" # Higher order composite beam 18 DOF
+        # 8x8 matrix
+        coeff = 1 / lᵉ^3
+        # k11_11 = 12 * EIᵉ
+        # k11_12 = 6 * EIᵉ * lᵉ
+        # k11_13 = -12 * abᵉ * EIᵉ
+        # k11_14 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
+        # k11_22 = 4 * EIᵉ * lᵉ^2
+        # k11_23 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
+        # k11_24 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
+        # k11_33 = 6 * GJᵉ * lᵉ^2 / 5 + 12 * Sᵉ
+        # k11_34 = GJᵉ * lᵉ^3 * 0.1 + 6 * Sᵉ * lᵉ
+        # k11_44 = (abᵉ * BTᵉ * lᵉ^3) + (2 * GJᵉ * lᵉ^4 / 15) + (4 * Sᵉ * lᵉ^2)
+        # # --- Block matrices ---
+        K11 = coeff * [
+            # u   v     w      θx     θy     θz     θx'    θy'    θz'
+            00000 00000 k11_11 k11_13 k11_12 00000 k11_14
+            00000 00000 k11_12 k11_23 k11_22 00000 k11_24
+            00000 00000 k11_13 k11_33 k11_23 00000 k11_34
+            00000 00000 k11_14 k11_34 k11_24 00000 k11_44
+        ]
+        k12_14 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
+        k12_24 = 0.5 * BTᵉ * lᵉ^3 - 2 * abᵉ * EIᵉ * lᵉ^2
+        k12_44 = 2 * Sᵉ * lᵉ^2 - GJᵉ * lᵉ^4 / 30
+        k12_32 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
+        k12_42 = -0.5 * BTᵉ * lᵉ^3 - 2 * abᵉ * EIᵉ * lᵉ^2
+        K12 = coeff * [
+            -k11_11 k11_12 -k11_13 k12_14
+            -k11_12 0.5*k11_22 -k11_23 k12_24
+            -k11_13 k12_32 -k11_33 k11_34
+            -k12_32 k12_42 -k11_34 k12_44
+        ]
+        k22_24 = 0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
+        k22_44 = -(abᵉ * BTᵉ * lᵉ^3) + (2 * GJᵉ * lᵉ^4 / 15) + (4 * Sᵉ * lᵉ^2)
+        K22 = coeff * [
+            k11_11 -k11_12 k11_13 -k11_23
+            -k11_12 k11_22 -k11_14 k22_24
+            k11_13 -k11_14 k11_33 -k11_34
+            -k11_23 k22_24 -k11_34 k22_44
+        ]
+        Ktop = hcat(K11, K12)
+        Kbot = hcat(K12', K22)
+        Kᵉ = vcat(Ktop, Kbot)
     end
 
     return Kᵉ
 end
 
-function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
+function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", dim=1)
     """
     The kinetic energy is
         T = 0.5∫₀ᴸ m (∂w/∂t)² dx = 0.5{q̇(t)}ᵀ[Mᵉ]{q̇(t)}
@@ -285,6 +397,23 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
             m13 m23 m33 m34
             m14 m24 m34 m44
         ]
+        if dim == 3
+            sml = 1e-3 * m11
+            Mᵉ = [
+                sml 000 000 000 000 000 000 000 000 000 000 000
+                000 sml 000 000 000 000 000 000 000 000 000 000
+                000 000 m11 000 m12 000 000 m13 000 m14 000 000
+                000 000 000 sml 000 000 000 000 000 000 000 000
+                000 000 m12 000 m22 000 000 m23 000 m24 000 000
+                000 000 000 000 000 sml 000 000 000 000 000 000
+                000 000 000 000 000 000 sml 000 000 000 000 000
+                000 000 m13 000 m23 000 000 m33 000 m34 000 000
+                000 000 000 000 000 000 000 000 sml 000 000 000
+                000 000 m14 000 m24 000 000 m34 000 m44 000 000
+                000 000 000 000 000 000 000 000 000 000 sml 000
+                000 000 000 000 000 000 000 000 000 000 000 sml
+            ]
+        end
     elseif elemType == "bend-twist"
         m11 = mb * 156
         m12 = mb * 22 * lᵉ
@@ -357,8 +486,64 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
         Mᵉ = vcat(Mtop, Mbot)
+    elseif elemType == "BT3" # higher order composite beam 10 DOF
+        az = 181 * mᵉ * lᵉ / 462
+        bz = 8 * mᵉ * lᵉ / 21
+        cz = 5 * mᵉ * lᵉ / 42
+        dz = 25 * mᵉ * lᵉ / 231
+        ez = 29 * mᵉ * lᵉ^2 / 840
+        fz = 11 * mᵉ * lᵉ^2 / 168
+        gz = 5 * mᵉ * lᵉ^2 / 168
+        hz = 3 * mᵉ * lᵉ^2 / 56
+        iz = 311 * mᵉ * lᵉ^2 / 4620
+        jz = 151 * mᵉ * lᵉ^2 / 4620
+        kz = 19 * mᵉ * lᵉ^3 / 1980
+        lz = 52 * mᵉ * lᵉ^3 / 3465
+        mz = 23 * mᵉ * lᵉ^4 / 18480
+        nz = 13 * mᵉ * lᵉ^4 / 13860
+        oz = 17 * mᵉ * lᵉ^3 / 5040
+        pz = 5 * mᵉ * lᵉ^3 / 1008
+        qz = 281 * mᵉ * lᵉ^3 / 55440
+        rz = 181 * mᵉ * lᵉ^3 / 55440
+        sz = mᵉ * lᵉ^3 / 84
+        tz = mᵉ * lᵉ^5 / 9240
+        uz = mᵉ * lᵉ^4 / 1008
+        vz = mᵉ * lᵉ^3 / 120
+        wz = mᵉ * lᵉ^4 / 1260
+        xz = mᵉ * lᵉ^5 / 11088
+        atau = 156 * iᵉ * lᵉ / 420
+        btau = 54 * iᵉ * lᵉ / 420
+        ctau = 22 * iᵉ * lᵉ^2 / 420
+        dtau = 13 * iᵉ * lᵉ^2 / 420
+        etau = 4 * iᵉ * lᵉ^3 / 420
+        ftau = 3 * iᵉ * lᵉ^3 / 420
+        M11 = [
+            az iz qz x_αbᵉ*bz x_αbᵉ*hz
+            iz lz mz x_αbᵉ*fz x_αbᵉ*sz
+            qz mz tz x_αbᵉ*pz x_αbᵉ*uz
+            x_αbᵉ*bz x_αbᵉ*fz x_αbᵉ*pz atau ctau
+            x_αbᵉ*hz x_αbᵉ*sz x_αbᵉ*uz ctau etau
+        ]
+        M12 = [
+            dz -jz rz x_αbᵉ*cz -x_αbᵉ*gz
+            jz -kz nz x_αbᵉ*ez -x_αbᵉvz
+            rz -nz xz x_αbᵉ*oz -x_αbᵉ*wz
+            x_αbᵉ*cz -x_αbᵉ*ez x_αbᵉ*oz btau -dtau
+            x_αbᵉ*gz -x_αbᵉ*vz x_αbᵉ*wz dtau -ftau
+        ]
+        M22 = [
+            az -iz qz x_αbᵉ*bz -x_αbᵉ*hz
+            -iz lz -mz -x_αbᵉ*fz x_αbᵉ*sz
+            qz -mz tz x_αbᵉ*pz -x_αbᵉ*uz
+            x_αbᵉ*bz -x_αbᵉ*fz x_αbᵉ*pz atau -ctau
+            -x_αbᵉ*hz x_αbᵉ*sz -x_αbᵉ*uz -ctau etau
+        ]
+        Mtop = hcat(M11, M12)
+        Mbot = hcat(M12', M22)
+        Mᵉ = vcat(Mtop, Mbot)
     elseif elemType == "BEAM3D"
-        m11_11 = 2 * mᵉ * lᵉ / 6
+        # TODO: won't fix but the natural frequencies seem broken
+        m11_11 = 140 * mᵉ * lᵉ / 420
         m11_22 = 156 * mᵉ * lᵉ / 420
         m11_26 = 22 * mᵉ * lᵉ^2 / 420
         m11_33 = m11_22
@@ -418,6 +603,7 @@ Module with generic FEM methods
 
 # --- Libraries ---
 using Zygote, ChainRulesCore
+using DelimitedFiles
 using LinearAlgebra
 using ..LinearBeamElem
 include("../solvers/SolverRoutines.jl")
@@ -545,7 +731,22 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
     Returns the transformation matrix for a given element type into 3D space
     """
 
+    rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
+    calpha = dR[1] * rxy_div
+    salpha = dR[2] * rxy_div
+    cbeta = 1 / rxy_div / l
+    sbeta = dR[3] / l
+
+    # Direction cosine matrix
+    T = [
+        calpha*cbeta salpha calpha*sbeta
+        -salpha*cbeta calpha -salpha*sbeta
+        -sbeta 0 cbeta
+    ]
+    writedlm("DebugT.csv", T, ',')
+
     if elemType == "BT2"
+        # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
         if dim == 3
             # 8x24
             Γ = [
@@ -559,23 +760,19 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
         if dim == 3
             # 4x12
             Γ = [
+                T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+                zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+                zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+                zeros(3, 3) zeros(3, 3) zeros(3, 3) T
             ]
+            # Γ = Matrix(I, 4, 4)
+            writedlm("DebugGamma.csv", Γ, ',')
         else
             error("Only 3D bend implemented")
         end
     elseif elemType == "BEAM3D"
-        rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
         if dim == 3
             # 12x12
-            calpha = dR[1] * rxy_div
-            salpha = dR[2] * rxy_div
-            cbeta = 1 / rxy_div / l
-            sbeta = dR[3] / l
-            T = [
-                calpha*cbeta salpha calpha*sbeta
-                -salpha*cbeta calpha -salpha*sbeta
-                -sbeta 0 cbeta
-            ]
             Γ = [
                 T zeros(3, 3) zeros(3, 3) zeros(3, 3)
                 zeros(3, 3) T zeros(3, 3) zeros(3, 3)
@@ -611,18 +808,23 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     """
 
     # --- Local nodal DOF vector ---
+    # Determine the number of dofs per node
     if elemType == "bend"
         nnd = 2
+        # This is a reduced dim element so we need to store more numbers
+        nndG = dim * nnd
+        # nndG = 2
     elseif elemType == "bend-twist"
         nnd = 3
     elseif elemType == "BT2"
         nnd = 4
     elseif elemType == "BEAM3D"
         nnd = 6
+        nndG = nnd
+
     else
         error(elemType, " element type not implemented")
     end
-    nndG = nnd # number of global DOF per node (multiply by 3 for xyz)
     qLocal = zeros(nnd * 2)
 
     # --- Initialize matrices ---
@@ -640,6 +842,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         println("|   Assembling global stiffness and mass matrices  |")
         println("+", "-"^50, "+")
         println("Default 2 nodes per elem, nothing else will work")
+        println("Using ", elemType, " elements")
         println("Using ", constitutive, " constitutive relations...")
         println(nElem, " elements")
         println(nNodes, " nodes")
@@ -682,17 +885,17 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive)
+        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false, dim)
 
         # ---------------------------
         #   Local mass matrix
         # ---------------------------
-        mLocal::Matrix{Float64} = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
+        mLocal::Matrix{Float64} = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType, dim)
 
         # ---------------------------
         #   Local force vector
         # ---------------------------
-        fLocal::Vector{Float64} = zeros(nnd * 2)
+        fLocal::Vector{Float64} = zeros(nndG * 2)
 
         # ---------------------------
         #   Transform from local to global coordinates
@@ -708,12 +911,22 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # println("T:")
         # show(stdout, "text/plain", Γ[1:3, 1:3])
         # println()
-        println("kLocal: ")
-        show(stdout, "text/plain", kLocal)
-        println()
-        println("mLocal: ")
-        show(stdout, "text/plain", mLocal)
-        println()
+        # println("kLocal: ")
+        # show(stdout, "text/plain", kLocal)
+        # println()
+        # println("mLocal: ")
+        # show(stdout, "text/plain", mLocal)
+        # println()
+        # println("kElem: ")
+        # show(stdout, "text/plain", kElem)
+        # println()
+        # println("mElem: ")
+        # show(stdout, "text/plain", mElem)
+        # println()
+        writedlm("DebugKLocal.csv", kLocal, ',')
+        writedlm("DebugMLocal.csv", mLocal, ',')
+        writedlm("DebugKElem.csv", kElem, ',')
+        writedlm("DebugMElem.csv", mElem, ',')
 
         # ---------------------------
         #   Assemble into global matrices
@@ -821,7 +1034,7 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
 
     # --- Transform to global then add into vector ---
     FLocalVec = transMat[1:m÷2, 1:n÷2]' * FLocalVec
-    globalF[end-n÷2+1:end] = FLocalVec * MAG
+    globalF[end-n÷2+1:end] += FLocalVec * MAG
 
 end
 

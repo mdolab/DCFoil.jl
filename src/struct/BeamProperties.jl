@@ -106,13 +106,19 @@ function compute_section_property(section::section_property, constitutive)
         EIₛIP = E₁ * c^3 * t / 12 # EI for a rectangle
         EAₛ = E₁ * c * t # EA for a rectangle
         GJₛ = G₁₂ * π * c^3 * t^3 / (c^2 + t^2) # GJ for an ellipse
+        GJₛ = G₁₂ * c^3 * t * 0.333  # GJ for a rectangle
     end
     Sₛ = EIₛ * ((0.5 * ab)^2 + (c^2 / 12.0))
 
     # if (Kₛ < 1e-5)
     #     Kₛ = Kₛ + 1e-5
     # end
-    println(EIₛ )
+    
+    # println("bend stiff: ", EIₛ)
+    # println("BTC: ", Kₛ)
+    # println("torsion stiff: ", GJₛ)
+    # println("warp res: ", Sₛ)
+    # println("ext. stiff: ", EAₛ)
 
     return EIₛ, EIₛIP, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 
