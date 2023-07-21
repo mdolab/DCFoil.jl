@@ -298,9 +298,9 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         gtheta = 0.1 * BTᵉ * lᵉ^3
         K11 = coeff * [
             cz dz iz -abᵉ*az -(abᵉ * bz + atheta)
-            dz gz jz -(bz - btheta) (-ftheta-abᵉ*ez)
+            dz gz jz -(abᵉ*bz - btheta) (-ftheta-abᵉ*ez)
             iz jz lz gtheta ctheta
-            -abᵉ*az -(bz - btheta) gtheta atau btau
+            -abᵉ*az -(abᵉ*bz - btheta) gtheta atau btau
             -(abᵉ * bz + atheta) (-ftheta-abᵉ*ez) ctheta btau dtau+dtheta
         ]
         K12 = coeff * [
@@ -312,9 +312,9 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         ]
         K22 = coeff * [
             cz -dz iz -abᵉ*az (abᵉ*bz-atheta)
-            -dz gz -jz (bz+btheta) (ftheta-abᵉ*ez)
+            -dz gz -jz (abᵉ*bz+btheta) (ftheta-abᵉ*ez)
             iz -jz lz -gtheta ctheta
-            -abᵉ*az (bz+btheta) -gtheta atau -btau
+            -abᵉ*az (abᵉ*bz+btheta) -gtheta atau -btau
             (abᵉ*bz-atheta) (ftheta-abᵉ*ez) ctheta -btau dtau-dtheta
         ]
         Ktop = hcat(K11, K12)
@@ -526,7 +526,7 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
         ]
         M12 = [
             dz -jz rz x_αbᵉ*cz -x_αbᵉ*gz
-            jz -kz nz x_αbᵉ*ez -x_αbᵉvz
+            jz -kz nz x_αbᵉ*ez -x_αbᵉ*vz
             rz -nz xz x_αbᵉ*oz -x_αbᵉ*wz
             x_αbᵉ*cz -x_αbᵉ*ez x_αbᵉ*oz btau -dtau
             x_αbᵉ*gz -x_αbᵉ*vz x_αbᵉ*wz dtau -ftau
@@ -755,7 +755,8 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
         else
             error("Only 3D BT2 implemented")
         end
-
+    elseif elemType == "BT3"
+        Γ = Matrix(I, 10, 10)
     elseif elemType == "bend"
         if dim == 3
             # 4x12
@@ -818,6 +819,9 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         nnd = 3
     elseif elemType == "BT2"
         nnd = 4
+    elseif elemType == "BT3"
+        nnd = 5
+        nndG = nnd
     elseif elemType == "BEAM3D"
         nnd = 6
         nndG = nnd
@@ -927,6 +931,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         writedlm("DebugMLocal.csv", mLocal, ',')
         writedlm("DebugKElem.csv", kElem, ',')
         writedlm("DebugMElem.csv", mElem, ',')
+        # TODO: PICKUP HERE, something wrong with the global assembly
 
         # ---------------------------
         #   Assemble into global matrices
@@ -985,7 +990,8 @@ function get_fixed_nodes(elemType::String, BCCond="clamped", dim=3)
                 # now the fixed nodes are [wx, wy, wz, ∂wx, ∂wy, ∂wz, θx, θy, θz, ∂θx, ∂θy, ∂θz]
                 fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
             end
-
+        elseif elemType == "BT3"
+            fixedNodes = [1,2,3,4,5]
         elseif elemType == "BEAM3D"
             fixedNodes = [1, 2, 3, 4, 5, 6]
         else

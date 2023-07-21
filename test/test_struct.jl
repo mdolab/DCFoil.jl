@@ -81,9 +81,9 @@ unit tests to verify the beam bend and bend-twist element
 
 include("../src/InitModel.jl")
 include("../src/struct/FiniteElements.jl")
-
+include("../src/solvers/SolverRoutines.jl")
 using .FEMMethods, .InitModel
-using .LinearBeamElem
+using .LinearBeamElem, .SolverRoutines
 
 # ==============================================================================
 #                         Test elemental matrices
@@ -168,6 +168,88 @@ function test_BT2_mass()
     return rel_err
 end
 
+function test_BT3_stiff()
+    constitutive = "orthotropic"
+    # ************************************************
+    #     BT2 element stiff
+    # ************************************************
+    elemType = "BT3"
+
+    EI = 2
+    GJ = 8
+    Ks = 4
+    Ss = 8/3
+
+    Ktest = LinearBeamElem.compute_elem_stiff(EI, 0, GJ, Ks, Ss, 0, 2, 1, elemType, constitutive)
+    # return Ktest
+
+    # --- Reference value ---
+    # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
+    ref_sol = vec([
+        4.2857    4.2857    0.4286   -3.0000   -5.0000   -4.2857    4.2857   -0.4286    3.0000   -1.0000
+        4.2857    5.4857    0.6286   -0.6000   -5.6000   -4.2857    3.0857   -0.2286    0.6000    0.4000
+        0.4286    0.6286    0.3429    0.4000    0.4000   -0.4286    0.2286    0.0571   -0.4000    0.4000
+       -3.0000   -0.6000    0.4000    8.8000    4.8000    3.0000   -5.4000    0.4000   -8.8000    4.8000
+       -5.0000   -5.6000    0.4000    4.8000   11.4667    5.0000   -4.4000    0.4000   -4.8000    2.1333
+       -4.2857   -4.2857   -0.4286    3.0000    5.0000    4.2857   -4.2857    0.4286   -3.0000    1.0000
+        4.2857    3.0857    0.2286   -5.4000   -4.4000   -4.2857    5.4857   -0.6286    5.4000   -2.4000
+       -0.4286   -0.2286    0.0571    0.4000    0.4000    0.4286   -0.6286    0.3429   -0.4000    0.4000
+        3.0000    0.6000   -0.4000   -8.8000   -4.8000   -3.0000    5.4000   -0.4000    8.8000   -4.8000
+       -1.0000    0.4000    0.4000    4.8000    2.1333    1.0000   -2.4000    0.4000   -4.8000    3.4667    
+    ])
+
+    # # --- Relative error ---
+    answers = vec(Ktest) # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    if det(Ktest) >= 1e-16
+        print("Your stiffness matrix is not singular...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    if Ktest' != Ktest
+        print("Your stiffness matrix is not symmetric...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    return rel_err
+end
+
+function test_BT3_mass()
+    elemType = "BT3"
+
+    Mtest = LinearBeamElem.compute_elem_mass(4, 16 / 3, 2, -1, elemType)
+    # return Mtest
+
+    # --- Reference value ---
+    # These were obtained from the matlab symbolic script plugging 2 for rho, 2 for the chord, and 1 for everything else
+    ref_sol = vec([
+        3.1342    1.0771    0.1622   -3.0476   -0.8571    0.8658   -0.5229    0.1045   -0.9524    0.4762
+        1.0771    0.4802    0.0797   -1.0476   -0.3810    0.5229   -0.3071    0.0600   -0.5524    0.2667
+        0.1622    0.0797    0.0139   -0.1587   -0.0635    0.1045   -0.0600    0.0115   -0.1079    0.0508
+       -3.0476   -1.0476   -0.1587    3.9619    1.1175   -0.9524    0.5524   -0.1079    1.3714   -0.6603
+       -0.8571   -0.3810   -0.0635    1.1175    0.4063   -0.4762    0.2667   -0.0508    0.6603   -0.3048
+        0.8658    0.5229    0.1045   -0.9524   -0.4762    3.1342   -1.0771    0.1622   -3.0476    0.8571
+       -0.5229   -0.3071   -0.0600    0.5524    0.2667   -1.0771    0.4802   -0.0797    1.0476   -0.3810
+        0.1045    0.0600    0.0115   -0.1079   -0.0508    0.1622   -0.0797    0.0139   -0.1587    0.0635
+       -0.9524   -0.5524   -0.1079    1.3714    0.6603   -3.0476    1.0476   -0.1587    3.9619   -1.1175
+        0.4762    0.2667    0.0508   -0.6603   -0.3048    0.8571   -0.3810    0.0635   -1.1175    0.4063
+    ])
+
+    # # --- Relative error ---
+    answers = vec(Mtest) # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    if minimum(eigvals(Mtest)) < 0.0
+        print("Your stiffness matrix is not positive definite...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    return rel_err
+end
+
+# ans = test_BT3_mass()
+# ans = test_BT3_stiff()
 # ==============================================================================
 #                         Test finite element solver with unit loads
 # ==============================================================================
@@ -382,27 +464,27 @@ function test_FiniteElementComp()
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
     # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
     ref_sol = [4, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 2.56699]
-    
+
     # --- Relative error ---
     answers = [bt_Ftip_wtip, bt_Ftip_psitip, bt_Ttip_wtip, bt_Ttip_psitip, BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-    
+
     return rel_err
 end
 
-using DelimitedFiles
+using DelimitedFiles, LinearAlgebra
 
 function test_FiniteElementIso3D()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
-    nNodes = 3
+    nNodes = 15
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
         "Λ" => deg2rad(0.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 1 * ones(nNodes), # chord length [m]
-        "s" => 1.0, # semispan [m]
+        "s" => 10, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
@@ -473,9 +555,9 @@ function test_FiniteElementIso3D()
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
-    T = [
-        0 -1 0
-        1 0 0
+    T = [ # transform -90 deg about z
+        0 1 0
+        -1 0 0
         0 0 1
     ]
     transMat = [
@@ -485,15 +567,16 @@ function test_FiniteElementIso3D()
         zeros(3, 3) zeros(3, 3) zeros(3, 3) T
     ]
     FEMMethods.apply_tip_load!(globalF, elemType, transMat, "force")
+    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "torque")
     u = copy(globalF)
 
     # println("Global matrices")
     # println("globalK = ")
     # show(stdout, "text/plain", globalK)
     # println()
-    # # println("globalM = ")
-    # # show(stdout, "text/plain", globalM)
-    # # println()
+    # println("globalM = ")
+    # show(stdout, "text/plain", globalM)
+    # println()
     # println("globalF = ")
     # println(globalF)
 
@@ -511,15 +594,252 @@ function test_FiniteElementIso3D()
     # # return K, F
     q1 = FEMMethods.solve_structure(K, M, F)
 
-    writedlm("DebugKMatrix.csv", K, ',')
-    writedlm("DebugMMatrix.csv", M, ',')
+    writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    writedlm("DebugMGlobMatrix.csv", globalM, ',')
 
-    # TODO:MORE THOROUGH CHECKING OF TRANSFORMATIONS AND NATURAL FREQUENCIES!!
+    # ************************************************
+    #     Natural frequencies
+    # ************************************************
+    omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, nNodes)
 
-    return q1, K, F
+    return q1, K, M, F, omegaSquared, modeShapes
 
 end
 
 
-q1, K, F = test_FiniteElementIso3D()
-println("tip deflection = ", q1[end-3], " m")
+# q1, K, M, F, omegaSquared, modeShapes = test_FiniteElementIso3D()
+# println("tip deflection = ", q1[end-3], " m")
+# println("tip rotation about y axis = ", q1[end-1], " rad")
+# natFreqs = sqrt.(Complex.(omegaSquared)) / (2 * pi)
+# println("Natural frequencies = ", real.(natFreqs), " Hz")
+
+function test_FiniteElementBend()
+    """
+    Test the finite elements with unit loads, thickness, length, and structural moduli
+    """
+    nNodes = 3
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => deg2rad(0.0), # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 1.0 * ones(nNodes), # chord length [m]
+        "s" => 10, # semispan [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "toc" => 1.0, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "θ" => deg2rad(0.0), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
+    )
+    solverOptions = Dict(
+        # ---------------------------
+        #   I/O
+        # ---------------------------
+        "name" => "t-foil",
+        "debug" => false,
+        # ---------------------------
+        #   General appendage options
+        # ---------------------------
+        "config" => "wing",
+        # "config" => "t-foil",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "rotation" => 0.0, # deg
+        "gravityVector" => [0.0, 0.0, -9.81],
+        "tipMass" => false,
+        # ---------------------------
+        #   Flow
+        # ---------------------------
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "use_freeSurface" => false,
+        "use_cavitation" => false,
+        "use_ventilation" => false,
+        # ---------------------------
+        #   Structure
+        # ---------------------------
+        "material" => "test-iso3d", # preselect from material library
+        # ---------------------------
+        #   Solver modes
+        # ---------------------------
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 1:2,
+        "tipForceMag" => 1,
+        # --- p-k (Eigen) solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 1,
+        "uRange" => [1, 2],
+        "maxQIter" => 100, # that didn't fix the slow run time...
+        "rhoKS" => 80.0,
+    )
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+    nElem = nNodes - 1
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+
+    # ************************************************
+    #     BT2
+    # ************************************************
+    dim = 3
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "bend"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
+    T = [ # transform -90 deg about z
+        0 1 0
+        -1 0 0
+        0 0 1
+    ]
+    transMat = [
+        T[3, 1] T[3, 2] T[3, 3] zeros(1, 3) zeros(1, 3) zeros(1, 3)
+        zeros(1, 3) T[2, 1] T[2, 2] T[2, 3] zeros(1, 3) zeros(1, 3)
+        zeros(1, 3) zeros(1, 3) T[3, 1] T[3, 2] T[3, 3] zeros(1, 3)
+        zeros(1, 3) zeros(1, 3) zeros(1, 3) T[2, 1] T[2, 2] T[2, 3]
+    ]
+    # transMat = Matrix(I, 4, 4)
+    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "force")
+    u = copy(globalF)
+
+    # println("Global matrices")
+    # println("globalK = ")
+    # show(stdout, "text/plain", globalK)
+    # println()
+    # println("globalM = ")
+    # show(stdout, "text/plain", globalM)
+    # println()
+    # println("globalF = ")
+    # println(globalF)
+    writedlm("DebugFGlob.csv", globalF, ',')
+    writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    writedlm("DebugMGlobMatrix.csv", globalM, ',')
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    # println("Blanked matrices")
+    # println("K = ")
+    # show(stdout, "text/plain", K)
+    # println()
+    # # println("globalM = ")
+    # # show(stdout, "text/plain", globalM)
+    # # println()
+    # println("F = ")
+    # println(F)
+    # # return K, F
+    # TODO: PICKUP HERE
+    q1 = FEMMethods.solve_structure(K, M, F)
+
+
+    # ************************************************
+    #     Natural frequencies
+    # ************************************************
+    omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
+
+    return q1, K, M, F, omegaSquared, modeShapes
+
+end
+
+
+# q1, K, M, F, omegaSquared, modeShapes = test_FiniteElementBend()
+# println("tip deflection = ", q1[end-1], " m")
+# # println("tip rotation about y axis = ", q1[end-1], " rad")
+# natFreqs = sqrt.(Complex.(omegaSquared)) / (2 * pi)
+
+function test_FEBT3()
+    """
+    Test the finite elements with unit loads, thickness, length, and structural moduli
+    """
+    nNodes = 3
+    dim = 1
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 1 * ones(nNodes), # chord length [m]
+        "s" => 1.0, # semispan [m]
+        "ab" => zeros(nNodes), # dist from midchord to EA [m]
+        "toc" => 1, # thickness-to-chord ratio
+        "x_αb" => zeros(nNodes), # static imbalance [m]
+        "θ" => 0 * π / 180, # fiber angle global [rad]
+    )
+    solverOptions = Dict(
+        "material" => "test-comp", # preselect from material library
+        "nNodes" => nNodes,
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+    )
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+    nElem = nNodes - 1
+    constitutive = FOIL.constitutive
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "BT3"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalF[end-4] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q3 = FEMMethods.solve_structure(K, M, F)
+    BT2_Ftip_wtip = q3[end-4]
+    BT2_Ftip_psitip = q3[end-1]
+
+    # ---------------------------
+    #   Tip torque only
+    # ---------------------------
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalF[end-1] = 1.0 # 0 Newton tip force
+    u = copy(globalF)
+
+
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+    q4 = FEMMethods.solve_structure(K, M, F)
+    BT2_Ttip_wtip = q4[end-4]
+    BT2_Ttip_psitip = q4[end-1]
+
+    # --- Print these out if something does not make sense ---
+    # println("bt_Ftip_wtip = ", bt_Ftip_wtip, " [m]")
+    # println("bt_Ftip_psitip" = ", bt_Ftip_psitip", " [rad]")
+    # println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
+    # println("bt_Ttip_psitip" = ", bt_Ttip_psitip", " [rad]")
+    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
+    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+
+    # --- Reference value ---
+    # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
+    # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
+    ref_sol = [4.0, 0.0, 0.0, 2.56699]
+
+    # --- Relative error ---
+    answers = [BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    return rel_err
+end
+
+test_FEBT3()
