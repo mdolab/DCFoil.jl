@@ -73,7 +73,9 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         whether to use Timoshenko beam theory (default is Euler-Bernoulli), only works for the bending element
     """
 
-    # --- Handy identities ---
+    # ************************************************
+    #     Handy identities
+    # ************************************************
     if useTimoshenko
         # NOTE: only used for the bending only elem. ATM
         κ = 5 / 6 # for a rect section according to wikipedia
@@ -83,6 +85,46 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     end
     kb = EIᵉ / (lᵉ^3 * (1 + ϕ))
     kt = GJᵉ / lᵉ
+    coeff = 1 / lᵉ^3
+    ax = EAᵉ * lᵉ^2
+    az = 12 * EIᵉ
+    bz = 6 * EIᵉ * lᵉ
+    cz = 1200 * EIᵉ / 70
+    dz = 600 * EIᵉ * lᵉ / 70
+    ez = 4 * EIᵉ * lᵉ^2
+    fz = 2 * EIᵉ * lᵉ^2
+    gz = 192 * EIᵉ * lᵉ^2 / 35
+    hz = 216 * EIᵉ * lᵉ^2 / 70
+    iz = 30 * EIᵉ * lᵉ^2 / 70
+    jz = 22 * EIᵉ * lᵉ^3 / 70
+    kz = 8 * EIᵉ * lᵉ^3 / 70
+    lz = 6 * EIᵉ * lᵉ^4 / 70
+    mz = EIᵉ * lᵉ^4 / 70
+    ay = 12 * EIIPᵉ
+    by = 6 * EIIPᵉ * lᵉ
+    cy = 1200 * EIIPᵉ / 70
+    dy = 600 * EIIPᵉ * lᵉ / 70
+    ey = 4 * EIIPᵉ * lᵉ^2
+    fy = 2 * EIIPᵉ * lᵉ^2
+    gy = 192 * EIIPᵉ * lᵉ^2 / 35
+    hy = 216 * EIIPᵉ * lᵉ^2 / 70
+    iy = 30 * EIIPᵉ * lᵉ^2 / 70
+    jy = 22 * EIIPᵉ * lᵉ^3 / 70
+    ky = 8 * EIIPᵉ * lᵉ^3 / 70
+    ly = 6 * EIIPᵉ * lᵉ^4 / 70
+    my = EIIPᵉ * lᵉ^4 / 70
+    atau = 0.2 * (6 * GJᵉ * lᵉ^2 + 60 * Sᵉ)
+    btau = 0.1 * (GJᵉ * lᵉ^3 + 60 * Sᵉ * lᵉ)
+    ctau = (GJᵉ * lᵉ^4 - 60 * Sᵉ * lᵉ^2) / 30
+    dtau = (2 * GJᵉ * lᵉ^4 + 60 * Sᵉ * lᵉ^2) / 15
+    atheta = BTᵉ * lᵉ^2
+    btheta = 0.2 * 6 * BTᵉ * lᵉ^2
+    ctheta = 0.05 * BTᵉ * lᵉ^4
+    dtheta = abᵉ * BTᵉ * lᵉ^3
+    etheta = 0.2 * 3 * BTᵉ * lᵉ^3
+    ftheta = 0.2 * 2 * BTᵉ * lᵉ^3
+    gtheta = 0.1 * BTᵉ * lᵉ^3
+
 
     # --- Constitutive law ---
     if constitutive == "isotropic"
@@ -172,8 +214,6 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     elseif elemType == "bend-twist-axial"
         println("Axial elements not implemented")
     elseif elemType == "BT2" # Higher order beam element
-        # 8x8 matrix
-        coeff = 1 / lᵉ^3
         # row 1
         k11_11::Float64 = 12 * EIᵉ
         k11_12::Float64 = 6 * EIᵉ * lᵉ
@@ -220,7 +260,6 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     elseif elemType == "BEAM3D" # 1st order 12 DOF spatial beam element
         if constitutive == "isotropic"
             # 12x12 elem stiffness matrix
-            coeff = 1 / lᵉ^3
             EIᵉOOP = EIᵉ
             EIᵉIP = EIIPᵉ * 1e2
             EAᵉ *= 1e2
@@ -271,43 +310,18 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
             println("Orthotropic not implemented")
         end
     elseif elemType == "BT3" # higher order composite beam 10 DOF
-        coeff = 1 / lᵉ^3
-        az = 12 * EIᵉ
-        bz = 6 * EIᵉ * lᵉ
-        cz = 1200 * EIᵉ / 70
-        dz = 600 * EIᵉ * lᵉ / 70
-        ez = 4 * EIᵉ * lᵉ^2
-        fz = 2 * EIᵉ * lᵉ^2
-        gz = 192 * EIᵉ * lᵉ^2 / 35
-        hz = 216 * EIᵉ * lᵉ^2 / 70
-        iz = 30 * EIᵉ * lᵉ^2 / 70
-        jz = 22 * EIᵉ * lᵉ^3 / 70
-        kz = 8 * EIᵉ * lᵉ^3 / 70
-        lz = 6 * EIᵉ * lᵉ^4 / 70
-        mz = EIᵉ * lᵉ^4 / 70
-        atau = 0.2 * (6 * GJᵉ * lᵉ^2 + 60 * Sᵉ)
-        btau = 0.1 * (GJᵉ * lᵉ^3 + 60 * Sᵉ * lᵉ)
-        ctau = (GJᵉ * lᵉ^4 - 60 * Sᵉ * lᵉ^2) / 30
-        dtau = (2 * GJᵉ * lᵉ^4 + 60 * Sᵉ * lᵉ^2) / 15
-        atheta = BTᵉ * lᵉ^2
-        btheta = 0.2 * 6 * BTᵉ * lᵉ^2
-        ctheta = 0.05 * BTᵉ * lᵉ^4
-        dtheta = abᵉ * BTᵉ * lᵉ^3
-        etheta = 0.2 * 3 * BTᵉ * lᵉ^3
-        ftheta = 0.2 * 2 * BTᵉ * lᵉ^3
-        gtheta = 0.1 * BTᵉ * lᵉ^3
         K11 = coeff * [
             cz dz iz -abᵉ*az -(abᵉ * bz + atheta)
-            dz gz jz -(abᵉ*bz - btheta) (-ftheta-abᵉ*ez)
+            dz gz jz -(abᵉ * bz - btheta) (-ftheta-abᵉ*ez)
             iz jz lz gtheta ctheta
-            -abᵉ*az -(abᵉ*bz - btheta) gtheta atau btau
+            -abᵉ*az -(abᵉ * bz - btheta) gtheta atau btau
             -(abᵉ * bz + atheta) (-ftheta-abᵉ*ez) ctheta btau dtau+dtheta
         ]
         K12 = coeff * [
             -cz dz -iz abᵉ*az -(abᵉ * bz - atheta)
-            -dz hz -kz (bz-btheta) etheta-abᵉ*fz
+            -dz hz -kz (abᵉ*bz-btheta) etheta-abᵉ*fz
             -iz kz mz -gtheta ctheta
-            abᵉ*az -(bz + btheta) gtheta -atau btau
+            abᵉ*az -(abᵉ * bz + btheta) gtheta -atau btau
             (abᵉ*bz+atheta) (-etheta-abᵉ*fz) ctheta -btau -ctau
         ]
         K22 = coeff * [
@@ -320,45 +334,39 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         Ktop = hcat(K11, K12)
         Kbot = hcat(K12', K22)
         Kᵉ = vcat(Ktop, Kbot)
-    elseif elemType == "COMP2" # Higher order composite beam 18 DOF
-        # 8x8 matrix
-        coeff = 1 / lᵉ^3
-        # k11_11 = 12 * EIᵉ
-        # k11_12 = 6 * EIᵉ * lᵉ
-        # k11_13 = -12 * abᵉ * EIᵉ
-        # k11_14 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
-        # k11_22 = 4 * EIᵉ * lᵉ^2
-        # k11_23 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
-        # k11_24 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
-        # k11_33 = 6 * GJᵉ * lᵉ^2 / 5 + 12 * Sᵉ
-        # k11_34 = GJᵉ * lᵉ^3 * 0.1 + 6 * Sᵉ * lᵉ
-        # k11_44 = (abᵉ * BTᵉ * lᵉ^3) + (2 * GJᵉ * lᵉ^4 / 15) + (4 * Sᵉ * lᵉ^2)
-        # # --- Block matrices ---
+    elseif elemType == "COMP2" # Higher order composite beam 18 DOF using a 4th order basis function in bending
         K11 = coeff * [
-            # u   v     w      θx     θy     θz     θx'    θy'    θz'
-            00000 00000 k11_11 k11_13 k11_12 00000 k11_14
-            00000 00000 k11_12 k11_23 k11_22 00000 k11_24
-            00000 00000 k11_13 k11_33 k11_23 00000 k11_34
-            00000 00000 k11_14 k11_34 k11_24 00000 k11_44
+            ax 00 0000000 0000000 00 00 0000000000000000 00 0
+            00 cy 0000000 0000000 00 dy 0000000000000000 00 iy
+            00 00 cz -abᵉ*az dz 00 -(abᵉ * bz + atheta) iz 0
+            00 00 -abᵉ*az atau -bz*abᵉ+btheta 00 btau gtheta 0
+            00 00 dz -bz*abᵉ+btheta gz 00 -(abᵉ * ez + ftheta) jz 00
+            00 dy 00 00 00 gy 0000000000000000 00 jy
+            00 00 -(abᵉ * bz + atheta) btau -(abᵉ * ez + ftheta) 00 dtheta+dtau ctheta 00
+            00 00 iz gtheta jz 00 ctheta lz 00
+            00 iy 00 00 00 jy 0000000000000000 00 ly
         ]
-        k12_14 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
-        k12_24 = 0.5 * BTᵉ * lᵉ^3 - 2 * abᵉ * EIᵉ * lᵉ^2
-        k12_44 = 2 * Sᵉ * lᵉ^2 - GJᵉ * lᵉ^4 / 30
-        k12_32 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
-        k12_42 = -0.5 * BTᵉ * lᵉ^3 - 2 * abᵉ * EIᵉ * lᵉ^2
         K12 = coeff * [
-            -k11_11 k11_12 -k11_13 k12_14
-            -k11_12 0.5*k11_22 -k11_23 k12_24
-            -k11_13 k12_32 -k11_33 k11_34
-            -k12_32 k12_42 -k11_34 k12_44
+            -ax 00 0000000 0000000 00 00 0000000000000000 00 0
+            00 -cy 0000000 0000000 00 dy 0000000000000000 00 -iy
+            00 00 -cz abᵉ*az dz 00 -abᵉ*bz+atheta -iz 0
+            00 00 abᵉ*az -atau -bz*abᵉ-btheta 00 btau gtheta 0
+            00 00 -dz bz*abᵉ-btheta hz 00 -abᵉ*fz+etheta -kz 00
+            00 -dy 00 00 00 hy 0000000000000000 00 -ky
+            00 00 (abᵉ*bz+atheta) -btau -(abᵉ * fz + etheta) 00 -ctau ctheta 00
+            00 00 -iz -gtheta kz 00 ctheta mz 00
+            00 -iy 00 00 00 ky 0000000000000000 00 my
         ]
-        k22_24 = 0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
-        k22_44 = -(abᵉ * BTᵉ * lᵉ^3) + (2 * GJᵉ * lᵉ^4 / 15) + (4 * Sᵉ * lᵉ^2)
         K22 = coeff * [
-            k11_11 -k11_12 k11_13 -k11_23
-            -k11_12 k11_22 -k11_14 k22_24
-            k11_13 -k11_14 k11_33 -k11_34
-            -k11_23 k22_24 -k11_34 k22_44
+            ax 00 0000000 0000000 00 00 0000000000000000 00 0
+            00 cy 0000000 0000000 00 -dy 0000000000000000 00 iy
+            00 00 cz -abᵉ*az -dz 00 (abᵉ*bz-atheta) iz 0
+            00 00 -abᵉ*az atau bz*abᵉ+btheta 00 -btau -gtheta 0
+            00 00 -dz bz*abᵉ+btheta gz 00 -abᵉ*ez+ftheta -jz 00
+            00 -dy 00 00 00 gy 0000000000000000 00 -jy
+            00 00 (abᵉ*bz-atheta) -btau -(abᵉ * ez + ftheta) 00 -dtheta+dtau ctheta 00
+            00 00 iz -gtheta -jz 00 ctheta lz 00
+            00 iy 00 00 00 -jy 0000000000000000 00 ly
         ]
         Ktop = hcat(K11, K12)
         Kbot = hcat(K12', K22)
@@ -376,9 +384,67 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
     Element mass matrix from the kinetic energies
     """
 
-    # --- Handy identities ---
+    # ************************************************
+    #     Handy identities
+    # ************************************************
     mb = mᵉ * lᵉ / 420
     mt = iᵉ * lᵉ / 6
+    ax= 2*mᵉ*lᵉ/6
+    bx= mᵉ*lᵉ^2/6
+    az = 181 * mᵉ * lᵉ / 462
+    bz = 8 * mᵉ * lᵉ / 21
+    cz = 5 * mᵉ * lᵉ / 42
+    dz = 25 * mᵉ * lᵉ / 231
+    ez = 29 * mᵉ * lᵉ^2 / 840
+    fz = 11 * mᵉ * lᵉ^2 / 168
+    gz = 5 * mᵉ * lᵉ^2 / 168
+    hz = 3 * mᵉ * lᵉ^2 / 56
+    iz = 311 * mᵉ * lᵉ^2 / 4620
+    jz = 151 * mᵉ * lᵉ^2 / 4620
+    kz = 19 * mᵉ * lᵉ^3 / 1980
+    lz = 52 * mᵉ * lᵉ^3 / 3465
+    mz = 23 * mᵉ * lᵉ^4 / 18480
+    nz = 13 * mᵉ * lᵉ^4 / 13860
+    oz = 17 * mᵉ * lᵉ^3 / 5040
+    pz = 5 * mᵉ * lᵉ^3 / 1008
+    qz = 281 * mᵉ * lᵉ^3 / 55440
+    rz = 181 * mᵉ * lᵉ^3 / 55440
+    sz = mᵉ * lᵉ^3 / 84
+    tz = mᵉ * lᵉ^5 / 9240
+    uz = mᵉ * lᵉ^4 / 1008
+    vz = mᵉ * lᵉ^3 / 120
+    wz = mᵉ * lᵉ^4 / 1260
+    xz = mᵉ * lᵉ^5 / 11088
+    ay = 181 * mᵉ * lᵉ / 462
+    by = 8 * mᵉ * lᵉ / 21
+    cy = 5 * mᵉ * lᵉ / 42
+    dy = 25 * mᵉ * lᵉ / 231
+    ey = 29 * mᵉ * lᵉ^2 / 840
+    fy = 11 * mᵉ * lᵉ^2 / 168
+    gy = 5 * mᵉ * lᵉ^2 / 168
+    hy = 3 * mᵉ * lᵉ^2 / 56
+    iy = 311 * mᵉ * lᵉ^2 / 4620
+    jy = 151 * mᵉ * lᵉ^2 / 4620
+    ky = 19 * mᵉ * lᵉ^3 / 1980
+    ly = 52 * mᵉ * lᵉ^3 / 3465
+    my = 23 * mᵉ * lᵉ^4 / 18480
+    ny = 13 * mᵉ * lᵉ^4 / 13860
+    oy = 17 * mᵉ * lᵉ^3 / 5040
+    py = 5 * mᵉ * lᵉ^3 / 1008
+    qy = 281 * mᵉ * lᵉ^3 / 55440
+    ry = 181 * mᵉ * lᵉ^3 / 55440
+    sy = mᵉ * lᵉ^3 / 84
+    ty = mᵉ * lᵉ^5 / 9240
+    uy = mᵉ * lᵉ^4 / 1008
+    vy = mᵉ * lᵉ^3 / 120
+    wy = mᵉ * lᵉ^4 / 1260
+    xy = mᵉ * lᵉ^5 / 11088
+    atau = 156 * iᵉ * lᵉ / 420
+    btau = 54 * iᵉ * lᵉ / 420
+    ctau = 22 * iᵉ * lᵉ^2 / 420
+    dtau = 13 * iᵉ * lᵉ^2 / 420
+    etau = 4 * iᵉ * lᵉ^3 / 420
+    ftau = 3 * iᵉ * lᵉ^3 / 420
 
     if elemType == "bend"
         m11 = mb * 156
@@ -436,6 +502,50 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
             m15 m25 0.0 m45 m55 0.0
             0.0 0.0 m36 0.0 0.0 m66
         ]
+    elseif elemType == "BEAM3D"
+        m11_11 = 140 * mᵉ * lᵉ / 420
+        m11_22 = 156 * mᵉ * lᵉ / 420
+        m11_26 = 22 * mᵉ * lᵉ^2 / 420
+        m11_33 = m11_22
+        m11_35 = m11_26
+        m11_44 = 2 * iᵉ * lᵉ / 6
+        m11_55 = 4 * mᵉ * lᵉ^3 / 420
+        m11_66 = m11_55
+        M11 = [
+            m11_11 000000 000000 000000 000000 000000
+            000000 m11_22 000000 000000 000000 m11_26
+            000000 000000 m11_33 000000 m11_35 000000
+            000000 000000 000000 m11_44 000000 000000
+            000000 000000 m11_35 000000 m11_55 000000
+            000000 m11_26 000000 000000 000000 m11_66
+        ]
+        m12_11 = 0.5 * m11_11
+        m12_22 = 54 * mᵉ * lᵉ / 420
+        m12_26 = -13 * mᵉ * lᵉ^2 / 420
+        m12_33 = m12_22
+        m12_35 = m12_26
+        m12_44 = 0.5 * m11_44
+        m12_55 = -3 * mᵉ * lᵉ^2 / 420
+        m12_66 = m12_55
+        M12 = [
+            m12_11 000000 000000 000000 000000 000000
+            000000 m12_22 000000 000000 000000 m12_26
+            000000 000000 m12_33 000000 m12_35 000000
+            000000 000000 000000 m12_44 000000 000000
+            000000 000000 -m12_35 000000 m12_55 000000
+            000000 -m12_26 000000 000000 000000 m12_66
+        ]
+        M22 = [
+            m11_11 000000 000000 000000 000000 000000
+            000000 m11_22 000000 000000 000000 -m11_26
+            000000 000000 m11_33 000000 -m11_35 000000
+            000000 000000 000000 m11_44 000000 000000
+            000000 000000 -m11_35 000000 m11_55 000000
+            000000 -m11_26 000000 000000 000000 m11_66
+        ]
+        Mtop = hcat(M11, M12)
+        Mbot = hcat(M12', M22)
+        Mᵉ = vcat(Mtop, Mbot)
     elseif elemType == "BT2"
         # row 1
         m11_11 = 13 * mᵉ * lᵉ / 35
@@ -541,47 +651,39 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
         Mᵉ = vcat(Mtop, Mbot)
-    elseif elemType == "BEAM3D"
-        # TODO: won't fix but the natural frequencies seem broken
-        m11_11 = 140 * mᵉ * lᵉ / 420
-        m11_22 = 156 * mᵉ * lᵉ / 420
-        m11_26 = 22 * mᵉ * lᵉ^2 / 420
-        m11_33 = m11_22
-        m11_35 = m11_26
-        m11_44 = 2 * iᵉ * lᵉ / 6
-        m11_55 = 4 * mᵉ * lᵉ^3 / 420
-        m11_66 = m11_55
+    elseif elemType == "COMP2"
         M11 = [
-            m11_11 000000 000000 000000 000000 000000
-            000000 m11_22 000000 000000 000000 m11_26
-            000000 000000 m11_33 000000 m11_35 000000
-            000000 000000 000000 m11_44 000000 000000
-            000000 000000 m11_35 000000 m11_55 000000
-            000000 m11_26 000000 000000 000000 m11_66
+            ax 00000     0000 00000000     0000 0000     0000      0000 0000
+            00    ay     0000 00000000     0000   iy     0000      0000   qy
+            00  0000       az x_αbᵉ*bz       iz 0000 x_αbᵉ*hz        qz 0000
+            00  0000 x_αbᵉ*bz     atau x_αbᵉ*fz 0000     ctau  x_αbᵉ*pz 0000
+            00  0000       iz x_αbᵉ*fz       lz 0000 x_αbᵉ*sz        mz 0000
+            00   iy      0000     0000     0000   ly     0000      0000   my
+            00  0000 x_αbᵉ*hz     ctau x_αbᵉ*sz 0000     etau  x_αbᵉ*uz 0000
+            00  0000       qz x_αbᵉ*pz       mz 0000 x_αbᵉ*uz        tz 0000
+            00    qy    0000     0000     0000   my     0000      0000    ty
         ]
-        m12_11 = 0.5 * m11_11
-        m12_22 = 54 * mᵉ * lᵉ / 420
-        m12_26 = -13 * mᵉ * lᵉ^2 / 420
-        m12_33 = m12_22
-        m12_35 = m12_26
-        m12_44 = 0.5 * m11_44
-        m12_55 = -3 * mᵉ * lᵉ^2 / 420
-        m12_66 = m12_55
         M12 = [
-            m12_11 000000 000000 000000 000000 000000
-            000000 m12_22 000000 000000 000000 m12_26
-            000000 000000 m12_33 000000 m12_35 000000
-            000000 000000 000000 m12_44 000000 000000
-            000000 000000 -m12_35 000000 m12_55 000000
-            000000 -m12_26 000000 000000 000000 m12_66
+            bx 00000     0000 00000000     0000 0000     0000      0000 0000
+            00    dy     0000 00000000     0000  -jy     0000      0000   ry
+            00  0000       dz x_αbᵉ*cz      -jz 0000 -x_αbᵉ*gz       rz 0000
+            00  0000 x_αbᵉ*cz btau    -x_αbᵉ*ez 0000    -dtau  x_αbᵉ*oz 0000
+            00  0000       jz x_αbᵉ*ez      -kz 0000 -x_αbᵉ*vz       nz 0000
+            00  jy       0000     0000     0000  -ky     0000      0000   ny
+            00  0000 x_αbᵉ*gz dtau    -x_αbᵉ*vz 0000    -ftau -x_αbᵉ*wz 0000
+            00 0000       rz x_αbᵉ*oz      -nz  0000 -x_αbᵉ*wz       xz 0000
+            00    ry     0000     0000     0000  -ny     0000      0000   xy
         ]
         M22 = [
-            m11_11 000000 000000 000000 000000 000000
-            000000 m11_22 000000 000000 000000 -m11_26
-            000000 000000 m11_33 000000 -m11_35 000000
-            000000 000000 000000 m11_44 000000 000000
-            000000 000000 -m11_35 000000 m11_55 000000
-            000000 -m11_26 000000 000000 000000 m11_66
+            ax 00000     0000 00000000     0000 0000     0000      0000 0000
+            00    ay     0000 00000000     0000  -iy     0000      0000   qy
+            00  0000       az x_αbᵉ*bz      -iz 0000 -x_αbᵉ*hz       qz 0000
+            00  0000 x_αbᵉ*bz     atau -x_αbᵉ*fz 0000    -ctau  x_αbᵉ*pz 0000
+            00  0000      -iz -x_αbᵉ*fz       lz 0000 x_αbᵉ*sz       -mz 0000
+            00  -iy      0000     0000     0000   ly     0000      0000  -my
+            00  0000 -x_αbᵉ*hz   -ctau x_αbᵉ*sz 0000     etau  -x_αbᵉ*uz 0000
+            00  0000       qz x_αbᵉ*pz     -mz 0000 -x_αbᵉ*uz        tz 0000
+            00    qy    0000     0000     0000  -my     0000      0000    ty
         ]
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
@@ -747,14 +849,9 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
 
     if elemType == "BT2"
         # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
-        if dim == 3
-            # 8x24
-            Γ = [
-            # TODO:this is wrong
-            ]
-        else
-            error("Only 3D BT2 implemented")
-        end
+        Γ = Matrix(I, 8, 8)
+    elseif elemType == "bend-twist"
+        Γ = Matrix(I, 6, 6)
     elseif elemType == "BT3"
         Γ = Matrix(I, 10, 10)
     elseif elemType == "bend"
@@ -817,8 +914,10 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # nndG = 2
     elseif elemType == "bend-twist"
         nnd = 3
+        nndG = nnd
     elseif elemType == "BT2"
         nnd = 4
+        nndG = nnd
     elseif elemType == "BT3"
         nnd = 5
         nndG = nnd
@@ -927,11 +1026,10 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # println("mElem: ")
         # show(stdout, "text/plain", mElem)
         # println()
-        writedlm("DebugKLocal.csv", kLocal, ',')
-        writedlm("DebugMLocal.csv", mLocal, ',')
-        writedlm("DebugKElem.csv", kElem, ',')
-        writedlm("DebugMElem.csv", mElem, ',')
-        # TODO: PICKUP HERE, something wrong with the global assembly
+        # writedlm("DebugKLocal.csv", kLocal, ',')
+        # writedlm("DebugMLocal.csv", mLocal, ',')
+        # writedlm("DebugKElem.csv", kElem, ',')
+        # writedlm("DebugMElem.csv", mElem, ',')
 
         # ---------------------------
         #   Assemble into global matrices
@@ -991,7 +1089,7 @@ function get_fixed_nodes(elemType::String, BCCond="clamped", dim=3)
                 fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
             end
         elseif elemType == "BT3"
-            fixedNodes = [1,2,3,4,5]
+            fixedNodes = [1, 2, 3, 4, 5]
         elseif elemType == "BEAM3D"
             fixedNodes = [1, 2, 3, 4, 5, 6]
         else
@@ -1161,11 +1259,7 @@ end
 end # end module
 
 # module BrickElem
-# # TODO: maybe never
 # function compute_shapeFuncs(coordMat, ξ, η, ζ, order=1)
-#     """
-#     TODO
-#     """
 #     # --- Lagrange poly shape funcs ---
 #     Nᵢ = 0.125 * [
 #         (1 - ξ) * (1 - η) * (1 - ζ) # node 1 (-1, -1, -1)

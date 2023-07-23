@@ -81,7 +81,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    FEMMethods.apply_tip_load!(globalF, elemType, transMat, loadType)
 
     # --- Initialize states ---
     u = copy(globalF) 

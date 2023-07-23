@@ -469,6 +469,10 @@ function test_FiniteElementComp()
     answers = [bt_Ftip_wtip, bt_Ftip_psitip, bt_Ttip_wtip, bt_Ttip_psitip, BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
+    omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
+
+    println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+
     return rel_err
 end
 
@@ -734,7 +738,6 @@ function test_FiniteElementBend()
     # println("F = ")
     # println(F)
     # # return K, F
-    # TODO: PICKUP HERE
     q1 = FEMMethods.solve_structure(K, M, F)
 
 
@@ -757,7 +760,7 @@ function test_FEBT3()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
-    nNodes = 3
+    nNodes = 20
     dim = 1
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
@@ -802,17 +805,16 @@ function test_FEBT3()
     BT2_Ftip_wtip = q3[end-4]
     BT2_Ftip_psitip = q3[end-1]
 
+    writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    writedlm("DebugMGlobMatrix.csv", globalM, ',')
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
-    chordVec = DVDict["c"]
-    ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-1] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
+    # return q3
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
@@ -825,10 +827,10 @@ function test_FEBT3()
     # println("bt_Ftip_psitip" = ", bt_Ftip_psitip", " [rad]")
     # println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
     # println("bt_Ttip_psitip" = ", bt_Ttip_psitip", " [rad]")
-    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
-    println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
-    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
-    println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+    # println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    # println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
+    # println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    # println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
@@ -839,7 +841,12 @@ function test_FEBT3()
     answers = [BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
+    omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
+
+    # println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+
     return rel_err
 end
 
-test_FEBT3()
+# test_FiniteElementComp()
+# ans = test_FEBT3()
