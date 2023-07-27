@@ -22,8 +22,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-# import seaborn as sns
-# from tabulate import tabulate
 
 # ==============================================================================
 # Extension modules
@@ -69,6 +67,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
     parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
+    parser.add_argument("--elem", type=int, default=0, help="Type of beam element: 0=BT2, 1=COMP2")
     args = parser.parse_args()
 
     # Echo the args

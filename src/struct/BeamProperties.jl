@@ -101,6 +101,10 @@ function compute_section_property(section::section_property, constitutive)
         EIₛ = (d₁₁ - d₁₂^2 / d₂₂) * c * t^3
         Kₛ = 2 * (d₁₆ - d₁₂ * d₂₆ / d₂₂) * c * t^3
         GJₛ = 4 * (d₆₆ - d₂₆^2 / d₂₂) * c * t^3
+
+        # TODO: make these parts more accurate later
+        EIₛIP = E₁ * c^3 * t / 12 # in-plane EI for a rectangle
+        EAₛ = E₁ * c * t # EA for a rectangle
     elseif (constitutive == "isotropic")
         EIₛ = E₁ * c * t^3 / 12 # EI for a rectangle
         EIₛIP = E₁ * c^3 * t / 12 # EI for a rectangle

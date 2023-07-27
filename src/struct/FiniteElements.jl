@@ -39,7 +39,7 @@ module LinearBeamElem
 
 """
 
-function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false, dim=1)
+function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
     """
     The internal strain energy of a beam is
         U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
@@ -151,25 +151,6 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
             k13 k23 k33 k34
             k14 k24 k34 k44
         ]
-        if dim == 3
-            # NOTE: This test failed and gives a singular matrix. You have to be more careful
-            inf = 1e4 * k11
-            Kᵉ = kb * [
-                # u  v  w   θx  θy  θz  u   v   w   θx  θy  θz
-                inf 000 000 000 000 000 -inf 00 000 000 000 000
-                000 inf 000 000 000 inf 000 -inf 00 000 000 inf
-                000 000 k11 000 k12 000 000 000 k13 000 k14 000
-                000 000 000 inf 000 000 000 000 000 -inf 00 000
-                000 000 k12 000 k22 000 000 000 k23 000 k24 000
-                000 inf 000 000 000 inf 000 -inf 00 000 000 inf
-                -inf 00 000 000 000 000 inf 000 000 000 000 000
-                000 -inf 00 000 000 -inf 00 inf 000 000 000 -inf
-                000 000 k13 000 k23 000 000 000 k33 000 k34 000
-                000 000 000 -inf 00 000 000 000 000 inf 000 000
-                000 000 k14 000 k24 000 000 000 k34 000 k44 000
-                000 inf 000 000 000 inf 000 -inf 00 000 000 inf
-            ]
-        end
 
     elseif elemType == "bend-twist"
         # 6x6 elem stiffness matrix
@@ -376,7 +357,7 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     return Kᵉ
 end
 
-function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", dim=1)
+function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
     """
     The kinetic energy is
         T = 0.5∫₀ᴸ m (∂w/∂t)² dx = 0.5{q̇(t)}ᵀ[Mᵉ]{q̇(t)}
@@ -389,8 +370,8 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
     # ************************************************
     mb = mᵉ * lᵉ / 420
     mt = iᵉ * lᵉ / 6
-    ax= 2*mᵉ*lᵉ/6
-    bx= mᵉ*lᵉ^2/6
+    ax = 2 * mᵉ * lᵉ / 6
+    bx = mᵉ * lᵉ^2 / 6
     az = 181 * mᵉ * lᵉ / 462
     bz = 8 * mᵉ * lᵉ / 21
     cz = 5 * mᵉ * lᵉ / 42
@@ -463,23 +444,6 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
             m13 m23 m33 m34
             m14 m24 m34 m44
         ]
-        if dim == 3
-            sml = 1e-3 * m11
-            Mᵉ = [
-                sml 000 000 000 000 000 000 000 000 000 000 000
-                000 sml 000 000 000 000 000 000 000 000 000 000
-                000 000 m11 000 m12 000 000 m13 000 m14 000 000
-                000 000 000 sml 000 000 000 000 000 000 000 000
-                000 000 m12 000 m22 000 000 m23 000 m24 000 000
-                000 000 000 000 000 sml 000 000 000 000 000 000
-                000 000 000 000 000 000 sml 000 000 000 000 000
-                000 000 m13 000 m23 000 000 m33 000 m34 000 000
-                000 000 000 000 000 000 000 000 sml 000 000 000
-                000 000 m14 000 m24 000 000 m34 000 m44 000 000
-                000 000 000 000 000 000 000 000 000 000 sml 000
-                000 000 000 000 000 000 000 000 000 000 000 sml
-            ]
-        end
     elseif elemType == "bend-twist"
         m11 = mb * 156
         m12 = mb * 22 * lᵉ
@@ -653,37 +617,37 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist", di
         Mᵉ = vcat(Mtop, Mbot)
     elseif elemType == "COMP2"
         M11 = [
-            ax 00000     0000 00000000     0000 0000     0000      0000 0000
-            00    ay     0000 00000000     0000   iy     0000      0000   qy
-            00  0000       az x_αbᵉ*bz       iz 0000 x_αbᵉ*hz        qz 0000
-            00  0000 x_αbᵉ*bz     atau x_αbᵉ*fz 0000     ctau  x_αbᵉ*pz 0000
-            00  0000       iz x_αbᵉ*fz       lz 0000 x_αbᵉ*sz        mz 0000
-            00   iy      0000     0000     0000   ly     0000      0000   my
-            00  0000 x_αbᵉ*hz     ctau x_αbᵉ*sz 0000     etau  x_αbᵉ*uz 0000
-            00  0000       qz x_αbᵉ*pz       mz 0000 x_αbᵉ*uz        tz 0000
-            00    qy    0000     0000     0000   my     0000      0000    ty
+            ax 00000 0000 00000000 0000 0000 0000 0000 0000
+            00 ay 0000 00000000 0000 iy 0000 0000 qy
+            00 0000 az x_αbᵉ*bz iz 0000 x_αbᵉ*hz qz 0000
+            00 0000 x_αbᵉ*bz atau x_αbᵉ*fz 0000 ctau x_αbᵉ*pz 0000
+            00 0000 iz x_αbᵉ*fz lz 0000 x_αbᵉ*sz mz 0000
+            00 iy 0000 0000 0000 ly 0000 0000 my
+            00 0000 x_αbᵉ*hz ctau x_αbᵉ*sz 0000 etau x_αbᵉ*uz 0000
+            00 0000 qz x_αbᵉ*pz mz 0000 x_αbᵉ*uz tz 0000
+            00 qy 0000 0000 0000 my 0000 0000 ty
         ]
         M12 = [
-            bx 00000     0000 00000000     0000 0000     0000      0000 0000
-            00    dy     0000 00000000     0000  -jy     0000      0000   ry
-            00  0000       dz x_αbᵉ*cz      -jz 0000 -x_αbᵉ*gz       rz 0000
-            00  0000 x_αbᵉ*cz btau    -x_αbᵉ*ez 0000    -dtau  x_αbᵉ*oz 0000
-            00  0000       jz x_αbᵉ*ez      -kz 0000 -x_αbᵉ*vz       nz 0000
-            00  jy       0000     0000     0000  -ky     0000      0000   ny
-            00  0000 x_αbᵉ*gz dtau    -x_αbᵉ*vz 0000    -ftau -x_αbᵉ*wz 0000
-            00 0000       rz x_αbᵉ*oz      -nz  0000 -x_αbᵉ*wz       xz 0000
-            00    ry     0000     0000     0000  -ny     0000      0000   xy
+            bx 00000 0000 00000000 0000 0000 0000 0000 0000
+            00 dy 0000 00000000 0000 -jy 0000 0000 ry
+            00 0000 dz x_αbᵉ*cz -jz 0000 -x_αbᵉ*gz rz 0000
+            00 0000 x_αbᵉ*cz btau -x_αbᵉ*ez 0000 -dtau x_αbᵉ*oz 0000
+            00 0000 jz x_αbᵉ*ez -kz 0000 -x_αbᵉ*vz nz 0000
+            00 jy 0000 0000 0000 -ky 0000 0000 ny
+            00 0000 x_αbᵉ*gz dtau -x_αbᵉ*vz 0000 -ftau -x_αbᵉ*wz 0000
+            00 0000 rz x_αbᵉ*oz -nz 0000 -x_αbᵉ*wz xz 0000
+            00 ry 0000 0000 0000 -ny 0000 0000 xy
         ]
         M22 = [
-            ax 00000     0000 00000000     0000 0000     0000      0000 0000
-            00    ay     0000 00000000     0000  -iy     0000      0000   qy
-            00  0000       az x_αbᵉ*bz      -iz 0000 -x_αbᵉ*hz       qz 0000
-            00  0000 x_αbᵉ*bz     atau -x_αbᵉ*fz 0000    -ctau  x_αbᵉ*pz 0000
-            00  0000      -iz -x_αbᵉ*fz       lz 0000 x_αbᵉ*sz       -mz 0000
-            00  -iy      0000     0000     0000   ly     0000      0000  -my
-            00  0000 -x_αbᵉ*hz   -ctau x_αbᵉ*sz 0000     etau  -x_αbᵉ*uz 0000
-            00  0000       qz x_αbᵉ*pz     -mz 0000 -x_αbᵉ*uz        tz 0000
-            00    qy    0000     0000     0000  -my     0000      0000    ty
+            ax 00000 0000 00000000 0000 0000 0000 0000 0000
+            00 ay 0000 00000000 0000 -iy 0000 0000 qy
+            00 0000 az x_αbᵉ*bz -iz 0000 -x_αbᵉ*hz qz 0000
+            00 0000 x_αbᵉ*bz atau -x_αbᵉ*fz 0000 -ctau x_αbᵉ*pz 0000
+            00 0000 -iz -x_αbᵉ*fz lz 0000 x_αbᵉ*sz -mz 0000
+            00 -iy 0000 0000 0000 ly 0000 0000 -my
+            00 0000 -x_αbᵉ*hz -ctau x_αbᵉ*sz 0000 etau -x_αbᵉ*uz 0000
+            00 0000 qz x_αbᵉ*pz -mz 0000 -x_αbᵉ*uz tz 0000
+            00 qy 0000 0000 0000 -my 0000 0000 ty
         ]
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
@@ -828,7 +792,7 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function get_transMat(dR, l, elemType="BT2", dim=3)
+function get_transMat(dR, l, elemType="BT2")
     """
     Returns the transformation matrix for a given element type into 3D space
     """
@@ -845,6 +809,7 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
         -salpha*cbeta calpha -salpha*sbeta
         -sbeta 0 cbeta
     ]
+    Z = zeros(3, 3)
     writedlm("DebugT.csv", T, ',')
 
     if elemType == "BT2"
@@ -855,31 +820,32 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
     elseif elemType == "BT3"
         Γ = Matrix(I, 10, 10)
     elseif elemType == "bend"
-        if dim == 3
-            # 4x12
-            Γ = [
-                T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-                zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-                zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-                zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-            ]
-            # Γ = Matrix(I, 4, 4)
-            writedlm("DebugGamma.csv", Γ, ',')
-        else
-            error("Only 3D bend implemented")
-        end
+        # 4x12
+        Γ = [
+            T Z Z Z
+            Z T Z Z
+            Z Z T Z
+            Z Z Z T
+        ]
+        # Γ = Matrix(I, 4, 4)
     elseif elemType == "BEAM3D"
-        if dim == 3
-            # 12x12
-            Γ = [
-                T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-                zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-                zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-                zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-            ]
-        else
-            error("Unsupported dimension")
-        end
+        # 12x12
+        Γ = [
+            T Z Z Z
+            Z T Z Z
+            Z Z T Z
+            Z Z Z T
+        ]
+    elseif elemType == "COMP2"
+        Γ = [
+            T Z Z Z Z Z
+            Z T Z Z Z Z
+            Z Z T Z Z Z
+            Z Z Z T Z Z
+            Z Z Z Z T Z
+            Z Z Z Z Z T
+        ]
+        # Γ = Matrix(I, 18, 18)
     else
         error("Unsupported element type")
     end
@@ -895,7 +861,7 @@ function get_transMat(dR, l, elemType="BT2", dim=3)
     return Γ
 end
 
-function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic", dim=3)
+function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
     """
     Generic function to assemble the global mass and stiffness matrices
 
@@ -909,22 +875,16 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     # Determine the number of dofs per node
     if elemType == "bend"
         nnd = 2
-        # This is a reduced dim element so we need to store more numbers
-        nndG = dim * nnd
-        # nndG = 2
     elseif elemType == "bend-twist"
         nnd = 3
-        nndG = nnd
     elseif elemType == "BT2"
         nnd = 4
-        nndG = nnd
     elseif elemType == "BT3"
         nnd = 5
-        nndG = nnd
     elseif elemType == "BEAM3D"
         nnd = 6
-        nndG = nnd
-
+    elseif elemType == "COMP2"
+        nnd = 9
     else
         error(elemType, " element type not implemented")
     end
@@ -934,9 +894,9 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     nElem::Int64 = size(elemConn)[1]
     nNodes = nElem + 1
     ndim = ndims(coordMat[1, :])
-    globalK::Matrix{Float64} = zeros(nndG * (nNodes), nndG * (nNodes))
-    globalM::Matrix{Float64} = zeros(nndG * (nNodes), nndG * (nNodes))
-    globalF::Vector{Float64} = zeros(nndG * (nNodes))
+    globalK::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
+    globalM::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
+    globalF::Vector{Float64} = zeros(nnd * (nNodes))
 
 
     # --- Debug printout for initialization ---
@@ -959,9 +919,9 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     globalK_z = Zygote.Buffer(globalK)
     globalM_z = Zygote.Buffer(globalM)
     globalF_z = Zygote.Buffer(globalF)
-    for jj in 1:nndG*nNodes
+    for jj in 1:nnd*nNodes
         globalF_z[jj] = 0.0
-        for ii in 1:nndG*nNodes
+        for ii in 1:nnd*nNodes
             globalK_z[jj, ii] = 0.0
             globalM_z[jj, ii] = 0.0
         end
@@ -988,17 +948,17 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false, dim)
+        kLocal::Matrix{Float64} = LinearBeamElem.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
 
         # ---------------------------
         #   Local mass matrix
         # ---------------------------
-        mLocal::Matrix{Float64} = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType, dim)
+        mLocal::Matrix{Float64} = LinearBeamElem.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
 
         # ---------------------------
         #   Local force vector
         # ---------------------------
-        fLocal::Vector{Float64} = zeros(nndG * 2)
+        fLocal::Vector{Float64} = zeros(nnd * 2)
 
         # ---------------------------
         #   Transform from local to global coordinates
@@ -1007,7 +967,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # The local coordinate system is {u} while the global is {U}
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
-        Γ = get_transMat(dR, lᵉ, elemType, dim)
+        Γ = get_transMat(dR, lᵉ, elemType)
         kElem = Γ' * kLocal * Γ
         mElem = Γ' * mLocal * Γ
         fElem = Γ' * fLocal
@@ -1026,28 +986,28 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # println("mElem: ")
         # show(stdout, "text/plain", mElem)
         # println()
-        # writedlm("DebugKLocal.csv", kLocal, ',')
-        # writedlm("DebugMLocal.csv", mLocal, ',')
-        # writedlm("DebugKElem.csv", kElem, ',')
-        # writedlm("DebugMElem.csv", mElem, ',')
+        writedlm("DebugKLocal.csv", kLocal, ',')
+        writedlm("DebugMLocal.csv", mLocal, ',')
+        writedlm("DebugKElem.csv", kElem, ',')
+        writedlm("DebugMElem.csv", mElem, ',')
 
         # ---------------------------
         #   Assemble into global matrices
         # ---------------------------
         # The following procedure generally follows:
         for nodeIdx ∈ 1:2 # loop over nodes in element
-            for dofIdx ∈ 1:nndG # loop over DOFs in node
-                idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * nndG + dofIdx) # idx of global dof (row of global matrix)
-                idxRowₑ = (nodeIdx - 1) * nndG + dofIdx # idx of dof within this element
+            for dofIdx ∈ 1:nnd # loop over DOFs in node
+                idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * nnd + dofIdx) # idx of global dof (row of global matrix)
+                idxRowₑ = (nodeIdx - 1) * nnd + dofIdx # idx of dof within this element
 
                 # --- Assemble RHS ---
                 globalF_z[idxRow] = fElem[idxRowₑ]
 
                 # --- Assemble LHS ---
                 for nodeColIdx ∈ 1:2 # loop over nodes in element
-                    for dofColIdx ∈ 1:nndG # loop over DOFs in node
-                        idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nndG + dofColIdx # idx of global dof (col of global matrix)
-                        idxColₑ = (nodeColIdx - 1) * nndG + dofColIdx # idx of dof within this element (column)
+                    for dofColIdx ∈ 1:nnd # loop over DOFs in node
+                        idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nnd + dofColIdx # idx of global dof (col of global matrix)
+                        idxColₑ = (nodeColIdx - 1) * nnd + dofColIdx # idx of dof within this element (column)
 
                         globalK_z[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
                         globalM_z[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
@@ -1063,35 +1023,23 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     return globalK, globalM, globalF
 end
 
-function get_fixed_nodes(elemType::String, BCCond="clamped", dim=3)
+function get_fixed_nodes(elemType::String, BCCond="clamped")
     """
     Depending on the elemType, return the indices of fixed nodes
     """
     if BCCond == "clamped"
         if elemType == "bend"
             fixedNodes = [1, 2]
-            if dim == 2
-                fixedNodes = [1, 2, 3, 4]
-            elseif dim == 3
-                fixedNodes = [1, 2, 3, 4, 5, 6]
-            end
-
         elseif elemType == "bend-twist"
             fixedNodes = [1, 2, 3]
-
         elseif elemType == "BT2"
             fixedNodes = [1, 2, 3, 4]
-            if dim == 2
-                # now the fixed nodes are [wx, wy, ∂wx, ∂wy, θx, ∂θx, θy, ∂θy]
-                fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8]
-            elseif dim == 3
-                # now the fixed nodes are [wx, wy, wz, ∂wx, ∂wy, ∂wz, θx, θy, θz, ∂θx, ∂θy, ∂θz]
-                fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-            end
         elseif elemType == "BT3"
             fixedNodes = [1, 2, 3, 4, 5]
         elseif elemType == "BEAM3D"
             fixedNodes = [1, 2, 3, 4, 5, 6]
+        elseif elemType == "COMP2"
+            fixedNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         else
             error("elemType not recognized")
 
@@ -1121,6 +1069,8 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
             FLocalVec = [1.0, 0.0, 0.0, 0.0]
         elseif elemType == "BEAM3D"
             FLocalVec = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        elseif elemType == "COMP2"
+            FLocalVec = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         else
             error("element not defined")
         end
@@ -1131,6 +1081,8 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
             FLocalVec = [0.0, 0.0, 1.0, 0.0]
         elseif elemType == "BEAM3D"
             FLocalVec = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        elseif elemType == "COMP2"
+            FLocalVec = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         else
             error("element not defined")
         end
@@ -1219,7 +1171,8 @@ function put_BC_back(q, elemType::String, BCType="clamped")
     if BCType == "clamped"
         if elemType == "BT2"
             uSol = vcat([0, 0, 0, 0], q)
-            uSol = vcat([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], q) # global now
+        elseif elemType == "COMP2"
+            uSol = vcat(zeros(9), q)
         else
             println("Not working")
             exit()

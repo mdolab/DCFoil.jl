@@ -79,7 +79,8 @@ solverOptions = Dict(
     @test test_FiniteElementComp() <= 1e-6
     @test test_BT2_stiff() <= 1e-5
     @test test_BT2_mass() <= 1e-4
-    @test testFEBT3() <= 1e-5
+    @test test_FEBT3() <= 1e-5
+    @test test_FECOMP2() <= 1e-1
 
     # ************************************************
     #     Hydrodynamic tests

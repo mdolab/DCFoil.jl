@@ -761,7 +761,6 @@ function test_FEBT3()
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
     nNodes = 20
-    dim = 1
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -850,3 +849,103 @@ end
 
 # test_FiniteElementComp()
 # ans = test_FEBT3()
+
+function test_FECOMP2()
+    nNodes = 6
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 1 * ones(nNodes), # chord length [m]
+        "s" => 1.0, # semispan [m]
+        "ab" => zeros(nNodes), # dist from midchord to EA [m]
+        "toc" => 1, # thickness-to-chord ratio
+        "x_αb" => zeros(nNodes), # static imbalance [m]
+        "θ" => 0 * π / 180, # fiber angle global [rad]
+    )
+    solverOptions = Dict(
+        "material" => "test-comp", # preselect from material library
+        "nNodes" => nNodes,
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+    )
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+    nElem = nNodes - 1
+    constitutive = FOIL.constitutive
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+
+    # ---------------------------
+    #   Tip force only
+    # ---------------------------
+    elemType = "COMP2"
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+    abVec = DVDict["ab"]
+    x_αbVec = DVDict["x_αb"]
+    chordVec = DVDict["c"]
+    ebVec = 0.25 * chordVec .+ abVec
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    T = [ # transform -90 deg about z
+    0 1 0
+    -1 0 0
+    0 0 1
+    ]
+    transMat = [
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3,3) zeros(3,3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3,3) zeros(3,3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3,3) zeros(3,3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3,3) zeros(3,3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3,3) T zeros(3,3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3,3) zeros(3,3) T
+    ]
+    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "force")
+    
+    u = copy(globalF)
+    
+    
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+    
+    q3 = FEMMethods.solve_structure(K, M, F)
+    BT2_Ftip_wtip = q3[end-6]
+    BT2_Ftip_psitip = q3[end-4]
+    
+    writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    writedlm("DebugMGlobMatrix.csv", globalM, ',')
+    # ---------------------------
+    #   Tip torque only
+    # ---------------------------
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "torque")
+    u = copy(globalF)
+    
+    # return q3
+    
+    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+    
+    q4 = FEMMethods.solve_structure(K, M, F)
+    BT2_Ttip_wtip = q4[end-6]
+    BT2_Ttip_psitip = q4[end-4]
+    
+    # --- Print these out if something does not make sense ---
+    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
+    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+
+    # --- Reference value ---
+    # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
+    # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
+    ref_sol = [4.0, 0.0, 0.0, 2.56699]
+
+    # --- Relative error ---
+    answers = [BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 6)
+
+    println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+
+    return rel_err
+end
+
+test_FECOMP2()
