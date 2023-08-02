@@ -695,7 +695,7 @@ function make_mesh(nElem::Int64, span; config="wing", rotation=0.000, nElStrut=0
     config: 
         "wing" or "t-foil"
     rotation: 
-        rotation of the foil in degrees where 0 is lifting up in 'z'
+        rotation of the foil in degrees where 0.0 is lifting up in 'z' and y is the spanwise direction
     Outputs
     -------
     mesh

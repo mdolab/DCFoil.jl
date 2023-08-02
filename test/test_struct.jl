@@ -178,7 +178,7 @@ function test_BT3_stiff()
     EI = 2
     GJ = 8
     Ks = 4
-    Ss = 8/3
+    Ss = 8 / 3
 
     Ktest = LinearBeamElem.compute_elem_stiff(EI, 0, GJ, Ks, Ss, 0, 2, 1, elemType, constitutive)
     # return Ktest
@@ -186,16 +186,16 @@ function test_BT3_stiff()
     # --- Reference value ---
     # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
     ref_sol = vec([
-        4.2857    4.2857    0.4286   -3.0000   -5.0000   -4.2857    4.2857   -0.4286    3.0000   -1.0000
-        4.2857    5.4857    0.6286   -0.6000   -5.6000   -4.2857    3.0857   -0.2286    0.6000    0.4000
-        0.4286    0.6286    0.3429    0.4000    0.4000   -0.4286    0.2286    0.0571   -0.4000    0.4000
-       -3.0000   -0.6000    0.4000    8.8000    4.8000    3.0000   -5.4000    0.4000   -8.8000    4.8000
-       -5.0000   -5.6000    0.4000    4.8000   11.4667    5.0000   -4.4000    0.4000   -4.8000    2.1333
-       -4.2857   -4.2857   -0.4286    3.0000    5.0000    4.2857   -4.2857    0.4286   -3.0000    1.0000
-        4.2857    3.0857    0.2286   -5.4000   -4.4000   -4.2857    5.4857   -0.6286    5.4000   -2.4000
-       -0.4286   -0.2286    0.0571    0.4000    0.4000    0.4286   -0.6286    0.3429   -0.4000    0.4000
-        3.0000    0.6000   -0.4000   -8.8000   -4.8000   -3.0000    5.4000   -0.4000    8.8000   -4.8000
-       -1.0000    0.4000    0.4000    4.8000    2.1333    1.0000   -2.4000    0.4000   -4.8000    3.4667    
+        4.2857 4.2857 0.4286 -3.0000 -5.0000 -4.2857 4.2857 -0.4286 3.0000 -1.0000
+        4.2857 5.4857 0.6286 -0.6000 -5.6000 -4.2857 3.0857 -0.2286 0.6000 0.4000
+        0.4286 0.6286 0.3429 0.4000 0.4000 -0.4286 0.2286 0.0571 -0.4000 0.4000
+        -3.0000 -0.6000 0.4000 8.8000 4.8000 3.0000 -5.4000 0.4000 -8.8000 4.8000
+        -5.0000 -5.6000 0.4000 4.8000 11.4667 5.0000 -4.4000 0.4000 -4.8000 2.1333
+        -4.2857 -4.2857 -0.4286 3.0000 5.0000 4.2857 -4.2857 0.4286 -3.0000 1.0000
+        4.2857 3.0857 0.2286 -5.4000 -4.4000 -4.2857 5.4857 -0.6286 5.4000 -2.4000
+        -0.4286 -0.2286 0.0571 0.4000 0.4000 0.4286 -0.6286 0.3429 -0.4000 0.4000
+        3.0000 0.6000 -0.4000 -8.8000 -4.8000 -3.0000 5.4000 -0.4000 8.8000 -4.8000
+        -1.0000 0.4000 0.4000 4.8000 2.1333 1.0000 -2.4000 0.4000 -4.8000 3.4667
     ])
 
     # # --- Relative error ---
@@ -224,16 +224,16 @@ function test_BT3_mass()
     # --- Reference value ---
     # These were obtained from the matlab symbolic script plugging 2 for rho, 2 for the chord, and 1 for everything else
     ref_sol = vec([
-        3.1342    1.0771    0.1622   -3.0476   -0.8571    0.8658   -0.5229    0.1045   -0.9524    0.4762
-        1.0771    0.4802    0.0797   -1.0476   -0.3810    0.5229   -0.3071    0.0600   -0.5524    0.2667
-        0.1622    0.0797    0.0139   -0.1587   -0.0635    0.1045   -0.0600    0.0115   -0.1079    0.0508
-       -3.0476   -1.0476   -0.1587    3.9619    1.1175   -0.9524    0.5524   -0.1079    1.3714   -0.6603
-       -0.8571   -0.3810   -0.0635    1.1175    0.4063   -0.4762    0.2667   -0.0508    0.6603   -0.3048
-        0.8658    0.5229    0.1045   -0.9524   -0.4762    3.1342   -1.0771    0.1622   -3.0476    0.8571
-       -0.5229   -0.3071   -0.0600    0.5524    0.2667   -1.0771    0.4802   -0.0797    1.0476   -0.3810
-        0.1045    0.0600    0.0115   -0.1079   -0.0508    0.1622   -0.0797    0.0139   -0.1587    0.0635
-       -0.9524   -0.5524   -0.1079    1.3714    0.6603   -3.0476    1.0476   -0.1587    3.9619   -1.1175
-        0.4762    0.2667    0.0508   -0.6603   -0.3048    0.8571   -0.3810    0.0635   -1.1175    0.4063
+        3.1342 1.0771 0.1622 -3.0476 -0.8571 0.8658 -0.5229 0.1045 -0.9524 0.4762
+        1.0771 0.4802 0.0797 -1.0476 -0.3810 0.5229 -0.3071 0.0600 -0.5524 0.2667
+        0.1622 0.0797 0.0139 -0.1587 -0.0635 0.1045 -0.0600 0.0115 -0.1079 0.0508
+        -3.0476 -1.0476 -0.1587 3.9619 1.1175 -0.9524 0.5524 -0.1079 1.3714 -0.6603
+        -0.8571 -0.3810 -0.0635 1.1175 0.4063 -0.4762 0.2667 -0.0508 0.6603 -0.3048
+        0.8658 0.5229 0.1045 -0.9524 -0.4762 3.1342 -1.0771 0.1622 -3.0476 0.8571
+        -0.5229 -0.3071 -0.0600 0.5524 0.2667 -1.0771 0.4802 -0.0797 1.0476 -0.3810
+        0.1045 0.0600 0.0115 -0.1079 -0.0508 0.1622 -0.0797 0.0139 -0.1587 0.0635
+        -0.9524 -0.5524 -0.1079 1.3714 0.6603 -3.0476 1.0476 -0.1587 3.9619 -1.1175
+        0.4762 0.2667 0.0508 -0.6603 -0.3048 0.8571 -0.3810 0.0635 -1.1175 0.4063
     ])
 
     # # --- Relative error ---
@@ -471,7 +471,7 @@ function test_FiniteElementComp()
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
 
-    println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+    println("f_n = ", sqrt.(omegaSquared) / (2 * pi))
 
     return rel_err
 end
@@ -873,7 +873,7 @@ function test_FECOMP2()
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=45.0)
 
     # ---------------------------
     #   Tip force only
@@ -885,30 +885,52 @@ function test_FECOMP2()
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    T = [ # transform -90 deg about z
-    0 1 0
-    -1 0 0
-    0 0 1
+    rot = deg2rad(45)
+    c = cos(rot)
+    s = sin(rot)
+    T = [ # transform deg about x
+        1 0 0
+        0 c -s
+        0 s c
     ]
     transMat = [
-        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3,3) zeros(3,3)
-        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3,3) zeros(3,3)
-        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3,3) zeros(3,3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3,3) zeros(3,3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3,3) T zeros(3,3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3,3) zeros(3,3) T
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
     ]
     FEMMethods.apply_tip_load!(globalF, elemType, transMat, "force")
-    
+
     u = copy(globalF)
-    
-    
+
+
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-    
+
     q3 = FEMMethods.solve_structure(K, M, F)
+    # transform back to local coordinates
+    rot = deg2rad(-45)
+    c = cos(rot)
+    s = sin(rot)
+    T = [ # transform deg about x
+        1 0 0
+        0 c -s
+        0 s c
+    ]
+    transMat = [
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+    ]
+    q3 = transMat[1:9,1:9]*q3[end-8:end]
     BT2_Ftip_wtip = q3[end-6]
     BT2_Ftip_psitip = q3[end-4]
-    
+    println("displacements of tip load",q3[end-8:end])
+
     writedlm("DebugKGlobMatrix.csv", globalK, ',')
     writedlm("DebugMGlobMatrix.csv", globalM, ',')
     # ---------------------------
@@ -917,15 +939,15 @@ function test_FECOMP2()
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, transMat, "torque")
     u = copy(globalF)
-    
+
     # return q3
-    
+
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-    
+
     q4 = FEMMethods.solve_structure(K, M, F)
     BT2_Ttip_wtip = q4[end-6]
     BT2_Ttip_psitip = q4[end-4]
-    
+
     # --- Print these out if something does not make sense ---
     println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
     println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
@@ -943,7 +965,7 @@ function test_FECOMP2()
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 6)
 
-    println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+    println("f_n = ", sqrt.(omegaSquared) / (2 * pi))
 
     return rel_err
 end
