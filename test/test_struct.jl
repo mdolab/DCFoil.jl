@@ -851,7 +851,12 @@ end
 # ans = test_FEBT3()
 
 function test_FECOMP2()
-    nNodes = 6
+    nNodes = 10
+    testAngle = 45.0 # [deg] angle of rotation from default (NONZERO WORKS  )
+    angleDefault = deg2rad(90) # default angle of rotation from beam local about z
+    
+    axisDefault = "z"
+    
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -869,11 +874,12 @@ function test_FECOMP2()
         "U∞" => 5.0, # free stream velocity [m/s]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
     )
+    
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=45.0)
+    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=testAngle)
 
     # ---------------------------
     #   Tip force only
@@ -885,15 +891,9 @@ function test_FECOMP2()
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    rot = deg2rad(45)
-    c = cos(rot)
-    s = sin(rot)
-    T = [ # transform deg about x
-        1 0 0
-        0 c -s
-        0 s c
-    ]
-    transMat = [
+    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault) 
+    T = T1
+    transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -901,52 +901,46 @@ function test_FECOMP2()
         zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
         zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
     ]
-    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "force")
-
+    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, "force")
+    
     u = copy(globalF)
-
+    
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q3 = FEMMethods.solve_structure(K, M, F)
+    u3 = FEMMethods.solve_structure(K, M, F)
     # transform back to local coordinates
-    rot = deg2rad(-45)
-    c = cos(rot)
-    s = sin(rot)
-    T = [ # transform deg about x
-        1 0 0
-        0 c -s
-        0 s c
-    ]
-    transMat = [
+    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault) # question remaining why this is not the negative angle
+    T = T1
+    transMatG2L = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
         zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
         zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-    ]
-    q3 = transMat[1:9,1:9]*q3[end-8:end]
-    BT2_Ftip_wtip = q3[end-6]
-    BT2_Ftip_psitip = q3[end-4]
-    println("displacements of tip load",q3[end-8:end])
+        ]
+        q3 = transMatG2L[1:9, 1:9] * u3[end-8:end] # transform back to local coordinates
+        BT2_Ftip_wtip = q3[end-6]
+        BT2_Ftip_psitip = q3[end-5]
+        println("tip displacements:",q3)
 
-    writedlm("DebugKGlobMatrix.csv", globalK, ',')
-    writedlm("DebugMGlobMatrix.csv", globalM, ',')
+    # writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    # writedlm("DebugMGlobMatrix.csv", globalM, ',')
     # ---------------------------
     #   Tip torque only
     # ---------------------------
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    FEMMethods.apply_tip_load!(globalF, elemType, transMat, "torque")
+    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, "torque")
     u = copy(globalF)
-
-    # return q3
-
+    
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    q4 = FEMMethods.solve_structure(K, M, F)
+    
+    u4 = FEMMethods.solve_structure(K, M, F)
+    q4 = transMatG2L[1:9, 1:9] * u4[end-8:end] # transform back to local coordinates
     BT2_Ttip_wtip = q4[end-6]
-    BT2_Ttip_psitip = q4[end-4]
+    BT2_Ttip_psitip = q4[end-5]
+    println("tip displacements:", q4)
 
     # --- Print these out if something does not make sense ---
     println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
@@ -970,4 +964,4 @@ function test_FECOMP2()
     return rel_err
 end
 
-test_FECOMP2()
+# test_FECOMP2()

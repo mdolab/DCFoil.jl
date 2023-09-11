@@ -126,9 +126,9 @@ include("../../src/solvers/SolveFlutter.jl")
 include("../../src/InitModel.jl")
 include("../../src/struct/FiniteElements.jl")
 include("../../src/solvers/SolverRoutines.jl")
-include("../../src/hydro/Hydro.jl")
+include("../../src/hydro/HydroStrip.jl")
 include("../../src/constants/SolutionConstants.jl")
-using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .SolutionConstants
+using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .HydroStrip, .SolutionConstants
 # FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
 # nElem = FOIL.nNodes - 1
 # structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
@@ -240,9 +240,9 @@ using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .Solution
 # # ************************************************
 # # TODO: no they are not, this test shows that
 # derivs, = Zygote.jacobian((x) ->
-#         Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5, nothing, false), 1.0)
+#         HydroStrip.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5, nothing, false), 1.0)
 # fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
-#         Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5), 1.0)
+#         HydroStrip.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5), 1.0)
 
 # ************************************************
 #     Forward difference checks (dumb way)

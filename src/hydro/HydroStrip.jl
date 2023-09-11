@@ -1,12 +1,11 @@
 # --- Julia ---
 
-# @File    :   hydro.jl
+# @File    :   HydroStrip.jl
 # @Time    :   2022/05/18
 # @Author  :   Galen Ng
 # @Desc    :   Contains hydrodynamic routines
-# TODO: declare data types for performance improvements
 
-module Hydro
+module HydroStrip
 """
 Hydrodynamics module
 """
@@ -513,6 +512,9 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
     elseif elemType == "BT2"
         nLocDOF = 4
         nDOF = nLocDOF # number of global DOFs at 1 node
+    elseif elemType == "COMP2"
+        nLocDOF = 9
+        nDOF = nLocDOF
     end
 
     # fluid dynamic pressure
@@ -526,6 +528,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
     # ---------------------------
     #   Loop over strips (nodes)
     # ---------------------------
+    # Basic straight line code
     if ndims(aeroMesh) == 1
         for yⁿ ∈ aeroMesh
             # --- compute strip width ---
@@ -574,7 +577,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
                       e_αh e_αα
                   ]
 
-            # --- Compute Compute local AIC matrix for this element ---
+            # --- Compute Compute local AIC matrix for this strip ---
             if elemType == "bend-twist"
                 println("These aerodynamics are all wrong BTW...")
                 AICLocal = -1 * [
@@ -669,6 +672,21 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
                     0.0 E_f[2, 1] K_f[2, 2] E_f[2, 2] # Pitching moment
                     0.0 0.0000000 0.0000000 0.0000000
                 ]
+            elseif elemType == "COMP2"
+                # NOTE: Done in aero coordinates
+                AICLocal = [
+                    # TODO: DOUBLE CHECK THIS
+                    # u v   w   phi       theta     psi phi'     theta'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
+                    0.0 0.0 0.0 K_f[1, 2] E_f[1, 1] 0.0 E_f[1, 2] 0.0 0.0 # w
+                    0.0 0.0 0.0 K_f[2, 2] E_f[2, 1] 0.0 E_f[2, 2] 0.0 0.0 # phi
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # phi'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi'
+                ]
             else
                 println("nothing else works")
             end
@@ -699,9 +717,9 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
     return AIC, planformArea
 end
 
-function compute_AICs(dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
+function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
     """
-    Compute the AIC matrix for a given mesh using LHS convention
+    Compute the AIC matrix for a given aeroMesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
     Inputs
     ------
@@ -710,7 +728,7 @@ function compute_AICs(dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, ele
         in such a way that 
             {F} = -([Mf]{udd} + [Cf]{ud} + [Kf]{u})
         These are matrices
-    mesh: Array
+    aeroMesh: Array
         Mesh of the foil
     FOIL: struct
         Struct containing the foil implicit constants
@@ -729,6 +747,8 @@ function compute_AICs(dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, ele
         nDOF = 3
     elseif elemType == "BT2"
         nDOF = 4
+    elseif elemType == "COMP2"
+        nDOF = 9
     end
 
     # --- Initialize global matrices ---
@@ -754,83 +774,236 @@ function compute_AICs(dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, ele
     # ---------------------------
     #   Loop over strips (nodes)
     # ---------------------------
-    nNodes = length(mesh)
-    for yⁿ in mesh
-        # --- compute strip width ---
-        Δy = 0.0
-        if jj < nNodes
-            Δy = mesh[jj+1] - mesh[jj]
-            if jj == 1
+    # Basic straight line code
+    if ndims(aeroMesh) == 1
+        for yⁿ in aeroMesh
+            # --- compute strip width ---
+            Δy = 0.0
+            if jj < FOIL.nNodes
+                Δy = aeroMesh[jj+1] - aeroMesh[jj]
+                if jj == 1
+                    Δy = Δy / 2
+                end
+            else
+                Δy = aeroMesh[jj] - aeroMesh[jj-1]
+                if jj == FOIL.nNodes
+                    Δy = Δy / 2
+                end
+            end
+
+            # --- Linearly interpolate values based on y loc ---
+            clα::Float64 = SolverRoutines.do_linear_interp(aeroMesh, FOIL.clα, yⁿ)
+            c::Float64 = SolverRoutines.do_linear_interp(aeroMesh, chordVec, yⁿ)
+            ab::Float64 = SolverRoutines.do_linear_interp(aeroMesh, abVec, yⁿ)
+            eb::Float64 = SolverRoutines.do_linear_interp(aeroMesh, ebVec, yⁿ)
+            b::Float64 = 0.5 * c # semichord for more readable code
+
+            k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
+
+            # Do computation once for efficiency
+            CKVec = compute_theodorsen(k)
+            Ck = CKVec[1] + 1im * CKVec[2]
+
+            K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            M_f = compute_node_mass(b, ab, FOIL.ρ_f)
+
+            # --- Compute Compute local AIC matrix for this element ---
+            if elemType == "bend-twist"
+                println("These aerodynamics are all wrong BTW...")
+                KLocal = -1 * [
+                    0.00000000 0.0 K_f[1, 2] # Lift
+                    0.00000000 0.0 0.00000000
+                    0.00000000 0.0 K_f[2, 2] # Pitching moment
+                ]
+            elseif elemType == "BT2"
+                KLocal = [
+                    0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+                CLocal = [
+                    C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+                MLocal = [
+                    M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
+                    0.0 0.0 0.0 0.0
+                    M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+            elseif elemType == "COMP2"
+                # NOTE: Done in aero coordinates
+                KLocal = [
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # u
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # v
+                    0.0 0.0 0.0 K_f[1, 2] K̂_f[1, 1] 0.0 0.0 K̂_f[1, 2] 0.0  # w
+                    0.0 0.0 0.0 K_f[2, 2] K̂_f[2, 1] 0.0 0.0 K̂_f[2, 2] 0.0 # phi
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi'
+                ]
+                CLocal = [
+                    # u v   w         phi 
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
+                    0.0 0.0 C_f[1, 1] C_f[1, 2] Ĉ_f[1, 1] 0.0 Ĉ_f[1, 2] 0.0 0.0  # w
+                    0.0 0.0 C_f[2, 1] C_f[2, 2] Ĉ_f[2, 1] 0.0 Ĉ_f[2, 2] 0.0 0.0 # phi
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # phi'
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta'
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi'
+                ]
+                MLocal = [
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # u
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # v
+                    0.0 0.0 M_f[1, 1] M_f[1, 2] 0.0 0.0 0.0 0.0 0.0 # w
+                    0.0 0.0 M_f[2, 1] M_f[2, 2] 0.0 0.0 0.0 0.0 0.0 # phi
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # theta
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # psi
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # phi'
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # theta'
+                    0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0 0.0 0.0 # psi'
+                ]
+            else
+                println("nothing else works")
+            end
+
+            GDOFIdx::Int64 = nDOF * (jj - 1) + 1
+
+            # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+            globalKf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal) * Δy
+            globalKf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal) * Δy
+            globalCf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal) * Δy
+            globalCf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal) * Δy
+            globalMf_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal * Δy
+
+            # Add rectangle to planform area
+            planformArea += c * Δy
+
+            jj += 1 # increment strip counter
+        end
+    elseif ndims(aeroMesh) == 2
+        for yⁿ in aeroMesh[:,YDIM]
+            # --- compute strip width ---
+            Δy = 0.0
+            if jj < FOIL.nNodes
+                nVec = (aeroMesh[jj+1, :] - aeroMesh[jj, :])
+            else
+                nVec = (aeroMesh[jj, :] - aeroMesh[jj-1, :])
+            end
+            # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
+            lᵉ::Float64 = norm(nVec, 2) # length of elem
+            Δy = lᵉ
+            if jj == 1 || jj == FOIL.nNodes
                 Δy = Δy / 2
             end
-        else
-            Δy = mesh[jj] - mesh[jj-1]
-            if jj == nNodes
-                Δy = Δy / 2
+
+            nVec = nVec / lᵉ # normalize
+
+            # --- Linearly interpolate values based on y loc ---
+            clα::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], FOIL.clα, yⁿ)
+            c::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], chordVec, yⁿ)
+            ab::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], abVec, yⁿ)
+            eb::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], ebVec, yⁿ)
+            b::Float64 = 0.5 * c # semichord for more readable code
+
+            k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
+
+            # Do computation once for efficiency
+            CKVec = compute_theodorsen(k)
+            Ck = CKVec[1] + 1im * CKVec[2]
+
+            K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            M_f = compute_node_mass(b, ab, FOIL.ρ_f)
+
+            # --- Compute Compute local AIC matrix for this element ---
+            if elemType == "bend-twist"
+                println("These aerodynamics are all wrong BTW...")
+                KLocal = -1 * [
+                    0.00000000 0.0 K_f[1, 2] # Lift
+                    0.00000000 0.0 0.00000000
+                    0.00000000 0.0 K_f[2, 2] # Pitching moment
+                ]
+            elseif elemType == "BT2"
+                KLocal = [
+                    0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+                CLocal = [
+                    C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
+                    0.0 0.0 0.0 0.0
+                    C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+                MLocal = [
+                    M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
+                    0.0 0.0 0.0 0.0
+                    M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
+                    0.0 0.0 0.0 0.0
+                ]
+            elseif elemType == "COMP2"
+                # NOTE: Done in aero coordinates
+                KLocal = [
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # u
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # v
+                    0.0 0.0 0.0 K̂_f[1, 1] K_f[1, 2] 0.0 0.0 K̂_f[1, 2] 0.0  # w
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi
+                    0.0 0.0 0.0 K̂_f[2, 1] K_f[2, 2] 0.0 0.0 K̂_f[2, 2] 0.0 # theta
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta'
+                    0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi'
+                ]
+                CLocal = [
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # u
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # v
+                    0.0 0.0 C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] 0.0 0.0 Ĉ_f[1, 2] 0.0  # w
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi
+                    0.0 0.0 C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] 0.0 0.0 Ĉ_f[2, 2] 0.0 # theta
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi'
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta'
+                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi'
+                ]
+                MLocal = [
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # u
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # v
+                    0.0 0.0 M_f[1, 1] 0.0 M_f[1, 2] 0.0 0.0 0.0 0.0 # w
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # phi
+                    0.0 0.0 M_f[2, 1] 0.0 M_f[2, 2] 0.0 0.0 0.0 0.0 # theta
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # psi
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # phi'
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # theta'
+                    0.0 0.0 0.0000000 0.0 0.0000000 0.0 0.0 0.0 0.0 # psi'
+                ]
+            else
+                println("nothing else works")
             end
+
+            GDOFIdx::Int64 = nDOF * (jj - 1) + 1
+
+            # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+            globalKf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal) * Δy
+            globalKf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal) * Δy
+            globalCf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal) * Δy
+            globalCf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal) * Δy
+            globalMf_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal * Δy
+
+            # Add rectangle to planform area
+            planformArea += c * Δy
+
+            jj += 1 # increment strip counter
         end
-
-        # --- Linearly interpolate values based on y loc ---
-        clα::Float64 = SolverRoutines.do_linear_interp(mesh, FOIL.clα, yⁿ)
-        c::Float64 = SolverRoutines.do_linear_interp(mesh, chordVec, yⁿ)
-        ab::Float64 = SolverRoutines.do_linear_interp(mesh, abVec, yⁿ)
-        eb::Float64 = SolverRoutines.do_linear_interp(mesh, ebVec, yⁿ)
-        b::Float64 = 0.5 * c # semichord for more readable code
-
-        k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
-
-        # Do computation once for efficiency
-        CKVec = compute_theodorsen(k)
-        Ck = CKVec[1] + 1im * CKVec[2]
-
-        K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
-        C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
-        M_f = compute_node_mass(b, ab, FOIL.ρ_f)
-
-        # --- Compute Compute local AIC matrix for this element ---
-        if elemType == "bend-twist"
-            println("These aerodynamics are all wrong BTW...")
-            KLocal = -1 * [
-                0.00000000 0.0 K_f[1, 2] # Lift
-                0.00000000 0.0 0.00000000
-                0.00000000 0.0 K_f[2, 2] # Pitching moment
-            ]
-        elseif elemType == "BT2"
-            KLocal = [
-                0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
-                0.0 0.0 0.0 0.0
-                0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
-                0.0 0.0 0.0 0.0
-            ]
-            CLocal = [
-                C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
-                0.0 0.0 0.0 0.0
-                C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
-                0.0 0.0 0.0 0.0
-            ]
-            MLocal = [
-                M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
-                0.0 0.0 0.0 0.0
-                M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
-                0.0 0.0 0.0 0.0
-            ]
-        else
-            println("nothing else works")
-        end
-
-        GDOFIdx::Int64 = nDOF * (jj - 1) + 1
-
-        # Add local AIC to global AIC and remember to multiply by strip width to get the right result
-        globalKf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(KLocal) * Δy
-        globalKf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(KLocal) * Δy
-        globalCf_r_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = real(CLocal) * Δy
-        globalCf_i_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = imag(CLocal) * Δy
-        globalMf_z[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = MLocal * Δy
-
-        # Add rectangle to planform area
-        planformArea += c * Δy
-
-        jj += 1 # increment strip counter
     end
 
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
@@ -852,7 +1025,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     # ---------------------------
     #   Strip theory
     # ---------------------------
-    AIC = zeros(nGDOF ÷ 3, nGDOF ÷ 3)
+    AIC = zeros(nGDOF, nGDOF)
     _, planformArea = compute_steady_AICs!(AIC, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # --- Compute fluid tractions ---
@@ -898,10 +1071,14 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT
     elseif elemType == "BT2"
         nDOF = 4
         Moments = ForceVector[3:nDOF:end]
+        Lift = ForceVector[1:nDOF:end]
+    elseif elemType == "COMP2"
+        nDOF = 9
+        Moments = ForceVector[4:nDOF:end]
+        Lift = ForceVector[3:nDOF:end]
     else
         error("Invalid element type")
     end
-    Lift = ForceVector[1:nDOF:end]
 
     # --- Total dynamic hydro force calcs ---
     TotalLift = 0

@@ -4,11 +4,11 @@ Test derivative routines with super basic tests
 
 include("../src/solvers/SolverRoutines.jl")
 using .SolverRoutines
-include("../src/hydro/Hydro.jl")
+include("../src/hydro/HydroStrip.jl")
 include("../src/InitModel.jl")
 include("../src/struct/FiniteElements.jl")
 include("../src/solvers/SolveFlutter.jl")
-using .Hydro, .InitModel, .FEMMethods, .SolveFlutter
+using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, Zygote
 using Plots,  Printf, LinearAlgebra
 
@@ -22,13 +22,13 @@ function test_hydromass()
     b = 2.0
     ab = 3.0
 
-    derivs = Zygote.jacobian((x1, x2) -> Hydro.compute_node_mass(x1, x2, rho_f),
+    derivs = Zygote.jacobian((x1, x2) -> HydroStrip.compute_node_mass(x1, x2, rho_f),
         b, ab)
 
-    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Hydro.compute_node_mass(x, ab, rho_f),
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> HydroStrip.compute_node_mass(x, ab, rho_f),
         b)
 
-    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Hydro.compute_node_mass(b, x, rho_f),
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> HydroStrip.compute_node_mass(b, x, rho_f),
         ab)
 
     test1 = derivs[1] - fdderivs1
@@ -48,13 +48,13 @@ function test_hydrodamp()
     eb = 0.5
     ab = 3.0
     k = 0.1
-    Cklist = Hydro.compute_theodorsen(k)
+    Cklist = HydroStrip.compute_theodorsen(k)
     Ck = Cklist[1] + Cklist[2] * im
     U∞ = 10.0
     Λ = 0.0
 
     function my_compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
-        Cf, Cfhat = Hydro.compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
+        Cf, Cfhat = HydroStrip.compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
 
         return imag(Cf)
     end
@@ -84,7 +84,7 @@ end # end function
 function test_interp()
     """Test the my linear interpolation"""
     mesh = collect(0:0.1:2)
-    yVec = Hydro.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
+    yVec = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
     xq = 0.5
 
     derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
@@ -124,7 +124,7 @@ function test_hydroderiv(DVDict, solverOptions)
     function my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω)
         """Simple wrapper"""
 
-        Mf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω, "BT2")
+        Mf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω, "BT2")
 
         # Select the fluid matrix you want to verify derivatives for
         return Mf
@@ -248,7 +248,7 @@ function test_theodorsenDeriv()
     # ---------------------------
     #   Test glauert lift distribution
     # ---------------------------
-    cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
+    cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
     pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
     plot!(title="lift slope")
 
@@ -271,20 +271,20 @@ function test_theodorsenDeriv()
     dRD_r = []
     dRD_i = []
     for k ∈ kSweep
-        datum = Hydro.compute_theodorsen(k)
-        datum2 = Hydro.compute_pade(k)
-        datum3 = Hydro.compute_fraccalc(k)
+        datum = HydroStrip.compute_theodorsen(k)
+        datum2 = HydroStrip.compute_pade(k)
+        datum3 = HydroStrip.compute_fraccalc(k)
         push!(datar, datum[1])
         push!(datai, datum[2])
         push!(datar2, datum2[1])
         push!(datai2, datum2[2])
         push!(datar3, datum3[1])
         push!(datai3, datum3[2])
-        # derivAD = ForwardDiff.derivative(Hydro.compute_theodorsen, k)
-        # derivFD = FiniteDifferences.forward_fdm(2, 1)(Hydro.compute_theodorsen, k)
-        derivAD, = Zygote.jacobian(Hydro.compute_pade, k)
-        derivFD, = Zygote.jacobian(Hydro.compute_fraccalc, k)
-        derivRD, = Zygote.jacobian(Hydro.compute_theodorsen, k)
+        # derivAD = ForwardDiff.derivative(HydroStrip.compute_theodorsen, k)
+        # derivFD = FiniteDifferences.forward_fdm(2, 1)(HydroStrip.compute_theodorsen, k)
+        derivAD, = Zygote.jacobian(HydroStrip.compute_pade, k)
+        derivFD, = Zygote.jacobian(HydroStrip.compute_fraccalc, k)
+        derivRD, = Zygote.jacobian(HydroStrip.compute_theodorsen, k)
         push!(dADr, derivAD[1])
         push!(dADi, derivAD[2])
         push!(dFDr, derivFD[1])
@@ -295,9 +295,9 @@ function test_theodorsenDeriv()
 
     # # --- Derivatives ---
     # dADr
-    # println("Forward AD:", ForwardDiff.derivative(Hydro.compute_theodorsen, 0.1))
-    # println("Finite difference check:", FiniteDifferences.central_fdm(5, 1)(Hydro.compute_theodorsen, 0.1))
-    # println("Reverse AD:", Zygote.jacobian(Hydro.compute_theodorsen, 0.1))
+    # println("Forward AD:", ForwardDiff.derivative(HydroStrip.compute_theodorsen, 0.1))
+    # println("Finite difference check:", FiniteDifferences.central_fdm(5, 1)(HydroStrip.compute_theodorsen, 0.1))
+    # println("Reverse AD:", Zygote.jacobian(HydroStrip.compute_theodorsen, 0.1))
 
     # ************************************************
     #     Plot data

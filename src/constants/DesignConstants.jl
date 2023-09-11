@@ -9,9 +9,9 @@
 
 module DesignConstants
 
-include("../hydro/Hydro.jl")
+include("../hydro/HydroStrip.jl")
 include("../struct/BeamProperties.jl")
-using .Hydro, .StructProp
+using .HydroStrip, .StructProp
 
 struct foil{T<:Float64}
     """

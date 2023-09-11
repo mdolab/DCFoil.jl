@@ -13,11 +13,11 @@ module InitModel
 export init_static, init_dynamic
 # --- Libraries ---
 using Zygote
-include("./hydro/Hydro.jl")
+include("./hydro/HydroStrip.jl")
 include("./struct/BeamProperties.jl")
 include("./struct/MaterialLibrary.jl")
 include("./constants/DesignConstants.jl")
-using .Hydro, .StructProp, .MaterialLibrary
+using .HydroStrip, .StructProp, .MaterialLibrary
 using .DesignConstants
 
 # function init_static(DVDict::Dict, solverOptions)
@@ -95,7 +95,7 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα = Hydro.compute_glauert_circ(span, c, deg2rad(α₀), solverOptions["U∞"], nNodes)
+  clα = HydroStrip.compute_glauert_circ(span, c, deg2rad(α₀), solverOptions["U∞"], nNodes)
 
   # ---------------------------
   #   Build final model

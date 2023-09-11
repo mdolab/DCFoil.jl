@@ -9,9 +9,9 @@
 
 module SolutionConstants
 
-include("../hydro/Hydro.jl")
+include("../hydro/HydroStrip.jl")
 include("../struct/BeamProperties.jl")
-using .Hydro, .StructProp
+using .HydroStrip, .StructProp
 
 # ==============================================================================
 #                         STRUCTS

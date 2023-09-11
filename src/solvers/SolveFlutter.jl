@@ -37,13 +37,13 @@ using ChainRulesCore
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
 include("../struct/FiniteElements.jl")
-include("../hydro/Hydro.jl")
+include("../hydro/HydroStrip.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
 # then use them
-using .InitModel, .Hydro, .StructProp
+using .InitModel, .HydroStrip, .StructProp
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
@@ -218,7 +218,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Assemble structure
     # ---------------------------
-    elemType = "BT2"
+    elemType = "COMP2"
     loadType = "force"
 
     abVec = DVDict["ab"]
@@ -227,7 +227,20 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    # Get transformation matrix for the tip load
+    angleDefault = deg2rad(90) # default angle of rotation from beam local about z
+    axisDefault = "z"
+    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault)
+    T = T1
+    transMatL2G = [
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+        ]
+    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
@@ -272,9 +285,9 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("+------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    # globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
-    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
-    _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+    # globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
+    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
+    _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
     println("Wetted natural frequencies [Hz]:")
@@ -1349,10 +1362,10 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
-    # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
-    # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
-    globalMf, _, _, _, _ = Hydro.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
-    _, _, Mff = Hydro.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
+    # globalMf, _, _, _, _ = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
+    # globalMf, _, _, _, _ = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
+    globalMf, _, _, _, _ = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
+    _, _, Mff = HydroStrip.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
@@ -1385,11 +1398,11 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         # ---------------------------
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
         ω = k * U∞ * (cos(Λ)) / b_ref
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
-        Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
+        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
+        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
+        Kffull_i, Cffull_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
         # Mode space reduction
         Kf_r = Qr' * Kffull_r * Qr
         Kf_i = Qr' * Kffull_i * Qr

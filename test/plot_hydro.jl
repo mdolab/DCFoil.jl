@@ -7,9 +7,9 @@
 """
 
 # --- Imports ---
-include("../src/hydro/Hydro.jl")
-# include("src/hydro/Hydro.jl")
-using .Hydro # Using the Hydro module
+include("../src/hydro/HydroStrip.jl")
+# include("src/hydro/HydroStrip.jl")
+using .HydroStrip # Using the Hydro module
 # using PyCall
 using LinearAlgebra
 using Plots, Printf
@@ -55,7 +55,7 @@ function test_theofs()
         u = hcat(h, AOA)
         du = hcat(dh, dAOA)
         ddu = hcat(ddh, ddAOA)
-        Ck_r, Ck_i = Hydro.compute_theodorsen(k)
+        Ck_r, Ck_i = HydroStrip.compute_theodorsen(k)
         Ck = Ck_r + Ck_i * im
         clHist = Vector{Float64}()
         cmHist = Vector{Float64}()
@@ -68,26 +68,26 @@ function test_theofs()
         #   Submerged vals
         # ---------------------------
         # --- Stiffness forces ---
-        Kmat, _ = Hydro.compute_node_stiff(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
+        Kmat, _ = HydroStrip.compute_node_stiff(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
         # --- Damping forces ---
-        Cmat, _ = Hydro.compute_node_damp(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
-        Mmat = Hydro.compute_node_mass(b, ab, rho_f)
+        Cmat, _ = HydroStrip.compute_node_damp(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
+        Mmat = HydroStrip.compute_node_mass(b, ab, rho_f)
         # ---------------------------
         #   FS effect
         # ---------------------------
         # Now do the same with the FS effect for stiffness forces but this Ck is purely real
         hcRatio = 1.0
-        Cls = Hydro.compute_clsROM(k, hcRatio, 4.0)
-        # Kmat1, _ = Hydro.compute_node_stiff(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
-        Cms = Hydro.compute_cmsROM(k, hcRatio, 4.0)
-        # Kmat2, _ = Hydro.compute_node_stiff(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
+        Cls = HydroStrip.compute_clsROM(k, hcRatio, 4.0)
+        # Kmat1, _ = HydroStrip.compute_node_stiff(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
+        Cms = HydroStrip.compute_cmsROM(k, hcRatio, 4.0)
+        # Kmat2, _ = HydroStrip.compute_node_stiff(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
         # KmatROM = vcat(Kmat1[1, :], Kmat2[2, :])
 
         # Damping
-        Cld = Hydro.compute_cldROM(k, hcRatio, 4.0)
-        # Cmat1, _ = Hydro.compute_node_damp(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
-        Cmd = Hydro.compute_cmdROM(k, hcRatio, 4.0)
-        # Cmat2, _ = Hydro.compute_node_damp(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
+        Cld = HydroStrip.compute_cldROM(k, hcRatio, 4.0)
+        # Cmat1, _ = HydroStrip.compute_node_damp(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
+        Cmd = HydroStrip.compute_cmdROM(k, hcRatio, 4.0)
+        # Cmat2, _ = HydroStrip.compute_node_damp(clα, b, eb, ab, Uinf, Λ, rho_f, Ck)
         # CmatROM = vcat(Cmat1[1, :], Cmat2[2, :])
 
         for (ii, t) in enumerate(tSweep)
@@ -156,16 +156,16 @@ function test_theofs()
     # CkmdSweep = Vector{Float64}()
     # hcRatio = 1.0
     # for k in newkSweep
-    #     Ck_r, Ck_i = Hydro.compute_theodorsen(k)
+    #     Ck_r, Ck_i = HydroStrip.compute_theodorsen(k)
     #     push!(CkSweep, Ck_r)
-    #     Ck = Hydro.compute_clsROM(k, hcRatio, 4.0)
+    #     Ck = HydroStrip.compute_clsROM(k, hcRatio, 4.0)
     #     push!(CklsSweep, Ck)
-    #     Ck = Hydro.compute_cmsROM(k, hcRatio, 4.0)
+    #     Ck = HydroStrip.compute_cmsROM(k, hcRatio, 4.0)
     #     push!(CkmsSweep, Ck)
 
-    #     Ck = Hydro.compute_cldROM(k, hcRatio, 4.0)
+    #     Ck = HydroStrip.compute_cldROM(k, hcRatio, 4.0)
     #     push!(CkldSweep, Ck)
-    #     Ck = Hydro.compute_cmdROM(k, hcRatio, 4.0)
+    #     Ck = HydroStrip.compute_cmdROM(k, hcRatio, 4.0)
     #     push!(CkmdSweep, Ck)
 
     # end
@@ -203,9 +203,9 @@ function test_FSeffect()
     cl_rc = zeros(length(Usweep))
     uCtr = 1
     for U∞ in Usweep
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
+        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
+        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -219,9 +219,9 @@ function test_FSeffect()
     depth = 0.1 #[m]
     uCtr = 1
     for U∞ in Usweep
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
+        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
+        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -235,9 +235,9 @@ function test_FSeffect()
     depth = 0.05 #[m]
     uCtr = 1
     for U∞ in Usweep
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
+        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * 1 # rad
-        cl_α = Hydro.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
+        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * 1 # rad
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -271,8 +271,8 @@ function test_sears()
     labels = []
     kPlot = 0.01:0.5:10.5
     for k in kPlot
-        Sk = Hydro.compute_sears(k)
-        ans = Hydro.compute_theodorsen(k)
+        Sk = HydroStrip.compute_sears(k)
+        ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)
         push!(CkSweep, Ck)
@@ -289,8 +289,8 @@ function test_sears()
     SkSweep = []
     CkSweep = []
     for k in kSweep
-        Sk = Hydro.compute_sears(k)
-        ans = Hydro.compute_theodorsen(k)
+        Sk = HydroStrip.compute_sears(k)
+        ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)
         push!(CkSweep, Ck)

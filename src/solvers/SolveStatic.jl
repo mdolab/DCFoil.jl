@@ -24,12 +24,12 @@ using Zygote
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
 include("../struct/FiniteElements.jl")
-include("../hydro/Hydro.jl")
+include("../hydro/HydroStrip.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
 # then use them
-using .InitModel, .Hydro, .StructProp
+using .InitModel, .HydroStrip, .StructProp
 using .FEMMethods
 using .SolutionConstants
 using .SolverRoutines
@@ -71,6 +71,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # elemType = "bend"
     # elemType = "bend-twist"
     elemType = "BT2"
+    # elemType = "COMP2"
     # loadType = "force" # doesn't work with xyz global yet
     loadType = "torque"
 
@@ -81,7 +82,24 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    FEMMethods.apply_tip_load!(globalF, elemType, transMat, loadType)
+    if elemType == "COMP2"
+        # Get transformation matrix for the tip load
+        angleDefault = deg2rad(90) # default angle of rotation from beam local about z
+    else
+       angleDefault = 0.0 
+    end
+    axisDefault = "z"
+    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault)
+    T = T1
+    transMatL2G = [
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+        ]
+    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
 
     # --- Initialize states ---
     u = copy(globalF) 
@@ -89,8 +107,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
-    # fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
-    fTractions, AIC, planformArea = Hydro.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
+    fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -105,7 +123,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", true)
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---
@@ -143,8 +161,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
 
     # --- Get hydroLoads again on solution ---
-    # fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
-    fHydro, AIC, _ = Hydro.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
+    fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -199,12 +217,18 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
         nDOF = 4
         Ψ = states[3:nDOF:end]
         Moments = fHydro[3:nDOF:end]
+        W = states[1:nDOF:end]
+        Lift = fHydro[1:nDOF:end]
+    elseif elemType == "COMP2"
+        nDOF = 9
+        Ψ = states[5:nDOF:end]
+        Moments = fHydro[5:nDOF:end]
+        W = states[3:nDOF:end]
+        Lift = fHydro[3:nDOF:end]
     else
         error("Invalid element type")
     end
 
-    W = states[1:nDOF:end]
-    Lift = fHydro[1:nDOF:end]
 
     # --- Write bending ---
     fname = workingOutputDir * "bending.dat"
@@ -256,8 +280,14 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         Moments = forces[3:nDOF:end]
         W = states[1:nDOF:end]
         Lift = forces[1:nDOF:end]
+    elseif constants.elemType == "COMP2"
+        nDOF = 9
+        Ψ = states[4:nDOF:end]
+        Moments = forces[4:nDOF:end]
+        W = states[3:nDOF:end]
+        Lift = forces[3:nDOF:end]
     else
-        println("Invalid element type")
+        error("Invalid element type")
     end
 
     # ************************************************
@@ -349,9 +379,14 @@ function compute_residuals(structuralStates)
         foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
+    elseif CONSTANTS.elemType == "COMP2"
+        completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
+        F = -CONSTANTS.AICmat * foilTotalStates
+        FOut = F[10:end]
     else
+        error("Invalid element type")
         println(CONSTANTS.elemType)
-        println("Invalid element type")
     end
 
 

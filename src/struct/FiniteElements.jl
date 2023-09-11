@@ -687,6 +687,7 @@ function make_mesh(nElem::Int64, span; config="wing", rotation=0.000, nElStrut=0
     Makes a mesh and element connectivity
     First element is always origin (x,y,z) = (0,0,0)
     You do not necessarily have to make this mesh yourself every run
+    The default is to mesh y as the span
 
     Inputs
     ------
@@ -792,6 +793,37 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
+function get_rotate3dMat(rot; axis="x")
+    """
+    Rotates a 3D vector about axis by rot radians (RH rule!)
+    """
+    rotMat = Array{Float64}(undef, 3, 3)
+    c = cos(rot)
+    s = sin(rot)
+    if axis == "x"
+        rotMat = [
+            1 0 0
+            0 c -s
+            0 s c
+        ]
+    elseif axis == "y"
+        rotMat = [
+            c 0 s
+            0 1 0
+            -s 0 c
+        ]
+    elseif axis == "z"
+        rotMat = [
+            c -s 0
+            s c 0
+            0 0 1
+        ]
+    else
+        println("Only axis rotation implemented")
+    end
+    return rotMat
+end
+
 function get_transMat(dR, l, elemType="BT2")
     """
     Returns the transformation matrix for a given element type into 3D space
@@ -810,7 +842,7 @@ function get_transMat(dR, l, elemType="BT2")
         -sbeta 0 cbeta
     ]
     Z = zeros(3, 3)
-    writedlm("DebugT.csv", T, ',')
+    # writedlm("DebugT.csv", T, ',')
 
     if elemType == "BT2"
         # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
@@ -986,10 +1018,10 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # println("mElem: ")
         # show(stdout, "text/plain", mElem)
         # println()
-        writedlm("DebugKLocal.csv", kLocal, ',')
-        writedlm("DebugMLocal.csv", mLocal, ',')
-        writedlm("DebugKElem.csv", kElem, ',')
-        writedlm("DebugMElem.csv", mElem, ',')
+        # writedlm("DebugKLocal.csv", kLocal, ',')
+        # writedlm("DebugMLocal.csv", mLocal, ',')
+        # writedlm("DebugKElem.csv", kElem, ',')
+        # writedlm("DebugMElem.csv", mElem, ',')
 
         # ---------------------------
         #   Assemble into global matrices
@@ -1055,6 +1087,11 @@ end
 function apply_tip_load!(globalF, elemType, transMat, loadType="force")
     """
     Routine for applying unit tip load to the end node
+        globalF
+            vector
+        elemType: str
+        transMat: 2d array
+            Transformation matrix from local into global coordinates
     """
 
     MAG = 1.0
@@ -1089,8 +1126,10 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
     end
 
     # --- Transform to global then add into vector ---
-    FLocalVec = transMat[1:m÷2, 1:n÷2]' * FLocalVec
-    globalF[end-n÷2+1:end] += FLocalVec * MAG
+    if elemType == "COMP2"
+        FLocalVec = transMat[1:m÷2, 1:n÷2]' * FLocalVec
+    end
+    globalF[end-length(FLocalVec)+1:end] += FLocalVec * MAG
 
 end
 

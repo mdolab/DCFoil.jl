@@ -25,12 +25,12 @@ using FileIO
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
 include("../struct/FiniteElements.jl")
-include("../hydro/Hydro.jl")
+include("../hydro/HydroStrip.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 # then use them
-using .InitModel, .Hydro, .StructProp
+using .InitModel, .HydroStrip, .StructProp
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
@@ -57,7 +57,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ************************************************
     #     Assemble structural matrices
     # ************************************************
-    elemType = "BT2"
+    elemType = "COMP2"
     loadType = "force"
 
     abVec = DVDict["ab"]
@@ -68,7 +68,20 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    # Get transformation matrix for the tip load
+    angleDefault = deg2rad(90) # default angle of rotation from beam local about z
+    axisDefault = "z"
+    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault)
+    T = T1
+    transMatL2G = [
+        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+        ]
+    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
 
     # ---------------------------
     #   Apply BC blanking
@@ -112,11 +125,11 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         # ---------------------------
         #   Assemble hydro matrices
         # ---------------------------
-        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
-        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        Kf_r, Cf_r, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
-        Kf_i, Cf_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
+        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
+        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+        Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
         Cf = Cf_r + 1im * Cf_i
         Kf = Kf_r + 1im * Kf_i
@@ -144,7 +157,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         #   Get hydroloads at freq
         # ---------------------------
         fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-        fDynamic, DynLift, DynMoment = Hydro.integrate_hydroLoads(uSol, fullAIC, α₀, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
+        fDynamic, DynLift, DynMoment = HydroStrip.integrate_hydroLoads(uSol, fullAIC, α₀, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
 
         # --- Store total force and tip deflection values ---
         LiftDyn[f_ctr] = (DynLift)
