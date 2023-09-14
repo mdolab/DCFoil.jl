@@ -19,6 +19,7 @@ using SpecialFunctions
 using LinearAlgebra
 using Statistics
 using Zygote, ChainRulesCore
+using Printf, DelimitedFiles
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
 
@@ -503,6 +504,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
     -------
     AIC: Matrix
         Aerodynamic influence coefficient matrix (now filled out)
+        In the global reference frame
     """
 
     if elemType == "bend"
@@ -530,6 +532,9 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
     # ---------------------------
     # Basic straight line code
     if ndims(aeroMesh) == 1
+        println("=============================")
+        println("Using straight line code")
+        println("=============================")
         for yⁿ ∈ aeroMesh
             # --- compute strip width ---
             Δy = 0.0
@@ -607,6 +612,9 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             jj += 1 # increment strip counter
         end
     elseif ndims(aeroMesh) == 2
+        println("=============================")
+        println("Using 3D mesh code")
+        println("=============================")
         for yⁿ in aeroMesh[:, YDIM]
             # --- compute strip width ---
             Δy = 0.0
@@ -619,8 +627,9 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             lᵉ::Float64 = norm(nVec, 2) # length of elem
             Δy = lᵉ
             if jj == 1 || jj == FOIL.nNodes
-                Δy = Δy / 2
+                Δy = 0.5 * lᵉ
             end
+            println("Δy: ", Δy)
 
             nVec = nVec / lᵉ # normalize
 
@@ -675,7 +684,6 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             elseif elemType == "COMP2"
                 # NOTE: Done in aero coordinates
                 AICLocal = [
-                    # TODO: DOUBLE CHECK THIS
                     # u v   w   phi       theta     psi phi'     theta'
                     0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
                     0.0 0.0 0.0 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
@@ -690,18 +698,15 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             else
                 println("nothing else works")
             end
-            # # ---------------------------
-            # #   Transform from local to global
-            # # ---------------------------
-            # # The local coordinate system is {u} while the global is {U}
-            # # {u} = [Γ] * {U}
-            # # where [Γ] is the transformation matrix
-            # ΓFull = SolverRoutines.get_transMat(nVec, elemType)
-            # Γ = ΓFull[1:nLocDOF, 1:nDOF]
-            # AICStrip = Γ' * AICLocal * Γ'
-            # NOTE: We will do the hydro calc in local coords to build the traction vector and then transform that result
 
             GDOFIdx = nDOF * (jj - 1) + 1
+
+            # ---------------------------
+            #   Transformation of AIC
+            # ---------------------------
+            # Aerodynamics need to happen in global reference frame
+            Γ = SolverRoutines.get_transMat(nVec, 1.0, elemType)
+            AICLocal = Γ'[1:nLocDOF,1:nLocDOF] * AICLocal * Γ[1:nLocDOF,1:nLocDOF]
 
             # Add local AIC to global AIC and remember to multiply by strip width to get the right result
             # AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICStrip * Δy
@@ -739,6 +744,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
     -------
     AIC: Matrix
         Aerodynamic influence coefficient matrix (now filled out)
+        in the global reference frame
     """
 
     if elemType == "bend"
@@ -902,7 +908,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             lᵉ::Float64 = norm(nVec, 2) # length of elem
             Δy = lᵉ
             if jj == 1 || jj == FOIL.nNodes
-                Δy = Δy / 2
+                Δy = 0.5*lᵉ
             end
 
             nVec = nVec / lᵉ # normalize
@@ -989,6 +995,15 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             else
                 println("nothing else works")
             end
+            
+            # ---------------------------
+            #   Transformation of AIC
+            # ---------------------------
+            # Aerodynamics need to happen in global reference frame
+            Γ = SolverRoutines.get_transMat(nVec, 1.0, elemType)
+            KLocal = Γ' * KLocal * Γ
+            KLocal = Γ' * CLocal * Γ
+            KLocal = Γ' * MLocal * Γ
 
             GDOFIdx::Int64 = nDOF * (jj - 1) + 1
 
@@ -1011,10 +1026,13 @@ end
 
 
 
-function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType="bend-twist")
+function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType="bend-twist",)
     """
     Computes the steady hydrodynamic vector loads
     given the solved hydrofoil shape (strip theory)
+
+    foilStructuralStates: array
+        Structural states of the foil in GLOBAL FRAME
     """
     # ---------------------------
     #   Initializations
@@ -1037,6 +1055,52 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     # println("")
     # println("Aero loads")
     # println(fTractions)
+    # writedlm("DebugAIC.csv", AIC, ',') # THESE ARE THE SAME
+    # open("totalStates.dat", "w") do io # THESE ARE THE SAME
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 4
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 3
+    #     end
+    #     for qⁿ ∈ foilTotalStates#[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
+    # open("structuralStates.dat", "w") do io # THESE ARE THE SAME
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 4
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 3
+    #     end
+    #     for qⁿ ∈ foilStructuralStates#[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
+    # open("hydroTractions.dat", "w") do io
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 4
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 3
+    #     end
+    #     for qⁿ ∈ hydroTractions#[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
 
     return hydroTractions, AIC, planformArea
 end

@@ -6,7 +6,7 @@ include("../src/struct/BeamProperties.jl")
 
 using LinearAlgebra
 using .StructProp
-using Plots
+using Plots, DelimitedFiles
 
 # ==============================================================================
 #                         BEAM PROPERTIES
@@ -98,7 +98,7 @@ function test_BT2_stiff()
     # ************************************************
     elemType = "BT2"
 
-    Ktest = LinearBeamElem.compute_elem_stiff(2, 8, 4, 8 / 3, 2, 1, elemType, constitutive)
+    Ktest = LinearBeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3,0.0, 2, 1, elemType, constitutive)
     # show(stdout, "text/plain", Ktest[1:end, 1:end])
 
     # --- Reference value ---
@@ -130,6 +130,8 @@ function test_BT2_stiff()
 
     return rel_err
 end
+
+# test_BT2_stiff()
 
 function test_BT2_mass()
     """
@@ -348,17 +350,17 @@ function test_FiniteElementComp()
     """
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
-    nNodes = 30
+    nNodes = 40
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 30.0 * π / 180, # sweep angle [rad]
+        "Λ" => 0.0 * π / 180, # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
-        "θ" => 0 * π / 180, # fiber angle global [rad]
+        "θ" => deg2rad(15), # fiber angle global [rad]
     )
     solverOptions = Dict(
         "material" => "test-comp", # preselect from material library
@@ -371,46 +373,7 @@ function test_FiniteElementComp()
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
     structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
-    # ************************************************
-    #     bend-twist
-    # ************************************************
-    # ---------------------------
-    #   Tip force only
-    # ---------------------------
-    elemType = "bend-twist"
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
-    abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
-    chordVec = DVDict["c"]
-    ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    globalF[end-2] = 1.0 # 0 Newton tip force
-    u = copy(globalF)
-
-
-    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    q1 = FEMMethods.solve_structure(K, M, F)
-    bt_Ftip_wtip = q1[end-2]
-    bt_Ftip_psitip = q1[end]
-
-    # ---------------------------
-    #   Tip torque only
-    # ---------------------------
-    abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
-    chordVec = DVDict["c"]
-    ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    globalF[end] = 1.0 # 0 Newton tip force
-    u = copy(globalF)
-
-
-    K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    q2 = FEMMethods.solve_structure(K, M, F)
-    bt_Ttip_wtip = q2[end-2]
-    bt_Ttip_psitip = q2[end]
+    
 
     # ---------------------------
     #   Tip force only
@@ -427,6 +390,8 @@ function test_FiniteElementComp()
 
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+    writedlm("DebugK-BT2.csv", K,",")
+    writedlm("DebugF-BT2.csv", F,",")
 
     q3 = FEMMethods.solve_structure(K, M, F)
     BT2_Ftip_wtip = q3[end-3]
@@ -451,22 +416,18 @@ function test_FiniteElementComp()
     BT2_Ttip_psitip = q4[end-1]
 
     # --- Print these out if something does not make sense ---
-    # println("bt_Ftip_wtip = ", bt_Ftip_wtip, " [m]")
-    # println("bt_Ftip_psitip" = ", bt_Ftip_psitip", " [rad]")
-    # println("bt_Ttip_wtip = ", bt_Ttip_wtip, " [m]")
-    # println("bt_Ttip_psitip" = ", bt_Ttip_psitip", " [rad]")
-    # println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
-    # println("BT2_Ftip_psitip" = ", BT2_Ftip_psitip", " [rad]")
-    # println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
-    # println("BT2_Ttip_psitip" = ", BT2_Ttip_psitip", " [rad]")
+    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    println("BT2_Ftip_psitip = ", rad2deg(BT2_Ftip_psitip), " [deg]")
+    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    println("BT2_Ttip_psitip = ", rad2deg(BT2_Ttip_psitip), " [deg]")
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
     # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
-    ref_sol = [4, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 2.56699]
+    ref_sol = [4.0, 0.0, 0.0, 2.56699]
 
     # --- Relative error ---
-    answers = [bt_Ftip_wtip, bt_Ftip_psitip, bt_Ttip_wtip, bt_Ttip_psitip, BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
+    answers = [BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
@@ -475,6 +436,8 @@ function test_FiniteElementComp()
 
     return rel_err
 end
+
+test_FiniteElementComp()
 
 using DelimitedFiles, LinearAlgebra
 
@@ -598,8 +561,8 @@ function test_FiniteElementIso3D()
     # # return K, F
     q1 = FEMMethods.solve_structure(K, M, F)
 
-    writedlm("DebugKGlobMatrix.csv", globalK, ',')
-    writedlm("DebugMGlobMatrix.csv", globalM, ',')
+    # writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    # writedlm("DebugMGlobMatrix.csv", globalM, ',')
 
     # ************************************************
     #     Natural frequencies
@@ -722,9 +685,9 @@ function test_FiniteElementBend()
     # println()
     # println("globalF = ")
     # println(globalF)
-    writedlm("DebugFGlob.csv", globalF, ',')
-    writedlm("DebugKGlobMatrix.csv", globalK, ',')
-    writedlm("DebugMGlobMatrix.csv", globalM, ',')
+    # writedlm("DebugFGlob.csv", globalF, ',')
+    # writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    # writedlm("DebugMGlobMatrix.csv", globalM, ',')
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
@@ -804,8 +767,8 @@ function test_FEBT3()
     BT2_Ftip_wtip = q3[end-4]
     BT2_Ftip_psitip = q3[end-1]
 
-    writedlm("DebugKGlobMatrix.csv", globalK, ',')
-    writedlm("DebugMGlobMatrix.csv", globalM, ',')
+    # writedlm("DebugKGlobMatrix.csv", globalK, ',')
+    # writedlm("DebugMGlobMatrix.csv", globalM, ',')
     # ---------------------------
     #   Tip torque only
     # ---------------------------
@@ -851,9 +814,12 @@ end
 # ans = test_FEBT3()
 
 function test_FECOMP2()
-    nNodes = 10
-    testAngle = 45.0 # [deg] angle of rotation from default (NONZERO WORKS  )
-    angleDefault = deg2rad(90) # default angle of rotation from beam local about z
+    """
+    Test simple tip force and torque on a composite beam
+    """
+    nNodes = 40
+    testAngle = 0.0 # [deg] angle of rotation from default (NONZERO WORKS  )
+    angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
     
     axisDefault = "z"
     
@@ -866,7 +832,7 @@ function test_FECOMP2()
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
-        "θ" => 0 * π / 180, # fiber angle global [rad]
+        "θ" => deg2rad(15), # fiber angle global [rad]
     )
     solverOptions = Dict(
         "material" => "test-comp", # preselect from material library
@@ -891,8 +857,9 @@ function test_FECOMP2()
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault) 
-    T = T1
+    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault) 
+    # T = T1
+    T = I(3)
     transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -910,8 +877,8 @@ function test_FECOMP2()
 
     u3 = FEMMethods.solve_structure(K, M, F)
     # transform back to local coordinates
-    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault) # question remaining why this is not the negative angle
-    T = T1
+    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault) # question remaining why this is not the negative angle
+    # T = T1
     transMatG2L = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
         zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -935,7 +902,9 @@ function test_FECOMP2()
     u = copy(globalF)
     
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-    
+    writedlm("DebugK-COMP2.csv", K,",")
+    writedlm("DebugF-COMP2.csv", F,",")
+
     u4 = FEMMethods.solve_structure(K, M, F)
     q4 = transMatG2L[1:9, 1:9] * u4[end-8:end] # transform back to local coordinates
     BT2_Ttip_wtip = q4[end-6]
@@ -943,10 +912,10 @@ function test_FECOMP2()
     println("tip displacements:", q4)
 
     # --- Print these out if something does not make sense ---
-    println("BT2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
-    println("BT2_Ftip_psitip = ", BT2_Ftip_psitip, " [rad]")
-    println("BT2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
-    println("BT2_Ttip_psitip = ", BT2_Ttip_psitip, " [rad]")
+    println("COMP2_Ftip_wtip = ", BT2_Ftip_wtip, " [m]")
+    println("COMP2_Ftip_psitip = ", rad2deg(BT2_Ftip_psitip), " [deg]")
+    println("COMP2_Ttip_wtip = ", BT2_Ttip_wtip, " [m]")
+    println("COMP2_Ttip_psitip = ", rad2deg(BT2_Ttip_psitip), " [deg]")
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
@@ -964,4 +933,4 @@ function test_FECOMP2()
     return rel_err
 end
 
-# test_FECOMP2()
+test_FECOMP2()

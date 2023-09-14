@@ -228,9 +228,9 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     # Get transformation matrix for the tip load
-    angleDefault = deg2rad(90) # default angle of rotation from beam local about z
+    angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
     axisDefault = "z"
-    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault)
+    T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
     T = T1
     transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)

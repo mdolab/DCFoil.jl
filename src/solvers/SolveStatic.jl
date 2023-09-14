@@ -18,6 +18,7 @@ using FiniteDifferences
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
+using Printf, DelimitedFiles
 
 # --- DCFoil modules ---
 # First include them
@@ -71,7 +72,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # elemType = "bend"
     # elemType = "bend-twist"
     elemType = "BT2"
-    # elemType = "COMP2"
+    elemType = "COMP2"
     # loadType = "force" # doesn't work with xyz global yet
     loadType = "torque"
 
@@ -82,31 +83,34 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    if elemType == "COMP2"
-        # Get transformation matrix for the tip load
-        angleDefault = deg2rad(90) # default angle of rotation from beam local about z
-    else
-       angleDefault = 0.0 
-    end
-    axisDefault = "z"
-    T1 = FEMMethods.get_rotate3dMat(angleDefault, axis=axisDefault)
-    T = T1
-    transMatL2G = [
-        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-        ]
-    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
+    # if elemType == "COMP2"
+    #     # Get transformation matrix for the tip load
+    #     angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+    # else
+    #     angleDefault = 0.0
+    # end
+    # axisDefault = "z"
+    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    # T = T1
+    # transMatL2G = [
+    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+    # ]
+    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
 
     # --- Initialize states ---
-    u = copy(globalF) 
-    
+    u = zeros(length(globalF))
+
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
+    # TODO: I THINK YOURE TRANSFORMING THE HYDROFORCES OR MATERIAL STIFFNESSES WRONG. PICK
+    # TODO: PICKUP HERE WHY DO THE F vectors that actually go in not agree? The lift is about half what it should be
+
     # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
     fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
     globalF = fTractions
@@ -126,20 +130,70 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    # # --- Debug printout of matrices in human readable form after BC application ---
-    # println("Global stiffness matrix:")
-    # println("------------------------")
-    # show(stdout, "text/plain", K)
-    # println("")
-    # println("Global mass matrix:")
-    # println("-------------------")
-    # show(stdout, "text/plain", M)
-
+    # --- Debug printout of matrices in human readable form after BC application ---
+    writedlm(outputDir * "K.csv", K,",")
+    writedlm(outputDir * "M.csv", M,",")
 
     # ---------------------------
     #   Pre-solve system
     # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
+    # Write answer to file DEBUG
+    open(outputDir * "presolve_w.dat", "w") do io
+        stringData = elemType * "\n"
+        write(io, stringData)
+        if elemType == "COMP2"
+            nDOF = 9
+            nStart = 3
+        elseif elemType == "BT2"
+            nDOF = 4
+            nStart = 1
+        end
+        for qⁿ ∈ q[nStart:nDOF:end]
+            stringData = @sprintf("%.8f\n", qⁿ)
+            write(io, stringData)
+        end
+    end
+    open(outputDir *"presolve_hydro.dat", "w") do io
+        stringData = elemType * "\n"
+        write(io, stringData)
+        if elemType == "COMP2"
+            nDOF = 9
+            nStart = 3
+        elseif elemType == "BT2"
+            nDOF = 4
+            nStart = 1
+        end
+        for fⁿ ∈ F[nStart:nDOF:end]
+            stringData = @sprintf("%.8f\n", fⁿ)
+            write(io, stringData)
+        end
+    end
+    open(outputDir * "presolve_hydrotorque.dat", "w") do io
+        stringData = elemType * "\n"
+        write(io, stringData)
+        if elemType == "COMP2"
+            nDOF = 9
+            nStart = 4
+        elseif elemType == "BT2"
+            nDOF = 4
+            nStart = 3 # torque
+        end
+        for fⁿ ∈ F[nStart:nDOF:end]
+            stringData = @sprintf("%.8f\n", fⁿ)
+            write(io, stringData)
+        end
+    end
+    open(outputDir *"presolve_F.dat", "w") do io
+        stringData = elemType * "\n"
+        write(io, stringData)
+        for fⁿ ∈ F#[nStart:nDOF:end]
+            stringData = @sprintf("%.8f\n", fⁿ)
+            write(io, stringData)
+        end
+    end
+
+    return #HARD STOP
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0

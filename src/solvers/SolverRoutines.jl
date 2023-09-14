@@ -18,8 +18,12 @@ include("./EigenvalueProblem.jl")
 using .NewtonRhapson, .EigenvalueProblem
 using Zygote
 
-const RealOrComplex = Union{Real,Complex}
+# --- Globals ---
+global XDIM = 1
+global YDIM = 2
+global ZDIM = 3
 
+const RealOrComplex = Union{Real,Complex}
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
@@ -48,10 +52,19 @@ end # converge_r
 function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
     """
     Returns the deflected + rigid shape of the foil
+    Inputs
+    ------
+        foilStructuralStates - structural states of the foil in global ref frame!
+        α₀ - angle of attack
+        elemType - element type
+    Outputs
+    -------
+        foilTotalStates - total states of the foil in global reference frame
+        nDOF - number of DOF per node
     """
 
-    alfaRad = α₀ * π / 180
-    # alfaRad = deg2rad(α₀)
+    # alfaRad = α₀ * π / 180
+    alfaRad = deg2rad(α₀)
 
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
@@ -68,9 +81,29 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
         staticOffset =[ 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
     end
 
-    # Add static angle of attack to deflected foil
+    # ---------------------------
+    #   Transformation into global ref frame
+    # ---------------------------
+    if elemType == "COMP2"
+        # Get transformation matrix for the tip load
+        angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+        axisDefault = "z"
+        T1 = get_rotate3dMat(angleDefault, axis=axisDefault)
+        T = T1
+        transMatL2G = [
+            T zeros(3, 3) zeros(3, 3)
+            zeros(3, 3) T zeros(3, 3)
+            zeros(3, 3) zeros(3, 3) T
+        ]
+        staticOffset = transMatL2G' * staticOffset
+    else
+        angleDefault = 0.0
+    end
     w = foilStructuralStates[1:nDOF:end]
-    foilTotalStates = copy(foilStructuralStates) + repeat(staticOffset, outer=[length(w)])
+    staticOffsetGlobalRef = repeat(staticOffset, outer=[length(w)])
+    # Add static angle of attack to deflected foil
+    foilTotalStates = copy(foilStructuralStates) + staticOffsetGlobalRef
+
 
     return foilTotalStates, nDOF
 end # return_totalStates
@@ -578,6 +611,114 @@ function get_transMat(nVec, elemType="BT2")
             0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 1.0 # ψ2'
         ]
     end
+    return Γ
+end
+
+
+function get_rotate3dMat(rot; axis="x")
+    """
+    Rotates a 3D vector about axis by rot radians (RH rule!)
+    """
+    rotMat = Array{Float64}(undef, 3, 3)
+    c = cos(rot)
+    s = sin(rot)
+    if axis == "x"
+        rotMat = [
+            1 0 0
+            0 c -s
+            0 s c
+        ]
+    elseif axis == "y"
+        rotMat = [
+            c 0 s
+            0 1 0
+            -s 0 c
+        ]
+    elseif axis == "z"
+        rotMat = [
+            c -s 0
+            s c 0
+            0 0 1
+        ]
+    else
+        println("Only axis rotation implemented")
+    end
+    return rotMat
+end
+
+
+function get_transMat(dR, l, elemType="BT2")
+    """
+    Returns the transformation matrix for a given element type into 3D space
+
+    Inputs
+    -------
+        dR: normal vector
+        l: length of element
+        elemType: element type
+    """
+
+    rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
+    calpha = dR[1] * rxy_div
+    salpha = dR[2] * rxy_div
+    cbeta = 1 / rxy_div / l
+    sbeta = dR[3] / l
+
+    # Direction cosine matrix
+    T = [
+        calpha*cbeta salpha calpha*sbeta
+        -salpha*cbeta calpha -salpha*sbeta
+        -sbeta 0 cbeta
+    ]
+    Z = zeros(3, 3)
+    # writedlm("DebugT.csv", T, ',')
+
+    if elemType == "BT2"
+        # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
+        Γ = Matrix(I, 8, 8)
+    elseif elemType == "bend-twist"
+        Γ = Matrix(I, 6, 6)
+    elseif elemType == "BT3"
+        Γ = Matrix(I, 10, 10)
+    elseif elemType == "bend"
+        # 4x12
+        Γ = [
+            T Z Z Z
+            Z T Z Z
+            Z Z T Z
+            Z Z Z T
+        ]
+        # Γ = Matrix(I, 4, 4)
+    elseif elemType == "BEAM3D"
+        # 12x12
+        Γ = [
+            T Z Z Z
+            Z T Z Z
+            Z Z T Z
+            Z Z Z T
+        ]
+    elseif elemType == "COMP2"
+        Γ = [
+            T Z Z Z Z Z
+            Z T Z Z Z Z
+            Z Z T Z Z Z
+            Z Z Z T Z Z
+            Z Z Z Z T Z
+            Z Z Z Z Z T
+        ]
+        # Γ = Matrix(I, 18, 18)
+    else
+        error("Unsupported element type")
+    end
+
+    for ii in eachindex(Γ[:, 1])
+        for jj in eachindex(Γ[1, :])
+            if abs(Γ[ii, jj]) < 1e-16
+                Γ[ii, jj] = 0.0
+            end
+        end
+    end
+    # show(stdout, "text/plain", Γ)
     return Γ
 end
 # ==============================================================================

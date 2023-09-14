@@ -44,8 +44,12 @@ def get_bendingtwisting(states, nDOF=4):
     """
     Takes the structural 'u' vector and parses it into bending and twisting
     """
-    w = states[::nDOF]
-    psi = states[2::nDOF]  #  * 180 / np.pi
+    if nDOF==4:
+        w = states[::nDOF]
+        psi = states[2::nDOF]  #  * 180 / np.pi
+    else:
+        w = states[2::nDOF]
+        psi = states[3::nDOF]
 
     return w, psi
 

@@ -271,7 +271,7 @@ function test_SolveStaticComp()
     refBendSol = [0.0004825455285840, 0.0004908633758853, 0.0004909057635612]
     refTwistSol = [-0.00079926586938542, -0.0008235901040122, -0.0008357865527998]
 
-    nNodess = [10, 20, 40] # list of number of nodes to test
+    nNodess = [40, 20, 40] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
@@ -286,7 +286,8 @@ function test_SolveStaticComp()
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+        # TODO: Ok so now the issue is the composite fiber angle breaks everything
         "strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(

@@ -316,6 +316,8 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         Kbot = hcat(K12', K22)
         Kᵉ = vcat(Ktop, Kbot)
     elseif elemType == "COMP2" # Higher order composite beam 18 DOF using a 4th order basis function in bending
+        println("I think this should be negative", -(abᵉ * bz + atheta))
+        # TODO: PICKUP DEBUGGING HERE AND FIGURE OUT WHY THERE IS NO NEGATIVE BTC IN THE UNTRANSFORMED SOLUTION
         K11 = coeff * [
             ax 00 0000000 0000000 00 00 0000000000000000 00 0
             00 cy 0000000 0000000 00 dy 0000000000000000 00 iy
@@ -793,105 +795,111 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function get_rotate3dMat(rot; axis="x")
-    """
-    Rotates a 3D vector about axis by rot radians (RH rule!)
-    """
-    rotMat = Array{Float64}(undef, 3, 3)
-    c = cos(rot)
-    s = sin(rot)
-    if axis == "x"
-        rotMat = [
-            1 0 0
-            0 c -s
-            0 s c
-        ]
-    elseif axis == "y"
-        rotMat = [
-            c 0 s
-            0 1 0
-            -s 0 c
-        ]
-    elseif axis == "z"
-        rotMat = [
-            c -s 0
-            s c 0
-            0 0 1
-        ]
-    else
-        println("Only axis rotation implemented")
-    end
-    return rotMat
-end
+# function get_rotate3dMat(rot; axis="x")
+#     """
+#     Rotates a 3D vector about axis by rot radians (RH rule!)
+#     """
+#     rotMat = Array{Float64}(undef, 3, 3)
+#     c = cos(rot)
+#     s = sin(rot)
+#     if axis == "x"
+#         rotMat = [
+#             1 0 0
+#             0 c -s
+#             0 s c
+#         ]
+#     elseif axis == "y"
+#         rotMat = [
+#             c 0 s
+#             0 1 0
+#             -s 0 c
+#         ]
+#     elseif axis == "z"
+#         rotMat = [
+#             c -s 0
+#             s c 0
+#             0 0 1
+#         ]
+#     else
+#         println("Only axis rotation implemented")
+#     end
+#     return rotMat
+# end
 
-function get_transMat(dR, l, elemType="BT2")
-    """
-    Returns the transformation matrix for a given element type into 3D space
-    """
+# function get_transMat(dR, l, elemType="BT2")
+#     """
+#     Returns the transformation matrix for a given element type into 3D space
 
-    rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
-    calpha = dR[1] * rxy_div
-    salpha = dR[2] * rxy_div
-    cbeta = 1 / rxy_div / l
-    sbeta = dR[3] / l
+#     Inputs
+#     -------
+#         dR: normal vector
+#         l: length of element
+#         elemType: element type
+#     """
 
-    # Direction cosine matrix
-    T = [
-        calpha*cbeta salpha calpha*sbeta
-        -salpha*cbeta calpha -salpha*sbeta
-        -sbeta 0 cbeta
-    ]
-    Z = zeros(3, 3)
-    # writedlm("DebugT.csv", T, ',')
+#     rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
+#     calpha = dR[1] * rxy_div
+#     salpha = dR[2] * rxy_div
+#     cbeta = 1 / rxy_div / l
+#     sbeta = dR[3] / l
 
-    if elemType == "BT2"
-        # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
-        Γ = Matrix(I, 8, 8)
-    elseif elemType == "bend-twist"
-        Γ = Matrix(I, 6, 6)
-    elseif elemType == "BT3"
-        Γ = Matrix(I, 10, 10)
-    elseif elemType == "bend"
-        # 4x12
-        Γ = [
-            T Z Z Z
-            Z T Z Z
-            Z Z T Z
-            Z Z Z T
-        ]
-        # Γ = Matrix(I, 4, 4)
-    elseif elemType == "BEAM3D"
-        # 12x12
-        Γ = [
-            T Z Z Z
-            Z T Z Z
-            Z Z T Z
-            Z Z Z T
-        ]
-    elseif elemType == "COMP2"
-        Γ = [
-            T Z Z Z Z Z
-            Z T Z Z Z Z
-            Z Z T Z Z Z
-            Z Z Z T Z Z
-            Z Z Z Z T Z
-            Z Z Z Z Z T
-        ]
-        # Γ = Matrix(I, 18, 18)
-    else
-        error("Unsupported element type")
-    end
+#     # Direction cosine matrix
+#     T = [
+#         calpha*cbeta salpha calpha*sbeta
+#         -salpha*cbeta calpha -salpha*sbeta
+#         -sbeta 0 cbeta
+#     ]
+#     Z = zeros(3, 3)
+#     # writedlm("DebugT.csv", T, ',')
 
-    for ii in eachindex(Γ[:, 1])
-        for jj in eachindex(Γ[1, :])
-            if abs(Γ[ii, jj]) < 1e-16
-                Γ[ii, jj] = 0.0
-            end
-        end
-    end
-    # show(stdout, "text/plain", Γ)
-    return Γ
-end
+#     if elemType == "BT2"
+#         # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
+#         Γ = Matrix(I, 8, 8)
+#     elseif elemType == "bend-twist"
+#         Γ = Matrix(I, 6, 6)
+#     elseif elemType == "BT3"
+#         Γ = Matrix(I, 10, 10)
+#     elseif elemType == "bend"
+#         # 4x12
+#         Γ = [
+#             T Z Z Z
+#             Z T Z Z
+#             Z Z T Z
+#             Z Z Z T
+#         ]
+#         # Γ = Matrix(I, 4, 4)
+#     elseif elemType == "BEAM3D"
+#         # 12x12
+#         Γ = [
+#             T Z Z Z
+#             Z T Z Z
+#             Z Z T Z
+#             Z Z Z T
+#         ]
+#     elseif elemType == "COMP2"
+#         Γ = [
+#             T Z Z Z Z Z
+#             Z T Z Z Z Z
+#             Z Z T Z Z Z
+#             Z Z Z T Z Z
+#             Z Z Z Z T Z
+#             Z Z Z Z Z T
+#         ]
+#         # Γ = Matrix(I, 18, 18)
+#     else
+#         error("Unsupported element type")
+#     end
+
+#     for ii in eachindex(Γ[:, 1])
+#         for jj in eachindex(Γ[1, :])
+#             if abs(Γ[ii, jj]) < 1e-16
+#                 Γ[ii, jj] = 0.0
+#             end
+#         end
+#     end
+#     # show(stdout, "text/plain", Γ)
+#     return Γ
+# end
 
 function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic")
     """
@@ -901,6 +909,11 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     ------
         coordMat: 2D array of coordinates of nodes
         elemConn: 2D array of element connectivity (nElem x 2)
+    Outputs
+    -------
+        globalK: global stiffness matrix
+        globalM: global mass matrix
+        globalF: global force vector
     """
 
     # --- Local nodal DOF vector ---
@@ -999,10 +1012,13 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         # The local coordinate system is {u} while the global is {U}
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
-        Γ = get_transMat(dR, lᵉ, elemType)
-        kElem = Γ' * kLocal * Γ
-        mElem = Γ' * mLocal * Γ
-        fElem = Γ' * fLocal
+        # Γ = SolverRoutines.get_transMat(dR, lᵉ, elemType)
+        # kElem = Γ' * kLocal * Γ
+        # mElem = Γ' * mLocal * Γ
+        # fElem = Γ' * fLocal
+        kElem = kLocal
+        mElem = mLocal
+        fElem = fLocal
         # println("T:")
         # show(stdout, "text/plain", Γ[1:3, 1:3])
         # println()
