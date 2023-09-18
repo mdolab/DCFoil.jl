@@ -4,6 +4,7 @@ Test to verify that the static solve works without failing
 
 using Printf
 using LinearAlgebra
+using Dates
 
 include("../src/solvers/SolveStatic.jl")
 using .SolveStatic
@@ -271,7 +272,7 @@ function test_SolveStaticComp()
     refBendSol = [0.0004825455285840, 0.0004908633758853, 0.0004909057635612]
     refTwistSol = [-0.00079926586938542, -0.0008235901040122, -0.0008357865527998]
 
-    nNodess = [40, 20, 40] # list of number of nodes to test
+    nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
@@ -287,7 +288,6 @@ function test_SolveStaticComp()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
-        # TODO: Ok so now the issue is the composite fiber angle breaks everything
         "strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
@@ -381,7 +381,7 @@ function test_SolveStaticComp()
 
 end # test_SolveStaticComp
 
-rel_err = test_SolveStaticComp()
+# rel_err = test_SolveStaticComp()
 
 # ==============================================================================
 #                         Test Forced Response
@@ -393,58 +393,11 @@ function test_SolveForcedComp()
 
 end # end test_SolveForcedComp
 
+# test_SolveForcedComp()
+
 # ==============================================================================
 #                         Test Flutter Solver
 # ==============================================================================
-function test_flutter()
-    """
-    Test flutter solver
-    """
-    nNodes = 10
-    DVDict = Dict(
-        "name" => "akcabay",
-        "nNodes" => nNodes,
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 6.0, # free stream velocity [m/s]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "cfrp", # preselect from material library
-        "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
-    )
-
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "",
-        # --- General solver options ---
-        "tipMass" => false,
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 1:0.1:1000,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => true,
-        "nModes" => 3,
-        "uRange" => [5.0, 6.0],
-    )
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-    nElem = nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];)
-
-    return 0.0
-end
-
 function test_modal()
     """
     Test modal solver
@@ -531,10 +484,13 @@ function test_eigensolve()
     err = LinearAlgebra.norm(w_r1 - w_r, 2) + LinearAlgebra.norm(w_i1 - w_i, 2)
 end
 
-function test_flutter_staticDiv()
+function test_pk_staticDiv()
     """
     Test flutter solver for the static divergence case
     """
+
+    ref_val = 0.2346166
+
     nNodes = 10
     df = 1
     fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
@@ -543,7 +499,7 @@ function test_flutter_staticDiv()
 
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "Λ" => deg2rad(0.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
@@ -551,6 +507,7 @@ function test_flutter_staticDiv()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(-15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(
@@ -560,6 +517,7 @@ function test_flutter_staticDiv()
         # --- General solver options ---
         "config" => "wing",
         "nNodes" => nNodes,
+        "nNodeStrut" => 10,
         "U∞" => 5.0, # free stream velocity [m/s]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "rotation" => 0.0, # deg
@@ -585,7 +543,8 @@ function test_flutter_staticDiv()
     )
     evalFuncs = ["ksflutter"]
 
-    outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+        string(Dates.today()),
         solverOptions["name"],
         solverOptions["material"],
         rad2deg(DVDict["θ"]),
@@ -594,15 +553,20 @@ function test_flutter_staticDiv()
 
     solverOptions["outputDir"] = outputDir
 
-    costFuncs = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    # TODO: fix with nondim p_r
-    return (95.3118 - costFuncs["ksflutter"]) / 95.3118
+    DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+
+    err = (ref_val - costFuncs["ksflutter"]) / ref_val
+    return err
 end
 
-function test_flutter()
+# test_pk_staticDiv()
+
+function test_pk_flutter()
     """
-    Test flutter solver for the static divergence case
+    Test flutter solver for the fluttering case
     """
+    ref_val = 0.05347
     nNodes = 10
     df = 1
     fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
@@ -611,7 +575,7 @@ function test_flutter()
 
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => -15.0 * π / 180, # sweep angle [rad]
+        "Λ" => deg2rad(-15.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
@@ -619,6 +583,7 @@ function test_flutter()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(
@@ -628,6 +593,7 @@ function test_flutter()
         # --- General solver options ---
         "config" => "wing",
         "nNodes" => nNodes,
+        "nNodeStrut" => 10,
         "U∞" => 5.0, # free stream velocity [m/s]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "rotation" => 0.0, # deg
@@ -653,7 +619,8 @@ function test_flutter()
     )
     evalFuncs = ["ksflutter"]
 
-    outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+        string(Dates.today()),
         solverOptions["name"],
         solverOptions["material"],
         rad2deg(DVDict["θ"]),
@@ -662,6 +629,11 @@ function test_flutter()
 
     solverOptions["outputDir"] = outputDir
 
-    costFuncs = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    return (95.3118 - costFuncs["ksflutter"]) / 95.3118
+    DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+    err = (ref_val - costFuncs["ksflutter"]) / ref_val
+
+    return err
 end
+
+# test_pk_flutter()

@@ -388,7 +388,6 @@ end
 
 # ans = test_BT3_mass()
 # ans = test_BT3_stiff()
-# TODO: PICKUP HERE AND DEBUG THE ELEMENT STIFF
 # ans1 = test_COMP2_stiff()
 # ans2 = test_COMP2_mass()
 # ==============================================================================
@@ -1041,8 +1040,8 @@ function test_FECOMP2()
     u = copy(globalF)
     
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-    writedlm("DebugK-COMP2.csv", K,",")
-    writedlm("DebugF-COMP2.csv", F,",")
+    # writedlm("DebugK-COMP2.csv", K,",")
+    # writedlm("DebugF-COMP2.csv", F,",")
 
     u4 = FEMMethods.solve_structure(K, M, F)
     q4 = transMatG2L[1:9, 1:9] * u4[end-8:end] # transform back to local coordinates

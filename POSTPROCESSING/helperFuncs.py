@@ -43,13 +43,21 @@ def load_tecplot_file(filename):
 def get_bendingtwisting(states, nDOF=4):
     """
     Takes the structural 'u' vector and parses it into bending and twisting
+
+    Outputs:
+    --------
+    w : array
+        Bending deflection (z-axis)
+    psi : array
+        Twisting deflection about global y-axis
     """
     if nDOF==4:
         w = states[::nDOF]
         psi = states[2::nDOF]  #  * 180 / np.pi
     else:
-        w = states[2::nDOF]
-        psi = states[3::nDOF]
+        # Then it is probably the COMP2 element
+        w = states[3::nDOF]
+        psi = states[5::nDOF]
 
     return w, psi
 

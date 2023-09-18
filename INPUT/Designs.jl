@@ -7,7 +7,6 @@ This file is just meant to store DV dictionaries of designs we analyze in the pa
 # ==============================================================================
 # THIS COMPARES WELL WITH RESULTS FROM THE PAPER
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
@@ -24,7 +23,6 @@ DVDict = Dict(
 
 # Static divergence case
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => deg2rad(0.0), # sweep angle [rad]
@@ -43,7 +41,6 @@ DVDict = Dict(
 # Not great agreement with paper, need to test
 # Table 1: 2.75 in x 20 in strut
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 0.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -60,7 +57,6 @@ DVDict = Dict(
 
 # --- Yingqian's Sweep & Anisotropy Paper (2018) ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => 30.0 * π / 180, # sweep angle [rad]
@@ -77,7 +73,6 @@ DVDict = Dict(
 
 # --- Yingqian's Viscous FSI Paper (2019) ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -95,7 +90,6 @@ DVDict = Dict(
 
 # --- Dummy test with 1's ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => 30.0 * π / 180, # sweep angle [rad]
@@ -112,7 +106,6 @@ DVDict = Dict(
 
 # --- Eirikur's flat plate ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 10.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]

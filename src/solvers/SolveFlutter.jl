@@ -166,10 +166,10 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     # ---------------------------
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
-    ChainRulesCore.ignore_derivatives() do
-        fname = @sprintf("%s/structMatrices.jld2", outputDir)
-        save(fname, "Ks", Ks, "Ms", Ms)
-    end
+    # ChainRulesCore.ignore_derivatives() do
+    #     fname = @sprintf("%s/structMatrices.jld2", outputDir)
+    #     save(fname, "Ks", Ks, "Ms", Ms)
+    # end
 
     # ---------------------------
     #   Initialize stuff
@@ -218,9 +218,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Assemble structure
     # ---------------------------
-    elemType = "COMP2"
-    loadType = "force"
-
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
@@ -1810,17 +1807,17 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
 
     Inputs
     ------
-    N_MAX_Q_ITER
-    flowHistory - flow history. Array(Nflow, 3)
-    NTotalModesFound - total number of modes found. Int
-    nFlow - number of flow conditions. Int
-    p_r - real part of the eigenvalues across all flow conditions [-]. Array(N_MAX_Q_ITER, Nmodes).
-    This has to be the non-dimensional version so the derivatives are correct
-    iblank - blanking indices
+        N_MAX_Q_ITER
+        flowHistory - flow history. Array(Nflow, 3)
+        NTotalModesFound - total number of modes found. Int
+        nFlow - number of flow conditions. Int
+        p_r - real part of the eigenvalues across all flow conditions [-]. Array(N_MAX_Q_ITER, Nmodes).
+            This has to be the non-dimensional version so the derivatives are correct
+        iblank - blanking indices
 
     Outputs
     -------
-    obj - flutter constraint. Float
+    obj - flutter constraint [-]. Float
     pmG - flutter safety margin
     """
     # ************************************************

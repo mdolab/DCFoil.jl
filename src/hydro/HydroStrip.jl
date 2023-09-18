@@ -629,7 +629,6 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             if jj == 1 || jj == FOIL.nNodes
                 Δy = 0.5 * lᵉ
             end
-            println("Δy: ", Δy)
 
             nVec = nVec / lᵉ # normalize
 
@@ -1001,9 +1000,9 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             # ---------------------------
             # Aerodynamics need to happen in global reference frame
             Γ = SolverRoutines.get_transMat(nVec, 1.0, elemType)
-            KLocal = Γ' * KLocal * Γ
-            KLocal = Γ' * CLocal * Γ
-            KLocal = Γ' * MLocal * Γ
+            KLocal = Γ'[1:nDOF,1:nDOF] * KLocal * Γ[1:nDOF,1:nDOF]
+            CLocal = Γ'[1:nDOF,1:nDOF] * CLocal * Γ[1:nDOF,1:nDOF]
+            MLocal = Γ'[1:nDOF,1:nDOF] * MLocal * Γ[1:nDOF,1:nDOF]
 
             GDOFIdx::Int64 = nDOF * (jj - 1) + 1
 
@@ -1023,8 +1022,6 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
 
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
 end
-
-
 
 function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType="bend-twist",)
     """

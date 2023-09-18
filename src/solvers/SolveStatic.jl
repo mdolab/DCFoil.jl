@@ -37,6 +37,12 @@ using .SolverRoutines
 using .DCFoilSolution
 
 # ==============================================================================
+#                         COMMON VARIABLES
+# ==============================================================================
+elemType = "COMP2"
+loadType = "torque"
+
+# ==============================================================================
 #                         Top level API routines
 # ==============================================================================
 function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dict)
@@ -69,13 +75,6 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     #     SOLVE FEM FIRST TIME
     # ************************************************
-    # elemType = "bend"
-    # elemType = "bend-twist"
-    elemType = "BT2"
-    elemType = "COMP2"
-    # loadType = "force" # doesn't work with xyz global yet
-    loadType = "torque"
-
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
     global chordVec = DVDict["c"] # need for evalFuncs
@@ -128,70 +127,83 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    # --- Debug printout of matrices in human readable form after BC application ---
-    writedlm(outputDir * "K.csv", K,",")
-    writedlm(outputDir * "M.csv", M,",")
+    # # --- Debug printout of matrices in human readable form after BC application ---
+    # writedlm(outputDir * "K.csv", K,",")
+    # writedlm(outputDir * "M.csv", M,",")
 
     # ---------------------------
     #   Pre-solve system
     # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
-    # Write answer to file DEBUG
-    open(outputDir * "presolve_w.dat", "w") do io
-        stringData = elemType * "\n"
-        write(io, stringData)
-        if elemType == "COMP2"
-            nDOF = 9
-            nStart = 3
-        elseif elemType == "BT2"
-            nDOF = 4
-            nStart = 1
-        end
-        for qⁿ ∈ q[nStart:nDOF:end]
-            stringData = @sprintf("%.8f\n", qⁿ)
-            write(io, stringData)
-        end
-    end
-    open(outputDir *"presolve_hydro.dat", "w") do io
-        stringData = elemType * "\n"
-        write(io, stringData)
-        if elemType == "COMP2"
-            nDOF = 9
-            nStart = 3
-        elseif elemType == "BT2"
-            nDOF = 4
-            nStart = 1
-        end
-        for fⁿ ∈ F[nStart:nDOF:end]
-            stringData = @sprintf("%.8f\n", fⁿ)
-            write(io, stringData)
-        end
-    end
-    open(outputDir * "presolve_hydrotorque.dat", "w") do io
-        stringData = elemType * "\n"
-        write(io, stringData)
-        if elemType == "COMP2"
-            nDOF = 9
-            nStart = 4
-        elseif elemType == "BT2"
-            nDOF = 4
-            nStart = 3 # torque
-        end
-        for fⁿ ∈ F[nStart:nDOF:end]
-            stringData = @sprintf("%.8f\n", fⁿ)
-            write(io, stringData)
-        end
-    end
-    open(outputDir *"presolve_F.dat", "w") do io
-        stringData = elemType * "\n"
-        write(io, stringData)
-        for fⁿ ∈ F#[nStart:nDOF:end]
-            stringData = @sprintf("%.8f\n", fⁿ)
-            write(io, stringData)
-        end
-    end
-
-    return #HARD STOP
+    # # Write answer to file DEBUG
+    # open(outputDir * "presolve_w.dat", "w") do io
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 3
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 1
+    #     end
+    #     for qⁿ ∈ q[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
+    # open(outputDir*"presolve_twist.dat","w") do io
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 5
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 3 # torque
+    #     end
+    #     for qⁿ ∈ q[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
+    # open(outputDir *"presolve_hydro.dat", "w") do io
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 3
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 1
+    #     end
+    #     for fⁿ ∈ F[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", fⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
+    # open(outputDir * "presolve_hydrotorque.dat", "w") do io
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     if elemType == "COMP2"
+    #         nDOF = 9
+    #         nStart = 5
+    #     elseif elemType == "BT2"
+    #         nDOF = 4
+    #         nStart = 3 # torque
+    #     end
+    #     for fⁿ ∈ F[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", fⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
+    # open(outputDir *"presolve_F.dat", "w") do io
+    #     stringData = elemType * "\n"
+    #     write(io, stringData)
+    #     for fⁿ ∈ F#[nStart:nDOF:end]
+    #         stringData = @sprintf("%.8f\n", fⁿ)
+    #         write(io, stringData)
+    #     end
+    # end
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
@@ -334,8 +346,8 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         Lift = forces[1:nDOF:end]
     elseif constants.elemType == "COMP2"
         nDOF = 9
-        Ψ = states[4:nDOF:end]
-        Moments = forces[4:nDOF:end]
+        Ψ = states[5:nDOF:end]
+        Moments = forces[5:nDOF:end]
         W = states[3:nDOF:end]
         Lift = forces[3:nDOF:end]
     else
