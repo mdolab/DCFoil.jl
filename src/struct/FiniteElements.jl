@@ -113,18 +113,19 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     ky = 8 * EIIPᵉ * lᵉ^3 / 70
     ly = 6 * EIIPᵉ * lᵉ^4 / 70
     my = EIIPᵉ * lᵉ^4 / 70
-    atau = 0.2 * (6 * GJᵉ * lᵉ^2 + 60 * Sᵉ)
-    btau = 0.1 * (GJᵉ * lᵉ^3 + 60 * Sᵉ * lᵉ)
-    ctau = (GJᵉ * lᵉ^4 - 60 * Sᵉ * lᵉ^2) / 30
-    dtau = (2 * GJᵉ * lᵉ^4 + 60 * Sᵉ * lᵉ^2) / 15
-    atheta = BTᵉ * lᵉ^2
-    btheta = 0.2 * 6 * BTᵉ * lᵉ^2
-    ctheta = 0.05 * BTᵉ * lᵉ^4
-    dtheta = abᵉ * BTᵉ * lᵉ^3
-    etheta = 0.2 * 3 * BTᵉ * lᵉ^3
-    ftheta = 0.2 * 2 * BTᵉ * lᵉ^3
-    gtheta = 0.1 * BTᵉ * lᵉ^3
+    aτ = 0.2 * (6 * GJᵉ * lᵉ^2 + 60 * Sᵉ)
+    bτ = 0.1 * (GJᵉ * lᵉ^3 + 60 * Sᵉ * lᵉ)
+    cτ = (GJᵉ * lᵉ^4 - 60 * Sᵉ * lᵉ^2) / 30
+    dτ = (2 * GJᵉ * lᵉ^4 + 60 * Sᵉ * lᵉ^2) / 15
+    aθ = BTᵉ * lᵉ^2
+    bθ = 0.2 * 6 * BTᵉ * lᵉ^2
+    cθ = 0.05 * BTᵉ * lᵉ^4
+    dθ = abᵉ * BTᵉ * lᵉ^3
+    eθ = 0.2 * 3 * BTᵉ * lᵉ^3
+    fθ = 0.2 * 2 * BTᵉ * lᵉ^3
+    gθ = 0.1 * BTᵉ * lᵉ^3
 
+    
 
     # --- Constitutive law ---
     if constitutive == "isotropic"
@@ -290,66 +291,50 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         elseif constitutive == "orthotropic"
             println("Orthotropic not implemented")
         end
-    elseif elemType == "BT3" # higher order composite beam 10 DOF
-        K11 = coeff * [
-            cz dz iz -abᵉ*az -(abᵉ * bz + atheta)
-            dz gz jz -(abᵉ * bz - btheta) (-ftheta-abᵉ*ez)
-            iz jz lz gtheta ctheta
-            -abᵉ*az -(abᵉ * bz - btheta) gtheta atau btau
-            -(abᵉ * bz + atheta) (-ftheta-abᵉ*ez) ctheta btau dtau+dtheta
-        ]
-        K12 = coeff * [
-            -cz dz -iz abᵉ*az -(abᵉ * bz - atheta)
-            -dz hz -kz (abᵉ*bz-btheta) etheta-abᵉ*fz
-            -iz kz mz -gtheta ctheta
-            abᵉ*az -(abᵉ * bz + btheta) gtheta -atau btau
-            (abᵉ*bz+atheta) (-etheta-abᵉ*fz) ctheta -btau -ctau
-        ]
-        K22 = coeff * [
-            cz -dz iz -abᵉ*az (abᵉ*bz-atheta)
-            -dz gz -jz (abᵉ*bz+btheta) (ftheta-abᵉ*ez)
-            iz -jz lz -gtheta ctheta
-            -abᵉ*az (abᵉ*bz+btheta) -gtheta atau -btau
-            (abᵉ*bz-atheta) (ftheta-abᵉ*ez) ctheta -btau dtau-dtheta
-        ]
-        Ktop = hcat(K11, K12)
-        Kbot = hcat(K12', K22)
-        Kᵉ = vcat(Ktop, Kbot)
     elseif elemType == "COMP2" # Higher order composite beam 18 DOF using a 4th order basis function in bending
-        println("I think this should be negative", -(abᵉ * bz + atheta))
-        # TODO: PICKUP DEBUGGING HERE AND FIGURE OUT WHY THERE IS NO NEGATIVE BTC IN THE UNTRANSFORMED SOLUTION
+        aa = -abᵉ*az
+        at = -(abᵉ * bz + aθ)
+        bb = -bz*abᵉ+bθ
+        ff =-(abᵉ * ez + fθ)
+        dd = dθ+dτ
         K11 = coeff * [
-            ax 00 0000000 0000000 00 00 0000000000000000 00 0
-            00 cy 0000000 0000000 00 dy 0000000000000000 00 iy
-            00 00 cz -abᵉ*az dz 00 -(abᵉ * bz + atheta) iz 0
-            00 00 -abᵉ*az atau -bz*abᵉ+btheta 00 btau gtheta 0
-            00 00 dz -bz*abᵉ+btheta gz 00 -(abᵉ * ez + ftheta) jz 00
-            00 dy 00 00 00 gy 0000000000000000 00 jy
-            00 00 -(abᵉ * bz + atheta) btau -(abᵉ * ez + ftheta) 00 dtheta+dtau ctheta 00
-            00 00 iz gtheta jz 00 ctheta lz 00
-            00 iy 00 00 00 jy 0000000000000000 00 ly
+            ax 00 00 00 00 00 00 00 00
+            00 cy 00 00 00 dy 00 00 iy
+            00 00 cz aa dz 00 at iz 00
+            00 00 aa aτ bb 00 bτ gθ 00
+            00 00 dz bb gz 00 ff jz 00
+            00 dy 00 00 00 gy 00 00 jy
+            00 00 at bτ ff 00 dd cθ 00
+            00 00 iz gθ jz 00 cθ lz 00
+            00 iy 00 00 00 jy 00 00 ly
         ]
+        an =-abᵉ*bz+aθ
+        af = -abᵉ*fz+eθ
+        ae = -(abᵉ*fz+eθ)
+        bn = bz*abᵉ+bθ
         K12 = coeff * [
-            -ax 00 0000000 0000000 00 00 0000000000000000 00 0
-            00 -cy 0000000 0000000 00 dy 0000000000000000 00 -iy
-            00 00 -cz abᵉ*az dz 00 -abᵉ*bz+atheta -iz 0
-            00 00 abᵉ*az -atau -bz*abᵉ-btheta 00 btau gtheta 0
-            00 00 -dz bz*abᵉ-btheta hz 00 -abᵉ*fz+etheta -kz 00
-            00 -dy 00 00 00 hy 0000000000000000 00 -ky
-            00 00 (abᵉ*bz+atheta) -btau -(abᵉ * fz + etheta) 00 -ctau ctheta 00
-            00 00 -iz -gtheta kz 00 ctheta mz 00
-            00 -iy 00 00 00 ky 0000000000000000 00 my
+            -ax 000 000 000 000 00 00 000 00
+            000 -cy 000 000 000 dy 00 000 -iy
+            000 000 -cz -aa  dz 00 an -iz 00
+            000 000 -aa -aτ -bn 00 bτ  gθ 00
+            000 000 -dz -bb  hz 00 af -kz 00
+            000 -dy 000 000 000 hy 00 000 -ky
+            000 000 -at -bτ  ae 00 -cτ cθ 00
+            000 000 -iz -gθ  kz 00  cθ mz 00
+            000 -iy 000 000 000 ky 000 00 my
         ]
+        fn =-abᵉ*ez+fθ
+        dn = -dθ+dτ
         K22 = coeff * [
-            ax 00 0000000 0000000 00 00 0000000000000000 00 0
-            00 cy 0000000 0000000 00 -dy 0000000000000000 00 iy
-            00 00 cz -abᵉ*az -dz 00 (abᵉ*bz-atheta) iz 0
-            00 00 -abᵉ*az atau bz*abᵉ+btheta 00 -btau -gtheta 0
-            00 00 -dz bz*abᵉ+btheta gz 00 -abᵉ*ez+ftheta -jz 00
-            00 -dy 00 00 00 gy 0000000000000000 00 -jy
-            00 00 (abᵉ*bz-atheta) -btau -(abᵉ * ez + ftheta) 00 -dtheta+dtau ctheta 00
-            00 00 iz -gtheta -jz 00 ctheta lz 00
-            00 iy 00 00 00 -jy 0000000000000000 00 ly
+            ax 00  00  00  00  00  00  00 00
+            00 cy  00  00  00 -dy  00  00 iy
+            00 00  cz  aa -dz  00 -an  iz 00
+            00 00  aa  aτ  bn  00 -bτ -gθ 00
+            00 00 -dz  bn  gz  00  fn -jz 00
+            00 -dy 00  00  00  gy  00  00 -jy
+            00 00 -an -bτ  fn  00  dn  cθ 00
+            00 00  iz -gθ -jz  00  cθ  lz 00
+            00 iy  00  00  00 -jy  00  00 ly
         ]
         Ktop = hcat(K11, K12)
         Kbot = hcat(K12', K22)
@@ -422,12 +407,12 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
     vy = mᵉ * lᵉ^3 / 120
     wy = mᵉ * lᵉ^4 / 1260
     xy = mᵉ * lᵉ^5 / 11088
-    atau = 156 * iᵉ * lᵉ / 420
-    btau = 54 * iᵉ * lᵉ / 420
-    ctau = 22 * iᵉ * lᵉ^2 / 420
-    dtau = 13 * iᵉ * lᵉ^2 / 420
-    etau = 4 * iᵉ * lᵉ^3 / 420
-    ftau = 3 * iᵉ * lᵉ^3 / 420
+    aτ = 156 * iᵉ * lᵉ / 420
+    bτ = 54 * iᵉ * lᵉ / 420
+    cτ = 22 * iᵉ * lᵉ^2 / 420
+    dτ = 13 * iᵉ * lᵉ^2 / 420
+    eτ = 4 * iᵉ * lᵉ^3 / 420
+    fτ = 3 * iᵉ * lᵉ^3 / 420
 
     if elemType == "bend"
         m11 = mb * 156
@@ -587,69 +572,81 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
         vz = mᵉ * lᵉ^3 / 120
         wz = mᵉ * lᵉ^4 / 1260
         xz = mᵉ * lᵉ^5 / 11088
-        atau = 156 * iᵉ * lᵉ / 420
-        btau = 54 * iᵉ * lᵉ / 420
-        ctau = 22 * iᵉ * lᵉ^2 / 420
-        dtau = 13 * iᵉ * lᵉ^2 / 420
-        etau = 4 * iᵉ * lᵉ^3 / 420
-        ftau = 3 * iᵉ * lᵉ^3 / 420
+        aτ = 156 * iᵉ * lᵉ / 420
+        bτ = 54 * iᵉ * lᵉ / 420
+        cτ = 22 * iᵉ * lᵉ^2 / 420
+        dτ = 13 * iᵉ * lᵉ^2 / 420
+        eτ = 4 * iᵉ * lᵉ^3 / 420
+        fτ = 3 * iᵉ * lᵉ^3 / 420
         M11 = [
             az iz qz x_αbᵉ*bz x_αbᵉ*hz
             iz lz mz x_αbᵉ*fz x_αbᵉ*sz
             qz mz tz x_αbᵉ*pz x_αbᵉ*uz
-            x_αbᵉ*bz x_αbᵉ*fz x_αbᵉ*pz atau ctau
-            x_αbᵉ*hz x_αbᵉ*sz x_αbᵉ*uz ctau etau
+            x_αbᵉ*bz x_αbᵉ*fz x_αbᵉ*pz aτ cτ
+            x_αbᵉ*hz x_αbᵉ*sz x_αbᵉ*uz cτ eτ
         ]
         M12 = [
             dz -jz rz x_αbᵉ*cz -x_αbᵉ*gz
             jz -kz nz x_αbᵉ*ez -x_αbᵉ*vz
             rz -nz xz x_αbᵉ*oz -x_αbᵉ*wz
-            x_αbᵉ*cz -x_αbᵉ*ez x_αbᵉ*oz btau -dtau
-            x_αbᵉ*gz -x_αbᵉ*vz x_αbᵉ*wz dtau -ftau
+            x_αbᵉ*cz -x_αbᵉ*ez x_αbᵉ*oz bτ -dτ
+            x_αbᵉ*gz -x_αbᵉ*vz x_αbᵉ*wz dτ -fτ
         ]
         M22 = [
             az -iz qz x_αbᵉ*bz -x_αbᵉ*hz
             -iz lz -mz -x_αbᵉ*fz x_αbᵉ*sz
             qz -mz tz x_αbᵉ*pz -x_αbᵉ*uz
-            x_αbᵉ*bz -x_αbᵉ*fz x_αbᵉ*pz atau -ctau
-            -x_αbᵉ*hz x_αbᵉ*sz -x_αbᵉ*uz -ctau etau
+            x_αbᵉ*bz -x_αbᵉ*fz x_αbᵉ*pz aτ -cτ
+            -x_αbᵉ*hz x_αbᵉ*sz -x_αbᵉ*uz -cτ eτ
         ]
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
         Mᵉ = vcat(Mtop, Mbot)
     elseif elemType == "COMP2"
+        xb = x_αbᵉ*bz
+        xf = x_αbᵉ*fz
+        xh = x_αbᵉ*hz
+        xc = x_αbᵉ*cz
+        xp = x_αbᵉ*pz 
+        xs = x_αbᵉ*sz
+        xu = x_αbᵉ*uz
         M11 = [
-            ax 00000 0000 00000000 0000 0000 0000 0000 0000
-            00 ay 0000 00000000 0000 iy 0000 0000 qy
-            00 0000 az x_αbᵉ*bz iz 0000 x_αbᵉ*hz qz 0000
-            00 0000 x_αbᵉ*bz atau x_αbᵉ*fz 0000 ctau x_αbᵉ*pz 0000
-            00 0000 iz x_αbᵉ*fz lz 0000 x_αbᵉ*sz mz 0000
-            00 iy 0000 0000 0000 ly 0000 0000 my
-            00 0000 x_αbᵉ*hz ctau x_αbᵉ*sz 0000 etau x_αbᵉ*uz 0000
-            00 0000 qz x_αbᵉ*pz mz 0000 x_αbᵉ*uz tz 0000
-            00 qy 0000 0000 0000 my 0000 0000 ty
+            ax 00 00 00 00 00 00 00 00
+            00 ay 00 00 00 iy 00 00 qy
+            00 00 az xb iz 00 xh qz 00
+            00 00 xb aτ xf 00 cτ xp 00
+            00 00 iz xf lz 00 xs mz 00
+            00 iy 00 00 00 ly 00 00 my
+            00 00 xh cτ xs 00 eτ xu 00
+            00 00 qz xp mz 00 xu tz 00
+            00 qy 00 00 00 my 00 00 ty
         ]
+        xg = -x_αbᵉ*gz
+        xe = -x_αbᵉ*ez
+        xo = x_αbᵉ*oz
+        xv = -x_αbᵉ*vz
+        xw = -x_αbᵉ*wz
         M12 = [
-            bx 00000 0000 00000000 0000 0000 0000 0000 0000
-            00 dy 0000 00000000 0000 -jy 0000 0000 ry
-            00 0000 dz x_αbᵉ*cz -jz 0000 -x_αbᵉ*gz rz 0000
-            00 0000 x_αbᵉ*cz btau -x_αbᵉ*ez 0000 -dtau x_αbᵉ*oz 0000
-            00 0000 jz x_αbᵉ*ez -kz 0000 -x_αbᵉ*vz nz 0000
-            00 jy 0000 0000 0000 -ky 0000 0000 ny
-            00 0000 x_αbᵉ*gz dtau -x_αbᵉ*vz 0000 -ftau -x_αbᵉ*wz 0000
-            00 0000 rz x_αbᵉ*oz -nz 0000 -x_αbᵉ*wz xz 0000
-            00 ry 0000 0000 0000 -ny 0000 0000 xy
+            bx 00  00  00  00  00  00 00 00
+            00 dy  00  00  00 -jy  00 00 ry
+            00 00  dz  xc -jz  00  xg rz 00
+            00 00  xc  bτ  xe  00 -dτ xo 00
+            00 00  jz -xe -kz  00  xv nz 00
+            00 jy  00  00  00 -ky  00 00 ny
+            00 00 -xg  dτ  xv  00 -fτ xw 00
+            00 00  rz  xo -nz  00  xw xz 00
+            00 ry  00  00  00 -ny  00 00 xy
         ]
         M22 = [
-            ax 00000 0000 00000000 0000 0000 0000 0000 0000
-            00 ay 0000 00000000 0000 -iy 0000 0000 qy
-            00 0000 az x_αbᵉ*bz -iz 0000 -x_αbᵉ*hz qz 0000
-            00 0000 x_αbᵉ*bz atau -x_αbᵉ*fz 0000 -ctau x_αbᵉ*pz 0000
-            00 0000 -iz -x_αbᵉ*fz lz 0000 x_αbᵉ*sz -mz 0000
-            00 -iy 0000 0000 0000 ly 0000 0000 -my
-            00 0000 -x_αbᵉ*hz -ctau x_αbᵉ*sz 0000 etau -x_αbᵉ*uz 0000
-            00 0000 qz x_αbᵉ*pz -mz 0000 -x_αbᵉ*uz tz 0000
-            00 qy 0000 0000 0000 -my 0000 0000 ty
+            ax  00  00  00  00  00  00  00  00
+            00  ay  00  00  00 -iy  00  00  qy
+            00  00  az  xb -iz  00 -xh  qz  00
+            00  00  xb  aτ -xf  00 -cτ  xp  00
+            00  00 -iz -xf  lz  00  xs -mz  00
+            00 -iy  00  00  00  ly  00  00 -my
+            00  00 -xh -cτ  xs  00  eτ -xu  00
+            00  00  qz  xp -mz  00 -xu  tz  00
+            00  qy  00  00  00 -my  00  00  ty
         ]
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)

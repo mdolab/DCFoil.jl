@@ -108,8 +108,6 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
-    # TODO: I THINK YOURE TRANSFORMING THE HYDROFORCES OR MATERIAL STIFFNESSES WRONG. PICK
-    # TODO: PICKUP HERE WHY DO THE F vectors that actually go in not agree? The lift is about half what it should be
 
     # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
     fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)

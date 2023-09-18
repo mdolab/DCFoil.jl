@@ -163,7 +163,7 @@ function test_BT2_mass()
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
     if minimum(eigvals(Mtest)) < 0.0
-        print("Your stiffness matrix is not positive definite...it's wrong")
+        print("Your mass matrix is not positive definite...it's wrong")
         rel_err += 1 # make test fail
     end
 
@@ -250,8 +250,147 @@ function test_BT3_mass()
     return rel_err
 end
 
+function test_COMP2_stiff()
+    """
+    Test the second order beam matrix with unit values
+    """
+    constitutive = "orthotropic"
+    # ************************************************
+    #     COMP2 element stiff
+    # ************************************************
+    elemType = "COMP2"
+
+    Ktest = LinearBeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3,0.0, 2, 1, elemType, constitutive)
+    # show(stdout, "text/plain", Ktest[1:end, 1:end])
+
+    # # Reduce the full size to what we actually test
+    # blankingList = vcat([1,2,6,9], [1,2,6,9] .+ 9)
+    # Ktest = Ktest[1:end.∉[blankingList], 1:end.∉[blankingList]]
+
+    # Rearrange stuff so we can compare to the matlab training solution
+    switch = [3,5,8,4,7]
+    switchid = vcat(switch, switch .+ 9)
+    Ktest = hcat(
+        Ktest[3, switchid],
+        Ktest[5, switchid], 
+        Ktest[8, switchid], 
+        Ktest[4, switchid], 
+        Ktest[7, switchid], 
+        Ktest[12,switchid],
+        Ktest[14,switchid],
+        Ktest[17,switchid],
+        Ktest[13,switchid],
+        Ktest[16,switchid],
+    )
+    println("Ktest")
+    show(stdout, "text/plain", Ktest)
+    println()
+
+    # --- Reference value ---
+    # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
+    ref_sol = vec([
+        4.2857    4.2857    0.4286   -3.0000   -5.0000   -4.2857    4.2857   -0.4286    3.0000   -1.0000
+        4.2857    5.4857    0.6286   -0.6000   -5.6000   -4.2857    3.0857   -0.2286    0.6000    0.4000
+        0.4286    0.6286    0.3429    0.4000    0.4000   -0.4286    0.2286    0.0571   -0.4000    0.4000
+        -3.0000   -0.6000    0.4000    8.8000    4.8000    3.0000   -5.4000    0.4000   -8.8000    4.8000
+        -5.0000   -5.6000    0.4000    4.8000   11.4667    5.0000   -4.4000    0.4000   -4.8000    2.1333
+        -4.2857   -4.2857   -0.4286    3.0000    5.0000    4.2857   -4.2857    0.4286   -3.0000    1.0000
+        4.2857    3.0857    0.2286   -5.4000   -4.4000   -4.2857    5.4857   -0.6286    5.4000   -2.4000
+        -0.4286   -0.2286    0.0571    0.4000    0.4000    0.4286   -0.6286    0.3429   -0.4000    0.4000
+        3.0000    0.6000   -0.4000   -8.8000   -4.8000   -3.0000    5.4000   -0.4000    8.8000   -4.8000
+        -1.0000    0.4000    0.4000    4.8000    2.1333    1.0000   -2.4000    0.4000   -4.8000    3.4667
+    ])
+
+    # --- Relative error ---
+    answers = vec(Ktest) # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    if det(Ktest) >= 1e-16
+        println("Your stiffness matrix is not singular...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    if Ktest' != Ktest
+        println("Your stiffness matrix is not symmetric...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    return rel_err
+end
+
+function test_COMP2_mass()
+    """
+    Test the second order beam matrix with unit values
+    """
+    # ************************************************
+    #     COMP2 element mass
+    # ************************************************
+    elemType = "COMP2"
+
+    Mtest = LinearBeamElem.compute_elem_mass(4, 16 / 3, 2, -1, elemType)
+    # show(stdout, "text/plain", Mtest[5:end, 5:end])
+
+    # # Reduce the full size to what we actually test
+    # blankingList = vcat([1,2,6,9], [1,2,6,9] .+ 9)
+    # Mtest = Mtest[1:end.∉[blankingList], 1:end.∉[blankingList]]
+
+    # Now rearrange stuff so we can compare to the matlab training solution
+    # Rearrange stuff so we can compare to the matlab training solution
+    switch = [3,5,8,4,7]
+    switchid = vcat(switch, switch .+ 9)
+    Mtest = hcat(
+        Mtest[3, switchid],
+        Mtest[5, switchid], 
+        Mtest[8, switchid], 
+        Mtest[4, switchid], 
+        Mtest[7, switchid], 
+        Mtest[12,switchid],
+        Mtest[14,switchid],
+        Mtest[17,switchid],
+        Mtest[13,switchid],
+        Mtest[16,switchid],
+    )
+    println("Mtest")
+    show(stdout, "text/plain", Mtest)
+    println()
+
+    # --- Reference value ---
+    # These were obtained from the matlab symbolic script plugging 2 for rho, 2 for the chord, and 1 for everything else
+    ref_sol = vec([
+        3.1342    1.0771    0.1622   -3.0476   -0.8571    0.8658   -0.5229    0.1045   -0.9524    0.4762
+        1.0771    0.4802    0.0797   -1.0476   -0.3810    0.5229   -0.3071    0.0600   -0.5524    0.2667
+        0.1622    0.0797    0.0139   -0.1587   -0.0635    0.1045   -0.0600    0.0115   -0.1079    0.0508
+       -3.0476   -1.0476   -0.1587    3.9619    1.1175   -0.9524    0.5524   -0.1079    1.3714   -0.6603
+       -0.8571   -0.3810   -0.0635    1.1175    0.4063   -0.4762    0.2667   -0.0508    0.6603   -0.3048
+        0.8658    0.5229    0.1045   -0.9524   -0.4762    3.1342   -1.0771    0.1622   -3.0476    0.8571
+       -0.5229   -0.3071   -0.0600    0.5524    0.2667   -1.0771    0.4802   -0.0797    1.0476   -0.3810
+        0.1045    0.0600    0.0115   -0.1079   -0.0508    0.1622   -0.0797    0.0139   -0.1587    0.0635
+       -0.9524   -0.5524   -0.1079    1.3714    0.6603   -3.0476    1.0476   -0.1587    3.9619   -1.1175
+        0.4762    0.2667    0.0508   -0.6603   -0.3048    0.8571   -0.3810    0.0635   -1.1175    0.4063    
+    ])
+
+    # # --- Relative error ---
+    answers = vec(Mtest) # put computed solutions here
+    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
+
+    if Mtest' != Mtest
+        println("Your mass matrix is not symmetric...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    if minimum(eigvals(Mtest)) < 0.0
+        print("Your mass matrix is not positive definite...it's wrong")
+        rel_err += 1 # make test fail
+    end
+
+    return rel_err
+end
+
 # ans = test_BT3_mass()
 # ans = test_BT3_stiff()
+# TODO: PICKUP HERE AND DEBUG THE ELEMENT STIFF
+ans1 = test_COMP2_stiff()
+# ans2 = test_COMP2_mass()
 # ==============================================================================
 #                         Test finite element solver with unit loads
 # ==============================================================================
@@ -437,7 +576,7 @@ function test_FiniteElementComp()
     return rel_err
 end
 
-test_FiniteElementComp()
+# test_FiniteElementComp()
 
 using DelimitedFiles, LinearAlgebra
 
@@ -933,4 +1072,4 @@ function test_FECOMP2()
     return rel_err
 end
 
-test_FECOMP2()
+# test_FECOMP2()
