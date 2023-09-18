@@ -389,7 +389,7 @@ end
 # ans = test_BT3_mass()
 # ans = test_BT3_stiff()
 # TODO: PICKUP HERE AND DEBUG THE ELEMENT STIFF
-ans1 = test_COMP2_stiff()
+# ans1 = test_COMP2_stiff()
 # ans2 = test_COMP2_mass()
 # ==============================================================================
 #                         Test finite element solver with unit loads

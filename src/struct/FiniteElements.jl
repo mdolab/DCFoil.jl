@@ -627,15 +627,15 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
         xv = -x_αbᵉ*vz
         xw = -x_αbᵉ*wz
         M12 = [
-            bx 00  00  00  00  00  00 00 00
-            00 dy  00  00  00 -jy  00 00 ry
-            00 00  dz  xc -jz  00  xg rz 00
-            00 00  xc  bτ  xe  00 -dτ xo 00
-            00 00  jz -xe -kz  00  xv nz 00
-            00 jy  00  00  00 -ky  00 00 ny
-            00 00 -xg  dτ  xv  00 -fτ xw 00
-            00 00  rz  xo -nz  00  xw xz 00
-            00 ry  00  00  00 -ny  00 00 xy
+            bx 00  00  00  00  00  00  00 00
+            00 dy  00  00  00 -jy  00  00 ry
+            00 00  dz  xc -jz  00  xg  rz 00
+            00 00  xc  bτ  xe  00 -dτ  xo 00
+            00 00  jz -xe -kz  00  xv  nz 00
+            00 jy  00  00  00 -ky  00  00 ny
+            00 00 -xg  dτ  xv  00 -fτ -xw 00
+            00 00  rz  xo -nz  00  xw  xz 00
+            00 ry  00  00  00 -ny  00  00 xy
         ]
         M22 = [
             ax  00  00  00  00  00  00  00  00
