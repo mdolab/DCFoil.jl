@@ -5,7 +5,7 @@
 # @Author  :   Galen Ng
 # @Desc    :   Main executable for the project
 
-using Printf # for better file name
+using Printf, Dates
 include("../../src/DCFoil.jl")
 
 using .DCFoil
@@ -30,14 +30,14 @@ tipMass = false
 run_static = true
 # run_forced = true
 run_modal = true
-run_flutter = true
+# run_flutter = true
 debug = true
 # tipMass = true
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 20 # spatial nodes
+nNodes = 60 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -45,7 +45,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [150.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************
@@ -62,6 +62,7 @@ DVDict = Dict(
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+    "strut" => 0.4, # from Yingqian
 )
 
 solverOptions = Dict(
@@ -71,6 +72,7 @@ solverOptions = Dict(
     # --- General solver options ---
     "config" => "wing",
     "nNodes" => nNodes,
+    "nNodeStrut" => 10,
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "rotation" => 0.0, # deg
@@ -98,7 +100,15 @@ solverOptions = Dict(
 # ************************************************
 #     Cost functions
 # ************************************************
-evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
+evalFuncs = [
+    "wtip", 
+    "psitip", 
+    "cl", 
+    "cmy", 
+    "lift", 
+    "moment", 
+    # "ksflutter",
+]
 
 # ************************************************
 #     I/O
@@ -106,7 +116,8 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+    string(Dates.today()),
     solverOptions["name"],
     solverOptions["material"],
     rad2deg(DVDict["θ"]),
@@ -118,10 +129,10 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-costFuncs = DCFoil.run_model(
+DCFoil.run_model(
     DVDict,
     evalFuncs;
     # --- Optional args ---
     solverOptions=solverOptions
 )
-
+costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)

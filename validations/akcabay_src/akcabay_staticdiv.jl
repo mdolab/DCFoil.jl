@@ -5,7 +5,7 @@
 # @Author  :   Galen Ng
 # @Desc    :   Main executable for the project
 
-using Printf # for better file name
+using Printf, Dates
 include("../../src/DCFoil.jl")
 
 using .DCFoil
@@ -31,7 +31,7 @@ run_static = true
 run_forced = true
 run_modal = true
 run_flutter = true
-debug = true
+# debug = true
 # tipMass = true
 
 # ************************************************
@@ -62,21 +62,30 @@ DVDict = Dict(
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(-15), # fiber angle global [rad]
+    "strut" => 0.4, # from Yingqian
 )
 
 solverOptions = Dict(
-    # --- I/O ---
+    # ---------------------------
+    #   I/O
+    # ---------------------------
     "name" => "akcabay",
     "debug" => debug,
-    # --- General solver options ---
+    # ---------------------------
+    #   General appendage options
+    # ---------------------------
     "config" => "wing",
     "nNodes" => nNodes,
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "nNodeStrut" => 10,
     "rotation" => 0.0, # deg
-    "material" => "cfrp", # preselect from material library
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => tipMass,
+    # ---------------------------
+    #   Flow
+    # ---------------------------
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "material" => "cfrp", # preselect from material library
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
@@ -106,7 +115,8 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+    string(Dates.today()),
     solverOptions["name"],
     solverOptions["material"],
     rad2deg(DVDict["θ"]),
@@ -118,10 +128,10 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-costFuncs = DCFoil.run_model(
+DCFoil.run_model(
     DVDict,
     evalFuncs;
     # --- Optional args ---
     solverOptions=solverOptions
 )
-
+costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)

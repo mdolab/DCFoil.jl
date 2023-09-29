@@ -186,7 +186,7 @@ function test_AICs()
         "nNodeStrut" => 10, # nodes on strut
         "rotation" => 45.0, # deg
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         # ---------------------------
         #   Flow
         # ---------------------------

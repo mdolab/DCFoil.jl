@@ -111,7 +111,7 @@ function set_defaultOptions()
         "config" => "wing",
         "gravityVector" => [0.0, 0.0, -9.81],
         "rotation" => 0.0, # Rotation of the wing about the x-axis [deg]
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_cavitation" => false,
         "use_freeSurface" => false,
         "use_ventilation" => false,

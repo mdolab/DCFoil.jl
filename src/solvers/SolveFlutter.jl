@@ -4,9 +4,9 @@
 @Time    :   2022/10/07
 @Author  :   Galen Ng with snippets from Eirikur Jonsson
 @Desc    :   p-k method for flutter analysis, also contains modal analysis
-NOTE: if flutter solution is failing, there are 2 places to check:
-    1. starting k guess
-    2. tolerance on real root
+             NOTE: if flutter solution is failing, there are 2 places to check:
+                1. starting k guess
+                2. tolerance on real root in function extract_kCrossings()
 """
 
 module SolveFlutter
@@ -53,8 +53,10 @@ using .DCFoilSolution
 # ==============================================================================
 #                         COMMON VARIABLES
 # ==============================================================================
+elemType = "COMP2"
 elemType = "BT2"
 loadType = "force"
+derivMode = "RAD"
 
 # ==============================================================================
 #                         Top level API routines
@@ -123,7 +125,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     uRange = solverOptions["uRange"]
     fSweep = solverOptions["fSweep"]
     nModes = solverOptions["nModes"]
-    tipMass = solverOptions["tipMass"]
+    tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
 
     global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions; uRange=uRange, fSweep=fSweep)
@@ -158,7 +160,8 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbVec[end] = -0.1 # [m]
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], x_αbVec, elemType)
+        elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbVec, elemType)
     end
 
     # ---------------------------
@@ -200,7 +203,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ************************************************
     outputDir = solverOptions["outputDir"]
     nModes = solverOptions["nModes"]
-    tipMass = solverOptions["tipMass"]
+    tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
     global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
@@ -224,25 +227,26 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    # Get transformation matrix for the tip load
-    angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
-    axisDefault = "z"
-    T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    T = T1
-    transMatL2G = [
-        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-        ]
-    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
+    # # Get transformation matrix for the tip load
+    # angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+    # axisDefault = "z"
+    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    # T = T1
+    # transMatL2G = [
+    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+    #     ]
+    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbVec[end] = -0.1 # [m]
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], x_αbVec, elemType)
+        elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbVec, elemType)
     end
 
     # ---------------------------
@@ -254,7 +258,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Initialize stuff
     # ---------------------------
-    u = copy(globalF)
+    u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # globalMf = copy(globalMs) * 0
@@ -262,7 +266,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # globalKf_r = copy(globalKs) * 0
     # globalKf_i = copy(globalKs) * 0
     # globalCf_i = copy(globalKs) * 0
-    derivMode = "RAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     # ---------------------------
@@ -350,7 +353,7 @@ end # end write_sol
 
 function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, outputDir="./OUTPUT/")
     """
-    Write out the p-k flutter results
+    Write out the quiescent fluid results
     """
 
     # Store solutions here
@@ -849,6 +852,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     m[ii, 2] = 0
                 end
                 for ii in 1:nModes
+                    # TODO: PICKUP HERE WITH DEBUGGING FLUTTER
+                    println(size(idxTmp)) #try this
                     m[ii, 1] = ii
                     m[ii, 2] = idxTmp[ii]
                 end
@@ -1550,7 +1555,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
         for jj in 1:ik # loop over all reduced frequencies (tracing the mode line)
 
             # Check if we found a real root
-            # NOTE: If your flutter analyses are failing, this is probably why
+            # If your flutter analyses are failing, this is probably why
             if (k_history[jj] < SolutionConstants.p_i_tol) && (abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol) # SolutionConstants.mepsLarge # Real root
                 # There should be another real root coming up or we already processed
                 # one matching the zero freq

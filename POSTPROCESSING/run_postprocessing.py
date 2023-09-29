@@ -48,6 +48,9 @@ cm, fs_lgd, fs, ls, markers = set_my_plot_settings()
 labels = ["SS", "CFRP"]
 labels = ["CFRP"]
 
+# Linestyles
+ls = ["-", "--", "-.", ":"]
+
 # ==============================================================================
 #                         Main driver
 # ==============================================================================
@@ -67,7 +70,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
     parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
-    parser.add_argument("--elem", type=int, default=0, help="Type of beam element: 0=BT2, 1=COMP2")
+    parser.add_argument("--elem", type=int, default=1, help="Type of beam element: 0=BT2, 1=COMP2")
     args = parser.parse_args()
 
     # Echo the args
@@ -77,6 +80,10 @@ if __name__ == "__main__":
         print(arg, ":", getattr(args, arg))
     print(30 * "-")
 
+    if args.elem == 0:
+        N_DOF = 4
+    elif args.elem == 1:
+        N_DOF = 9
     # ************************************************
     #     I/O
     # ************************************************
@@ -125,12 +132,6 @@ if __name__ == "__main__":
             except KeyError:
                 nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
 
-    # ************************************************
-    #     Plot settings
-    # ************************************************
-
-    # Linestyles
-    ls = ["-", "--", "-.", ":"]
     # ==============================================================================
     #                         READ IN DATA
     # ==============================================================================
@@ -222,25 +223,31 @@ if __name__ == "__main__":
 
             # Turn into the right states
             nModes = structModes.shape[0]
-            nDOF = 4  # TODO: should be an option somehow
             try:
                 structBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
                 structTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
                 wetBendModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
                 wetTwistModesDict[key] = np.zeros((nModes, DVDict["nNodes"]))
             except KeyError:
-                print("WARNING: nNodes not found, using neval instead...")
-                structBendModesDict[key] = np.zeros((nModes, DVDict["neval"]))
-                structTwistModesDict[key] = np.zeros((nModes, DVDict["neval"]))
-                wetBendModesDict[key] = np.zeros((nModes, DVDict["neval"]))
-                wetTwistModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                try:
+                    structBendModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                    structTwistModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                    wetBendModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                    wetTwistModesDict[key] = np.zeros((nModes, DVDict["neval"]))
+                except KeyError:
+                    structBendModesDict[key] = np.zeros((nModes, SolverOptions[key]["nNodes"]))
+                    structTwistModesDict[key] = np.zeros((nModes, SolverOptions[key]["nNodes"]))
+                    wetBendModesDict[key] = np.zeros((nModes, SolverOptions[key]["nNodes"]))
+                    wetTwistModesDict[key] = np.zeros((nModes, SolverOptions[key]["nNodes"]))
             for ii in range(nModes):
-                structBendModesDict[key][ii, :], structTwistModesDict[key][ii, :] = get_bendingtwisting(
-                    structModes[ii, :], nDOF=nDOF
-                )
-                wetBendModesDict[key][ii, :], wetTwistModesDict[key][ii, :] = get_bendingtwisting(
-                    wetModes[ii, :], nDOF=nDOF
-                )
+                # Dry
+                bend, twist = get_bendingtwisting(structModes[ii, :], nDOF=N_DOF)
+                structBendModesDict[key][ii, :] = bend
+                structTwistModesDict[key][ii, :] = twist
+                # Wet
+                bend, twist = get_bendingtwisting(wetModes[ii, :], nDOF=N_DOF)
+                wetBendModesDict[key][ii, :] = bend
+                wetTwistModesDict[key][ii, :] = twist
 
     if args.is_flutter:
         # ************************************************
@@ -368,9 +375,6 @@ if __name__ == "__main__":
             print("Saved to:", fname)
         plt.close()
 
-    # ************************************************
-    #     Static results
-    # ************************************************
     if args.is_static:
 
         # ---------------------------
@@ -386,6 +390,7 @@ if __name__ == "__main__":
         ytickTwist = []
 
         for iic, key in enumerate(args.cases):
+            breakpoint()
             funcs = funcsDict[key]
             bending = bendingDict[key]
             twisting = np.rad2deg(twistingDict[key])
@@ -483,6 +488,7 @@ if __name__ == "__main__":
             rao,
             flowSpeed,
             fs_lgd,
+            args.elem
         )
 
         fig.suptitle("Tip frequency response spectra")
@@ -569,7 +575,7 @@ if __name__ == "__main__":
                 axes,
                 flutterSol=flutterSolDict[key],
                 ls=ls[ii],
-                units="kts",
+                # units="kts",
                 # marker="o",
                 showRLlabels=True,
                 annotateModes=annotateModes,

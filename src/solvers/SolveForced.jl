@@ -36,6 +36,15 @@ using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 
+# ==============================================================================
+#                         COMMON VARIABLES
+# ==============================================================================
+elemType = "COMP2"
+loadType = "force"
+
+# ==============================================================================
+#                         Top level API routines
+# ==============================================================================
 function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     """
     Solve
@@ -57,9 +66,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ************************************************
     #     Assemble structural matrices
     # ************************************************
-    elemType = "COMP2"
-    loadType = "force"
-
+    
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
@@ -68,20 +75,20 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    # Get transformation matrix for the tip load
-    angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
-    axisDefault = "z"
-    T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    T = T1
-    transMatL2G = [
-        T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-        zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-        ]
-    FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
+    # # Get transformation matrix for the tip load
+    # angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+    # axisDefault = "z"
+    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    # T = T1
+    # transMatL2G = [
+    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+    #     ]
+    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
 
     # ---------------------------
     #   Apply BC blanking
@@ -167,6 +174,12 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
             TipBendDyn[f_ctr] = (uSol[end-3])
             TipTwistDyn[f_ctr] = (uSol[end-1])
             phaseAngle = angle(uSol[end-3])
+        elseif elemType == "COMP2"
+            TipBendDyn[f_ctr] = (uSol[end-6])
+            TipTwistDyn[f_ctr] = (uSol[end-4])
+            phaseAngle = angle(uSol[end-6])
+        else
+            println("Invalid element type")
         end
 
         # # DEBUG QUIT ON FIRST FREQ

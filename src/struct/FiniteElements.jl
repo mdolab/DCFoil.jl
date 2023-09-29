@@ -41,10 +41,6 @@ module LinearBeamElem
 
 function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
     """
-    The internal strain energy of a beam is
-        U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
-
-    Element stiffness matrix from the strain energies
     Output
     ------
     Kᵉ: Stiffness matrix, size depends on element type
@@ -58,7 +54,7 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     GJᵉ : Float64
         torsional stiffness of the element [N-m²]
     BTᵉ : Float64
-        this is Kₛ from the paper (material bend-twist coupling) [N-m²]
+        this is Kₛ from the paper (material bend-twist coupling, +ve for nose-down BTC) [N-m²]
     Sᵉ : Float64
         structural warping (cross-sections do not retain shape) [N-m⁴]
     lᵉ : Float64
@@ -71,6 +67,11 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         which constitutive model to use (isotropic or orthotropic)
     useTimoshenko : Bool
         whether to use Timoshenko beam theory (default is Euler-Bernoulli), only works for the bending element
+
+    The internal strain energy of a beam is
+        U = some-integral-function-derived-from-energy-principles = 0.5{q(t)}ᵀ[Kᵉ]{q(t)}
+
+    Element stiffness matrix from the strain energies
     """
 
     # ************************************************
@@ -346,6 +347,24 @@ end
 
 function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
     """
+    Outputs
+    -------
+    Mᵉ : Array, Float64
+        element mass matrix
+    Inputs
+    ------
+    mᵉ : Float64
+        mass per unit span of the element [kg / m]
+    iᵉ : Float64
+        mass moment of inertia about EA per unit span  [kg - m]
+    lᵉ : Float64
+        length of the element [m]
+    x_αbᵉ : Float64
+        static imbalance (distance from EA to CG, +ve CG aft of EA) [m]
+    elemType : String
+        which element mass matrix to use
+    
+
     The kinetic energy is
         T = 0.5∫₀ᴸ m (∂w/∂t)² dx = 0.5{q̇(t)}ᵀ[Mᵉ]{q̇(t)}
 
@@ -1067,6 +1086,19 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="
 
         # --- Assemble into global matrix ---
         globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
+    elseif elemType == "COMP2"
+        nDOF = 18
+        # --- Get sectional properties ---
+        ms = mass / elemLength
+        # Parallel axis theorem
+        Iea = inertia + mass * (x_αbVec[end])^2
+        is = Iea / elemLength
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbVec[end], elemType)
+
+        # --- Assemble into global matrix ---
+        globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
+    else
+        error("Not implemented")
     end
 
     ChainRulesCore.ignore_derivatives() do

@@ -65,7 +65,7 @@ function test_SolveStaticRigid()
         # "config" => "t-foil",
         "nNodes" => nNodes, # number of nodes on foil half wing
         "nNodeStrut" => 10, # nodes on strut
-        "tipMass" => false,
+        "use_tipMass" => false,
         "material" => "rigid", # preselect from material library
         "rotation" => 0.0, # deg
         # --------------------------------
@@ -187,7 +187,7 @@ function test_SolveStaticIso()
         "debug" => false,
         "outputDir" => "test_out/",
         # --- General solver options ---
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_cavitation" => false,
         "use_freesurface" => false,
         # --- Static solve ---
@@ -302,7 +302,7 @@ function test_SolveStaticComp()
         # "config" => "t-foil",
         "nNodes" => nNodes, # number of nodes on foil half wing
         "nNodeStrut" => 10, # nodes on strut
-        "tipMass" => false,
+        "use_tipMass" => false,
         "material" => "cfrp", # preselect from material library
         "rotation" => 0.0, # deg
         # --------------------------------
@@ -432,7 +432,7 @@ function test_modal()
         "outputDir" => "",
         # --- General solver options ---
         "nNodes" => nNodes,
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_cavitation" => false,
         "use_freesurface" => false,
         "material" => "cfrp", # preselect from material library
@@ -523,7 +523,7 @@ function test_pk_staticDiv()
         "rotation" => 0.0, # deg
         "material" => "cfrp", # preselect from material library
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -599,7 +599,7 @@ function test_pk_flutter()
         "rotation" => 0.0, # deg
         "material" => "cfrp", # preselect from material library
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,

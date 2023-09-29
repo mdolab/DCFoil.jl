@@ -4,7 +4,7 @@
 # @Time    :   2022/06/16
 # @Desc    :   Main executable for running DCFoil
 
-using Printf # for better file name
+using Printf, Dates
 include("src/DCFoil.jl")
 
 using .DCFoil
@@ -80,7 +80,7 @@ solverOptions = Dict(
     "nNodeStrut" => 10, # nodes on strut
     "rotation" => 0.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
-    "tipMass" => tipMass,
+    "use_tipMass" => tipMass,
     # ---------------------------
     #   Flow
     # ---------------------------
@@ -122,7 +122,8 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+    string(Dates.today()),
     solverOptions["name"],
     solverOptions["material"],
     rad2deg(DVDict["θ"]),

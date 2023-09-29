@@ -18,7 +18,7 @@ import pickle
 # ==============================================================================
 def load_jld(filename: str):
     """
-    Load data from a .jld file
+    Load data from a .jld or .jld2 file
     f is a dictionary
     """
     f = h5py.File(filename, "r")
@@ -51,13 +51,14 @@ def get_bendingtwisting(states, nDOF=4):
     psi : array
         Twisting deflection about global y-axis
     """
-    if nDOF==4:
+    if nDOF == 4:
         w = states[::nDOF]
-        psi = states[2::nDOF]  #  * 180 / np.pi
+        psi = states[2::nDOF]
     else:
         # Then it is probably the COMP2 element
-        w = states[3::nDOF]
-        psi = states[5::nDOF]
+        # Remember this IS 0-based indexing
+        w = states[2::nDOF]
+        psi = states[4::nDOF]
 
     return w, psi
 

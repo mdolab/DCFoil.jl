@@ -121,7 +121,7 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 # ==============================================================================
 for theta in θ_sweep
     DVDict["θ"] = theta
-    outputDir = @sprintf("./OUTPUT/kramer_theta%02.1f/", (theta * 180 / π))
+    outputDir = @sprintf("./OUTPUT/kramer_theta%02.1f/", deg2rad(theta))
     mkpath(outputDir)
     solverOptions["outputDir"] = outputDir
     DCFoil.run_model(

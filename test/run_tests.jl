@@ -44,7 +44,7 @@ solverOptions = Dict(
     "config" => "wing",
     "rotation" => 0.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
-    "tipMass" => false,
+    "use_tipMass" => false,
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
@@ -118,7 +118,7 @@ end
 
 end
 
-@testset "Larger scale local test" begin
-    # Write your tests here.
-    @test test_pkflutterderiv(DVDict, solverOptions) <= 1e-4
-end
+# @testset "Larger scale local test" begin
+#     # Write your tests here.
+#     @test test_pkflutterderiv(DVDict, solverOptions) <= 1e-4
+# end

@@ -369,7 +369,7 @@ function test_COMP2_mass()
         0.4762    0.2667    0.0508   -0.6603   -0.3048    0.8571   -0.3810    0.0635   -1.1175    0.4063    
     ])
 
-    # # --- Relative error ---
+    # --- Relative error ---
     answers = vec(Mtest) # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
@@ -389,7 +389,7 @@ end
 # ans = test_BT3_mass()
 # ans = test_BT3_stiff()
 # ans1 = test_COMP2_stiff()
-# ans2 = test_COMP2_mass()
+ans2 = test_COMP2_mass()
 # ==============================================================================
 #                         Test finite element solver with unit loads
 # ==============================================================================
@@ -611,7 +611,7 @@ function test_FiniteElementIso3D()
         "nNodeStrut" => 10, # nodes on strut
         "rotation" => 0.0, # deg
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         # ---------------------------
         #   Flow
         # ---------------------------
@@ -750,7 +750,7 @@ function test_FiniteElementBend()
         "nNodeStrut" => 10, # nodes on strut
         "rotation" => 0.0, # deg
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         # ---------------------------
         #   Flow
         # ---------------------------

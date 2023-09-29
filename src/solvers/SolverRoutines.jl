@@ -593,28 +593,6 @@ function ipack1d(A, mask, nFlow)
     return B, nFound
 end # ipack1d
 
-function get_transMat(nVec, elemType="BT2")
-    """
-    Returns the transformation matrix for a given element type
-    """
-    if elemType == "BT2"
-        Γ = [
-            # Node 1
-            nVec[1] nVec[2] nVec[3] 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # w1
-            0.00000 0.00000 0.00000 1.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # w1'
-            0.00000 0.00000 0.00000 0.0 1.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # ψ1
-            0.00000 0.00000 0.00000 0.0 0.0 1.0 0.00000 0.00000 0.00000 0.0 0.0 0.0 # ψ1'
-            # Node 2
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 nVec[1] nVec[2] nVec[3] 0.0 0.0 0.0 # w2
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 1.0 0.0 0.0 # w2'
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 1.0 0.0 # ψ2
-            0.00000 0.00000 0.00000 0.0 0.0 0.0 0.00000 0.00000 0.00000 0.0 0.0 1.0 # ψ2'
-        ]
-    end
-    return Γ
-end
-
-
 function get_rotate3dMat(rot; axis="x")
     """
     Rotates a 3D vector about axis by rot radians (RH rule!)
@@ -645,7 +623,6 @@ function get_rotate3dMat(rot; axis="x")
     end
     return rotMat
 end
-
 
 function get_transMat(dR, l, elemType="BT2")
     """
@@ -711,13 +688,18 @@ function get_transMat(dR, l, elemType="BT2")
         error("Unsupported element type")
     end
 
-    for ii in eachindex(Γ[:, 1])
-        for jj in eachindex(Γ[1, :])
+    # --- Cleanup transformation matrix ---
+    Γ_z = Zygote.Buffer(Γ)
+    for ii in eachindex(Γ[:, 1]) # rows
+        for jj in eachindex(Γ[1, :]) # cols
             if abs(Γ[ii, jj]) < 1e-16
-                Γ[ii, jj] = 0.0
+                Γ_z[ii, jj] = 0.0
+            else
+                Γ_z[ii, jj] = Γ[ii, jj]
             end
         end
     end
+    Γ = copy(Γ_z)
     # show(stdout, "text/plain", Γ)
     return Γ
 end
