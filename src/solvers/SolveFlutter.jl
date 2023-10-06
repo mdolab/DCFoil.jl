@@ -54,7 +54,7 @@ using .DCFoilSolution
 #                         COMMON VARIABLES
 # ==============================================================================
 elemType = "COMP2"
-elemType = "BT2"
+# elemType = "BT2"
 loadType = "force"
 derivMode = "RAD"
 

@@ -28,16 +28,16 @@ tipMass = false
 
 # Uncomment here
 run_static = true
-# run_forced = true
+run_forced = true
 run_modal = true
-# run_flutter = true
+run_flutter = true
 debug = true
 # tipMass = true
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 60 # spatial nodes
+nNodes = 20 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -45,7 +45,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [150.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************

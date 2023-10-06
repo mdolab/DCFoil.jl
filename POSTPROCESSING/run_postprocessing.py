@@ -48,7 +48,7 @@ cm, fs_lgd, fs, ls, markers = set_my_plot_settings()
 labels = ["SS", "CFRP"]
 labels = ["CFRP"]
 
-# Linestyles
+# Linestyles for different cases
 ls = ["-", "--", "-.", ":"]
 
 # ==============================================================================
@@ -172,7 +172,6 @@ if __name__ == "__main__":
     if args.is_forced:
         print("Reading in forced vibration data")
         for ii, caseDir in enumerate(caseDirs):
-
             key = args.cases[ii]
 
             # --- Read frequencies ---
@@ -376,7 +375,6 @@ if __name__ == "__main__":
         plt.close()
 
     if args.is_static:
-
         # ---------------------------
         #   2D plots
         # ---------------------------
@@ -464,7 +462,6 @@ if __name__ == "__main__":
         # plt.close()
 
     if args.is_forced:
-
         # --- File name ---
         fname = f"{outputDir}/forced-dynamics.pdf"
 
@@ -478,17 +475,7 @@ if __name__ == "__main__":
         flowSpeed = SolverOptions[key]["U∞"]
         # --- Plot ---
         fig, axes = plot_forced(
-            fig,
-            axes,
-            fExtSweep,
-            dynTipBending,
-            dynTipTwisting,
-            dynLift,
-            dynMoment,
-            rao,
-            flowSpeed,
-            fs_lgd,
-            args.elem
+            fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, rao, flowSpeed, fs_lgd, args.elem
         )
 
         fig.suptitle("Tip frequency response spectra")
@@ -503,7 +490,6 @@ if __name__ == "__main__":
         plt.close()
 
     if args.is_modal:
-
         # --- File name ---
         fname = f"{outputDir}/modal-struct.pdf"
 
@@ -519,7 +505,6 @@ if __name__ == "__main__":
             figsize=figsize,
         )
         for ii, key in enumerate(args.cases):
-
             # --- Pack up data to plot ---
             modeShapeData = {
                 "structBM": structBendModesDict[key],
@@ -552,7 +537,6 @@ if __name__ == "__main__":
 
     # NOTE: This is the only post processing code that is parallel
     if args.is_flutter:
-
         # ************************************************
         #       Standard v-g, v-f, R-L plots
         # ************************************************

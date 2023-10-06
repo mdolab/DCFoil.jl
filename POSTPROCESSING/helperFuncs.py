@@ -13,6 +13,7 @@ import h5py
 import numpy as np
 import pickle
 
+
 # ==============================================================================
 #                         Helper functions
 # ==============================================================================
@@ -65,21 +66,48 @@ def get_bendingtwisting(states, nDOF=4):
 
 def compute_normFactorModeShape(modeShape: dict):
     """
-    Normalize the mode shape so max magnitude is 1
+    Normalize the mode shape so max magnitude is 1 for every successive mode
+    Outputs
+    -------
+    normFactor : list
+        List of normalization factors
     """
+    maxValList = {}
+    maxValListNoabs = {}
+    normFactor = []
+    # NMODE = 1
+
+    # for mm in range(NMODE):  # loop over modes
+    #     maxValList[mm] = []
+    #     maxValListNoabs[mm] = []
+    #     for k, v in modeShape.items():
+    #         breakpoint()
+    #         maxValList[mm].append(np.max(np.abs(v[mm, :])))
+    #         maxValListNoabs[mm].append(np.max((v[mm, :])))
+
+    # # Normalize by maximum value, if negative then flip sign
+    # for mm in range(modeShape["wetBM"].shape[0]):  # loop over modes
+    #     argmax = np.argmax(maxValList[mm])  # ind of max val between bend and twist
+    #     maxVal = maxValList[mm][argmax]
+    #     if maxVal != maxValListNoabs[mm][argmax]:
+    #         maxVal *= -1
+    #     normFactor.append(maxVal)
+
+    
     maxValList = []
     maxValListNoabs = []
     for k, v in modeShape.items():
-        maxValList.append(np.max(abs(v)))
+        maxValList.append(np.max(np.abs(v)))
         maxValListNoabs.append(np.max((v)))
 
     # Normalize by maximum value, if negative then flip sign
-    argmax = np.argmax(maxValList)
+    argmax = np.argmax(maxValList)  # ind of max val between bend and twist
     maxVal = maxValList[argmax]
     if maxVal != maxValListNoabs[argmax]:
         maxVal *= -1
+    normFactor.append(maxVal)
 
-    return maxVal
+    return normFactor
 
 
 def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i, R_r, R_i):
@@ -169,7 +197,6 @@ def find_DivAndFlutterPoints(d: dict, xKey: str, yKey: str, debug=False):
         # Search for the first sign change since that indicates the flutter point
         for i in range(len(asign) - 1):
             if asign[i] != asign[i + 1]:
-
                 if debug:
                     print("")
                     print(asign[i])

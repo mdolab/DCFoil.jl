@@ -295,7 +295,7 @@ def plot_static2d(
 
 def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, rao, flowSpeed, fs_lgd, elem):
     """
-    Plot forced response of the tip of the wing
+    Plot harmonically forced response of the tip of the wing
 
     Parameters
     ----------
@@ -309,7 +309,16 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
         frequency response of lift [N]
     dynMoment : _type_
         frequency response of moment [N-m] about the midchord
+    rao : _type_
+        response amplitude operator
+    flowSpeed : _type_
+        flow speed [m/s]
+    fs_lgd : _type_
+        legend font size
+    elem : _type_
+        element type
     """
+    # Get tip DOFs based on element type
     if elem == 0:
         TwistIdx = -2
     else:
@@ -320,6 +329,7 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
         OOPIdx = -7
 
     xLabel = "$f_{ext}$ [Hz]"
+
     # ************************************************
     #     Plot tip deflections
     # ************************************************
@@ -334,7 +344,6 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     # ax.annotate("$U_{\infty}=$%.1f" % (flowSpeed), xy=(0.8, 0.9), xycoords="axes fraction", color=cm[0])
-    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
     ax.set_xlabel(xLabel)
 
@@ -347,10 +356,11 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     for ii, entry in enumerate(rao[:, -2, -2]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
-    ax.set_xlabel(xLabel)
 
+    # ************************************************
+    #     Cross-correlations
+    # ************************************************
     ax = axes[1, 0]
     # yLabel = r"$\frac{w}{w_{f0}}$"
     # nondim = dynTipBending[0]  # nondimensionalize by the static value
@@ -360,9 +370,7 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     for ii, entry in enumerate(rao[:, OOPIdx, TwistIdx]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
-    ax.set_xlabel(xLabel)
 
     ax = axes[1, 1]
     # yLabel = r"$\frac{\psi}{\psi_{f0}}$"
@@ -374,7 +382,6 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
-    ax.set_xlabel(xLabel)
 
     # NOTE: TBH these are not terribly useful unless you're looking at transmitted force into the hull of the boat
     # which you should not, because you want to couple the foil to the ship model!
@@ -396,6 +403,8 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     # ax.set_xlabel(xLabel)
 
     for ax in axes.flatten():
+        ax.set_xlabel(xLabel)
+        ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
         nplt.adjust_spines(ax, outward=True)
 
     return fig, axes
