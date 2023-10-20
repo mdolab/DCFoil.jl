@@ -27,8 +27,8 @@ debug = false
 tipMass = false
 
 # Uncomment here
-run_static = true
-run_forced = true
+# run_static = true
+# run_forced = true
 run_modal = true
 run_flutter = true
 debug = true
@@ -75,7 +75,7 @@ solverOptions = Dict(
     "nNodeStrut" => 10,
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "rotation" => 0.0, # deg
+    "rotation" => 45.0, # deg rotation about x-axis
     "material" => "cfrp", # preselect from material library
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => tipMass,

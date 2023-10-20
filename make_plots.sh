@@ -41,8 +41,8 @@ cd postprocessing
 # python ./run_postprocessing.py --cases 2023-09-26_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_forced --is_modal
 # python ./run_postprocessing.py --cases 2023-09-26_akcabay-swept_cfrp_f15.0_w-15.0_bt2 --is_modal --is_static --elem 0
 # python ./run_postprocessing.py --cases 2023-09-26_akcabay-swept_cfrp_f15.0_w-15.0_comp2 --is_modal --is_static
-# python ./run_postprocessing.py --cases 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_comp2 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_bt2 --is_flutter 
-python ./run_postprocessing.py --cases 2023-10-06_akcabay_cfrp_f-15.0_w0.0_comp2 2023-10-06_akcabay_cfrp_f-15.0_w0.0_bt2 --is_flutter 
+python ./run_postprocessing.py --cases 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_comp2 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_bt2 --is_flutter 
+# python ./run_postprocessing.py --cases 2023-10-06_akcabay_cfrp_f-15.0_w0.0_comp2 2023-10-06_akcabay_cfrp_f-15.0_w0.0_bt2 --is_flutter 
 
 cd ..
 

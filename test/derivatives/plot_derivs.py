@@ -43,7 +43,7 @@ def load_jld(filename: str):
 # ==============================================================================
 
 derivs = load_jld("../../eigenDerivs.jld2")
-breakpoint()
+# TODO: PICKUP HERE
 if __name__ == "__main__":
     fname = "derivs.pdf"
 

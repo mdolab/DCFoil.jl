@@ -1,0 +1,110 @@
+\documentclass[9pt]{article}
+\usepackage{times,cleveref}
+\usepackage{siunitx,gensymb} % gensym gives degree
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage[margin=1in]{geometry}
+\usepackage[compact]{titlesec}
+
+% --- Math ---
+\newcommand{\pp}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\ppt}[2]{\frac{\partial^2 #1}{\partial #2^2}}
+\newcommand{\pptt}[2]{\frac{\partial^3 #1}{\partial #2^3}}
+\newcommand{\ppttt}[2]{\frac{\partial^4 #1}{\partial #2^4}}
+\newcommand{\DD}[2]{\frac{D #1}{D #2}}
+\newcommand{\dd}[2]{\frac{d #1}{d #2}}
+\newcommand{\ddt}[2]{\frac{d^2 #1}{d #2^2}}
+\newcommand{\ddtt}[2]{\frac{d^3 #1}{d #2^3}}
+\newcommand{\ddttt}[2]{\frac{d^4 #1}{d #2^4}}
+\newcommand{\mbb}[1]{\mathbb{#1}}    % math blackboard
+\newcommand{\mbf}[1]{\mathbf{#1}}
+\newcommand{\mrm}[1]{\mathrm{#1}}
+\newcommand{\mcal}[1]{\mathcal{#1}}  % math calligraphy
+\newcommand{\mbfh}[1]{\widehat{\mathbf{#1}}}
+\newcommand{\mbfv}[1]{\vec{\mathbf{#1}}}
+\newcommand{\half}{\frac{1}{2}}
+\newcommand{\third}{\frac{1}{3}}
+% --- Equations ---
+\newcommand{\be}{\begin{eqnarray}}
+\newcommand{\ee}{\end{eqnarray}}
+\newcommand{\ben}{\begin{eqnarray*}}
+\newcommand{\een}{\end{eqnarray*}}
+% --- Numerical methods ---
+\newcommand{\dx}{d\mbf{x}}
+\newcommand{\Dt}{\Delta t}
+\newcommand{\ih}{\hat{i}}
+\newcommand{\jh}{\hat{j}}
+\newcommand{\kh}{\hat{k}}
+\newcommand{\nh}{\hat{n}}
+\newcommand{\xh}{\hat{x}}
+\newcommand{\yh}{\hat{y}}
+\newcommand{\zh}{\hat{z}}
+\newcommand{\uj}[1]{u_{j  #1 }}
+\newcommand{\ujn}[2]{u_{j  #1 }^{n  #2}}
+\newcommand{\BigO}{\mathcal{O}}
+\newcommand{\CFL}{{\mbox{CFL}}}
+\newcommand{\opt}[1]{#1 (x^{\star})}
+% --- Flow ---
+\newcommand{\Uinf}{U_{\infty}}
+\newcommand{\Vinf}{V_{\infty}}
+\newcommand{\Minf}{M_{\infty}}
+\newcommand{\bVinf}{\mbf{V}_{\infty}}
+\newcommand{\pinf}{p_{\infty}}
+\newcommand{\cpmin}{C_{p_{\tn{min}}}}
+% --- Other Shorthands ---
+\newcommand{\tn}[1]{\textnormal{#1}}
+\newcommand{\fw} {forward swept\:}
+\newcommand{\un} {unswept\:}
+\newcommand{\bw} {backward swept\:}
+\newcommand{\scriptth}{\scriptsize \textnormal{th}}
+\newcommand{\cfrp}[1] {CFRP #1$^\circ$\:}
+\newcommand{\tss}[1]{\textsuperscript{#1}}
+\newcommand{\wrt} {with respect to\:}
+
+% --- Spacings ---
+\setlength{\headsep}{0.0in}
+\setlength{\topmargin}{0.0in}
+\setlength{\textheight}{8.8in}
+\setlength{\textwidth}{6.8in}
+\setlength{\oddsidemargin}{-.15in}
+\setlength{\evensidemargin}{-.15in}
+\setlength{\unitlength}{1in}
+
+\bibliographystyle{unsrtnat}
+
+
+\begin{document}
+
+\title{\vspace{-1.5cm} DCFoil Documentation}
+\author{Galen W.~Ng}
+\maketitle
+% ==============================================================================
+%                         BEGIN
+% ==============================================================================
+\section*{Summary}
+% 
+DCFoil is a program for the dynamic analysis and design optimization of composite hydrofoils.
+
+
+\clearpage
+\tableofcontents
+\clearpage
+%------------------------------------------------------------------------------
+\section{Coordinate system}
+% 
+
+%------------------------------------------------------------------------------
+\section{Discretization}
+\subsection{Structural beam model}
+\subsection{Hydrodynamic loads}
+
+%------------------------------------------------------------------------------
+\section{Static solution}
+
+%------------------------------------------------------------------------------
+\section{Forced vibration solution}
+
+%------------------------------------------------------------------------------
+\section{Flutter solution}
+
+\end{document}

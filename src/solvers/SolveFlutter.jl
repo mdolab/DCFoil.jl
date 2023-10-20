@@ -4,6 +4,7 @@
 @Time    :   2022/10/07
 @Author  :   Galen Ng with snippets from Eirikur Jonsson
 @Desc    :   p-k method for flutter analysis, also contains modal analysis
+
              NOTE: if flutter solution is failing, there are 2 places to check:
                 1. starting k guess
                 2. tolerance on real root in function extract_kCrossings()
@@ -42,7 +43,6 @@ include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
-# then use them
 using .InitModel, .HydroStrip, .StructProp
 using .FEMMethods
 using .SolveStatic
@@ -54,7 +54,7 @@ using .DCFoilSolution
 #                         COMMON VARIABLES
 # ==============================================================================
 elemType = "COMP2"
-# elemType = "BT2"
+# elemType = "BT2" 
 loadType = "force"
 derivMode = "RAD"
 
@@ -852,8 +852,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     m[ii, 2] = 0
                 end
                 for ii in 1:nModes
-                    # TODO: PICKUP HERE WITH DEBUGGING FLUTTER
-                    println(size(idxTmp)) #try this
                     m[ii, 1] = ii
                     m[ii, 2] = idxTmp[ii]
                 end
@@ -1364,20 +1362,12 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
-    # globalMf, _, _, _, _ = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
-    # globalMf, _, _, _, _ = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
     globalMf, _, _, _, _ = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
     _, _, Mff = HydroStrip.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
-    # AR = inv(MM .+ Mf) * (KK)
-    # yQuiescent = SolverRoutines.cmplxStdEigValProb2(AR, imag(AR), Nr)
-    # omegaSquared = yQuiescent[Nr+1:2*Nr]
-    # Δk = 0.0 # step size
-    # ChainRulesCore.ignore_derivatives() do
     Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
-    # end
 
     # ************************************************
     #     Perform iterations on k values
@@ -1400,8 +1390,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         # ---------------------------
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
         ω = k * U∞ * (cos(Λ)) / b_ref
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
         Kffull_i, Cffull_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
@@ -1412,7 +1400,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         Cf_i = Qr' * Cffull_i * Qr
 
         # --- Solve eigenvalue problem ---
-        # println(k)
         p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
         # --- Sort eigenvalues from small to large ---
         p_r = sort(real(p_r_tmp))
@@ -1423,7 +1410,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
 
         # --- Mode tracking (prevent mode hopping between k's) ---
         # Don't need mode tracking for the very first step
-        # NOTE: This correlation matrix will be square
+        # This correlation matrix will be square
         if (ik > 1)
             # van Zyl tracking method: Find correlation matrix btwn current and previous eigenvectors (mode shape)
             # Rows are old eigenvector number and columns are new eigenvector number
@@ -1447,10 +1434,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
             R_aa_i = R_aa_i_tmp[:, idxs]
 
             # --- If too big of jump, back up on 'k' ---
-            # println("p_r ^{k-1}")
-            # println(p_eigs_r[:,ik-1])
             tmp_p_diff = sqrt.((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
-            # tmp_p_diff = sqrt.((p_eigs_r[:, ik-1] - p_r) .^ 2 + (p_eigs_i[:, ik-1] - p_i) .^ 2)
             p_diff = maximum(real(tmp_p_diff))
             if (p_diff > p_diff_max)
                 # println("Failed, p_diff: ", p_diff, ", p_diff_max: ", p_diff_max)

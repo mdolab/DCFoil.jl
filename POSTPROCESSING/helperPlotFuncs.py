@@ -1,9 +1,10 @@
 # --- Python 3.9 ---
 """
-@File    :   divAndFlutterPlots.py
+@File    :   helperPlotFuncs.py
 @Time    :   2023/02/03
 @Author  :   Galen Ng
-@Desc    :   Contains functions for plotting flutter and divergence points. Some ideas taken from Dr. Eirikur Jonsson
+@Desc    :   Contains functions for plotting flutter and divergence points. 
+             Snippets from Dr. Eirikur Jonsson
 """
 
 # ==============================================================================
@@ -18,31 +19,23 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import tecplot as tp
 
-# import matplotlib
-# import matplotlib.patheffects as patheffects
-# from matplotlib.offsetbox import AnchoredText
-
 # ==============================================================================
 # Extension modules
 # ==============================================================================
 import niceplots as nplt
 from helperFuncs import get_bendingtwisting, compute_normFactorModeShape
 
-# import nicetecplots as ntp
-
-# --- Enable niceplot colors as a list ---
-# plt.style.use(niceplots.get_style())
-# niceColors = niceplots.get_colors().values()
-niceColors = sns.color_palette("tab10")
-plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
-cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-
+# ==============================================================================
+#                         GLOBAL VARIABLES
+# ==============================================================================
 # Continuous colormap
 niceColors = sns.color_palette("cool")
 plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
 ccm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
-
+# ==============================================================================
+#                         FUNCTIONS
+# ==============================================================================
 def plot_wingPlanform(DVDict: dict, nNodes):
     """
     Use design var dictionary to plot the wing

@@ -11,6 +11,7 @@ include("../src/solvers/SolveFlutter.jl")
 using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, Zygote
 using Plots,  Printf, LinearAlgebra
+using JLD2
 
 # ==============================================================================
 #                         Aero-node tests
@@ -345,13 +346,16 @@ function test_pkflutterderiv(DVDict, solverOptions)
     """
     Test AD derivative of the pk flutter analysis with 
     KS aggregation against finite differences
+    
     TODO: every derivatives is good except span because of a bug in the spanwise lift slope, which should be superceded anyway
     """
 
     @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
     @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
+    save("./RAD.jld2", "derivs", funcsSensAD)
     @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
-
+    save("./FWDDiff.jld2", "derivs", funcsSensFD)
+    
     # Print it out
     for (k, v) in funcsSensAD
         println("AD: ", k, " = ", v)
@@ -361,6 +365,7 @@ function test_pkflutterderiv(DVDict, solverOptions)
             if maximum(funcsSensFD[k] - v) > 1e-3
                 println("Possibly bad derivative: ", k)
                 println("Abs difference btwn FD and AD: ", funcsSensFD[k] - v)
+                println("Check FD step size")
             end
         end
     end

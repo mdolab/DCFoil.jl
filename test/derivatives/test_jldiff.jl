@@ -3,7 +3,7 @@
 # @File    :   test_deriv.jl
 # @Time    :   2023/03/16
 # @Author  :   Galen Ng
-# @Desc    :   Derivatives wrt fiber angle
+# @Desc    :   Derivatives wrt fiber angle for a much more manual check
 
 using Printf # for better file name
 using FileIO
