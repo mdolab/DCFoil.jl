@@ -10,9 +10,7 @@
 # Standard Python modules
 # ==============================================================================
 import os
-import json
-import argparse
-from pathlib import Path
+import sys
 
 # ==============================================================================
 # External Python modules
@@ -28,6 +26,9 @@ import seaborn as sns
 # Extension modules
 # ==============================================================================
 import niceplots
+current = os.path.dirname(os.path.realpath(__file__))  # Getting the parent directory name
+# adding the parent directory to the sys. path.
+sys.path.append(os.path.dirname(current))
 from POSTPROCESSING.helperFuncs import get_bendingtwisting, load_jld, compute_normFactorModeShape
 from POSTPROCESSING.helperPlotFuncs import set_my_plot_settings
 

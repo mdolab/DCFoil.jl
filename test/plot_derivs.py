@@ -19,7 +19,6 @@ import json
 # ==============================================================================
 import numpy as np
 import matplotlib.pyplot as plt
-import h5py
 import seaborn as sns
 from tabulate import tabulate
 
@@ -28,46 +27,22 @@ from tabulate import tabulate
 # ==============================================================================
 import niceplots
 
+current = os.path.dirname(os.path.realpath(__file__))  # Getting the parent directory name
+sys.path.append(os.path.dirname(current))  # adding the parent directory to the sys. path.
+from POSTPROCESSING.helperFuncs import load_jld
+from POSTPROCESSING.helperPlotFuncs import set_my_plot_settings
 
-def load_jld(filename: str):
-    """
-    Load data from a .jld file
-    f is a dictionary
-    """
-    f = h5py.File(filename, "r")
-    return f
+# ==============================================================================
+#                         COMMON VARS
+# ==============================================================================
 
 
 # ==============================================================================
-#                         Main driver
+#                         Helper functions
 # ==============================================================================
-
-derivs = load_jld("../../eigenDerivs.jld2")
-# TODO: PICKUP HERE
-if __name__ == "__main__":
-    fname = "derivs.pdf"
-
+def plot_adderivs(fname):
     dosave = not not fname
-
-    plt.style.use(niceplots.get_style())  # all settings
-    # --- Adjust default options for matplotlib ---
-    myOptions = {
-        "font.size": 25,
-        "font.family": "sans-serif",  # set to "serif" to get the same as latex
-        # "font.sans-serif": ["Helvetica"],  # this does not work on all systems
-        "text.usetex": False,  # use external latex for all text
-        "text.latex.preamble": [
-            r"\usepackage{lmodern}",  # latin modern font
-            r"\usepackage{amsmath}",  # for using equation commands
-            r"\usepackage{helvet}",  # should make latex serif in helvet now
-            r"\usepackage{sansmath}",
-            r"\sansmath",  # supposed to force math to be rendered in serif font
-        ],
-    }
-    plt.rcParams.update(myOptions)
-    niceColors = sns.color_palette("tab10")
-    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
-    cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    derivs = load_jld("../../eigenDerivs.jld2")
 
     # ---------------------------
     #   Load data
@@ -122,3 +97,56 @@ if __name__ == "__main__":
     headers = ["h", "fwd", "cent"]
     tablefmt = "latex"
     print(tabulate(table, headers, tablefmt=tablefmt, floatfmt=".15f"))
+
+def plot_pkderivs(fname):
+    dosave = not not fname
+    
+    # ************************************************
+    #     Load data
+    # ************************************************
+    data = load_jld("./FWDDiff-BT2.jld2")
+    bt2fdderivs = np.asarray(data["derivs"])
+
+    data = load_jld("./RAD-BT2.jld2")
+    bt2adderivs = np.asarray(data["derivs"])
+
+
+    data = load_jld("./FWDDiff-COMP2.jld2")
+    comp2fdderivs = np.asarray(data["derivs"])
+
+    data = load_jld("./RAD-COMP2.jld2")
+    comp2adderivs = np.asarray(data["derivs"])
+
+    breakpoint()
+    # Create figure object
+    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10))
+    
+    
+    
+    plt.show(block=(not dosave))
+    for ax in axes.flatten():
+        niceplots.adjust_spines(ax, outward=True)
+    if dosave:
+        plt.savefig(fname, format="pdf")
+        print("Saved to:", fname)
+    plt.close()
+
+# ==============================================================================
+#                         Main driver
+# ==============================================================================
+if __name__ == "__main__":
+
+    cm, fs_lgd, fs, ls, markers = set_my_plot_settings()
+
+    # # ************************************************
+    # #     Basic fiber angle deriv plot
+    # # ************************************************
+    # fname = "derivs.pdf"
+
+    # plot_adderivs(fname)
+
+    # ************************************************
+    #     Compare RAD derivatives
+    # ************************************************
+    fname = "rad-derivs.pdf"
+    plot_pkderivs(fname)
