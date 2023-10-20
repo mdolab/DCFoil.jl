@@ -42,11 +42,38 @@ from POSTPROCESSING.helperFuncs import load_jld
 # ************************************************
 from kramer_src.kramerData import wetFreqHz, wetThetaDeg, dryFreqHz, dryThetaDeg
 
+# ==============================================================================
+#                         COMMON VARIABLES
+# ==============================================================================
 fname = "kramer.pdf"
-analysisDir = "../OUTPUT/kramer_theta-"
+analysisDir = "../OUTPUT/kramer_theta"
 fiberAngles = np.arange(0, 90 + 10, 10)
 nModes = 5  # number of modes analyzed in DCFoil
 
+plt.style.use(niceplots.get_style())  # all settings
+# --- Adjust default options for matplotlib ---
+myOptions = {
+    "font.size": 35,
+    # "font.family": "sans-serif",  # set to "serif" to get the same as latex
+    "font.sans-serif": ["Helvetica"],  # this does not work on all systems
+    # "text.usetex": True, # use external latex for all text
+    "text.latex.preamble": [
+        r"\usepackage{lmodern}",  # latin modern font
+        r"\usepackage{amsmath}",  # for using equation commands
+        r"\usepackage{helvet}",  # should make latex serif in helvet now
+        r"\usepackage{sansmath}",
+        r"\sansmath",  # supposed to force math to be rendered in serif font
+    ],
+}
+plt.rcParams.update(myOptions)
+niceColors = sns.color_palette("tab10")
+# niceColors = matplotlib.cm.get_cmap("tab20").colors
+plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
+cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+# ==============================================================================
+#                         MAIN DRIVER
+# ==============================================================================
 if __name__ == "__main__":
 
     # --- Read data ---
@@ -54,35 +81,14 @@ if __name__ == "__main__":
     wetNatFreqs = np.zeros((len(fiberAngles), nModes))
     for ii, fiber in enumerate(fiberAngles):
         dataDir = f"{analysisDir}{fiber:.1f}/"
-        structJLData = load_jld(f"{dataDir}/modal/structModal.jld")
-        wetJLData = load_jld(f"{dataDir}/modal/wetModal.jld")
+        structJLData = load_jld(f"{dataDir}/modal/structModal.jld2")
+        wetJLData = load_jld(f"{dataDir}/modal/wetModal.jld2")
 
         # NOTE: Julia stores data in column major order so it is transposed
         structNatFreqs[ii, :] = np.asarray(structJLData["structNatFreqs"])
         wetNatFreqs[ii, :] = np.asarray(wetJLData["wetNatFreqs"])
 
     dosave = not not fname
-
-    plt.style.use(niceplots.get_style())  # all settings
-    # --- Adjust default options for matplotlib ---
-    myOptions = {
-        "font.size": 35,
-        "font.family": "sans-serif",  # set to "serif" to get the same as latex
-        # "font.sans-serif": ["Helvetica"], # this does not work on all systems
-        # "text.usetex": True, # use external latex for all text
-        "text.latex.preamble": [
-            r"\usepackage{lmodern}",  # latin modern font
-            r"\usepackage{amsmath}",  # for using equation commands
-            r"\usepackage{helvet}",  # should make latex serif in helvet now
-            r"\usepackage{sansmath}",
-            r"\sansmath",  # supposed to force math to be rendered in serif font
-        ],
-    }
-    plt.rcParams.update(myOptions)
-    niceColors = sns.color_palette("tab10")
-    # niceColors = matplotlib.cm.get_cmap("tab20").colors
-    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
-    cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     # Create figure object
     fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(11, 8))

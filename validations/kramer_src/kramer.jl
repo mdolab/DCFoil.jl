@@ -33,7 +33,7 @@ run_modal = true
 debug = true
 
 # --- Fill out task details ---
-θ_sweep = (0.0:10:90.0) * π / 180
+θ_sweep = deg2rad.(0.0:10:90.0)
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
@@ -52,7 +52,7 @@ DVDict = Dict(
     "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "g" => 0.04, # structural damping percentage
@@ -61,7 +61,54 @@ DVDict = Dict(
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => 0 * π / 180, # fiber angle global [rad]
+    "θ" => deg2rad(0), # fiber angle global [rad]
+    "strut" => 0.4, # from Yingqian
+)
+
+solverOptions = Dict(
+    # ---------------------------
+    #   I/O
+    # ---------------------------
+    # "name" => "akcabay-swept",
+    "name" => "t-foil",
+    "debug" => debug,
+    # ---------------------------
+    #   General appendage options
+    # ---------------------------
+    "config" => "wing",
+    "nNodes" => nNodes, # number of nodes on foil half wing
+    "nNodeStrut" => 10, # nodes on strut
+    "rotation" => 0.0, # deg
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_tipMass" => false,
+    # ---------------------------
+    #   Flow
+    # ---------------------------
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # ---------------------------
+    #   Structure
+    # ---------------------------
+    "material" => "cfrp", # preselect from material library
+    # ---------------------------
+    #   Solver modes
+    # ---------------------------
+    # --- Static solve ---
+    "run_static" => run_static,
+    # --- Forced solve ---
+    "run_forced" => run_forced,
+    "fSweep" => fSweep,
+    "tipForceMag" => tipForceMag,
+    # --- p-k (Eigen) solve ---
+    "run_modal" => run_modal,
+    "run_flutter" => run_flutter,
+    "nModes" => nModes,
+    "uRange" => [1.0,2.0],
+    "maxQIter" => 100, # that didn't fix the slow run time...
+    "rhoKS" => 80.0,
 )
 
 # ************************************************
@@ -73,23 +120,13 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 #                         Call DCFoil
 # ==============================================================================
 for theta in θ_sweep
-    outputDir = @sprintf("./OUTPUT/kramer_theta%02.1f/", (theta * 180 / π))
-    mkpath(outputDir)
     DVDict["θ"] = theta
+    outputDir = @sprintf("./OUTPUT/kramer_theta%02.1f/", deg2rad(theta))
+    mkpath(outputDir)
+    solverOptions["outputDir"] = outputDir
     DCFoil.run_model(
         DVDict,
         evalFuncs;
-        # --- Optional args ---
-        run_static=run_static,
-        run_forced=run_forced,
-        run_modal=run_modal,
-        run_flutter=run_flutter,
-        fSweep=fSweep,
-        tipForceMag=tipForceMag,
-        nModes=nModes,
-        uSweep=uSweep,
-        fSearch=fSearch,
-        outputDir=outputDir,
-        debug=debug
+        solverOptions=solverOptions,
     )
 end

@@ -3,10 +3,10 @@
 # @File    :   test_deriv.jl
 # @Time    :   2023/03/16
 # @Author  :   Galen Ng
-# @Desc    :   Derivatives wrt fiber angle
+# @Desc    :   Derivatives wrt fiber angle for a much more manual check
 
 using Printf # for better file name
-using JLD
+using FileIO
 using ForwardDiff, FiniteDifferences, Zygote
 include("../../src/DCFoil.jl")
 
@@ -46,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 # nModes is really the starting number of structural modes you want to solve for
 fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [187.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 
@@ -77,7 +77,7 @@ solverOptions = Dict(
     "config" => "wing",
     "rotation" => 0.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
-    "tipMass" => tipMass,
+    "use_tipMass" => tipMass,
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
@@ -122,13 +122,13 @@ dvKey = "θ" # dv to test deriv
 evalFunc = "ksflutter"
 
 # # Right now, we require a complete solve to get the derivatives
-# include("../../src/solvers/SolveFlutter.jl")
-# include("../../src/InitModel.jl")
-# include("../../src/struct/FiniteElements.jl")
-# include("../../src/solvers/SolverRoutines.jl")
-# include("../../src/hydro/Hydro.jl")
-# include("../../src/constants/SolutionConstants.jl")
-# using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .Hydro, .SolutionConstants
+include("../../src/solvers/SolveFlutter.jl")
+include("../../src/InitModel.jl")
+include("../../src/struct/FiniteElements.jl")
+include("../../src/solvers/SolverRoutines.jl")
+include("../../src/hydro/HydroStrip.jl")
+include("../../src/constants/SolutionConstants.jl")
+using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .HydroStrip, .SolutionConstants
 # FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
 # nElem = FOIL.nNodes - 1
 # structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
@@ -231,30 +231,24 @@ evalFunc = "ksflutter"
 #     structMesh, b_ref, chordVec)
 # fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x1) -> SolveFlutter.solve(structMesh, solverOptions, uRange, x1, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug), b_ref)
 # # derivs = DCFoil.compute_funcSens(SOL, DVDict, evalFunc; mode="RAD", solverOptions=solverOptions)
-# # save("./RADDiff.jld", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
+# # save("./RADDiff.jld2", "derivs", derivs[1], "steps", steps, "funcVal", funcVal)
 # # println("deriv = ", derivs)
 
-# THIS IS THE FINAL STEP
-# ************************************************
-#     are the hydro slopes correct?
-# ************************************************
-# TODO: no they are not, this test shows that
-derivs, = Zygote.jacobian((x) ->
-        Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5, nothing, false), 1.0)
-fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
-        Hydro.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5), 1.0)
-
+# # THIS IS THE FINAL STEP
 # # ************************************************
-# #     Does it all work?
+# #     are the hydro slopes correct?
 # # ************************************************
-# funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-# funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+# # TODO: no they are not, this test shows that
+# derivs, = Zygote.jacobian((x) ->
+#         HydroStrip.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5, nothing, false), 1.0)
+# fdderivs, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+#         HydroStrip.compute_glauert_circ(x, ones(5), 0.2, 6.0, 5), 1.0)
 
 # ************************************************
 #     Forward difference checks (dumb way)
 # ************************************************
-funcVal = 0.0f0
 derivs = zeros(length(steps))
+funcVal = 0.0f0
 for (ii, dh) in enumerate(steps)
     costFuncs = DCFoil.run_model(
         DVDict,
@@ -279,4 +273,11 @@ for (ii, dh) in enumerate(steps)
     DVDict[dvKey] -= dh
 end
 
-save("./FWDDiff.jld", "derivs", derivs, "steps", steps, "funcVal", funcVal)
+save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
+
+# ************************************************
+#     Does it all work?
+# ************************************************
+funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
+funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+save("./RAD.jld2", "derivs", funcsSensAD, "funcVal", funcVal)

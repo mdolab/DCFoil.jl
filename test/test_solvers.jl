@@ -4,6 +4,7 @@ Test to verify that the static solve works without failing
 
 using Printf
 using LinearAlgebra
+using Dates
 
 include("../src/solvers/SolveStatic.jl")
 using .SolveStatic
@@ -34,7 +35,7 @@ function test_SolveStaticRigid()
     refBendSol = [0.0000002020248011, 0.0000002058145797, 0.0000002072123383]
     refTwistSol = [0.0000000156876292, 0.0000000159326983, 0.0000000160164539]
 
-    nNodess = [10, 20, 40] # list of number of nodes to test
+    nNodess = [10, 20, 30] # list of number of nodes to test
     # ************************************************
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
@@ -42,33 +43,38 @@ function test_SolveStaticRigid()
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "Λ" => deg2rad(0.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
     )
-
     solverOptions = Dict(
-        # --- I/O ---
         "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "rigid", # preselect from material library
+        "U∞" => 6.0, # free stream velocity [m/s]
+        # --- I/O ---
         "name" => "akcabay",
-        "nNodes" => nNodes,
         "debug" => false,
         "outputDir" => "test_out/",
         # --- General solver options ---
         "config" => "wing",
+        # "config" => "t-foil",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "use_tipMass" => false,
+        "material" => "rigid", # preselect from material library
         "rotation" => 0.0, # deg
-        "tipMass" => false,
+        # --------------------------------
+        #   Flow
+        # --------------------------------
         "use_cavitation" => false,
         "use_freesurface" => false,
         # --- Static solve ---
         "run_static" => true,
-        "U∞" => 6.0, # free stream velocity [m/s]
         # --- Forced solve ---
         "run_forced" => false,
         "fSweep" => 0:0.1:10,
@@ -78,6 +84,7 @@ function test_SolveStaticRigid()
         "run_flutter" => false,
         "nModes" => 5,
         "uRange" => nothing,
+        "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
 
@@ -101,9 +108,12 @@ function test_SolveStaticRigid()
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
 
-        costFuncs = DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
+        println("cl:",costFuncs["cl"])
+        println("cmy:",costFuncs["cmy"])
         meshlvl += 1
     end
 
@@ -134,12 +144,11 @@ function test_SolveStaticRigid()
     rel_err2 = LinearAlgebra.norm(answers - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
     rel_err = max(rel_err1, rel_err2)
 
-    # println("Relative error: ", rel_err1)
-    # println("Relative error: ", rel_err2)
-
     return rel_err
 
 end # test_SolveStaticRigid
+
+# test_SolveStaticRigid()
 
 function test_SolveStaticIso()
     """
@@ -178,7 +187,7 @@ function test_SolveStaticIso()
         "debug" => false,
         "outputDir" => "test_out/",
         # --- General solver options ---
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_cavitation" => false,
         "use_freesurface" => false,
         # --- Static solve ---
@@ -192,6 +201,7 @@ function test_SolveStaticIso()
         "run_flutter" => false,
         "nModes" => 5,
         "uRange" => nothing,
+        "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
 
@@ -214,13 +224,10 @@ function test_SolveStaticIso()
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
-        # --- Mesh ---
-        FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-        nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
-        # --- Solve ---
-        STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
+
+        DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
@@ -280,21 +287,29 @@ function test_SolveStaticComp()
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "U∞" => 6.0, # free stream velocity [m/s]
         # --- I/O ---
-        "nNodes" => nNodes,
         "name" => "akcabay",
         "debug" => false,
         "outputDir" => "test_out/",
         # --- General solver options ---
-        "tipMass" => false,
+        "config" => "wing",
+        # "config" => "t-foil",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "use_tipMass" => false,
+        "material" => "cfrp", # preselect from material library
+        "rotation" => 0.0, # deg
+        # --------------------------------
+        #   Flow
+        # --------------------------------
         "use_cavitation" => false,
         "use_freesurface" => false,
-        "material" => "cfrp", # preselect from material library
         # --- Static solve ---
         "run_static" => true,
         # --- Forced solve ---
@@ -306,6 +321,7 @@ function test_SolveStaticComp()
         "run_flutter" => false,
         "nModes" => 5,
         "uRange" => nothing,
+        "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
 
@@ -327,13 +343,10 @@ function test_SolveStaticComp()
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
-        # --- Mesh ---
-        FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-        nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];)
-        # --- Solve ---
-        STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
-        costFuncs = SolveStatic.evalFuncs(STATSOL.structStates, STATSOL.fHydro, evalFuncs)
+
+        DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
         meshlvl += 1
@@ -364,216 +377,27 @@ function test_SolveStaticComp()
     rel_err2 = LinearAlgebra.norm(tipTwistData - refTwistSol, 2) / LinearAlgebra.norm(refTwistSol, 2)
     rel_err = max(rel_err1, rel_err2)
 
-    # println("Relative error: ", rel_err1)
-    # println("Relative error: ", rel_err2)
-
     return rel_err
 
 end # test_SolveStaticComp
+
+# rel_err = test_SolveStaticComp()
 
 # ==============================================================================
 #                         Test Forced Response
 # ==============================================================================
 function test_SolveForcedComp()
     """
-    Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
-    nNodess = [10, 20, 40] # list of number of nodes to test
-    # ************************************************
-    #     DV Dictionaries (see INPUT directory)
-    # ************************************************
-    nNodes = nNodess[1] # spatial nodes
-    # --- Foil from Deniz Akcabay's 2020 paper ---
-    fSweep = 0.01:0.1:10
-    tipForceMag = 1.0
-    DVDict = Dict(
-        "name" => "akcabay",
-        "nNodes" => nNodes,
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 6.0, # free stream velocity [m/s]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "cfrp", # preselect from material library
-        "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
-    )
-
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "",
-        # --- General solver options ---
-        "tipMass" => false,
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => true,
-        "fSweep" => fSweep,
-        "tipForceMag" => tipForceMag,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => false,
-        "nModes" => 5,
-        "uRange" => nothing,
-    )
-    # ==============================================================================
-    #                         Call Forced Vibration Solver
-    # ==============================================================================
-    # Call it for different mesh levels
-    tipBendData = zeros(length(nNodess))
-    tipTwistData = zeros(length(nNodess))
-    meshlvl = 1
-    for nNodes in nNodess
-        # --- Resize some stuff ---
-        DVDict["nNodes"] = nNodes
-        DVDict["c"] = 0.1 * ones(nNodes)
-        DVDict["ab"] = 0 * ones(nNodes)
-        DVDict["x_αb"] = 0 * ones(nNodes)
-        # --- Mesh ---
-        FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-        nElem = nNodes - 1
-        structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
-        # --- Solve ---
-        TipBendDyn, TipTwistDyn, LiftDyn, MomDyn = SolveForced.solve(structMesh, elemConn, DVDict, solverOptions)
-        tipBendData[meshlvl] = TipBendDyn[1]
-        tipTwistData[meshlvl] = TipTwistDyn[1]
-        meshlvl += 1
-    end
-
-    meshlvl = 1
-
-    # ************************************************
-    #     Write results to test output file
-    # ************************************************
-    # NOTE: this assumes you're running the test from the run_tests.jl file
-    fname = "test.out"
-    open(fname, "a") do io
-        write(io, "+---------------------------------------+\n")
-        write(io, "|    test_SolveForcedComp\n")
-        write(io, "+---------------------------------------+\n")
-        write(io, "f = 0 [Hz]")
-        write(io, "  meshlvl   | tip bend [m] | tip twist [rad] |\n")
-        for tip in tipBendData
-            tipTwist = tipTwistData[meshlvl]
-            line = @sprintf("%i (%i nodes)   %.16f    %.16f\n", meshlvl, nNodess[meshlvl], tip, tipTwist)
-            write(io, line)
-            meshlvl += 1
-        end
-    end
-
-    # --- Relative error ---
 
 end # end test_SolveForcedComp
+
+# test_SolveForcedComp()
 
 # ==============================================================================
 #                         Test Flutter Solver
 # ==============================================================================
-
-# function test_correlationMatrix()
-#     """
-#     Test the correlation method of van Zyl between k increments
-#     """
-
-#     # --- k^(n) data ---
-#     R_old = [
-#         0.0 0.0 0.0 0.0
-#         0.0 0.0 0.0 0.0
-#         0.0 0.0 0.0 0.0
-#         0.0 0.0 0.0 0.0
-#     ]
-#     # --- k^(n+1) data ---
-#     R_new = []
-
-#     old_r = real(R_old)
-#     old_i = imag(R_old)
-#     new_r = real(R_new)
-#     new_i = imag(R_new)
-#     SolverFlutter.compute_correlationMatrix(old_r, old_i, new_r, new_i)
-# end
-
-# function test_correlationMetrics()
-#     """
-#     Test the correlation method of van Zyl when new modes are found between dynP increments
-#     It uses the eigenvalues to help decide if a new mode is found
-#     """
-
-#     # --- q^(n) data ---
-#     p_old = []
-#     R_old = []
-#     # --- q^(n+1) data ---
-#     p_new = []
-#     R_new = []
-
-#     old_r = real(R_old)
-#     old_i = imag(R_old)
-#     new_r = real(R_new)
-#     new_i = imag(R_new)
-#     p_old_i = imag(p_old)
-#     p_new_i = imag(p_new)
-#     SolverFlutter.compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i)
-# end
-
-# function test_modeSpace()
-#     """
-#     """
-# end
-function test_flutter()
-    """
-    Test flutter solver
-    """
-    nNodes = 10
-    DVDict = Dict(
-        "name" => "akcabay",
-        "nNodes" => nNodes,
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "U∞" => 6.0, # free stream velocity [m/s]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "material" => "cfrp", # preselect from material library
-        "g" => 0.04, # structural damping percentage
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
-    )
-
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "",
-        # --- General solver options ---
-        "tipMass" => false,
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 1:0.1:1000,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => true,
-        "nModes" => 3,
-        "uRange" => [5.0, 6.0],
-    )
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
-    nElem = nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];)
-
-    return 0.0
-end
-
 function test_modal()
     """
     Test modal solver
@@ -608,7 +432,7 @@ function test_modal()
         "outputDir" => "",
         # --- General solver options ---
         "nNodes" => nNodes,
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_cavitation" => false,
         "use_freesurface" => false,
         "material" => "cfrp", # preselect from material library
@@ -660,10 +484,13 @@ function test_eigensolve()
     err = LinearAlgebra.norm(w_r1 - w_r, 2) + LinearAlgebra.norm(w_i1 - w_i, 2)
 end
 
-function test_flutter_staticDiv()
+function test_pk_staticDiv()
     """
     Test flutter solver for the static divergence case
     """
+
+    ref_val = 0.2346166
+
     nNodes = 10
     df = 1
     fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
@@ -672,7 +499,7 @@ function test_flutter_staticDiv()
 
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "Λ" => deg2rad(0.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
@@ -680,6 +507,7 @@ function test_flutter_staticDiv()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(-15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(
@@ -689,12 +517,13 @@ function test_flutter_staticDiv()
         # --- General solver options ---
         "config" => "wing",
         "nNodes" => nNodes,
+        "nNodeStrut" => 10,
         "U∞" => 5.0, # free stream velocity [m/s]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "rotation" => 0.0, # deg
         "material" => "cfrp", # preselect from material library
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -714,7 +543,8 @@ function test_flutter_staticDiv()
     )
     evalFuncs = ["ksflutter"]
 
-    outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+        string(Dates.today()),
         solverOptions["name"],
         solverOptions["material"],
         rad2deg(DVDict["θ"]),
@@ -723,15 +553,20 @@ function test_flutter_staticDiv()
 
     solverOptions["outputDir"] = outputDir
 
-    costFuncs = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    # TODO: fix with nondim p_r
-    return (95.3118 - costFuncs["ksflutter"]) / 95.3118
+    DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+
+    err = (ref_val - costFuncs["ksflutter"]) / ref_val
+    return err
 end
 
-function test_flutter()
+# test_pk_staticDiv()
+
+function test_pk_flutter()
     """
-    Test flutter solver for the static divergence case
+    Test flutter solver for the fluttering case
     """
+    ref_val = 0.05347
     nNodes = 10
     df = 1
     fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
@@ -740,7 +575,7 @@ function test_flutter()
 
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => -15.0 * π / 180, # sweep angle [rad]
+        "Λ" => deg2rad(-15.0), # sweep angle [rad]
         "g" => 0.04, # structural damping percentage
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
@@ -748,6 +583,7 @@ function test_flutter()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(
@@ -757,12 +593,13 @@ function test_flutter()
         # --- General solver options ---
         "config" => "wing",
         "nNodes" => nNodes,
+        "nNodeStrut" => 10,
         "U∞" => 5.0, # free stream velocity [m/s]
         "ρ_f" => 1000.0, # fluid density [kg/m³]
         "rotation" => 0.0, # deg
         "material" => "cfrp", # preselect from material library
         "gravityVector" => [0.0, 0.0, -9.81],
-        "tipMass" => false,
+        "use_tipMass" => false,
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -782,7 +619,8 @@ function test_flutter()
     )
     evalFuncs = ["ksflutter"]
 
-    outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+        string(Dates.today()),
         solverOptions["name"],
         solverOptions["material"],
         rad2deg(DVDict["θ"]),
@@ -791,6 +629,11 @@ function test_flutter()
 
     solverOptions["outputDir"] = outputDir
 
-    costFuncs = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    return (95.3118 - costFuncs["ksflutter"]) / 95.3118
+    DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+    err = (ref_val - costFuncs["ksflutter"]) / ref_val
+
+    return err
 end
+
+# test_pk_flutter()

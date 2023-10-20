@@ -23,10 +23,11 @@ function return_constitutive(materialName::String)
         ν₁₂ = 0.25
         constitutive = "orthotropic"
     elseif (materialName == "test-comp")
+        # TODO: will need to retrain these tests
         ρₛ = 1590.0
-        E₁ = 1
-        E₂ = 1
-        G₁₂ = 1
+        E₁ = 100
+        E₂ = 50
+        G₁₂ = 10
         ν₁₂ = 0.25
         constitutive = "orthotropic"
     elseif (materialName == "ss") # stainless-steel
@@ -58,6 +59,13 @@ function return_constitutive(materialName::String)
         ν₁₂ = 0.25
         # constitutive = "isotropic"
         constitutive = "orthotropic" # NOTE: Need to use this because the isotropic case uses an ellipse for GJ
+    elseif (materialName == "test-iso3d")
+        ρₛ = 1000.0
+        E₁ = 1e9
+        E₂ = 1e9
+        G₁₂ = 1e9
+        ν₁₂ = 0.25
+        constitutive = "isotropic"
     end # if
 
     return ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive

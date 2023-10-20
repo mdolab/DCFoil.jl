@@ -2,51 +2,54 @@
 
 ![Alt text](./media/logo.svg "logo-text")
 
-Dynamic Composite Foil (DCFoil) in Julia v1.7.3 (latest tested).
+Dynamic Composite Foil (DCFoil) in Julia
+
+## Versions
+
 We test for `macOS-latest` and `Ubuntu-latest`.
+
+v1.7.3 (stable) 
+v1.9.0 (latest)
 
 ## Get started
 
 You must be in this root directory. From the terminal you can type
+```
+julia --project=.
+```
+or in the Julia REPL, type
+```
+] activate .
+```
+and all the dependencies in the `Project.toml` should be queued to compile at runtime.
+You can double-check that all the right packages are present with `status` in the Pkg REPL.
+You may need to type into the Pkg REPL
 
-`julia --project=.`
+`instantiate()`
 
-OR
-
-in the Julia REPL, type
-
-`] activate .`
-
-and all the dependencies in the `Project.toml` should be queued to compiled at runtime.
-You can double check that all the right packages are present with `status` in the Pkg REPL.
-You may need to type into the Julia REPL
-
-`Pkg.instantiate()`
-
-Now you are ready to run the solver with
+Now you are ready to run the solver in the Julia REPL with
 
 `include("main.jl")`
 
 Since this is JIT, it will be slow the first time because it needs to compile stuff first.
-You can alternatively run the code with
+You can alternatively run the code from the terminal with
 
 `julia main.jl`
 
-NOTE: Running julia using shell script nohup does not work but a regular nohup command is fine
+NOTE: 
+`run_main.sh` is a convenience script for the above. Running julia using shell script `nohup` does not work but a regular `nohup` command is fine
 
-TODO: paper links
-For more, see the formal documentation <> and journal paper
 
 ## Developers Notes
 
-### Convention
+### Conventions
 
 Please use this coding convention:
 
-* camelCase - variables
-* PascalCase - modules and module filenames
-* snake_case - functions (all functions should contain a verb) and non-module filenames
-* SCREAMING_SNAKE_CASE - constants
+* `camelCase` - variables
+* `PascalCase` - modules and module filenames
+* `snake_case` - functions (all functions should contain a verb) and non-module filenames
+* `SCREAMING_SNAKE_CASE` - constants
 
 ### Sensitivites
 #### Adding new cost functions or design variables
@@ -57,22 +60,28 @@ Please use this coding convention:
 * `LinRange()` because it isn't easily differentiated. Do something like `start:step:end`
 * Mutating arrays
 
-### Dependencies
+### Package Dependencies
 
 Add package dependencies in the REPL with
 
-`using Pkg`
-
-`Pkg.add("package-name", preserve=PRESERVE_DIRECT)`
+```
+using Pkg
+Pkg.add("package-name", preserve=PRESERVE_DIRECT)
+```
 
 to keep the version of the package static.
 
 To update all dependencies (be careful with this in case it breaks tests)
 
-`Pkg.update(level=UPLEVEL_PATCH)`
+```
+Pkg.update(level=UPLEVEL_PATCH)
+```
+
+Use `Pkg.rm("<module-name>")` to remove a package.
 
 NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last change (also see `help <your-command>`).
-Use `Pkg.rm(<module-name>)` to remove a package.
+Chances are if there is a Pkg bug, it has to do with python, which actually is not necessary.
+
 
 #### Python dependencies from the MACH framework
 
@@ -97,4 +106,11 @@ pygeo
 ```
 ### Tests
 
-Under the `./test/` directory, run the `run_tests.jl`.
+Under the `./test/` directory, run 
+```
+run_tests.jl
+```
+
+## Citation
+TODO: paper links
+For more, see the formal documentation <> and journal paper

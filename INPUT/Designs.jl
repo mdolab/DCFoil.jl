@@ -2,10 +2,11 @@
 This file is just meant to store DV dictionaries of designs we analyze in the paper
 """
 
-# --- Foil from Deniz Akcabay's 2020 paper ---
+# ==============================================================================
+#                         Deniz Akcabay's 2020 paper
+# ==============================================================================
 # THIS COMPARES WELL WITH RESULTS FROM THE PAPER
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
@@ -19,9 +20,9 @@ DVDict = Dict(
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
 )
+
 # Static divergence case
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => deg2rad(0.0), # sweep angle [rad]
@@ -40,7 +41,6 @@ DVDict = Dict(
 # Not great agreement with paper, need to test
 # Table 1: 2.75 in x 20 in strut
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 0.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -57,7 +57,6 @@ DVDict = Dict(
 
 # --- Yingqian's Sweep & Anisotropy Paper (2018) ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => 30.0 * π / 180, # sweep angle [rad]
@@ -74,7 +73,6 @@ DVDict = Dict(
 
 # --- Yingqian's Viscous FSI Paper (2019) ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -92,7 +90,6 @@ DVDict = Dict(
 
 # --- Dummy test with 1's ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
     "Λ" => 30.0 * π / 180, # sweep angle [rad]
@@ -109,7 +106,6 @@ DVDict = Dict(
 
 # --- Eirikur's flat plate ---
 DVDict = Dict(
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
     "U∞" => 10.0, # free stream velocity [m/s]
     "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -124,20 +120,14 @@ DVDict = Dict(
     "θ" => 0 * π / 180, # fiber angle global [rad]
 )
 
-# ---------------------------
-#   IMOCA 60
-# ---------------------------
+# ==============================================================================
+#                         IMOCA60
+# ==============================================================================
 # --- IMOCA 60 bulb keel ---
 DVDict = Dict(
-    "name" => "IMOCA60Keel",
-    "nNodes" => nNodes,
     "α₀" => 6.0, # initial angle of attack [deg]
-    "U∞" => 50.0 / 1.9438, # free stream velocity [m/s]
     "Λ" => deg2rad(0.0), # sweep angle [rad]
-    "ρ_f" => 1025.0, # fluid density [kg/m³]
-    # "material" => "ss", # preselect from material library
     # "toc" => 0.1, # thickness-to-chord ratio
-    "material" => "cfrp", # preselect from material library
     "toc" => 0.15, # thickness-to-chord ratio
     "g" => 0.04, # structural damping percentage
     "c" => 0.65 * ones(nNodes), # chord length [m]
@@ -146,3 +136,68 @@ DVDict = Dict(
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
 )
+
+solverOptions = Dict(
+    # --- I/O ---
+    "name" => "IMOCA60",
+    "debug" => debug,
+    # --- General solver options ---
+    "config" => "wing",
+    "nNodes" => nNodes,
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1025.0, # fluid density [kg/m³]
+    "rotation" => 0.0, # deg
+    "material" => "cfrp", # preselect from material library
+    # "material" => "ss", # preselect from material library
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_tipMass" => tipMass,
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # --- Static solve ---
+    "run_static" => run_static,
+    # --- Forced solve ---
+    "run_forced" => run_forced,
+    "fSweep" => fSweep,
+    "tipForceMag" => tipForceMag,
+    # --- Eigen solve ---
+    "run_modal" => run_modal,
+    "run_flutter" => run_flutter,
+    "nModes" => nModes,
+    "uRange" => uRange,
+    "maxQIter" => 500,
+    "rhoKS" => 80.0,
+)
+
+# ==============================================================================
+#                         AC75 AC37
+# ==============================================================================
+DVDict = Dict()
+# mesh_dict = {
+#             "num_x": 3,  # NOTE: Perform mesh convergence.
+#             "num_y": 5,  # NOTE: Perform mesh convergence.
+#             "span": 3.0,
+#             "chord": 0.25,
+#             "span_cos_spacing": 1.0,
+#             "chord_cos_spacing": 1.0,
+#             "wing_type": "rect",
+#             "offset": np.array([0, 0, 0])
+#         }
+
+#         surface = {
+#             "type": "aero",
+#             "name": "rudder_strut",
+#             "symmetry": True,
+#             "S_ref_type": "projected",
+#             "chord_cp": 0.25 * np.ones(3),
+#             "mesh": mesh,
+#             "CL0": 0.000000,
+#             "CD0": 0.008880,  # At Re=3.0e6
+#             "with_viscous": True,
+#             "with_wave": False,
+#             "groundplane": False,
+#             "k_lam": 0.05,
+#             # "t_over_c_cp": np.array([0.126]),
+#             "t_over_c": 0.126,  # Eppler E836.
+#             "c_max_t": 0.428,  # Eppler E836.
+#         }

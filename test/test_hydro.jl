@@ -4,8 +4,8 @@ Run tests on hydro module file
 
 using LinearAlgebra
 using Printf
-include("../src/hydro/Hydro.jl")
-using .Hydro # Using the Hydro module
+include("../src/hydro/HydroStrip.jl")
+using .HydroStrip # Using the Hydro module
 include("../src/solvers/DCFoilSolution.jl")
 include("../src/constants/SolutionConstants.jl")
 include("../src/struct/FiniteElements.jl")
@@ -44,9 +44,9 @@ function test_stiffness()
     ω = 1e10 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
-    CKVec = Hydro.compute_theodorsen(k)
+    CKVec = HydroStrip.compute_theodorsen(k)
     Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
-    Matrix, SweepMatrix = Hydro.compute_node_stiff(clα, b, eb, ab, U, Λ, ρ, Ck)
+    Matrix, SweepMatrix = HydroStrip.compute_node_stiff(clα, b, eb, ab, U, Λ, ρ, Ck)
 
     # show(stdout, "text/plain", real(Matrix))
     # show(stdout, "text/plain", imag(Matrix))
@@ -91,9 +91,9 @@ function test_damping()
     ω = 1e10 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
-    CKVec = Hydro.compute_theodorsen(k)
+    CKVec = HydroStrip.compute_theodorsen(k)
     Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2] # TODO: for now, put it back together so solve is easy to debug
-    Matrix, SweepMatrix = Hydro.compute_node_damp(clα, b, eb, ab, U, Λ, ρ, Ck)
+    Matrix, SweepMatrix = HydroStrip.compute_node_damp(clα, b, eb, ab, U, Λ, ρ, Ck)
 
     # --- Relative error ---
     answers = vec(real(Matrix)) # put computed solutions here
@@ -129,7 +129,7 @@ function test_mass()
     Λ = 45 * π / 180 # 45 deg
     ω = 1e10 # infinite frequency limit
     ρ = 1000.0
-    Matrix = Hydro.compute_node_mass(b, ab, ρ)
+    Matrix = HydroStrip.compute_node_mass(b, ab, ρ)
 
     # --- Relative error ---
     answers = vec(real(Matrix)) # put computed solutions here
@@ -147,5 +147,103 @@ end
 # ==============================================================================
 
 
+function test_AICs()
+    aeroMesh = [
+        0.0 0.0 0.0
+        0.0 1.0 0.0
+    ]
+    chordVec = [1.0, 1.0]
+    abVec = [0.0, 0.0]
+    ebVec = [0.5, 0.5]
+    Λ = 0.0
+    nNodes = 2
+    DVDict = Dict(
+        "α₀" => 6.0, # initial angle of attack [deg]
+        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "g" => 0.04, # structural damping percentage
+        "c" => 0.1 * ones(nNodes), # chord length [m]
+        "s" => 0.3, # semispan [m]
+        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12, # thickness-to-chord ratio
+        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "θ" => deg2rad(15), # fiber angle global [rad]
+        "strut" => 0.4, # from Yingqian
+    )
 
+    solverOptions = Dict(
+        # ---------------------------
+        #   I/O
+        # ---------------------------
+        # "name" => "akcabay-swept",
+        "name" => "t-foil",
+        "debug" => false,
+        # ---------------------------
+        #   General appendage options
+        # ---------------------------
+        "config" => "wing",
+        # "config" => "t-foil",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "rotation" => 45.0, # deg
+        "gravityVector" => [0.0, 0.0, -9.81],
+        "use_tipMass" => false,
+        # ---------------------------
+        #   Flow
+        # ---------------------------
+        "U∞" => 5.0, # free stream velocity [m/s]
+        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "use_freeSurface" => false,
+        "use_cavitation" => false,
+        "use_ventilation" => false,
+        # ---------------------------
+        #   Structure
+        # ---------------------------
+        "material" => "cfrp", # preselect from material library
+        # ---------------------------
+        #   Solver modes
+        # ---------------------------
+        # --- Static solve ---
+        "run_static" => true,
+        # --- Forced solve ---
+        "run_forced" => false,
+        "fSweep" => 1:2,
+        "tipForceMag" => 1,
+        # --- p-k (Eigen) solve ---
+        "run_modal" => false,
+        "run_flutter" => false,
+        "nModes" => 1,
+        "uRange" => [1, 2],
+        "maxQIter" => 100, # that didn't fix the slow run time...
+        "rhoKS" => 80.0,
+    )
 
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+    elemType = "BT2"
+    # elemType = "COMP2"
+    alfaRad = deg2rad(4.0)
+    if elemType == "bend"
+        error("Only bend-twist element type is supported for load computation")
+    elseif elemType == "bend-twist"
+        nDOF = 3
+        staticOffset = [0, 0, alfaRad]
+    elseif elemType == "BT2"
+        nDOF = 4
+        # nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
+        staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
+        # staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+    elseif elemType == "COMP2"
+        nDOF = 9
+        staticOffset = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+    end
+    AIC = zeros(nDOF*nNodes, nDOF*nNodes)
+
+    AIC, planformArea = HydroStrip.compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    dummy = AIC[:, 1]
+    w = dummy[1:nDOF:end]
+    structStates = (repeat(staticOffset, outer=[length(w)]))
+    fHydro = -1 * AIC * structStates
+    return AIC, fHydro
+end
+
+AIC, fHydro = test_AICs()

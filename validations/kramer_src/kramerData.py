@@ -85,7 +85,8 @@ wetThetaDeg = np.array(
             72.95395195236696,
             75.76722752949715,
         ],
-    ]
+    ],
+    dtype=object,
 )
 wetFreqHz = np.array(
     [
@@ -169,6 +170,7 @@ wetFreqHz = np.array(
             130.55898385517833,
         ],
     ],
+    dtype=object,
 )
 
 dryThetaDeg = np.array(
@@ -277,7 +279,8 @@ dryThetaDeg = np.array(
             -3.2518095600048156,
             0.5929067132360046,
         ],
-    ]
+    ],
+    dtype=object,
 )
 
 dryFreqHz = np.array(
@@ -386,5 +389,6 @@ dryFreqHz = np.array(
             725.9571988295393,
             733.7685393250615,
         ],
-    ]
+    ],
+    dtype=object,
 )

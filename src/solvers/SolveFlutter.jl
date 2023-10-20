@@ -4,9 +4,10 @@
 @Time    :   2022/10/07
 @Author  :   Galen Ng with snippets from Eirikur Jonsson
 @Desc    :   p-k method for flutter analysis, also contains modal analysis
-NOTE: if flutter solution is failing, there are 2 places to check:
-    1. starting k guess
-    2. tolerance on real root
+
+             NOTE: if flutter solution is failing, there are 2 places to check:
+                1. starting k guess
+                2. tolerance on real root in function extract_kCrossings()
 """
 
 module SolveFlutter
@@ -21,13 +22,14 @@ export solve
 # --- Libraries ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote, FiniteDifferences, ForwardDiff
+using Zygote, FiniteDifferences
 using BenchmarkTools
 using TimerOutputs
 # using Profile # for profiling
 using Plots # for debugging
 using Printf
-using JLD # julia data format
+# using JLD2 # julia data format
+using FileIO
 using FiniteDifferences
 using Zygote
 using ChainRulesCore
@@ -36,13 +38,12 @@ using ChainRulesCore
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
 include("../struct/FiniteElements.jl")
-include("../hydro/Hydro.jl")
+include("../hydro/HydroStrip.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
-# then use them
-using .InitModel, .Hydro, .StructProp
+using .InitModel, .HydroStrip, .StructProp
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
@@ -52,8 +53,10 @@ using .DCFoilSolution
 # ==============================================================================
 #                         COMMON VARIABLES
 # ==============================================================================
-elemType = "BT2"
+elemType = "COMP2"
+# elemType = "BT2" 
 loadType = "force"
+derivMode = "RAD"
 
 # ==============================================================================
 #                         Top level API routines
@@ -91,7 +94,7 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     )
 
     # --- Store solution in struct ---
-    global FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank)
+    global FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank, p_r)
 
 
     # ************************************************
@@ -107,8 +110,8 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
         write_sol(FLUTTERSOL, solverOptions["outputDir"])
     end
 
-    # return obj, pmG, FLUTTERSOL
-    return obj
+    return obj, pmG, FLUTTERSOL
+    # return obj
 end # end solve
 
 function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
@@ -122,7 +125,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     uRange = solverOptions["uRange"]
     fSweep = solverOptions["fSweep"]
     nModes = solverOptions["nModes"]
-    tipMass = solverOptions["tipMass"]
+    tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
 
     global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions; uRange=uRange, fSweep=fSweep)
@@ -157,7 +160,8 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbVec[end] = -0.1 # [m]
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], x_αbVec, elemType)
+        elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbVec, elemType)
     end
 
     # ---------------------------
@@ -165,10 +169,10 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     # ---------------------------
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
-    ChainRulesCore.ignore_derivatives() do
-        fname = @sprintf("%s/structMatrices.jld", outputDir)
-        save(fname, "Ks", Ks, "Ms", Ms)
-    end
+    # ChainRulesCore.ignore_derivatives() do
+    #     fname = @sprintf("%s/structMatrices.jld2", outputDir)
+    #     save(fname, "Ks", Ks, "Ms", Ms)
+    # end
 
     # ---------------------------
     #   Initialize stuff
@@ -199,7 +203,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ************************************************
     outputDir = solverOptions["outputDir"]
     nModes = solverOptions["nModes"]
-    tipMass = solverOptions["tipMass"]
+    tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
     global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
@@ -208,7 +212,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("        BEGINNING MODAL SOLUTION")
     println("====================================================================================")
     if debug
-        rm("DebugOutput/", recursive=true)
+        rm("DebugOutput/", recursive=true, force=true) # remove the debug folder even if it doesn't exist
         mkpath("DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
@@ -217,21 +221,32 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Assemble structure
     # ---------------------------
-    elemType = "BT2"
-    loadType = "force"
-
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    FEMMethods.apply_tip_load!(globalF, elemType, loadType)
+    # # Get transformation matrix for the tip load
+    # angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+    # axisDefault = "z"
+    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    # T = T1
+    # transMatL2G = [
+    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+    #     ]
+    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbVec[end] = -0.1 # [m]
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, structMesh[2] - structMesh[1], x_αbVec, elemType)
+        elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbVec, elemType)
     end
 
     # ---------------------------
@@ -243,7 +258,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Initialize stuff
     # ---------------------------
-    u = copy(globalF)
+    u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # globalMf = copy(globalMs) * 0
@@ -251,7 +266,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # globalKf_r = copy(globalKs) * 0
     # globalKf_i = copy(globalKs) * 0
     # globalCf_i = copy(globalKs) * 0
-    derivMode = "RAD"
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     # ---------------------------
@@ -271,9 +285,9 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("+------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    # globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
-    globalMf, globalCf_r, _, globalKf_r, _ = Hydro.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
-    _, _, Mf = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
+    # globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
+    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
+    _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
     println("Wetted natural frequencies [Hz]:")
@@ -317,29 +331,29 @@ function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     mkpath(workingOutput)
 
     # --- Store eigenvalues ---
-    fname = workingOutput * "eigs_r.jld"
+    fname = workingOutput * "eigs_r.jld2"
     save(fname, "data", true_eigs_r)
-    fname = workingOutput * "eigs_i.jld"
+    fname = workingOutput * "eigs_i.jld2"
     save(fname, "data", true_eigs_i)
 
     # --- Store eigenvectors ---
-    fname = workingOutput * "eigenvectors_r.jld"
+    fname = workingOutput * "eigenvectors_r.jld2"
     save(fname, "data", R_eigs_r)
-    fname = workingOutput * "eigenvectors_i.jld"
+    fname = workingOutput * "eigenvectors_i.jld2"
     save(fname, "data", R_eigs_i)
 
     # --- Store blanking ---
-    fname = workingOutput * "iblank.jld"
+    fname = workingOutput * "iblank.jld2"
     save(fname, "data", iblank)
 
     # --- Store flow history ---
-    fname = workingOutput * "flowHistory.jld"
+    fname = workingOutput * "flowHistory.jld2"
     save(fname, "data", flowHistory)
 end # end write_sol
 
 function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, outputDir="./OUTPUT/")
     """
-    Write out the p-k flutter results
+    Write out the quiescent fluid results
     """
 
     # Store solutions here
@@ -347,11 +361,11 @@ function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeSh
     mkpath(workingOutput)
 
     # --- Store structural dynamics analysis ---
-    fname = workingOutput * "structModal.jld"
+    fname = workingOutput * "structModal.jld2"
     save(fname, "structNatFreqs", structNatFreqs, "structModeShapes", structModeShapes)
 
     # --- Store wetted modal analysis ---
-    fname = workingOutput * "wetModal.jld"
+    fname = workingOutput * "wetModal.jld2"
     save(fname, "wetNatFreqs", wetNatFreqs, "wetModeShapes", wetModeShapes)
 
 end # end function
@@ -574,7 +588,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     # save correlation matrix
     if debug
         ChainRulesCore.ignore_derivatives() do
-            fname = @sprintf("./DebugOutput/corrMatrix-%03i.jld", nFlow)
+            fname = @sprintf("./DebugOutput/corrMatrix-%03i.jld2", nFlow)
             save(fname, "corrMat", C)
         end
     end
@@ -958,7 +972,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
             if debug
                 ChainRulesCore.ignore_derivatives() do
                     lineCtr = 0
-                    fname = @sprintf("./DebugOutput/corrmetric-%03i.jld", nFlow)
+                    fname = @sprintf("./DebugOutput/corrmetric-%03i.jld2", nFlow)
                     save(fname, "corr", corr)
 
                     fname = @sprintf("./DebugOutput/m-%03i.dat", nFlow)
@@ -1043,7 +1057,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     end
 
                     # Store eigenvectors as JLD
-                    fname = @sprintf("./DebugOutput/sorted-eigenvectors-%03i.jld", nFlow)
+                    fname = @sprintf("./DebugOutput/sorted-eigenvectors-%03i.jld2", nFlow)
                     save(fname, "evec_r", R_eigs_r_tmp_z[:, :, nFlow], "evec_i", R_eigs_i_tmp_z[:, :, nFlow])
 
                     fname = @sprintf("./DebugOutput/iblank-%03i.dat", nFlow)
@@ -1348,20 +1362,12 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
     # Need to do a dummy call to get the hydrodynamic added mass
-    # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, 1.0, 1.0, elemType)
-    # globalMf, _, _, _, _ = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
-    globalMf, _, _, _, _ = Hydro.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
-    _, _, Mff = Hydro.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
+    globalMf, _, _, _, _ = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
+    _, _, Mff = HydroStrip.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
-    # AR = inv(MM .+ Mf) * (KK)
-    # yQuiescent = SolverRoutines.cmplxStdEigValProb2(AR, imag(AR), Nr)
-    # omegaSquared = yQuiescent[Nr+1:2*Nr]
-    # Δk = 0.0 # step size
-    # ChainRulesCore.ignore_derivatives() do
     Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
-    # end
 
     # ************************************************
     #     Perform iterations on k values
@@ -1384,11 +1390,9 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         # ---------------------------
         # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
         ω = k * U∞ * (cos(Λ)) / b_ref
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, FOIL, U∞, ω, elemType)
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = Hydro.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        Kffull_r, Cffull_r, _ = Hydro.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
-        Kffull_i, Cffull_i, _ = Hydro.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
+        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
+        Kffull_i, Cffull_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
         # Mode space reduction
         Kf_r = Qr' * Kffull_r * Qr
         Kf_i = Qr' * Kffull_i * Qr
@@ -1396,7 +1400,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         Cf_i = Qr' * Cffull_i * Qr
 
         # --- Solve eigenvalue problem ---
-        # println(k)
         p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
         # --- Sort eigenvalues from small to large ---
         p_r = sort(real(p_r_tmp))
@@ -1407,7 +1410,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
 
         # --- Mode tracking (prevent mode hopping between k's) ---
         # Don't need mode tracking for the very first step
-        # NOTE: This correlation matrix will be square
+        # This correlation matrix will be square
         if (ik > 1)
             # van Zyl tracking method: Find correlation matrix btwn current and previous eigenvectors (mode shape)
             # Rows are old eigenvector number and columns are new eigenvector number
@@ -1431,10 +1434,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
             R_aa_i = R_aa_i_tmp[:, idxs]
 
             # --- If too big of jump, back up on 'k' ---
-            # println("p_r ^{k-1}")
-            # println(p_eigs_r[:,ik-1])
             tmp_p_diff = sqrt.((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
-            # tmp_p_diff = sqrt.((p_eigs_r[:, ik-1] - p_r) .^ 2 + (p_eigs_i[:, ik-1] - p_i) .^ 2)
             p_diff = maximum(real(tmp_p_diff))
             if (p_diff > p_diff_max)
                 # println("Failed, p_diff: ", p_diff, ", p_diff_max: ", p_diff_max)
@@ -1539,7 +1539,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
         for jj in 1:ik # loop over all reduced frequencies (tracing the mode line)
 
             # Check if we found a real root
-            # NOTE: If your flutter analyses are failing, this is probably why
+            # If your flutter analyses are failing, this is probably why
             if (k_history[jj] < SolutionConstants.p_i_tol) && (abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol) # SolutionConstants.mepsLarge # Real root
                 # There should be another real root coming up or we already processed
                 # one matching the zero freq
@@ -1796,17 +1796,17 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
 
     Inputs
     ------
-    N_MAX_Q_ITER
-    flowHistory - flow history. Array(Nflow, 3)
-    NTotalModesFound - total number of modes found. Int
-    nFlow - number of flow conditions. Int
-    p_r - real part of the eigenvalues across all flow conditions [-]. Array(N_MAX_Q_ITER, Nmodes).
-    This has to be the non-dimensional version so the derivatives are correct
-    iblank - blanking indices
+        N_MAX_Q_ITER
+        flowHistory - flow history. Array(Nflow, 3)
+        NTotalModesFound - total number of modes found. Int
+        nFlow - number of flow conditions. Int
+        p_r - real part of the eigenvalues across all flow conditions [-]. Array(N_MAX_Q_ITER, Nmodes).
+            This has to be the non-dimensional version so the derivatives are correct
+        iblank - blanking indices
 
     Outputs
     -------
-    obj - flutter constraint. Float
+    obj - flutter constraint [-]. Float
     pmG - flutter safety margin
     """
     # ************************************************
@@ -1907,18 +1907,35 @@ end # compute_KS
 #                         Cost func and sensitivity routines
 # ==============================================================================
 # All of these routines have to take the exact same inputs
-function evalFuncs(DVDict::Dict, solverOptions::Dict)
+function compute_costFuncs(DVDict::Dict, solverOptions::Dict)
     """
     Wrapper to solve and compute the cost func
     This is the primal solver
     """
 
-    obj = eval_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+    obj = cost_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
 
     return obj
 end
 
-function eval_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+function get_sol(DVDict::Dict, solverOptions::Dict)
+    """
+    This does the primal solve and returns the solution
+    It is used in the top-level evalFuncs call in DCFoil 
+    to return the sol struct
+    """
+
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+        setup_solver(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+
+    # Solve
+    obj, _, SOL = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
+    return SOL
+end
+
+function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
     """
     This does the primal solve but with a function signature compatible with Zygote
     """
@@ -1928,7 +1945,8 @@ function eval_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solve
         setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
 
     # Solve
-    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+    obj, _, _ = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
     return obj
 end
 
@@ -1942,7 +1960,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     if mode == "FiDi" # use finite differences the stupid way
 
-        sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.evalFuncs(x, solverOptions),
+        sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
             DVDict)
 
         # --- Iterate over DVDict keys ---
@@ -1964,7 +1982,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
 
         sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
-                eval_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
+                cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
             DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"])
 
         # --- Order the sensitivities properly ---

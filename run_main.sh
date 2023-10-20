@@ -4,7 +4,8 @@
 # This executable script runs program from terminal
 ############################################################
 
+# Error handling
 set -e
 
 # Run the program
-nohup julia runscripts/main_imoca-ss.jl &
+julia runscripts/main_imoca-ss.jl &
