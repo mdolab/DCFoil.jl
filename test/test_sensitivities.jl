@@ -10,7 +10,9 @@ include("../src/struct/FiniteElements.jl")
 include("../src/solvers/SolveFlutter.jl")
 using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, Zygote
-using Plots, Printf, LinearAlgebra
+using Plots
+using Printf
+using LinearAlgebra
 using JLD2
 
 # ==============================================================================
@@ -39,7 +41,7 @@ function test_hydromass()
     test1 = norm(test1, 2)
     test2 = norm(test2, 2)
     return min(test1, test2)
-end # end function
+end 
 
 function test_hydrodamp()
     # Test values
@@ -80,7 +82,7 @@ function test_hydrodamp()
     test3 = derivs[3] - fdderivs3
 
     return max(norm(test1, 2), norm(test2, 2), norm(test3, 2))
-end # end function
+end 
 
 function test_interp()
     """Test the my linear interpolation"""
@@ -347,13 +349,14 @@ function test_pkflutterderiv(DVDict, solverOptions)
     Test AD derivative of the pk flutter analysis with 
     KS aggregation against finite differences
 
-    TODO: every derivatives is good except span because of a bug in the spanwise lift slope, which should be superceded anyway
+    Also some profiling
     """
 
     @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
     @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
     @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
-    
+
+
     # Print it out
     for (key, val) in funcsSensFD
         save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
@@ -374,7 +377,13 @@ function test_pkflutterderiv(DVDict, solverOptions)
 
 end
 
-
+function test_pkprofile(DVDict, solverOptions)
+    """
+    Profile pk flutter deriv
+    """
+    # SolveFlutter.compute_costFuncs(DVDict, solverOptions)
+    funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
+end
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -423,5 +432,11 @@ solverOptions = Dict(
     "rhoKS" => 80.0,
 )
 
-derivs = test_pkflutterderiv(DVDict, solverOptions)
+# Profiling code
+using BenchmarkTools
+using TimerOutputs
+using Profile
+
+@profview test_pkprofile(DVDict, solverOptions)
+Profile.clear() # run to clear compilation stuff
 
