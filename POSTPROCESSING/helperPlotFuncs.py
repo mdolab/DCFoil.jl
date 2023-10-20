@@ -23,7 +23,7 @@ import tecplot as tp
 # Extension modules
 # ==============================================================================
 import niceplots as nplt
-from helperFuncs import get_bendingtwisting, compute_normFactorModeShape
+from .helperFuncs import get_bendingtwisting, compute_normFactorModeShape
 
 # ==============================================================================
 #                         GLOBAL VARIABLES

@@ -91,10 +91,10 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     #                         Flutter solution
     # ==============================================================================
     if solverOptions["run_modal"]
-        SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
+        @time SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
+        @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
     end
 end
 

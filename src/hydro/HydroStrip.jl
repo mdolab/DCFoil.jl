@@ -958,7 +958,6 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
                 ]
             elseif elemType == "COMP2"
                 # NOTE: Done in local aero coordinates
-                # TODO: PICKUP DOUBLE CHECK HERE
                 KLocal = [
                     # u v   w         phi       theta     psi phi'     theta'
                     0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
