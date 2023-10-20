@@ -36,7 +36,7 @@ run_flutter = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 3 # spatial nodes
+nNodes = 20 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -137,4 +137,4 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
 costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
-# costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")
+costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")

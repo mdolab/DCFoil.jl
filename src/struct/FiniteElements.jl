@@ -856,15 +856,14 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
 
     # --- Debug printout for initialization ---
     ChainRulesCore.ignore_derivatives() do
-        println("+", "-"^50, "+")
-        println("|   Assembling global stiffness and mass matrices  |")
-        println("+", "-"^50, "+")
-        println("Default 2 nodes per elem, nothing else will work")
-        println("Using ", elemType, " elements")
-        println("Using ", constitutive, " constitutive relations...")
-        println(nElem, " elements")
-        println(nNodes, " nodes")
-        println(nnd * nNodes, " total DOFs")
+        println("+------------------------------+")
+        println("|   Assembling beam matrices   |")
+        println("+------------------------------+")
+        # println("Default 2 nodes per elem, nothing else will work")
+        println("Constitutive relations: ", constitutive)
+        println("Element: ", elemType)
+        println("No. of elems: ",nElem)
+        println("Beam nodes: ", nNodes," (", nnd * nNodes, " DOFs)")
     end
 
     # ************************************************

@@ -8,19 +8,23 @@ Dynamic Composite Foil (DCFoil) in Julia
 
 We test for `macOS-latest` and `Ubuntu-latest`.
 
-v1.7.3 (stable) 
+v1.7.3 (stable)
 v1.9.0 (latest)
 
 ## Get started
 
 You must be in this root directory. From the terminal you can type
+
 ```
 julia --project=.
 ```
+
 or in the Julia REPL, type
+
 ```
 ] activate .
 ```
+
 and all the dependencies in the `Project.toml` should be queued to compile at runtime.
 You can double-check that all the right packages are present with `status` in the Pkg REPL.
 You may need to type into the Pkg REPL
@@ -36,7 +40,7 @@ You can alternatively run the code from the terminal with
 
 `julia main.jl`
 
-NOTE: 
+NOTE:
 `run_main.sh` is a convenience script for the above. Running julia using shell script `nohup` does not work but a regular `nohup` command is fine
 
 
@@ -52,6 +56,7 @@ Please use this coding convention:
 * `SCREAMING_SNAKE_CASE` - constants
 
 ### Sensitivites
+
 #### Adding new cost functions or design variables
 
 * For the given solver you're adding the DV or cost func to, check its `.evalFuncsSens()`
@@ -106,7 +111,7 @@ pygeo
 ```
 ### Tests
 
-Under the `./test/` directory, run 
+Under the `./test/` directory, run
 ```
 run_tests.jl
 ```

@@ -7,29 +7,22 @@
 
              NOTE: if flutter solution is failing, there are 2 places to check:
                 1. starting k guess
-                2. tolerance on real root in function extract_kCrossings()
+                2. tolerance on real root in 'function extract_kCrossings()'
 """
 
 module SolveFlutter
-"""
-Eigenvalue and eigenvector solution
-
-"""
 
 # --- Public functions ---
 export solve
 
 # --- Libraries ---
-using LinearAlgebra, Statistics
+using LinearAlgebra
+using Statistics
 using JSON
-using Zygote, FiniteDifferences
-using BenchmarkTools
-using TimerOutputs
-# using Profile # for profiling
-using Plots # for debugging
+using Plots 
 using Printf
-# using JLD2 # julia data format
 using FileIO
+# Differentiation
 using FiniteDifferences
 using Zygote
 using ChainRulesCore
@@ -51,10 +44,9 @@ using .SolverRoutines
 using .DCFoilSolution
 
 # ==============================================================================
-#                         COMMON VARIABLES
+#                         MODULE CONSTANTS
 # ==============================================================================
 elemType = "COMP2"
-# elemType = "BT2" 
 loadType = "force"
 derivMode = "RAD"
 
@@ -101,7 +93,6 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     #     AGGREGATE DAMPING USING NON-DIM 'p'
     # ************************************************
     ρKS = solverOptions["rhoKS"]
-    # obj, pmG = postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, FLUTTERSOL.eigs_r, FLUTTERSOL.iblank, ρKS)
     obj, pmG = postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, p_r, FLUTTERSOL.iblank, ρKS)
 
 
@@ -111,15 +102,15 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     end
 
     return obj, pmG, FLUTTERSOL
-    # return obj
 end # end solve
 
 function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
     """
     Setup function to be called before solve()
     """
+
     # ************************************************
-    #     Initialize
+    #     Initializations
     # ************************************************
     outputDir = solverOptions["outputDir"]
     uRange = solverOptions["uRange"]
@@ -127,7 +118,8 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     nModes = solverOptions["nModes"]
     tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
-
+    
+    # --- Init model structure ---
     global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions; uRange=uRange, fSweep=fSweep)
 
     # --- Create mesh ---
@@ -137,7 +129,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
     println("====================================================================================")
-    println("uRange: ", uRange)
+    println("Speed range [m/s]: ",uRange)
     if debug
         rm("DebugOutput/", recursive=true)
         mkpath("DebugOutput/")
@@ -145,16 +137,21 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
         println("|    Running debug mode!    |")
         println("+---------------------------+")
     end
-    # ---------------------------
-    #   Assemble structure
-    # ---------------------------
 
-    # @timeit to "FEM assembly"
+    # ************************************************
+    #     FLUTTER SOLUTION
+    # ************************************************
+    N_MAX_Q_ITER = solverOptions["maxQIter"]    # TEST VALUE
+    N_R = 8                                     # reduced problem size (Nr x Nr)
     abVec = ab
     x_αbVec = x_αb
     chordVec = c
     ebVec = 0.25 * chordVec .+ abVec
+    b_ref = sum(chordVec) / FOIL.nNodes         # mean semichord
 
+    # ************************************************
+    #     FEM assembly
+    # ************************************************
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     if tipMass
         bulbMass = 2200 #[kg]
@@ -169,27 +166,14 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     # ---------------------------
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
-    # ChainRulesCore.ignore_derivatives() do
-    #     fname = @sprintf("%s/structMatrices.jld2", outputDir)
-    #     save(fname, "Ks", Ks, "Ms", Ms)
-    # end
 
     # ---------------------------
-    #   Initialize stuff
+    #   Constants
     # ---------------------------
     u = copy(globalF)
-    derivMode = "RAD"
-    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
-
     dim = size(Ks)[1] + length(globalDOFBlankingList)
-
-    # ************************************************
-    #     FLUTTER SOLUTION
-    # ************************************************
-    N_MAX_Q_ITER = solverOptions["maxQIter"] # TEST VALUE
-    N_R = 8 # reduced problem size (Nr x Nr)
-    b_ref = sum(chordVec) / FOIL.nNodes # mean semichord
-
+    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
+    
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
 end
 
@@ -227,20 +211,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    # # Get transformation matrix for the tip load
-    # angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
-    # axisDefault = "z"
-    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    # T = T1
-    # transMatL2G = [
-    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-    #     ]
-    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
@@ -261,11 +231,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
-    # globalMf = copy(globalMs) * 0
-    # globalCf_r = copy(globalKs) * 0
-    # globalKf_r = copy(globalKs) * 0
-    # globalKf_i = copy(globalKs) * 0
-    # globalCf_i = copy(globalKs) * 0
     global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     # ---------------------------
@@ -285,7 +250,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     println("+------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    # globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
     globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, 0.1, 0.1, elemType)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
@@ -298,8 +262,6 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
         ctr += 1
     end
     println("+------------------------------------+")
-
-    # println("Eigenvector length", length(structModeShapes))
 
     # --- Put BCs back ---
     for ii in 1:nModes
@@ -320,15 +282,16 @@ function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     """
     Write out the p-k flutter results
     """
+    # Store solutions here
+    workingOutput = outputDir * "pkFlutter/"
+    mkpath(workingOutput)
+
     true_eigs_r = FLUTTERSOL.eigs_r
     true_eigs_i = FLUTTERSOL.eigs_i
     R_eigs_r = FLUTTERSOL.R_eigs_r
     R_eigs_i = FLUTTERSOL.R_eigs_i
     iblank = FLUTTERSOL.iblank
     flowHistory = FLUTTERSOL.flowHistory
-    # Store solutions here
-    workingOutput = outputDir * "pkFlutter/"
-    mkpath(workingOutput)
 
     # --- Store eigenvalues ---
     fname = workingOutput * "eigs_r.jld2"
@@ -349,6 +312,7 @@ function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     # --- Store flow history ---
     fname = workingOutput * "flowHistory.jld2"
     save(fname, "data", flowHistory)
+
 end # end write_sol
 
 function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, outputDir="./OUTPUT/")
@@ -375,8 +339,6 @@ end # end function
 # ==============================================================================
 function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     """
-    DESCRIPTION
-
     This routine computes the eigenvector correlation matrix needed for associating converged eigenvectors
     This implementation is based on the van Zyl mode tracking method 1992. https://arc.aiaa.org/doi/abs/10.2514/3.46380
 
@@ -398,8 +360,6 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     N_old = size(old_r)[2] # ncols or the number of modes
     M_new = size(new_r)[1]
     N_new = size(new_r)[2]
-    # normOld = zeros(N_old)
-    # normNew = zeros(N_new)
     C = zeros(M_old, M_new)
 
     # ---------------------------
@@ -419,15 +379,10 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     # S1 S2 numerator
     # Dot product the arrays
     Ctmp = abs.(transpose(conj(old)) * new)
-    # println("Ctmp")
-    # show(stdout, "text/plain", Ctmp)
-    # println("") 
-    # Ctmp is ok
 
+    
     # Now normalize correlation matrix Ctmp and put into output matrix C
-
     # --- Set to zero first for Buffer ---
-    # C_z = Zygote.Buffer(C)
     for jj in 1:M_new # loop cols
         for ii in 1:M_old # loop rows
             C[ii, jj] = 0.0
@@ -438,26 +393,11 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
         for ii in 1:N_old # loop rows
             if Ctmp[ii, jj] == 0.0 || normOld[ii] < SolutionConstants.mepsLarge || normNew[jj] < SolutionConstants.mepsLarge # do not allow divide by zero
                 C[ii, jj] = 0.0
-                # C[ii, jj] = 0.0
             else
                 C[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
-                # C[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
             end
         end
     end
-
-    # C = copy(C_z)
-    # println(size(C))
-    # println("C")
-    # println("=====================================")
-    # show(stdout, "text/plain", C)
-    # println("\n=====================================")
-    # println("C_z")
-    # println("=====================================")
-    # show(stdout, "text/plain", copy(C_z))
-    # println("\n=====================================")
-    # # println(old)
-    # println(new)
 
     return C
 
@@ -465,16 +405,22 @@ end # end function
 
 function loop_corrMat(C, N_new)
     """
-    This loop finds the max element in the C matrix,
+    Function that loops and finds the max element in the C matrix,
     stores the row and column indices in mTmp and corrTmp,
     then zeros out the row and column in the C matrix to continue
+    
+    Inputs
+    ------
+        C - correlation matrix
+        N_new - number of eigenvectors in latest iteration
+    Outputs
+    -------
 
-    N_new - number of eigenvectors in latest iteration
     """
+    
+    # --- Initialize outputs ---
     corrTmp = zeros(N_new)
     mTmp = zeros(Int64, N_new, 2)
-    # corrTmp_z = Zygote.Buffer(corrTmp)
-    # mTmp_z = Zygote.Buffer(mTmp)
     for ii in 1:N_new
         mTmp[ii, 1] = 0
         mTmp[ii, 2] = 0
@@ -487,20 +433,8 @@ function loop_corrMat(C, N_new)
 
         # --- Find max value in correlation matrix and location ---
         maxI, maxJ, maxVal = SolverRoutines.maxLocArr2d(C_work)
-        # Now copy the C matrix into a Zygote buffer to allow mutation
-        # C_z = Zygote.Buffer(C_work)
-        # for jj in 1:size(C_work)[2]
-        #     for ii in 1:size(C_work)[1]
-        #         C_z[ii, jj] = C_work[ii, jj]
-        #     end
-        # end
 
         # --- Check if max value is zero ---
-        # println("maxVal")
-        # println(maxVal)
-        # println("maxI, maxJ")
-        # println(maxI)
-        # println(maxJ)
         if maxVal == 0.0
             isMaxValZero = false
         else
@@ -510,29 +444,27 @@ function loop_corrMat(C, N_new)
             # Store where previous eigenvector was in proper spot for current eigenvector
             mTmp[maxJ, 1] = maxI
 
-            # Now zero out corresponding row and column in correlation matrix
+            # Zero out corresponding row and col in correlation matrix
             for jj in 1:size(C_work)[2] # loop cols
                 C_work[maxI, jj] = 0.0
             end
             for ii in 1:size(C_work)[1] # loop rows
                 C_work[ii, maxJ] = 0.0
             end
-            # C_work = copy(C_z) # copy back to C for the next loop
 
         end
     end # end while
-    # mTmp = copy(mTmp_z)
-    # corrTmp = copy(corrTmp_z)
 
     return mTmp, corrTmp
 end
 
 function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i; nFlow=nothing, debug=false)
     """
-    This routine computes the correlation metrics based on previous and current eigenvectors
+    Computes the correlation metrics based on previous and current eigenvectors
     between dynamic pressure increments qᵢ and qᵢ₊₁
     It is a modification to the van Zyl method that should handle if new modes appear
-    by looking at the frequencies between modes (imag part of p)
+    by looking at the frequencies between modes (imag(p))
+
     Inputs
     ------
         old_r, old_i - the real/imaginary part of the old eigenvectors from previous iteration. The size is (Mold, Nold)
@@ -559,10 +491,6 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     corr = zeros(N_old)
     m = zeros(Int64, N_old, 2)
     newModesIdx = zeros(Int64, N_old)
-    # # --- Zygote init to zero ---
-    # m_z = Zygote.Buffer(m)
-    # corr_z = Zygote.Buffer(corr)
-    # newModesIdx_z = Zygote.Buffer(newModesIdx)
     for ii in 1:N_old
         m[ii, 1] = 0
         m[ii, 2] = 0
@@ -572,8 +500,6 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
 
     # Working matrices
     newModesIdxTmp = zeros(Int64, N_new)
-    # --- Zygote init to zero ---
-    # newModesIdxTmp_z = Zygote.Buffer(newModesIdxTmp)
     for ii in 1:N_new
         newModesIdxTmp[ii] = 0
     end
@@ -600,12 +526,9 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     mTmp, corrTmp = loop_corrMat(C, N_new)
 
     # --- Add indices for location of new eigenvector (column 2) ---
-    # mTmp_z = Zygote.Buffer(mTmp)
-    # mTmp_z[:, 1] = mTmp[:, 1]
     for ii in 1:N_new
         mTmp[ii, 2] = ii
     end
-    # mTmp = copy(mTmp_z)
 
     # --- Find zero and nonzero elements in correlation array ---
     # Then find how many each has
@@ -623,16 +546,10 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
         end
     end
 
-    # # --- Copy back ---
-    # newModesIdxTmp = copy(newModesIdxTmp_z)
-    # m = copy(m_z)
-    # corr = copy(corr_z)
-
     # --- Lower frequency modes missed? ---
     # Loop over all possible new modes and see if they are lower than some max
     nNewModes = 0
     maxVal = maximum(p_old_i) # maximum frequency from old modes
-    # println("number of new modes = ", nz) NOTE: This matches the nNewModes argument which is good
     # Loop over new modes
     for ii in 1:nz
         if (p_new_i[newModesIdxTmp[ii]] < maxVal / 2)
@@ -640,25 +557,15 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
             newModesIdx[nNewModes] = newModesIdxTmp[ii]
         end
     end
-    # newModesIdx = copy(newModesIdx_z)
-
-    # println("corr")
-    # println("==============================")
-    # show(stdout, "text/plain", corr)
-    # println("\n==============================")
-    # println("m")
-    # println("==============================")
-    # show(stdout, "text/plain", m)
-    # println("\n==============================")
-    # println("newModesIdx")
-    # println("==============================")
-    # show(stdout, "text/plain", newModesIdx)
 
 
     return corr, m, newModesIdx, nCorrelatedModes, nNewModes
 end # end function
 
-function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr, globalDOFBlankingList, N_MAX_Q_ITER, nModes, Mmat, Kmat; ΔdynP=nothing, Δu=nothing, debug=false)
+function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr, globalDOFBlankingList, 
+    N_MAX_Q_ITER, nModes, Mmat, Kmat; 
+    ΔdynP=nothing, Δu=nothing, debug=false
+    )
     """
     Non-iterative flutter solution following van Zyl https://arc.aiaa.org/doi/abs/10.2514/2.2806
     Everything from here on is based on the FORTRAN code written by Eirikur Jonsson.
@@ -696,6 +603,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
         velocity increment [m/s]
     debug: bool
         flag to print debug statements
+
     Outputs
     -------
     p_r, p_i: array, size(nModes)
@@ -730,8 +638,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     R_eigs_r = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     R_eigs_i = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank::Matrix{Int64} = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
-    # stores [velocity, density, dynamic pressure]
-    flowHistory = zeros(N_MAX_Q_ITER, 3)
+    flowHistory = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
 
 
     # ---------------------------
@@ -773,6 +680,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     NTotalModesFound::Int64 = 0 # total number of modes found over the entire simulation
     nCorrNewModes::Int64 = 0 # number of new modes to correlate
     is_failed = false
+
     # --- Zygote buffers ---
     p_r_z = Zygote.Buffer(p_r)
     p_i_z = Zygote.Buffer(p_i)
@@ -866,15 +774,12 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
         else # not first condition; apply mode tracking between flow speeds
             # --- Compute correlation matrix btwn dynP increments ---
             # Old eigenvectors
-            # old_r = R_eigs_r_tmp[:, :, nFlow-1]
-            # old_i = R_eigs_i_tmp[:, :, nFlow-1]
             old_r = R_eigs_r_tmp_z[:, :, nFlow-1]
             old_i = R_eigs_i_tmp_z[:, :, nFlow-1]
             # New eigenvectors
             new_r = R_cross_r[:, 1:kCtr]
             new_i = R_cross_i[:, 1:kCtr]
             # Eigenvalues
-            # p_old_i = p_i[:, nFlow-1]
             p_old_i = p_i_z[:, nFlow-1]
             p_new_i = p_cross_i[1:kCtr]
             # Declare local scope var so we can ignore the derivatives
@@ -891,8 +796,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
 
             # Compute difference between old and new modes
-            # inner = (p_r[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
-            #         (p_i[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
             inner = (p_r_z[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
                     (p_i_z[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
             tmp_z = Zygote.Buffer(tmp)
@@ -916,13 +819,10 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
             # Were there too many iterations w/o progress? Mode probably disappeared
             boolCheck = false # declare it as global for this scope
             if !(isnothing(ΔdynP))
-                # boolCheck = dynPTmp - flowHistory[nFlow-1, 3] < ΔdynP / 50
                 boolCheck = dynPTmp - flowHistory_z[nFlow-1, 3] < ΔdynP / 50
             elseif !(isnothing(Δu))
-                # boolCheck = U∞ - flowHistory[nFlow-1, 1] < Δu / 50
                 boolCheck = U∞ - flowHistory_z[nFlow-1, 1] < Δu / 50
             end
-            # println("nCorrNewModes: ", nCorrNewModes)
 
             if (boolCheck)
                 # Let's check the fail flag, if yes then accept
@@ -943,7 +843,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
                     is_failed = false
                 end
-                # println("nCorrNewModes: ", nCorrNewModes)
             end
 
             # Now we add in any new lower frequency modes that weren't correlated above
@@ -1020,11 +919,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
             # These are the eigenvectors of the modal reduced system
             R_eigs_r_tmp_z[:, m[1:nCorr, 1], nFlow] = R_eig_r_work
             R_eigs_i_tmp_z[:, m[1:nCorr, 1], nFlow] = R_eig_i_work
-            # println("R_eigs_r_tmp_z: ")
-            # show(stdout, "text/plain", R_eigs_r_tmp_z)
-
-
-            # println(true_eigs_i[m[1:nCorr, 1], nFlow])
 
             # --- Store flow history ---
             flowHistory_z[nFlow, 1] = U∞
@@ -1035,7 +929,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
             for idx in m[1:nCorr, 1]
                 iblank_z[idx, nFlow] = 1
-                # iblank[idx, nFlow] = 1
             end
 
             # --- Write values to file for debugging---
@@ -1128,10 +1021,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalModesFound, is_failed))
             end # end if
         end
-        # Uncomment here to debug
-        # return true_eigs_r, true_eigs_i, R_eigs_r_tmp, R_eigs_i_tmp, iblank, flowHistory # my breakpoint
+    end # end flow speed loop
 
-    end # end while (Flow speed loop)
     # --- Copy buffers ---
     p_r = copy(p_r_z)
     p_i = copy(p_i_z)
@@ -1141,7 +1032,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     R_eigs_i_tmp = copy(R_eigs_i_tmp_z)
     flowHistory = copy(flowHistory_z)
     iblank = copy(iblank_z)
-
 
     # Decrement flow index since it was incremented before exit
     nFlow -= 1
@@ -1182,7 +1072,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     # because the derivatives were only correct for nondim 'p'
     # return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
     return p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
-    # return p_r[:, 1]
 
 end # end function
 
@@ -1194,6 +1083,7 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
     MM - structural mass matrix (Nr, Nr)
     KK - structural stiffness matrix (Nr, Nr)
     Qr - modal matrix (dimwithBC, Nr)
+
     Outputs
     -------
         p_cross_r - unsorted eigenvalues [rad/s]
@@ -1208,7 +1098,7 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
     # --- Loop over reduced frequency search range to construct lines ---
     p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
-    if (debug) # && qiter > 52 && qiter < 54
+    if (debug) 
         ChainRulesCore.ignore_derivatives() do
             nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
             # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k
@@ -1261,7 +1151,6 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
             xlabel!("Re(p)")
             ylabel!("Im(p)")
             fname = @sprintf("./DebugOutput/RL-qiter-%03i.png", qiter)
-            # println("Saving figure to: ", fname)
             savefig(fname)
             # Plot all extracted kCrossings as a V-f
             scatter([U∞], [p_cross_i[1]], label="mode 1")
@@ -1279,7 +1168,6 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
             xlabel!("V [m/s]")
             ylabel!("Im(p)")
             fname = @sprintf("./DebugOutput/Vf-qiter-%03i.png", qiter)
-            # println("Saving figure to: ", fname)
             savefig(fname)
             # Plot all extracted kCrossings as a V-g
             scatter([U∞], [p_cross_r[1]], label="mode 1")
@@ -1297,17 +1185,14 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
             xlabel!("V [m/s]")
             ylabel!("Re(p)")
             fname = @sprintf("./DebugOutput/Vg-qiter-%03i.png", qiter)
-            # println("Saving figure to: ", fname)
             savefig(fname)
         end
     end
 
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
-    # return p_cross_r
 end # end function
 
 function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
-    # function sweep_kCrossings(dim, kSweep, b_ref, Λ, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
     """
     Solve the eigenvalue problem over a range of reduced frequencies (k)
 
@@ -1319,6 +1204,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         MM - structural mass matrix
         KK - structural stiffness matrix
         Qr - modal matrix
+
     Outputs
     -------
         p_eigs_r - unsorted eigenvalues of length ik [rad/s]
@@ -1329,6 +1215,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         ik - number of k's that were actually analyzed and accepted
 
         The result is 'nMode' sets of lines that the eigenvalue problem was solved for
+
     """
 
     Nr = size(Qr)[2]
@@ -1425,9 +1312,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
             # NOTE: this might not be a problem?
 
             # --- Order eigenvalues and eigenvectors based on correlation matrix ---
-            # p_r_tmp = p_r
             p_r = p_r_tmp[idxs]
-            # p_i_tmp = p_i
             p_i = p_i_tmp[idxs]
 
             R_aa_r = R_aa_r_tmp[:, idxs]
@@ -1437,7 +1322,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
             tmp_p_diff = sqrt.((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
             p_diff = maximum(real(tmp_p_diff))
             if (p_diff > p_diff_max)
-                # println("Failed, p_diff: ", p_diff, ", p_diff_max: ", p_diff_max)
                 failed = true
             end
         end
@@ -1450,12 +1334,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
             # k = 0.5 * (k - k_history[ik-1]) + k_history[ik-1]
             k = 0.5 * (k - k_history_z[ik-1]) + k_history_z[ik-1]
         else # Success
-            # Store solution
-            # p_eigs_r[:, ik] = p_r
-            # p_eigs_i[:, ik] = p_i
-            # R_eigs_r[:, :, ik] = R_aa_r
-            # R_eigs_i[:, :, ik] = R_aa_i
-            # k_history[ik] = k
             p_eigs_r_z[:, ik] = p_r
             p_eigs_i_z[:, ik] = p_i
             R_eigs_r_z[:, :, ik] = R_aa_r
@@ -1468,14 +1346,13 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
 
             # Check if we solved the matched Im(p) = k problem
             maxImP = maximum(real(p_i))
-            # if (maxImP < k_history[ik-1]) || (k > maxK)
             if (maxImP < k_history_z[ik-1]) || (k > maxK)
                 # Assumes highest mode does NOT cross Im(p) = k line from below later
                 # i.e. continue looping until the highest mode crosses the line or we reach maxK
                 keepLooping = false
-            end # if
+            end
 
-        end # if
+        end
 
     end # end while
 
@@ -1488,7 +1365,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     k_history = copy(k_history_z)
 
     return p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik
-    # return p_eigs_r[:, 1]
 end # end function
 
 function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik, N_MAX_K_ITER)
@@ -1505,6 +1381,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
         k_history - history of k values [rad/s]
         ik - number of k values
         N_MAX_K_ITER - maximum number of k iterations
+
     Outputs
     -------
         p_cross_r - unsorted eigenvalues that cross Im(p) = k line [rad/s]
@@ -1540,7 +1417,8 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
             # Check if we found a real root
             # If your flutter analyses are failing, this is probably why
-            if (k_history[jj] < SolutionConstants.p_i_tol) && (abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol) # SolutionConstants.mepsLarge # Real root
+            if (k_history[jj] < SolutionConstants.p_i_tol) && 
+                (abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol)
                 # There should be another real root coming up or we already processed
                 # one matching the zero freq
                 p_cross_r_z[ctr] = p_eigs_r[ii, jj]
@@ -1548,8 +1426,6 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
                 R_cross_r_z[:, ctr] = R_eigs_r[:, ii, jj]
                 R_cross_i_z[:, ctr] = R_eigs_i[:, ii, jj]
                 ctr += 1
-
-                # println("You found a real root!")
 
             elseif jj < ik # Always true except for last mode
                 # Get left and right points
@@ -1667,7 +1543,9 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # because I have broken up the generalized hydrodynamic forces in mass, damping, and stiffness matrices
     # As a result, the eigenvalue problem is technically in a modified 'Rodden' form that has fluid-added mass.
     nonDimFactor = (U∞ * cos(Λ) / b)
+
     if pkEqnType == "ng"
+
         # --- Form A matrix ---
         # A - real part
         firstRow = hcat(iMat, zeroMat)
@@ -1686,6 +1564,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
         B_i = vcat(firstRow, secondRow)
 
     elseif pkEqnType == "hassig"
+
         # Precompute quasi-steady AIC matrices
         qA_r = Cf_r + Kf_r
         qA_i = Cf_i + Kf_i
@@ -1707,6 +1586,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
         secondRow = hcat(qA_i, zeroMat)
 
     elseif pkEqnType == "rodden"
+
         # Precompute quasi-steady AIC matrices
         qA_r = Cf_r + Kf_r
         qA_i = Cf_i + Kf_i
@@ -1750,9 +1630,6 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     p_i = y[n+1:2*n]
     R_aa_r = reshape(y[2*n+1:2*n+n^2], n, n)
     R_aa_i = reshape(y[2*n+n^2+1:end], n, n)
-    # println("p_r new = ", p_r)
-    # println("p_i new = ", p_i)
-    # println("New iter")
 
     return p_r, p_i, R_aa_r, R_aa_i
 end # end solve_eigenvalueProblem
@@ -1776,11 +1653,6 @@ function compute_modalSpace(Ms, Ks; Cs=nothing, reducedSize=20)
 
     # --- Compute the modal space matrix ---
     _, ubar = SolverRoutines.compute_eigsolve(Ks, Ms, reducedSize)
-    # A = inv(Ms) * Ks
-    # y = SolverRoutines.cmplxStdEigValProb2(A, zeros(size(A)), 2* reducedSize)
-    # n = 2*reducedSize # stacking real and imag parts
-    # ubar = reshape(y[2*n+1:2*n+n^2], n, n)
-    # # R_aa_i = reshape(y[2*n+n^2+1:end], n, n)
     Qr = ubar
 
     # --- Compute the reduced matrices ---
@@ -1835,7 +1707,6 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
     pmG_z = Zygote.Buffer(pmG)
     pmG_z[1:NTotalModesFound, 1:nFlow] = p_r[1:NTotalModesFound, 1:nFlow]
     pmGTmp = zeros(Float64, nFlow) # working pmG for the mode
-    # pmGTmp_z = Zygote.Buffer(pmGTmp)
 
     # ************************************************
     #     Aggregate damping
@@ -1852,11 +1723,8 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
         #     pmG[modeIdx, subIdx[1:nFound]] -= G[subIdx[1:nFound]]
         # end
 
-        # pmGTmp_z[1:nFound] = copy(pmG_z[modeIdx, subIdx[1:nFound]])
         pmGTmp = copy(pmG_z[modeIdx, subIdx[1:nFound]])
 
-
-        # Aggregate for this mode
         ksTmp_z[modeIdx] = compute_KS(pmGTmp[1:nFound], ρKS)
     end
     ksTmp = copy(ksTmp_z)
@@ -1867,12 +1735,11 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
     obj = compute_KS(ksTmp, ρKS)
 
     ChainRulesCore.ignore_derivatives() do
-        println("ksrho = ", ρKS)
+        # println("ksrho = ", ρKS)
         println("ksTmp = ", ksTmp)
         println("obj = ", obj)
     end
 
-    # return obj
     return obj, pmG
 end
 
@@ -1953,7 +1820,15 @@ end
 function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
     """
     Wrapper to compute the total sensitivities for this evalFunc
+
+    Outputs
+    -------
+        funcsSens - sensitivities of the cost funcs. Dict
     """
+
+    println("===================================================================================================")
+    println("        FLUTTER SENSITIVITIES: ",mode)
+    println("===================================================================================================")
 
     # Initialize output dictionary
     funcsSens = Dict()
@@ -1980,11 +1855,9 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     elseif mode == "RAD" # use automatic differentiation via Zygote
 
-
         sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
                 cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
             DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"])
-
         # --- Order the sensitivities properly ---
         funcsSens["α₀"] = sensitivities[1]
         funcsSens["Λ"] = sensitivities[2]
@@ -2012,6 +1885,6 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     return funcsSens
 
-end # end evalFuncsSens
+end 
 
 end # end module

@@ -75,20 +75,6 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    # # Get transformation matrix for the tip load
-    # angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
-    # axisDefault = "z"
-    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    # T = T1
-    # transMatL2G = [
-    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-    #     ]
-    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
 
     # ---------------------------
     #   Apply BC blanking
@@ -127,8 +113,13 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ************************************************
     f_ctr = 1
     for f in fSweep
-        println("Solving for frequency: ", f, "Hz")
+
+        if f_ctr % 20 == 1 # header every 10 iterations
+            println("Forcing: ", f, "Hz")
+        end
+
         ω = 2π * f # circular frequency
+
         # ---------------------------
         #   Assemble hydro matrices
         # ---------------------------
