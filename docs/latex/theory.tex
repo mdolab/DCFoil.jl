@@ -1,8 +1,12 @@
 \documentclass[9pt]{article}
-\usepackage{times,cleveref}
 \usepackage{siunitx,gensymb} % gensym gives degree
-\usepackage{natbib}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}
+\usepackage[numbers]{natbib}
 \usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[bookmarks=true,bookmarksnumbered=true,colorlinks=false]{hyperref}
+\usepackage{cleveref}
 \usepackage[margin=1in]{geometry}
 \usepackage[compact]{titlesec}
 
@@ -97,7 +101,100 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 \section{Discretization}
 \subsection{Structural beam model}
 \subsection{Hydrodynamic loads}
+% 
+The lifting line model derives from~\citet[Ch. XI]{Glauert1983a} and works for arbitrary chord.
+Specifically, we are after sectional lift slopes ($\textstyle c_{\ell_\alpha} = dc_\ell/d\alpha = a_0$).
+We assume
+\begin{itemize}
+    \item the chord is small compared to the span,
+    \item the wing is symmetric about the centerline,
+    \item span is straight and orthogonal to the freestream
+    \item trailing vortices are shed from the trailing edge and align with the freestream
+\end{itemize}
+The wing is represented by superimposing ``horseshoe'' systems of vortex lines (analagous to a wire with electrical current).
+This is because the circulation across a wing is not constant.
+The free vortex system is a sheet of trailing vortices springing from the trailing edge.
+The induced velocity of an element of the line ($ds$) at point $P$ from one vortex line of constant strength $\Gamma$ is
+\be
+dq = \frac{\Gamma}{4 \pi r^2} \sin(\theta) ds
+\ee
+but in practice, one would solve this is an integral over the entire vortex line, so we will build up to the full wing.
 
+% We know the forces to be
+% \begin{align}
+%      & L = \int_{-s/2}^{s/2} \rho \Uinf \Gamma(y) dy          \\
+%      & D_i = \int_{-s/2}^{s/2} \rho \Uinf w(y)  \Gamma(y) dy
+% \end{align}
+% where $s$ is total span.
+To begin solution, we first assume the circulation is the Fourier series\footnote{\citet{Kerwin2010} use $\tilde{y}$ as $\theta$}
+\be
+\Gamma(y) = 2 \Uinf s \sum_{n=1}^{\infty} a_n \sin \left( n \theta \right)
+\quad \tn{where }
+y = -\frac{s}{2}\cos(\theta)
+\quad \tn{and }
+\theta \in \left[-\frac{\pi}{2},\frac{\pi}{2}\right]
+.
+\ee
+The difficulty is now determining the Fourier coefficients $a_n$ so we need some relations for $\Gamma(y)$ to solve it.
+
+One relation is the equation for the normal induced velocity (downwash velocity) at a point along the span
+\be
+\label{eq:downwash}
+w(y) = \frac{1}{4\pi}
+\int_{-s/2}^{s/2} \frac{\dd{\Gamma}{\eta} }{y - \eta} d\eta
+=
+\boxed{
+    -\Uinf \sum_{n=1}^{\infty} \frac{n a_n \sin \left( n \theta \right)}{\sin(\theta)}
+}
+\ee
+where $\eta$ is the spanwise coordinate and $s$ is total span.
+We skipped a few steps in the derivation~\cite[Sec.~3.7]{Kerwin2010}.
+
+The second relation is from sectional lift as a function of circulation.
+Recall that the circulation at a section (derived from Kutta-Joukowski lift theorem) is
+\be
+\label{eq:circulation}
+\Gamma(y) = \half c_\ell c \Uinf
+=\half a_0 c \left(\Uinf \alpha - w(y)\right)
+\ee
+where we made use of $c_\ell = a_0 \alpha_{\tn{eff}} = a_0 \left(\alpha - w/\Uinf\right)$.
+After substitution of the Fourier series form and combining Equations~\eqref{eq:downwash} and~\eqref{eq:circulation}, we end up with
+\be
+\label{eq:circulation2}
+\sum_{n=1}^{\infty} a_n \sin(n\theta) \left(n\mu + \sin(\theta)\right)
+=
+\mu \alpha \sin(\theta)
+\quad \tn{where }\mu(\theta) = \frac{a_0 c(\theta)}{ 4 s}
+\ee
+
+Here's the digestion of the Julia code which does the numerical solution of Equation~\eqref{eq:circulation2} but symmetrically about the centerline.
+\begin{align*}
+     & \tilde{y} = \left[
+        0,\frac{\pi}{2}
+        \right] \quad \tn{of size nNodes}
+    \\
+     & \mbf{n} = \left[1:2:2\times\tn{nNodes}\right]
+    \\
+     & \mbf{c} = c  \sin(\tilde{y}) \quad \tn{(parametrized vector leading to elliptical planform)}
+    \\
+     & \mbf{b} = \frac{\pi}{4} \frac{\mbf{c}}{s/2} \alpha \sin(\tilde{y}) \quad \tn{(RHS of Equation~\eqref{eq:circulation2} in vector form)}
+    \\
+     & \tilde{y}n = \tilde{y} \otimes \mbf{n} \quad \tn{(outer product)}
+    \\
+     & \mbf{A_0} = \begin{bmatrix}
+                       |               & |                        \\
+                       \sin(\tilde{y}) & \sin(\tilde{y}) & \cdots \\
+                       |               & |
+                   \end{bmatrix} \quad \tn{(square matrix of $\sin(\tilde{y})$)}
+    \\
+     & \mbf{A_1} = \frac{\pi}{4} \frac{\mbf{c}}{s/2} \otimes \mbf{n} \quad \tn{(outer product representing $n\mu$ on LHS)}
+    \\
+     & \mbf{A} = \sin(\tilde{y} n ) \odot \left( \mbf{A_0}+\mbf{A_1} \right)                                                                  \\
+     & \mbf{A}\mbf{x} = \mbf{b} \quad \tn{(solve linear system for $\mbf{x} = a_n$)}                                                          \\
+     & \Gamma(y) = 4 \Uinf s/2 \left(\underbrace{\sin(\tilde{y}n)\mbf{x} }_{\tn{mat-vec product}} \right)                                     \\
+     & c_\ell = \frac{2\Gamma(y)}{\Uinf {c}}                                                                                                  \\
+     & c_{\ell_{\alpha}} = \frac{c_\ell}{\alpha}
+\end{align*}
 %------------------------------------------------------------------------------
 \section{Static solution}
 
@@ -106,5 +203,7 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 
 %------------------------------------------------------------------------------
 \section{Flutter solution}
+
+\bibliography{./gng-link,./mdolab-link}
 
 \end{document}
