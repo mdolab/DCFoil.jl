@@ -427,7 +427,7 @@ solverOptions = Dict(
     "run_modal" => false,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [180.0, 190.0],
+    "uRange" => [170.0, 190.0],
     "maxQIter" => 100,
     "rhoKS" => 80.0,
 )

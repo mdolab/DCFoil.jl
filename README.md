@@ -8,8 +8,8 @@ Dynamic Composite Foil (DCFoil) in Julia
 
 We test for `macOS-latest` and `Ubuntu-latest`.
 
-v1.7.3 (stable)
-v1.9.0 (latest)
+v1.9.0 (stable)
+v1.9.3 (latest)
 
 ## Get started
 
@@ -29,7 +29,7 @@ and all the dependencies in the `Project.toml` should be queued to compile at ru
 You can double-check that all the right packages are present with `status` in the Pkg REPL.
 You may need to type into the Pkg REPL
 
-`instantiate()`
+`instantiate`
 
 Now you are ready to run the solver in the Julia REPL with
 
@@ -60,9 +60,10 @@ Please use this coding convention:
 #### Adding new cost functions or design variables
 
 * For the given solver you're adding the DV or cost func to, check its `.evalFuncsSens()`
+
 #### Try not to do this
 
-* `LinRange()` because it isn't easily differentiated. Do something like `start:step:end`
+* `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`
 * Mutating arrays
 
 ### Package Dependencies
@@ -79,7 +80,7 @@ to keep the version of the package static.
 To update all dependencies (be careful with this in case it breaks tests)
 
 ```
-Pkg.update(level=UPLEVEL_PATCH)
+Pkg.update()
 ```
 
 Use `Pkg.rm("<module-name>")` to remove a package.
@@ -117,5 +118,6 @@ run_tests.jl
 ```
 
 ## Citation
+
 TODO: paper links
 For more, see the formal documentation <> and journal paper
