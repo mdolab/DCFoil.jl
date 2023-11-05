@@ -5,7 +5,7 @@
 \usepackage[numbers]{natbib}
 \usepackage{graphicx}
 \usepackage{xcolor}
-\usepackage[bookmarks=true,bookmarksnumbered=true,colorlinks=false]{hyperref}
+\usepackage[bookmarks=true,bookmarksnumbered=true,hidelinks]{hyperref}
 \usepackage{cleveref}
 \usepackage[margin=1in]{geometry}
 \usepackage[compact]{titlesec}
@@ -88,7 +88,14 @@
 \section*{Summary}
 % 
 DCFoil is a program for the dynamic analysis and design optimization of composite hydrofoils.
-
+\begin{figure}[htbp!]
+\centering
+      % reference: trim={<left> <lower> <right> <upper>}
+      \includegraphics[width=0.7\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{keel-dcfoil.pdf}
+      \caption{\label{fig:keel-dcfoil}
+      DCFoil modeling approach
+      }
+\end{figure}
 
 \clearpage
 \tableofcontents
@@ -102,6 +109,7 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 \subsection{Structural beam model}
 \subsection{Hydrodynamic loads}
 % 
+\subsubsection{Steady lifting line}
 The lifting line model derives from~\citet[Ch. XI]{Glauert1983a} and works for arbitrary chord.
 Specifically, we are after sectional lift slopes ($\textstyle c_{\ell_\alpha} = dc_\ell/d\alpha = a_0$).
 We assume
@@ -195,6 +203,128 @@ Here's the digestion of the Julia code which does the numerical solution of Equa
      & c_\ell = \frac{2\Gamma(y)}{\Uinf {c}}                                                                                                  \\
      & c_{\ell_{\alpha}} = \frac{c_\ell}{\alpha}
 \end{align*}
+
+\subsubsection{Extension to unsteady frequency domain}
+% 
+We are interested in the sectional lift and moments for a harmonically oscillating body.
+\citet{Theodorsen:1934} came up with the Theodorsen function $C(k)$ to account for the lag and deficit in forces.
+It is applied as a transfer function to the static hydrodynamics.
+\begin{eqnarray}
+    \label{eqn:GenFluidTheod}
+    \left\{\begin{matrix}
+        F_z \\
+        M_y
+    \end{matrix}\right\}_i =
+    -
+    \left(
+    \left[
+        \mbf{m_f}
+        \left\{
+        \begin{matrix}
+            \ddot{w} \\
+            \ddot{\psi}
+        \end{matrix}
+        \right\}
+        \right]_i
+    +
+    \left[
+        \mbf{c_f}
+        \left\{\begin{matrix}\dot{w} \\ \dot{\psi} \end{matrix}\right\}
+        \right]_i
+    +
+    \left[
+        \mbf{k_f}
+        \left\{\begin{matrix}w \\ \psi + \alpha_0 \end{matrix}\right\}
+        \right]_i
+        +
+    \left[
+        \mbf{\hat{c}_f}
+        \left\{\begin{matrix}\dot{w}' \\ \dot{\psi}' \end{matrix}\right\}
+        \right]_i
+    +
+    \left[
+        \mbf{\hat{k}_f}
+        \left\{\begin{matrix}w' \\ \psi' \end{matrix}\right\}
+        \right]_i
+    \right)
+    \Delta y_i
+\end{eqnarray}
+where $\Delta y_i$ is the strip width at node $i$, which we assume to be equal to element length.
+% 
+\begin{equation}
+    \label{eqn:FluidMass}
+    \mbf{m_f} = \pi \rho_f b^2 \begin{bmatrix}
+        1  & ab                                \\
+        ab & b^2\left(\frac{1}{8} + a^2\right)
+    \end{bmatrix}
+\end{equation}
+%
+\begin{equation}
+    \label{eqn:FluidDamp}
+    \mbf{c_f}(k) =
+    \frac{1}{2}\rho_f b U_0
+    \left(
+        \begin{aligned}
+            \cos(\Lambda)
+            \begin{bmatrix}
+                \vspace{3mm}c_{\ell_{\alpha}} 2 C(k) & -b \left[2 \pi + c_{\ell_{\alpha}} (1-2a) C (k)\right]     \\
+                c_{\ell_{\alpha}} eb 2C(k)           & \frac{b}{2} (1-2a)(2 \pi b - c_{\ell_{\alpha}} 2 eb C (k))
+            \end{bmatrix}
+            % + \\
+            % \sin(\Lambda)\frac{\partial}{\partial y}
+            % \begin{bmatrix}
+            %     \vspace{3mm}2 \pi b & 2 \pi ab^2                           \\
+            %     2\pi ab^2           & 2\pi b^3\left(\frac{1}{8}+a^2\right)
+            % \end{bmatrix} % NOTE: this is a repeat of what is in c_f
+        \end{aligned}
+    \right)
+\end{equation}
+%
+\begin{equation}
+    \label{eqn:FluidStiff}
+    \mbf{k_f}(k) = \frac{1}{2}\rho_f U_0^2 \cos(\Lambda)
+    \left(
+    \begin{aligned}
+            \cos(\Lambda)
+            \begin{bmatrix}
+                0 & -C(k)2b c_{\ell_{\alpha}}     \\
+                0 & -2eb^2 c_{\ell_{\alpha}} C(k)
+            \end{bmatrix}
+        \end{aligned}
+    \right)
+\end{equation}
+%
+\be
+\label{eqn:FluidSweep}
+\mbf{\hat{c}_f}(k) =
+\frac{1}{2}\rho_f b U_0
+\sin(\Lambda)
+\left(
+\begin{aligned}
+        \begin{bmatrix}
+            \vspace{3mm}2 \pi b & 2 \pi ab^2                           \\
+            2\pi ab^2           & 2\pi b^3\left(\frac{1}{8}+a^2\right)
+        \end{bmatrix}
+    \end{aligned}
+    \right)
+    \ee
+    %
+\begin{eqnarray}
+\mbf{\hat{k}_f}(k) =
+\frac{1}{2}\rho_f b U_0
+\sin(\Lambda)
+\left(
+\begin{aligned}
+    U_0 \cos(\Lambda)
+        \begin{bmatrix}
+            \vspace{3mm} c_{\ell_{\alpha}}2 C (k) & - c_{\ell_{\alpha}} b (1-2a)C(k)          \\
+            2ebc_{\ell_{\alpha}} C (k)            & \pi b^2  -c_{\ell_{\alpha}}eb^2(1-2a)C(k)
+        \end{bmatrix}
+    \end{aligned}
+    \right)
+\end{eqnarray}
+% 
+The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady (damping and stiffness) aerodynamics and are lumped into their respective global matrices if they are in phase with velocity or displacements.
 %------------------------------------------------------------------------------
 \section{Static solution}
 
@@ -203,6 +333,66 @@ Here's the digestion of the Julia code which does the numerical solution of Equa
 
 %------------------------------------------------------------------------------
 \section{Flutter solution}
+\subsubsection{Mode space reduction}
+%
+To reduce the problem size, we use mode space reduction to a reduced set of $N_r$ generalized coordinates.
+The displacement field is approximated by
+%
+\be
+\mbf{u} \approx \mbf{Q}_r(y) \mbf{q}(t)
+\ee
+%
+where $\mbf{q} \in \mathbb{R}^{N_r}$ is a vector of retained generalized coordinates and $\mbf{Q}_r \in \mathbb{R}^{N_s \times N_r}$ is a matrix with columns corresponding to eigenvectors.
+This is typically called the normal mode method.
+One then solves the eigenvalue problem
+%
+\be
+\left( \mbf{K_s} - \omega_i^2 \mbf{M_s}
+\right)
+\widebar{  \mbf{u} }_i = 0
+\ee
+%
+where $\omega_i$ is the natural frequency.
+We compute $\widebar{  \mbf{u} }_i$ and collect them in the matrix
+%
+\be
+\mathbf{Q}_r=\left[\begin{array}{cccc}
+        \mid                    & \mid                    &        & \mid                        \\
+        \overline{\mathbf{u}}_1 & \overline{\mathbf{u}}_2 & \cdots & \overline{\mathbf{u}}_{N_r} \\
+        \mid                    & \mid                    &        & \mid
+    \end{array}\right]
+.
+\ee
+%
+Now the reduced stiffness and mass matrices are
+%
+\be
+\mbf{M_s}_r = \mbf{Q}_r^T \mbf{M_s} \mbf{Q}_r = \mbf{I}_r \in \mathbb{R}^{N_r \times N_r} \\
+\mbf{K_s}_r = \mbf{Q}_r^T \mbf{K_s} \mbf{Q}_r = \tn{diag}\left[ \omega_i^2   \right]
+\ee
+%
+and the governing equation reduces to
+%
+\be
+\mbf{M_s}_r \ddot{\mbf{q}} + \mbf{C_s}_r \ddot{\mbf{q}} + \mbf{K_s}_r \mbf{q} - \mbf{Q}_r^T \mbf{f}_{\tn{hydro}} = \mbf{0}
+\ee
+%
+
+To apply this to the hydrodynamic loads, we obtain from Equation~\eqref{eqn:GenFluid}
+%
+\be
+\mbf{f}_{\tn{hydro},r} =
+-\left( \mbf{M_f}_r \ddot{\mbf{u}} + \mbf{C_f}_r \dot{\mbf{u}} + \mbf{K_f}_r \mbf{u}\right)
+\ee
+%
+where the matrices are
+%
+\be
+\mbf{M_f}_r = \mbf{Q}_r^T \mbf{M_f} \mbf{Q}_r \\
+\mbf{C_f}_r = \mbf{Q}_r^T \mbf{C_f} \mbf{Q}_r \\
+\mbf{K_f}_r = \mbf{Q}_r^T \mbf{K_f} \mbf{Q}_r.
+\ee
+Note, since cavitating flow leads to non-symmetric matrices, we cannot do all the simplifications \citet{Jonsson2017a} uses.
 
 \bibliography{./gng-link,./mdolab-link}
 

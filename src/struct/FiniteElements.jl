@@ -4,6 +4,9 @@
 @Time    :   2022/08/04
 @Author  :   Galen Ng
 @Desc    :   Finite element library
+
+# KNOWN BUGS:
+    span derivative may result in array size being wrong
 """
 
 # ==============================================================================
@@ -700,7 +703,7 @@ global XDIM = 1
 global YDIM = 2
 global ZDIM = 3
 
-function make_mesh(nElem::Int64, span; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
+function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
     """
     Makes a mesh and element connectivity
     First element is always origin (x,y,z) = (0,0,0)
@@ -730,7 +733,9 @@ function make_mesh(nElem::Int64, span; config="wing", rotation=0.000, nElStrut=0
     if config == "wing"
         # Set up a line mesh
         dl = span / (nElem) # dist btwn nodes
-        mesh_z[:, YDIM] = collect((0:dl:span))
+        # println("span",span)
+        # println("dl",dl)
+        mesh_z[:, YDIM] = collect((0.0:dl:span))
         for nodeIdx in 1:nElem+1 # loop nodes and rotate
             mesh_z[nodeIdx, :] = rotate3d(mesh_z[nodeIdx, :], rot; axis="x")
         end
@@ -873,13 +878,9 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     globalK_z = Zygote.Buffer(globalK)
     globalM_z = Zygote.Buffer(globalM)
     globalF_z = Zygote.Buffer(globalF)
-    for jj in 1:nnd*nNodes
-        globalF_z[jj] = 0.0
-        for ii in 1:nnd*nNodes
-            globalK_z[jj, ii] = 0.0
-            globalM_z[jj, ii] = 0.0
-        end
-    end
+    globalK_z[:,:] = globalK
+    globalM_z[:,:] = globalM
+    globalF_z[:] = globalF
     for elemIdx ∈ 1:nElem
         # ---------------------------
         #   Extract element info

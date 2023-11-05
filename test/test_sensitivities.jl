@@ -354,24 +354,24 @@ function test_pkflutterderiv(DVDict, solverOptions)
 
     @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
     @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-    @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+    # @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 
 
-    # Print it out
-    for (key, val) in funcsSensFD
-        save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
-        save("RAD" * key * ".jld2", "derivs", funcsSensAD)
-        println("AD: ", key, " = ", val)
-        println("FD: ", key, " = ", funcsSensFD[key])
+    # # Print it out
+    # for (key, val) in funcsSensFD
+    #     save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
+    #     save("RAD" * key * ".jld2", "derivs", funcsSensAD)
+    #     println("AD: ", key, " = ", val)
+    #     println("FD: ", key, " = ", funcsSensFD[key])
 
-        if val != nothing
-            if maximum(funcsSensFD[key] - val) > 1e-3
-                println("Possibly bad derivative: ", key)
-                println("Abs difference btwn FD and AD: ", funcsSensFD[key] - val)
-                println("Check FD step size")
-            end
-        end
-    end
+    #     if val !== nothing
+    #         if maximum(funcsSensFD[key] - val) > 1e-3
+    #             println("Possibly bad derivative: ", key)
+    #             println("Abs difference btwn FD and AD: ", funcsSensFD[key] - val)
+    #             println("Check FD step size")
+    #         end
+    #     end
+    # end
 
     return 0.0
 
@@ -387,7 +387,7 @@ end
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-nNodes = 4
+nNodes = 10
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
@@ -427,7 +427,7 @@ solverOptions = Dict(
     "run_modal" => false,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [187.0, 190.0],
+    "uRange" => [180.0, 190.0],
     "maxQIter" => 100,
     "rhoKS" => 80.0,
 )
@@ -437,6 +437,8 @@ using BenchmarkTools
 using TimerOutputs
 using Profile
 
+test_pkflutterderiv(DVDict, solverOptions)
 @profview test_pkprofile(DVDict, solverOptions)
+# Zygote.@profile test_pkprofile(DVDict, solverOptions) # this doesn't work
 Profile.clear() # run to clear compilation stuff
 

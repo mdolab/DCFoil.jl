@@ -75,10 +75,10 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
         nDOF = 4
         nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
         staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
-        # staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+    # staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
     elseif elemType == "COMP2"
         nDOF = 9
-        staticOffset =[ 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+        staticOffset = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
     end
 
     # ---------------------------
@@ -645,10 +645,9 @@ function get_transMat(dR, l, elemType="BT2")
     T = [
         calpha*cbeta salpha calpha*sbeta
         -salpha*cbeta calpha -salpha*sbeta
-        -sbeta 0 cbeta
+        -sbeta 0.0 cbeta
     ]
     Z = zeros(3, 3)
-    # writedlm("DebugT.csv", T, ',')
 
     if elemType == "BT2"
         # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
@@ -683,24 +682,23 @@ function get_transMat(dR, l, elemType="BT2")
             Z Z Z Z T Z
             Z Z Z Z Z T
         ]
-        # Γ = Matrix(I, 18, 18)
     else
         error("Unsupported element type")
     end
 
-    # --- Cleanup transformation matrix ---
-    Γ_z = Zygote.Buffer(Γ)
-    for ii in eachindex(Γ[:, 1]) # rows
-        for jj in eachindex(Γ[1, :]) # cols
-            if abs(Γ[ii, jj]) < 1e-16
-                Γ_z[ii, jj] = 0.0
-            else
-                Γ_z[ii, jj] = Γ[ii, jj]
-            end
-        end
-    end
-    Γ = copy(Γ_z)
-    # show(stdout, "text/plain", Γ)
+    # # --- Cleanup transformation matrix ---
+    # Γ_z = Zygote.Buffer(Γ)
+    # Γ_z[:,:] = Γ
+    # # for ii in eachindex(Γ[:, 1]) # rows
+    # #     for jj in eachindex(Γ[1, :]) # cols
+    # #         if abs(Γ[ii, jj]) < 1e-16
+    # #             Γ_z[ii, jj] = 0.0
+    # #         else
+    # #             Γ_z[ii, jj] = Γ[ii, jj]
+    # #         end
+    # #     end
+    # # end
+    # Γ = copy(Γ_z)
     return Γ
 end
 # ==============================================================================

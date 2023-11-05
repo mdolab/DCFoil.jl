@@ -22,6 +22,7 @@ using Zygote, ChainRulesCore
 using Printf, DelimitedFiles
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
+using SparseArrays
 
 # --- Globals ---
 global XDIM = 1
@@ -313,12 +314,13 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
 
     n = (1:1:nNodes) * 2 - ones(nNodes) # node numbers x2 (node multipliers)
 
-    b = π / 4 * (chordₚ / semispan) * α₀ .* sin.(ỹ) # RHS vector
+    mu = π / 4 * (chordₚ / semispan)
+    b = mu * α₀ .* sin.(ỹ) # RHS vector
 
     ỹn = ỹ .* n' # outer product of ỹ and n, matrix of [0, π/2]*node multipliers
 
     sinỹ_mat = repeat(sin.(ỹ), outer=[1, nNodes]) # parametrized square matrix where the columns go from 0 to 1
-    chord_ratio_mat = π / 4 * chordₚ / semispan .* n' # outer product of [0,...,tip chord-semispan ratio] and [1:2:nNodes*2-1] so the columns are the chord-span ratio vector times node multipliers with π/4 in front
+    chord_ratio_mat = mu .* n' # outer product of [0,...,tip chord-semispan ratio] and [1:2:nNodes*2-1] so the columns are the chord-span ratio vector times node multipliers with π/4 in front
 
     chord11 = sin.(ỹn) .* (chord_ratio_mat + sinỹ_mat) #matrix-matrix multiplication to get the [A] matrix
 
@@ -338,7 +340,6 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes, h=nothing
     dl = semispan / (nNodes - 1)
     xq = -semispan:dl:0
 
-    # TODO: THERE IS A BUG ON THIS LINE THAT MAKES THE DERIVATIVES WRT SPAN FOR THE WHOLE CODE WRONG
     cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
     # If this is fully ventilated, can divide the slope by 4
 
@@ -404,27 +405,30 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     """
     Hydrodynamic stiffness force
     """
+    # --- Precomputes ---
     qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
-    a = ab / b # precompute division by b to get a
-
+    a = ab / b 
+    clambda = cos(Λ)
+    slambda = sin(Λ)
     # Aerodynamic quasi-steady stiffness
     # (1st row is lift, 2nd row is pitching moment)
 
+
     k_hα = -2 * b * clα * Ck # lift due to angle of attack
     k_αα = -2 * eb * b * clα * Ck # moment due to angle of attack (disturbing)
-    K_f = qf * cos(Λ) * cos(Λ) *
+    K_f = qf * clambda * clambda *
           [
               0.0 k_hα
               0.0 k_αα
           ]
 
     # Sweep correction to aerodynamic quasi-steady stiffness
-    e_hh = U∞ * cos(Λ) * 2 * clα * Ck
-    e_hα = U∞ * cos(Λ) * (-clα) * b * (1 - a) * Ck
-    e_αh = U∞ * cos(Λ) * clα * b * (1 + a) * Ck
-    e_αα = U∞ * cos(Λ) *
+    e_hh = U∞ * clambda * 2 * clα * Ck
+    e_hα = U∞ * clambda * (-clα) * b * (1 - a) * Ck
+    e_αh = U∞ * clambda * clα * b * (1 + a) * Ck
+    e_αα = U∞ * clambda *
            (π * b * b - clα * eb * b * (1 - 2 * (a)) * Ck)
-    K̂_f = qf / U∞ * sin(Λ) * b *
+    K̂_f = qf / U∞ * slambda * b *
            [
                e_hh e_hα
                e_αh e_αα
@@ -437,8 +441,12 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     """
     Fluid-added damping matrix
     """
+    # --- Precomputes ---
     qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
-    a = ab / b # precompute division by b to get a
+    a = ab / b
+    clambda = cos(Λ)
+    slambda = sin(Λ)
+    coeff = qf / U∞ * b
 
     # Aerodynamic quasi-steady damping
     # (1st row is lift, 2nd row is pitching moment)
@@ -446,7 +454,7 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     c_hα = -b * (2π + clα * (1 - 2 * a) * Ck)
     c_αh = 2 * eb * clα * Ck
     c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
-    C_f = qf / U∞ * cos(Λ) * b *
+    C_f = coeff*clambda *
           [
               c_hh c_hα
               c_αh c_αα
@@ -455,11 +463,82 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     # Sweep correction to aerodynamic quasi-steady damping
     e_hh = 2π * b
     e_hα = 2π * ab * b
-    e_αh = 2π * ab * b
+    e_αh = e_hα
     e_αα = 2π * b^3 * (0.125 + a * a)
-    Ĉ_f = qf / U∞ * sin(Λ) * b *
+    Ĉ_f = coeff * slambda *
            [
                e_hh e_hα
+               e_αh e_αα
+           ]
+
+    return C_f, Ĉ_f
+end
+
+function compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda,slambda, rho_f, Ck)
+    """
+    Hydrodynamic stiffness force
+    """
+    # --- Precomputes ---
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b 
+    Uclambda = U∞ * clambda
+    clalphabCk = clα * b * Ck
+    # Aerodynamic quasi-steady stiffness
+    # (1st row is lift, 2nd row is pitching moment)
+
+
+    k_hα = -2 * b * clα * Ck # lift due to angle of attack
+    k_αα = k_hα * eb # moment due to angle of attack (disturbing)
+    K_f = qf * clambda * clambda *
+          [
+              0.0 k_hα;
+              0.0 k_αα
+          ]
+
+    # Sweep correction to aerodynamic quasi-steady stiffness
+    e_hh = Uclambda * 2 * clα * Ck
+    e_hα = Uclambda * (1 - a) * (-clalphabCk)
+    e_αh = Uclambda * (1 + a) * clalphabCk
+    e_αα = Uclambda *
+           (π * b * b - clalphabCk * eb * (1 - 2 * (a)))
+    K̂_f = qf / U∞ * slambda * b *
+           [
+               e_hh e_hα;
+               e_αh e_αα
+           ]
+
+    return K_f, K̂_f
+end
+
+function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f, Ck)
+    """
+    Fluid-added damping matrix
+    """
+    # --- Precomputes ---
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    coeff = qf / U∞ * b
+
+    # Aerodynamic quasi-steady damping
+    # (1st row is lift, 2nd row is pitching moment)
+    c_hh = 2 * clα * Ck
+    c_hα = -b * (2π + clα * (1 - 2 * a) * Ck)
+    c_αh = 2 * eb * clα * Ck
+    c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
+    C_f = coeff*clambda *
+          [
+              c_hh c_hα;
+              c_αh c_αα
+          ]
+
+    # Sweep correction to aerodynamic quasi-steady damping
+    e_hh = 2π * b
+    e_hα = 2π * ab * b
+    e_αh = e_hα
+    e_αα = 2π * b^3 * (0.125 + a * a)
+    Ĉ_f = coeff * slambda *
+           [
+               e_hh e_hα;
                e_αh e_αα
            ]
 
@@ -470,15 +549,17 @@ function compute_node_mass(b, ab, rho_f)
     """
     Fluid-added mass matrix
     """
+    # --- Precomputes ---
     bSquared = b * b # precompute square of b
     a = ab / b # precompute division by b to get a
-    m_hh = 1
+
+    m_hh = 1.0
     m_hα = ab
     m_αh = ab
     m_αα = bSquared * (0.125 + a * a)
     M_f = π * rho_f * bSquared *
           [
-              m_hh m_hα
+              m_hh m_hα;
               m_αh m_αα
           ]
 
@@ -705,7 +786,7 @@ function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, e
             # ---------------------------
             # Aerodynamics need to happen in global reference frame
             Γ = SolverRoutines.get_transMat(nVec, 1.0, elemType)
-            AICLocal = Γ'[1:nLocDOF,1:nLocDOF] * AICLocal * Γ[1:nLocDOF,1:nLocDOF]
+            AICLocal = Γ'[1:nLocDOF, 1:nLocDOF] * AICLocal * Γ[1:nLocDOF, 1:nLocDOF]
 
             # Add local AIC to global AIC and remember to multiply by strip width to get the right result
             # AIC[GDOFIdx:GDOFIdx+nDOF-1, GDOFIdx:GDOFIdx+nDOF-1] = AICStrip * Δy
@@ -763,15 +844,14 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
     globalKf_r_z = Zygote.Buffer(zeros(dim, dim))
     globalKf_i_z = Zygote.Buffer(zeros(dim, dim))
     # Zygote initialization
-    for jj in 1:dim
-        for ii in 1:dim
-            globalMf_z[ii, jj] = 0.0
-            globalCf_r_z[ii, jj] = 0.0
-            globalCf_i_z[ii, jj] = 0.0
-            globalKf_r_z[ii, jj] = 0.0
-            globalKf_i_z[ii, jj] = 0.0
-        end
-    end
+    # copyto!(globalMf_z, spzeros(dim,dim)) # copyto is unstable
+    # TODO: is julia pass by reference or value?
+    # It's pass by reference
+    globalMf_z[:, :] = zeros(dim, dim)
+    globalCf_r_z[:, :] = zeros(dim, dim)
+    globalCf_i_z[:, :] = zeros(dim, dim)
+    globalKf_r_z[:, :] = zeros(dim, dim)
+    globalKf_i_z[:, :] = zeros(dim, dim)
     # --- Initialize planform area counter ---
     planformArea = 0.0
 
@@ -895,7 +975,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             jj += 1 # increment strip counter
         end
     elseif ndims(aeroMesh) == 2
-        for yⁿ in aeroMesh[:,YDIM]
+        for yⁿ in aeroMesh[:, YDIM]
             # --- compute strip width ---
             Δy = 0.0
             if jj < FOIL.nNodes
@@ -907,26 +987,31 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             lᵉ::Float64 = norm(nVec, 2) # length of elem
             Δy = lᵉ
             if jj == 1 || jj == FOIL.nNodes
-                Δy = 0.5*lᵉ
+                Δy = 0.5 * lᵉ
             end
 
             nVec = nVec / lᵉ # normalize
 
             # --- Linearly interpolate values based on y loc ---
-            clα::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], FOIL.clα, yⁿ)
-            c::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], chordVec, yⁿ)
-            ab::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], abVec, yⁿ)
-            eb::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:,YDIM], ebVec, yⁿ)
+            clα::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], FOIL.clα, yⁿ)
+            c::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], chordVec, yⁿ)
+            ab::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], abVec, yⁿ)
+            eb::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], ebVec, yⁿ)
             b::Float64 = 0.5 * c # semichord for more readable code
 
-            k = ω * b / (U∞ * cos(Λ)) # local reduced frequency
-
+            
+            # --- Precomputes ---
+            clambda = cos(Λ)
+            slambda = sin(Λ)
+            k = ω * b / (U∞ * clambda) # local reduced frequency
             # Do computation once for efficiency
             CKVec = compute_theodorsen(k)
             Ck = CKVec[1] + 1im * CKVec[2]
 
-            K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
-            C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            # K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            # C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
+            K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda,slambda, FOIL.ρ_f, Ck)
+            C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda,slambda, FOIL.ρ_f, Ck)
             M_f = compute_node_mass(b, ab, FOIL.ρ_f)
 
             # --- Compute Compute local AIC matrix for this element ---
@@ -957,6 +1042,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
                     0.0 0.0 0.0 0.0
                 ]
             elseif elemType == "COMP2"
+                # TODO: SLOW, is this form of matrix initialization slow?
                 # NOTE: Done in local aero coordinates
                 KLocal = [
                     # u v   w         phi       theta     psi phi'     theta'
@@ -997,15 +1083,15 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             else
                 println("nothing else works")
             end
-            
+
             # ---------------------------
             #   Transformation of AIC
             # ---------------------------
             # Aerodynamics need to happen in global reference frame
             Γ = SolverRoutines.get_transMat(nVec, 1.0, elemType)
-            KLocal = Γ'[1:nDOF,1:nDOF] * KLocal * Γ[1:nDOF,1:nDOF]
-            CLocal = Γ'[1:nDOF,1:nDOF] * CLocal * Γ[1:nDOF,1:nDOF]
-            MLocal = Γ'[1:nDOF,1:nDOF] * MLocal * Γ[1:nDOF,1:nDOF]
+            KLocal = Γ'[1:nDOF, 1:nDOF] * KLocal * Γ[1:nDOF, 1:nDOF]
+            CLocal = Γ'[1:nDOF, 1:nDOF] * CLocal * Γ[1:nDOF, 1:nDOF]
+            MLocal = Γ'[1:nDOF, 1:nDOF] * MLocal * Γ[1:nDOF, 1:nDOF]
 
             GDOFIdx::Int64 = nDOF * (jj - 1) + 1
 
@@ -1023,6 +1109,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
         end
     end
 
+    # TODO: SLOW, this could potentially be because it is a large matrix...
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
 end
 
