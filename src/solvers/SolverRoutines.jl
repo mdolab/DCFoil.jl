@@ -686,19 +686,6 @@ function get_transMat(dR, l, elemType="BT2")
         error("Unsupported element type")
     end
 
-    # # --- Cleanup transformation matrix ---
-    # Γ_z = Zygote.Buffer(Γ)
-    # Γ_z[:,:] = Γ
-    # # for ii in eachindex(Γ[:, 1]) # rows
-    # #     for jj in eachindex(Γ[1, :]) # cols
-    # #         if abs(Γ[ii, jj]) < 1e-16
-    # #             Γ_z[ii, jj] = 0.0
-    # #         else
-    # #             Γ_z[ii, jj] = Γ[ii, jj]
-    # #         end
-    # #     end
-    # # end
-    # Γ = copy(Γ_z)
     return Γ
 end
 # ==============================================================================

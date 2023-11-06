@@ -342,7 +342,7 @@ if __name__ == "__main__":
             # cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
             # for mode in range(nModes):
             #     iic = mode % len(cm)
-            #     axes[0, 1].plot(flowList, gSweep[mode, :], label=f"Mode {mode+1}", c=cm[iic])
+            #     axes[0, 1].plot(flowList, gSweep[mode, :], label=f"Mode {mode+1}", color=cm[iic])
             # axes[0, 1].set_xlabel("nFlow")
             # axes[0, 1].legend(fontsize=10, labelcolor="linecolor", loc="best", frameon=False)
             # axes[0, 1].set_xlim(50, 60)
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     for key in args.cases:
         fname = f"{outputDir}/wing-geom-{key}.pdf"
         DVDict = DVDictDict[key]
-        fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"])
+        fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"], cm=cm)
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -388,7 +388,6 @@ if __name__ == "__main__":
         ytickTwist = []
 
         for iic, key in enumerate(args.cases):
-            breakpoint()
             funcs = funcsDict[key]
             bending = bendingDict[key]
             twisting = np.rad2deg(twistingDict[key])
@@ -475,7 +474,18 @@ if __name__ == "__main__":
         flowSpeed = SolverOptions[key]["U∞"]
         # --- Plot ---
         fig, axes = plot_forced(
-            fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, rao, flowSpeed, fs_lgd, args.elem
+            fig,
+            axes,
+            fExtSweep,
+            dynTipBending,
+            dynTipTwisting,
+            dynLift,
+            dynMoment,
+            rao,
+            flowSpeed,
+            fs_lgd,
+            args.elem,
+            cm,
         )
 
         fig.suptitle("Tip frequency response spectra")
@@ -558,6 +568,7 @@ if __name__ == "__main__":
                 fig,
                 axes,
                 flutterSol=flutterSolDict[key],
+                cm=cm,
                 ls=ls[ii],
                 # units="kts",
                 # marker="o",
@@ -602,6 +613,7 @@ if __name__ == "__main__":
                 fig,
                 axes,
                 flutterSol=flutterSolDict[key],
+                cm=cm,
                 semichord=0.5 * np.mean(DVDictDict[key]["c"]),
                 sweepAng=DVDictDict[key]["Λ"],
                 ls=ls[ii],

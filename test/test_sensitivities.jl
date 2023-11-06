@@ -387,7 +387,7 @@ end
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-nNodes = 10
+nNodes = 20
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
@@ -427,7 +427,7 @@ solverOptions = Dict(
     "run_modal" => false,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [170.0, 190.0],
+    "uRange" => [180.0, 190.0],
     "maxQIter" => 100,
     "rhoKS" => 80.0,
 )

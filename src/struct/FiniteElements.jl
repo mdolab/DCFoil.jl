@@ -1007,6 +1007,10 @@ function get_fixed_nodes(elemType::String, BCCond="clamped")
         error("BCCond not recognized")
     end
 
+    ChainRulesCore.ignore_derivatives() do
+        println("BCType: ", BCCond)
+    end
+
     return fixedNodes
 end
 
@@ -1059,7 +1063,7 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
 
 end
 
-function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="BT2")
+function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, elemType="BT2")
     """
     Apply a tip mass to the global mass matrix
 
@@ -1068,11 +1072,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="
     """
 
     globalM_z = Zygote.Buffer(globalM)
-    for jj in eachindex(globalM[:, 1])
-        for ii in eachindex(globalM[1, :])
-            globalM_z[jj, ii] = globalM[jj, ii]
-        end
-    end
+    globalM_z[:,:] = globalM
     if elemType == "bend-twist"
         println("Does not work")
     elseif elemType == "BT2"
@@ -1080,9 +1080,9 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="
         # --- Get sectional properties ---
         ms = mass / elemLength
         # Parallel axis theorem
-        Iea = inertia + mass * (x_αbVec[end])^2
+        Iea = inertia + mass * (x_αbBulb)^2
         is = Iea / elemLength
-        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbVec[end], elemType)
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
 
         # --- Assemble into global matrix ---
         globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
@@ -1091,9 +1091,9 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="
         # --- Get sectional properties ---
         ms = mass / elemLength
         # Parallel axis theorem
-        Iea = inertia + mass * (x_αbVec[end])^2
+        Iea = inertia + mass * (x_αbBulb)^2
         is = Iea / elemLength
-        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbVec[end], elemType)
+        tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
 
         # --- Assemble into global matrix ---
         globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
@@ -1105,7 +1105,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbVec, elemType="
         println("+------------------------------------+")
         println("|    Tip mass added!                 |")
         println("+------------------------------------+")
-        println("Dist. CG is aft of EA: ", x_αbVec[end], " [m]")
+        println("Dist. CG is aft of EA: ", x_αbBulb, " [m]")
     end
     return copy(globalM_z)
 end

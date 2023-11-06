@@ -27,8 +27,8 @@ debug = false
 tipMass = false
 
 # Uncomment here
-# run_static = true
-# run_forced = true
+run_static = true
+run_forced = true
 run_modal = true
 run_flutter = true
 debug = true
@@ -107,7 +107,7 @@ evalFuncs = [
     "cmy", 
     "lift", 
     "moment", 
-    # "ksflutter",
+    "ksflutter",
 ]
 
 # ************************************************

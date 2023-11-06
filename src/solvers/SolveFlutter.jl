@@ -47,6 +47,7 @@ using .DCFoilSolution
 #                         MODULE CONSTANTS
 # ==============================================================================
 elemType = "COMP2"
+# elemType = "BT2"
 loadType = "force"
 derivMode = "RAD"
 
@@ -156,9 +157,9 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
-        x_αbVec[end] = -0.1 # [m]
+        x_αbBulb = -0.1 # [m]
         elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbVec, elemType)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, elemType)
     end
 
     # ---------------------------
@@ -211,12 +212,13 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    # TODO: pickup here, there appears to be some sort of bug related to the tip mass
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
-        x_αbVec[end] = -0.1 # [m]
+        x_αbBulb = -0.1 # [m]
         elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbVec, elemType)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, elemType)
     end
 
     # ---------------------------
@@ -625,8 +627,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     # ---------------------------
     Mr, Kr, Qr = compute_modalSpace(Mmat, Kmat; reducedSize=Nr)
     ChainRulesCore.ignore_derivatives() do
-        @sprintf("Modal matrix Qr ∈ (%i x %i)\n", size(Qr)[1], size(Qr)[2])
-        @sprintf("Running max q iter: %i", N_MAX_Q_ITER)
+        println(@sprintf("Modal matrix Qr ∈ (%i x %i)", size(Qr)[1], size(Qr)[2]))
+        println(@sprintf("Running max q iter: %i", N_MAX_Q_ITER))
     end
     dimwithBC = Nr
 
@@ -1805,7 +1807,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     if mode == "FiDi" # use finite differences the stupid way
 
-        sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
+        @time sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
             DVDict)
 
         # --- Iterate over DVDict keys ---
@@ -1825,7 +1827,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     elseif mode == "RAD" # use automatic differentiation via Zygote
 
-        sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
+        @time sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
                 cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
             DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"])
         # --- Order the sensitivities properly ---

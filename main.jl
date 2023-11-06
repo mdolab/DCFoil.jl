@@ -4,7 +4,7 @@
 # @Time    :   2022/06/16
 # @Desc    :   Main executable for running DCFoil
 
-using Printf, Dates
+using Printf, Dates, Profile
 include("src/DCFoil.jl")
 
 using .DCFoil
@@ -36,13 +36,12 @@ run_flutter = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 20 # spatial nodes
+nNodes = 10 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
-df = 1
-fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing

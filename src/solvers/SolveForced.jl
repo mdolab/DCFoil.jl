@@ -112,7 +112,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     #     For every frequency, solve the system
     # ************************************************
     f_ctr = 1
-    for f in fSweep
+    @time for f in fSweep
 
         if f_ctr % 20 == 1 # header every 10 iterations
             println("Forcing: ", f, "Hz")
