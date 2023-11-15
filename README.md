@@ -64,7 +64,7 @@ Please use this coding convention:
 #### Try not to do this
 
 * `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`
-* Mutating arrays
+* Mutating arrays that require the Zygote.Buffer data type. It is SUPER slow.
 
 ### Package Dependencies
 

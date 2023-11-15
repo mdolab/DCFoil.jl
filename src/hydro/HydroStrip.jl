@@ -407,7 +407,7 @@ function compute_node_stiff(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     """
     # --- Precomputes ---
     qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
-    a = ab / b 
+    a = ab / b
     clambda = cos(Λ)
     slambda = sin(Λ)
     # Aerodynamic quasi-steady stiffness
@@ -454,7 +454,7 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     c_hα = -b * (2π + clα * (1 - 2 * a) * Ck)
     c_αh = 2 * eb * clα * Ck
     c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
-    C_f = coeff*clambda *
+    C_f = coeff * clambda *
           [
               c_hh c_hα
               c_αh c_αα
@@ -474,13 +474,13 @@ function compute_node_damp(clα, b, eb, ab, U∞, Λ, rho_f, Ck)
     return C_f, Ĉ_f
 end
 
-function compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda,slambda, rho_f, Ck)
+function compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f, Ck)
     """
     Hydrodynamic stiffness force
     """
     # --- Precomputes ---
     qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
-    a = ab / b 
+    a = ab / b
     Uclambda = U∞ * clambda
     clalphabCk = clα * b * Ck
     # Aerodynamic quasi-steady stiffness
@@ -491,7 +491,7 @@ function compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda,slambda, rho_f
     k_αα = k_hα * eb # moment due to angle of attack (disturbing)
     K_f = qf * clambda * clambda *
           [
-              0.0 k_hα;
+              0.0 k_hα
               0.0 k_αα
           ]
 
@@ -503,7 +503,7 @@ function compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda,slambda, rho_f
            (π * b * b - clalphabCk * eb * (1 - 2 * (a)))
     K̂_f = qf / U∞ * slambda * b *
            [
-               e_hh e_hα;
+               e_hh e_hα
                e_αh e_αα
            ]
 
@@ -525,9 +525,9 @@ function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f
     c_hα = -b * (2π + clα * (1 - 2 * a) * Ck)
     c_αh = 2 * eb * clα * Ck
     c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
-    C_f = coeff*clambda *
+    C_f = coeff * clambda *
           [
-              c_hh c_hα;
+              c_hh c_hα
               c_αh c_αα
           ]
 
@@ -538,7 +538,7 @@ function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f
     e_αα = 2π * b^3 * (0.125 + a * a)
     Ĉ_f = coeff * slambda *
            [
-               e_hh e_hα;
+               e_hh e_hα
                e_αh e_αα
            ]
 
@@ -559,7 +559,7 @@ function compute_node_mass(b, ab, rho_f)
     m_αα = bSquared * (0.125 + a * a)
     M_f = π * rho_f * bSquared *
           [
-              m_hh m_hα;
+              m_hh m_hα
               m_αh m_αα
           ]
 
@@ -844,8 +844,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
     globalKf_r_z = Zygote.Buffer(zeros(dim, dim))
     globalKf_i_z = Zygote.Buffer(zeros(dim, dim))
     # Zygote initialization
-    # copyto!(globalMf_z, spzeros(dim,dim)) # copyto is unstable
-    # TODO: is julia pass by reference or value?
+    # Is julia pass by reference or value?
     # It's pass by reference
     globalMf_z[:, :] = zeros(dim, dim)
     globalCf_r_z[:, :] = zeros(dim, dim)
@@ -999,7 +998,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             eb::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], ebVec, yⁿ)
             b::Float64 = 0.5 * c # semichord for more readable code
 
-            
+
             # --- Precomputes ---
             clambda = cos(Λ)
             slambda = sin(Λ)
@@ -1010,8 +1009,8 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
 
             # K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
             # C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
-            K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda,slambda, FOIL.ρ_f, Ck)
-            C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda,slambda, FOIL.ρ_f, Ck)
+            K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
+            C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
             M_f = compute_node_mass(b, ab, FOIL.ρ_f)
 
             # --- Compute Compute local AIC matrix for this element ---
@@ -1042,8 +1041,22 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
                     0.0 0.0 0.0 0.0
                 ]
             elseif elemType == "COMP2"
-                # TODO: SLOW, is this form of matrix initialization slow?
-                # NOTE: Done in local aero coordinates
+                # # NOTE: Done in local aero coordinates
+                # KLocal = zeros(9, 9)
+                # CLocal = zeros(9, 9)
+                # MLocal = zeros(Float64, 9, 9)
+                # KLocal[3:4,4:7] = [
+                #     K_f[1, 2] K̂_f[1, 1] 0.0 K̂_f[1, 2]
+                #     K_f[2, 2] K̂_f[2, 1] 0.0 K̂_f[2, 2]
+                # ]
+                # CLocal[3:4,3:7] = [
+                #     C_f[1, 1] C_f[1, 2] Ĉ_f[1, 1] 0.0 Ĉ_f[1, 2]
+                #     C_f[2, 1] C_f[2, 2] Ĉ_f[2, 1] 0.0 Ĉ_f[2, 2]
+                # ]
+                # MLocal[3:4,3:4] = [
+                #     M_f[1, 1] M_f[1, 2]
+                #     M_f[2, 1] M_f[2, 2]
+                # ]
                 KLocal = [
                     # u v   w         phi       theta     psi phi'     theta'
                     0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
@@ -1109,7 +1122,6 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
         end
     end
 
-    # TODO: SLOW, this could potentially be because it is a large matrix...
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
 end
 
@@ -1190,6 +1202,56 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     # end
 
     return hydroTractions, AIC, planformArea
+end
+
+function compute_genHydroLoadsMatrices(kMax::Float64, nk::Int64, U∞::Float64, b_ref::Float64, dim::Int64, structMesh, Λ, chordVec, abVec, ebVec, FOIL, elemType)
+    """
+    Computes the hydrodynamic coefficients for a sweep of reduced frequencies
+
+    Inputs
+    ------
+        kMax: maximum reduced frequency
+        nk: number of reduced frequencies
+        U∞: freestream velocity
+    """
+
+    kSweep_z = Zygote.Buffer(zeros(nk))
+
+    for ii in 1:nk
+        # Current value in a linspace from zero to one
+        dist = (ii - 1.0) / (nk - 1)
+        # Cubic distribution to bunch more points at lower k values
+        if ii == 1
+            kSweep_z[ii] = 1e-13
+        else
+            kSweep_z[ii] = kMax * dist * dist * dist
+        end
+    end
+    kSweep = copy(kSweep_z)
+
+    # --- Loop over reduced frequencies ---
+    Cf_r_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
+    Cf_i_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
+    Kf_r_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
+    Kf_i_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
+    Mf_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
+    ii = 1
+    for k in kSweep
+        ω = k * U∞ * (cos(Λ)) / b_ref
+
+        # Compute AIC
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+
+        # Accumulate in frequency sweep matrix
+        Cf_r_sweep_z[:, :, ii] = globalCf_r
+        Cf_i_sweep_z[:, :, ii] = globalCf_i
+        Kf_r_sweep_z[:, :, ii] = globalKf_r
+        Kf_i_sweep_z[:, :, ii] = globalKf_i
+        Mf_sweep_z[:, :, ii] = globalMf
+        ii += 1
+    end
+
+    return copy(Mf_sweep_z[:,:,1]), copy(Cf_r_sweep_z), copy(Cf_i_sweep_z), copy(Kf_r_sweep_z), copy(Kf_i_sweep_z), kSweep
 end
 
 # function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT2")

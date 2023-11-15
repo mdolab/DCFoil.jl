@@ -3,7 +3,7 @@ module SolverRoutines
 Generic routines every solver needs
 
 NOTE:
-any function with '_d' at the end is the one used for forward differentiation 
+any function with '_d' at the end is the one used for forward differentiation
 because certain operations cannot be differentiated
 by the AD tool (e.g., anything related to file writing)
 '_b' is for backward mode.
@@ -168,7 +168,7 @@ function cmplxInverse_d(A_r, A_rd, A_i, A_id, n)
     Forward analytic differentiation
         Cd = -(C*Ad*C)
         where C = A^-1
-    # See: 
+    # See:
     #     Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
 
     Inputs
@@ -245,7 +245,7 @@ function cmplxMatmult_d(A_r, A_rd, A_i, A_id, B_r, B_rd, B_i, B_id)
 end # cmplxMatmult
 
 function cmplxMatmult_b(A_r, A_i, B_r, B_i)
-    # Won't do this for now: 
+    # Won't do this for now:
 end
 
 function cmplxStdEigValProb(A_r, A_i, n)
@@ -295,12 +295,12 @@ function cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, n)
         Dd = I ∘ (U^-1 * Ad U)
         Ud = U * (F ∘ U^-1 * Ad * U)
         where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-        
+
         'd' terms are the forward seeds
-        
-        See: 
+
+        See:
         Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
-        
+
         Inputs
         ------
         A_r - nxn real part matrix
@@ -389,10 +389,10 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
         with eigenvalues d_k
         Ā = U^-H * (D̄ + F ∘ (U^H * Ū)) * U^H
         where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-        
+
         overbar terms are the reverse seeds
-        
-    See: 
+
+    See:
         Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
 
     Inputs
@@ -469,7 +469,7 @@ end # cmplxStdEigValProb_b
 
 function cmplxStdEigValProb2(A_r, A_i, n)
     """
-    Give back eigenvalues and vectors as a unrolled vector
+    Give back eigenvalues and vectors as an unrolled vector
     """
 
     # --- Solve standard eigenvalue problem (Ax = λx) ---
@@ -498,6 +498,79 @@ function cmplxStdEigValProb2(A_r, A_i, n)
     return y
 end # cmplxStdEigValProb
 
+function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
+    """
+    Interpolate/extrapolate polynomials of order 'd-1'
+    Providing 'd' points of array of size m x n, we obtain inter/extrapolant order 'd-1'
+    Comes from Eirikur's DLM4PY code
+
+    Inputs
+    ------
+        x0 - input array size(d)
+        y0 - input array y0(x0) size(m,n,d)
+        m, n  - size of array
+        d - number of points to use for interpolation
+        x  - the location we want to inter/extrapolate at - scalar
+    Outputs
+    -------
+        y  - the inter/extrapolated array at x, or y(x)
+    """
+
+    # 2 dimensional array interpolation
+    y = zeros(m, n)
+    for ii in 1:d
+        L = 1.0
+        for k in 1:d
+            if k != ii
+                L *= (x - x0[k]) / (x0[ii] - x0[k])
+            end
+        end
+        y += y0[:, :, ii] .* L
+    end
+
+    # # --- Call underlying interpolation function over m and n ---
+    # This routine was way too slow so we use the one above
+    # y = zeros(m, n)
+    # y_z = Zygote.Buffer(y)
+    # for ii in 1:m
+    #     for kk in 1:n
+    #         y[ii, kk] = lagrangeInterp(x0, y0[ii, kk, :], d, x)
+    #     end
+    # end
+
+    return y
+end
+
+function lagrangeInterp(x0, y0, n, x)
+    """
+    Interpolate/extrapolate polynomial of order 'm'
+    Providing 'n' points gives us inter/extrapolant of order m = n-1
+
+    Inputs
+    ------
+        x0 - input vector
+        y0 - input vector y0(x0)
+        n  - size of array
+        x  - the location we want to inter/extrapolate at
+    Outputs
+    -------
+        y  - the inter/extrapolated value at x, or y(x)
+    """
+    y = 0.0
+
+    for ii in 1:n # loop over points
+        L = 1.0 # Lagrange weight
+        for kk in 1:n
+            if kk != ii
+                # This is the lagrange polynomial
+                L *= (x - x0[kk]) / (x0[ii] - x0[kk])
+            end
+        end
+        y += y0[ii] * L
+    end
+
+    return y
+end
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================
@@ -519,6 +592,9 @@ function argmax2d(A)
     end
     locs = copy(locs_z)
 
+    # # List comprehension to avoid Zygote.Buffer
+    # locs = argmax(A[:, col] for col in 1:ncol)
+
     return locs
 
 end # argmax2d
@@ -526,7 +602,7 @@ end # argmax2d
 function maxLocArr2d(A)
     """
     Find the maximum location for 2d array A
-        
+
     Outputs
     -------
     locs - array of indices
@@ -592,6 +668,32 @@ function ipack1d(A, mask, nFlow)
 
     return B, nFound
 end # ipack1d
+
+function find_signChange(x)
+    """
+    Find the location where a sign changes in an array
+    Inputs
+    ------
+        x - array which signchange is to be found. Size(n)
+    Outputs
+    -------
+        locs - array of size 2 containing the location of the sign change
+    """
+
+    # Get signs of each element in x
+    sgn = sign.(x)
+    n = length(sgn)
+
+    for ii in 1:n-1
+        if sgn[ii+1] != sgn[ii]
+            locs = [ii, ii + 1]
+            return locs
+        else
+            continue
+        end
+    end
+
+end
 
 function get_rotate3dMat(rot; axis="x")
     """
@@ -905,8 +1007,11 @@ end
 #                         Custom derivative routines
 # ==============================================================================
 function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
+    """
+    Reverse rule for the eigenvalue problem
+    """
 
-    # TODO: redo using Sicheng and Eirikur's eigenvalue derivative method 
+    # TODO: redo using Sicheng and Eirikur's eigenvalue derivative method
     # that does not require the full eigenvalue solve
 
     y = cmplxStdEigValProb2(A_r, A_i, n)
@@ -965,7 +1070,7 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
         Ā_r = real(Ā)
         Ā_i = imag(Ā)
 
-        # Return NoTangent() because??
+        # Return NoTangent() because of order of args in this parent function
         return (NoTangent(), Ā_r, Ā_i, NoTangent())
 
     end # cmplxStdEigValProb_b
@@ -975,8 +1080,8 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
 end
 
 function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
-    """ 
-    MATRIX MULTIPLY
+    """
+    MATRIX MULTIPLY RULE
     """
     function times_pullback(ΔΩ)
         ∂A = @thunk(ΔΩ * B')

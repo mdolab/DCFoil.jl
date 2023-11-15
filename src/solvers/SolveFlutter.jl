@@ -63,7 +63,7 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     This acts like 'subroutine velocitySweepPkNonIter()' from Eirikur's code.
     """
 
-    # --- Primal solve ---
+    # --- Primal flutter eigenvalue calculations ---
     p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = compute_pkFlutterAnalysis(
         uRange,
         structMesh,
@@ -97,7 +97,7 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     obj, pmG = postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, p_r, FLUTTERSOL.iblank, ρKS)
 
 
-    # Write the solution to file
+    # --- Write the solution to file ---
     ChainRulesCore.ignore_derivatives() do
         write_sol(FLUTTERSOL, solverOptions["outputDir"])
     end
@@ -158,8 +158,10 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
-        elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, elemType)
+        dR = (structMesh[end, :] - structMesh[end-1, :])
+        elemLength = norm(dR, 2)
+        transMat = SolverRoutines.get_transMat(dR, elemLength, elemType)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb,transMat, elemType)
     end
 
     # ---------------------------
@@ -217,8 +219,10 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
-        elemLength = norm((structMesh[end-1, :] - structMesh[end, :]), 2)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, elemType)
+        dR = (structMesh[end-1, :] - structMesh[end, :])
+        elemLength = norm(dR, 2)
+        transMat = SolverRoutines.get_transMat(dR, elemLength, elemType)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
     end
 
     # ---------------------------
@@ -564,7 +568,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     return corr, m, newModesIdx, nCorrelatedModes, nNewModes
 end # end function
 
-function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr, globalDOFBlankingList,
+function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr::Int64, globalDOFBlankingList,
     N_MAX_Q_ITER, nModes, Mmat, Kmat;
     ΔdynP=nothing, Δu=nothing, debug=false
 )
@@ -659,7 +663,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
-    ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
+    # ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
     p_diff_max = 0.1 # max allowed change in roots between steps
 
     if debug
@@ -682,6 +686,9 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     NTotalModesFound::Int64 = 0 # total number of modes found over the entire simulation
     nCorrNewModes::Int64 = 0 # number of new modes to correlate
     is_failed = false
+    nK::Int64 = 22 # number of k values to sweep
+    maxK::Float64 = 3.5 # max reduced frequency k to search
+
 
     # --- Zygote buffers ---
     p_r_z = Zygote.Buffer(p_r)
@@ -716,11 +723,13 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
         # --- Sweep k and find eigenvalue/vector crossings ---
         # Non-dimensionalization factor
-        tmpFactor = U∞ * cos(Λ) / b_ref
-        div_tmp = 1 / tmpFactor
-        kSweep = ωSweep * div_tmp
+        # tmpFactor = U∞ * cos(Λ) / b_ref
+        # div_tmp = 1 / tmpFactor
+        # kSweep = ωSweep * div_tmp
+        # --- Compute generalized hydrodynamic loads ---
+        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, elemType)
         # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
-        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
+        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
         # ---------------------------
         #   Mode correlations
@@ -1050,7 +1059,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
 end # end function
 
-function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, MM, KK, Qr, structMesh, globalDOFBlankingList; debug=false, qiter=1)
+function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, MM, KK, Qr, structMesh, globalDOFBlankingList; debug=false, qiter=1)
     """
     # This routine solves an eigenvalue problem over a range of reduced frequencies k searches for the
     # intersection of each mode with the diagonal line Im(p) = k and then does a linear interpolation
@@ -1071,7 +1080,7 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
     N_MAX_K_ITER = 5000 # max k iterations before code breaks
 
     # --- Loop over reduced frequency search range to construct lines ---
-    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
     if (debug)
         ChainRulesCore.ignore_derivatives() do
@@ -1167,18 +1176,23 @@ function compute_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
 end # end function
 
-function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ,
+    chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
     """
     Solve the eigenvalue problem over a range of reduced frequencies (k)
 
     Inputs
     ------
+        globalMf - fluid added mass matrix (dim, dim)
+        Cf_r_sweep, Cf_i_sweep - real and imaginary parts of fluid damping matrix for reduced frequency sweep (dim, dim, nK)
+        Kf_r_sweep, Kf_i_sweep - real and imaginary part of fluid stiffness matrix for reduced frequency sweep (dim, dim, nK)
         dim - size of problem (nDOF w/o BC) (half the number of flutter modes you're solving for)
         kSweep - sweep of reduced frequencies
-        b - semichord
+        b_ref - reference semichord
         MM - structural mass matrix
         KK - structural stiffness matrix
-        Qr - modal matrix
+        Qr - modal matrix (Nr, Nr)
+        globalDOFBlankingList - list of DOFs to blank out for the BCs
 
     Outputs
     -------
@@ -1194,12 +1208,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     """
 
     Nr = size(Qr)[2]
-    # Fluid matrices
-    # globalMf_0 = zeros(dim, dim)
-    # globalCf_r_0 = zeros(dim, dim)
-    # globalCf_i_0 = zeros(dim, dim)
-    # globalKf_r_0 = zeros(dim, dim)
-    # globalKf_i_0 = zeros(dim, dim)
     # TODO: visualization of matrix magnitudes
 
     dimwithBC = Nr
@@ -1223,10 +1231,8 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
-    # Need to do a dummy call to get the hydrodynamic added mass
-    globalMf, _, _, _, _ = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, 1.0, 1.0, elemType)
     _, _, Mff = HydroStrip.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
-    # Modal fluid added mass matrix (Cf and Kf in loop)
+    # Modal fluid added mass matrix (Cf and Kf handled in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
     Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
@@ -1240,7 +1246,6 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
     # But we do not want to large since we want to get static div modes
     # k = 1e-12 # don't use this
     k = 2e-13 # this is a good value that catches static div modes
-    maxK = kSweep[end]
     ik = 1 # k counter
     # pkEqnType = "rodden"
     pkEqnType = "ng"
@@ -1250,9 +1255,14 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
         # ---------------------------
         #   Compute hydrodynamics
         # ---------------------------
-        # In Eirikur's code, he interpolates the AIC matrix but since it is cheap, we just compute it exactly
-        ω = k * U∞ * (cos(Λ)) / b_ref
-        _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        # In Eirikur's code, he interpolates the AIC matrix. We tried computing it exactly 
+        # but the cost is still too much even with strip theory
+        # --- Interpolate AICs ---
+        globalCf_r, globalCf_i = interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, pkEqnType)
+        globalKf_r, globalKf_i = interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, pkEqnType)
+        # --- Direct AIC computation ---
+        # ω = k * U∞ * (cos(Λ)) / b_ref
+        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList) # real
         Kffull_i, Cffull_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList) # imag
         # Mode space reduction
@@ -1321,7 +1331,7 @@ function sweep_kCrossings(dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, 
 
             # Check if we solved the matched Im(p) = k problem
             maxImP = maximum(real(p_i))
-            if (maxImP < k_history_z[ik-1]) || (k > maxK)
+            if (maxImP < k_history_z[ik-1]) || (k > kSweep[end])
                 # Assumes highest mode does NOT cross Im(p) = k line from below later
                 # i.e. continue looping until the highest mode crosses the line or we reach maxK
                 keepLooping = false
@@ -1447,6 +1457,81 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
     return p_cross_r, p_cross_i, R_cross_r, R_cross_i, ctr
 
 end # end extract_kCrossings
+
+function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, pkEqnType)
+    """
+    This function interpolates the influence coefficient matrix for specific reduced frequency
+    Here a linear interpolation is applied
+
+    Inputs
+    ------
+        k_sweep - vector of reduced frequency values that the AIC was generated at. Array(Nk)
+        Ar_sweep_r, Ar_sweep_i - The AIC (real/imag parts) evaluated at reduced frequencies in k_sweep. Array(Nmr,Nmr,Nk)
+
+    Outputs
+    -------
+        Ar_r, Ar_i - The interpolated AIC (real/imag parts) evaluated at reduced frequency k. Array(Nmr,Nmr)
+    """
+
+    # Nmr - the size of reduced problem
+    Nmr = size(Ar_sweep_r)[1]
+    # Nk - The number of reduced frequencies used to build the AIC.
+    Nk::Int64 = length(k_sweep)
+
+    # Calc the difference of current k and the k_sweep
+    kDiff = k .- k_sweep
+
+    # Find where the sign changes for the interpolation
+    bound = SolverRoutines.find_signChange(kDiff)
+    # Based on the pk eqauation we are solving it depends how we handle k=0
+    if (pkEqnType == "hassig" || pkEqnType == "ng")
+        # Use the lagrange interpolation (L for linear)
+        x0L = [k_sweep[bound[1]], k_sweep[bound[2]]]
+
+        y0L = cat(Ar_sweep_r[:, :, bound[1]], Ar_sweep_r[:, :, bound[2]], dims=3)
+        Ar_r = SolverRoutines.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
+
+        y0L = cat(Ar_sweep_i[:, :, bound[1]], Ar_sweep_i[:, :, bound[2]], dims=3)
+        Ar_i = SolverRoutines.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
+
+
+    elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
+        if (k == 0)
+
+            # ! Use the lagrange polynomial for quadratic extrapolation for k = 0
+            x0Q[1] = k_sweep[2]
+            x0Q[2] = k_sweep[3]
+            x0Q[3] = k_sweep[4]
+
+            y0Q[:, :, 1] = Ar_sweep_r[:, :, 2]
+            y0Q[:, :, 2] = Ar_sweep_r[:, :, 3]
+            y0Q[:, :, 3] = Ar_sweep_r[:, :, 4]
+            Ar_r = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_r)
+
+            y0Q[:, :, 1] = Ar_sweep_i[:, :, 2] / k_sweep[2]
+            y0Q[:, :, 2] = Ar_sweep_i[:, :, 3] / k_sweep[3]
+            y0Q[:, :, 3] = Ar_sweep_i[:, :, 4] / k_sweep[4]
+            Ar_i = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_i)
+
+
+        else
+            # ! Use linear interpolation
+            x0L[1] = k_sweep[bound[1]]
+            x0L[2] = k_sweep[bound[2]]
+
+            y0L[:, :, 1] = Ar_sweep_r[:, :, bound[1]]
+            y0L[:, :, 2] = Ar_sweep_r[:, :, bound[2]]
+            Ar_r = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_r)
+
+            y0L[:, :, 1] = Ar_sweep_i[:, :, bound[1]] / k
+            y0L[:, :, 2] = Ar_sweep_i[:, :, bound[2]] / k
+            Ar_i = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_i)
+
+        end
+    end
+
+    return Ar_r, Ar_i
+end
 
 function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
     # """

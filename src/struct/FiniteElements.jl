@@ -29,7 +29,7 @@ module LinearBeamElem
                                  |/
             o------------o       +----> x (local coords)
             1  E,ρₛ,A,I  2
-    
+
         {q} = [q₁, q₂, q₃, q₄, q₅, q₆, ...,q12 ]ᵀ
 
     The shape function for the element with the {q} vector) is
@@ -129,7 +129,7 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     fθ = 0.2 * 2 * BTᵉ * lᵉ^3
     gθ = 0.1 * BTᵉ * lᵉ^3
 
-    
+
 
     # --- Constitutive law ---
     if constitutive == "isotropic"
@@ -366,7 +366,7 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
         static imbalance (distance from EA to CG, +ve CG aft of EA) [m]
     elemType : String
         which element mass matrix to use
-    
+
 
     The kinetic energy is
         T = 0.5∫₀ᴸ m (∂w/∂t)² dx = 0.5{q̇(t)}ᵀ[Mᵉ]{q̇(t)}
@@ -629,7 +629,7 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
         xf = x_αbᵉ*fz
         xh = x_αbᵉ*hz
         xc = x_αbᵉ*cz
-        xp = x_αbᵉ*pz 
+        xp = x_αbᵉ*pz
         xs = x_αbᵉ*sz
         xu = x_αbᵉ*uz
         M11 = [
@@ -712,11 +712,11 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
 
     Inputs
     ------
-    nElem: 
+    nElem:
         number of elements
-    config: 
+    config:
         "wing" or "t-foil"
-    rotation: 
+    rotation:
         rotation of the foil in degrees where 0.0 is lifting up in 'z' and y is the spanwise direction
     Outputs
     -------
@@ -1063,7 +1063,7 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
 
 end
 
-function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, elemType="BT2")
+function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat, elemType="BT2")
     """
     Apply a tip mass to the global mass matrix
 
@@ -1072,7 +1072,9 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, elemType=
     """
 
     globalM_z = Zygote.Buffer(globalM)
-    globalM_z[:,:] = globalM
+    globalM_z[:, :] = globalM
+    # TODO: transformation matrix
+    # TODO: unit test for the tip mass, verification case from Eirikur's thesis?
     if elemType == "bend-twist"
         println("Does not work")
     elseif elemType == "BT2"
@@ -1083,6 +1085,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, elemType=
         Iea = inertia + mass * (x_αbBulb)^2
         is = Iea / elemLength
         tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
+        tipMassMat = transMat' * tipMassMat * transMat
 
         # --- Assemble into global matrix ---
         globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat
@@ -1094,6 +1097,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, elemType=
         Iea = inertia + mass * (x_αbBulb)^2
         is = Iea / elemLength
         tipMassMat = LinearBeamElem.compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
+        tipMassMat = transMat' * tipMassMat * transMat
 
         # --- Assemble into global matrix ---
         globalM_z[end-nDOF+1:end, end-nDOF+1:end] += tipMassMat

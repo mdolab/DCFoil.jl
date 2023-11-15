@@ -76,6 +76,7 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
   S_z = Zygote.Buffer(Sₛ)
   I_z = Zygote.Buffer(Iₛ)
   m_z = Zygote.Buffer(mₛ)
+
   for ii in 1:nNodes
     section = StructProp.section_property(c[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ)
 
