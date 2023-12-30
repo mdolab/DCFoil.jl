@@ -147,7 +147,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #         nStart = 1
     #     end
     #     for qⁿ ∈ q[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         stringData = @sprintf("%.16f\n", qⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -162,7 +162,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #         nStart = 3 # torque
     #     end
     #     for qⁿ ∈ q[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         stringData = @sprintf("%.16f\n", qⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -177,7 +177,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #         nStart = 1
     #     end
     #     for fⁿ ∈ F[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", fⁿ)
+    #         stringData = @sprintf("%.16f\n", fⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -192,7 +192,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #         nStart = 3 # torque
     #     end
     #     for fⁿ ∈ F[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", fⁿ)
+    #         stringData = @sprintf("%.16f\n", fⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -200,7 +200,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #     stringData = elemType * "\n"
     #     write(io, stringData)
     #     for fⁿ ∈ F#[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", fⁿ)
+    #         stringData = @sprintf("%.16f\n", fⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -217,7 +217,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
     derivMode = "RAD"
-    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), zeros(2,2), elemType, structMesh, AIC, derivMode, planformArea)
 
     # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
@@ -414,6 +414,10 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         # elseif mode == "RAD" # Reverse automatic differentiation
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
+    elseif mode == "analytic" 
+        # In the case of a linear elastic beam under static fluid loading, 
+        # dr/du = Ks - Kf
+        ∂r∂u = zeros(length(structuralStates), length(structuralStates))
     else
         error("Invalid mode")
     end

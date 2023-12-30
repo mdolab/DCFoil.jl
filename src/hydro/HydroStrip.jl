@@ -566,7 +566,7 @@ function compute_node_mass(b, ab, rho_f)
     return M_f
 end
 
-function compute_steady_AICs!(AIC::Matrix{Float64}, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, elemType="BT2")
+function compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, elemType="BT2")
     """
     Compute the steady aerodynamic influence coefficients (AICs) for a given mesh
     This is different from the general AIC method because there is no frequency dependence
@@ -1166,7 +1166,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     #         nStart = 3
     #     end
     #     for qⁿ ∈ foilTotalStates#[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         stringData = @sprintf("%.16f\n", qⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -1181,7 +1181,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     #         nStart = 3
     #     end
     #     for qⁿ ∈ foilStructuralStates#[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         stringData = @sprintf("%.16f\n", qⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -1196,7 +1196,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     #         nStart = 3
     #     end
     #     for qⁿ ∈ hydroTractions#[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
+    #         stringData = @sprintf("%.16f\n", qⁿ)
     #         write(io, stringData)
     #     end
     # end
@@ -1204,7 +1204,7 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     return hydroTractions, AIC, planformArea
 end
 
-function compute_genHydroLoadsMatrices(kMax::Float64, nk::Int64, U∞::Float64, b_ref::Float64, dim::Int64, structMesh, Λ, chordVec, abVec, ebVec, FOIL, elemType)
+function compute_genHydroLoadsMatrices(kMax, nk::Int64, U∞, b_ref, dim::Int64, structMesh, Λ, chordVec, abVec, ebVec, FOIL, elemType)
     """
     Computes the hydrodynamic coefficients for a sweep of reduced frequencies
 

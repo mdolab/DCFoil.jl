@@ -364,7 +364,7 @@ function test_FiniteElementIso()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => 30.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 1.0, # semispan [m]
 		"ab" => zeros(nNodes), # dist from midchord to EA [m]
@@ -455,7 +455,7 @@ function test_FiniteElementComp()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 1.0, # semispan [m]
 		"ab" => zeros(nNodes), # dist from midchord to EA [m]
@@ -550,7 +550,7 @@ function test_FiniteElementIso3D()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => deg2rad(0.0), # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 10, # semispan [m]
 		"ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
@@ -689,7 +689,7 @@ function test_FiniteElementBend()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => deg2rad(0.0), # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1.0 * ones(nNodes), # chord length [m]
 		"s" => 10, # semispan [m]
 		"ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
@@ -828,7 +828,7 @@ function test_FEBT3()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 1.0, # semispan [m]
 		"ab" => zeros(nNodes), # dist from midchord to EA [m]
@@ -927,7 +927,7 @@ function test_FECOMP2()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 1.0, # semispan [m]
 		"ab" => zeros(nNodes), # dist from midchord to EA [m]

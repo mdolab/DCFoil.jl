@@ -160,7 +160,7 @@ function test_AICs()
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
         "Λ" => deg2rad(-15.0), # sweep angle [rad]
-        "g" => 0.04, # structural damping percentage
+        "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]

@@ -56,7 +56,7 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
-    "g" => 0.04, # structural damping percentage
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
@@ -138,7 +138,7 @@ using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .HydroStrip, .Sol
 # ebVec = 0.25 * chordVec .+ abVec
 # globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, "BT2", FOIL.constitutive)
 # Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, [1, 2, 3, 4])
-# global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, "BT2", structMesh, zeros(2, 2), "FAD", 0.0)
+# global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, Cs, "BT2", structMesh, zeros(2, 2), "FAD", 0.0)
 
 # # ************************************************
 # #     Stupid simple unit tests
@@ -218,7 +218,7 @@ using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .HydroStrip, .Sol
 # #     KS aggregation derivatives
 # # ************************************************
 
-# structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(0.1, 0.0, 1.0, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+# structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solver(0.1, 0.0, 1.0, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
 
 # p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow = SolveFlutter.compute_pkFlutterAnalysis(uRange, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, 8, [1, 2, 3, 4], N_MAX_Q_ITER, 3, Ms, Ks; Δu=0.5)
 # derivs, = Zygote.jacobian((x) -> SolveFlutter.postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, x, iblank, 80), p_r)

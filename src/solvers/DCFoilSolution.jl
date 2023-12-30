@@ -9,16 +9,16 @@ because you'll need it for the costfunc and sensitivity calls
 
 module DCFoilSolution
 
-struct StaticSolution
-    structStates
-    fHydro
+struct StaticSolution{T<:Float64}
+    structStates::Vector{T}
+    fHydro::Vector{T}
 end
 struct FlutterSolution
     eigs_r # dimensional eigvals
     eigs_i # dimensional eigvals
-    R_eigs_r
-    R_eigs_i
-    NTotalModesFound
+    R_eigs_r # stacked eigenvectors
+    R_eigs_i # stacked eigenvectors
+    NTotalModesFound::Int64
     N_MAX_Q_ITER
     flowHistory
     nFlow::Int64

@@ -15,12 +15,12 @@ export run_model
 include("./solvers/SolveStatic.jl")
 include("./solvers/SolveForced.jl")
 include("./solvers/SolveFlutter.jl")
-include("./io/tecplotIO.jl")
+include("./io/TecplotIO.jl")
 include("./InitModel.jl")
 include("./struct/FiniteElements.jl")
 using JSON
 using .InitModel
-using .tecplotIO
+using .TecplotIO
 using .FEMMethods
 using .SolveStatic, .SolveForced, .SolveFlutter
 
@@ -71,7 +71,7 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     )
 
     # --- Write mesh to tecplot for later visualization ---
-    tecplotIO.write_mesh(DVDict, structMesh, outputDir, "mesh.dat")
+    TecplotIO.write_mesh(DVDict, structMesh, outputDir, "mesh.dat")
 
     # ==============================================================================
     #                         Static hydroelastic solution
@@ -94,7 +94,10 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
         @time SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     end
     if solverOptions["run_flutter"]
-        @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
+        global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
+        if solverOptions["writeTecplotSolution"]
+            SolveFlutter.write_tecplot(DVDict, FLUTTERSOL, structMesh, outputDir)
+        end
     end
 end
 

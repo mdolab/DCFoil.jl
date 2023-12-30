@@ -1073,7 +1073,6 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
 
     globalM_z = Zygote.Buffer(globalM)
     globalM_z[:, :] = globalM
-    # TODO: transformation matrix
     # TODO: unit test for the tip mass, verification case from Eirikur's thesis?
     if elemType == "bend-twist"
         println("Does not work")
@@ -1111,6 +1110,8 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
         println("+------------------------------------+")
         println("Dist. CG is aft of EA: ", x_αbBulb, " [m]")
     end
+    # NOTE: After adding the tip mass, the matrix is no longer positive definite... bug?
+    # println("after tip mass:",eigvals(copy(globalM_z)))
     return copy(globalM_z)
 end
 
@@ -1144,7 +1145,6 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     return newK, newM, newF
 end
 
-
 function put_BC_back(q, elemType::String, BCType="clamped")
     """
     appends the BCs back into the solution
@@ -1171,7 +1171,7 @@ function solve_structure(K, M, F)
     Solve the structural system
     """
 
-    q = K \ F # TODO: should probably replace this with an iterative solver
+    q = (K) \ F # TODO: should probably replace this with an iterative solver
 
     return q
 end
@@ -1180,6 +1180,8 @@ function compute_modal(K, M, nEig::Int64)
     """
     Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
     i.e., this is structural dynamics, not hydroelastics.
+
+    The eigenvalues should be all positive and real
     """
 
     # use krylov method to get first few smallest eigenvalues
@@ -1189,6 +1191,35 @@ function compute_modal(K, M, nEig::Int64)
     naturalFreqs = sqrt.(eVals) / (2π)
 
     return naturalFreqs, eVecs
+end
+
+function compute_proportional_damping(K, M, ζ)
+    """
+    Compute the proportional (Rayleigh) damping matrix
+
+    C = alpha [M] + beta [K]
+
+    where alpha and beta are the mass- and stiffness-
+    proportional damping coefficients, respectively.
+
+    
+    Inputs
+    ------
+        K: stiffness matrix after BCs applied
+        M: mass matrix after BCs applied
+        Zeta: damping ratio at the first two natural frequencies [-]
+    """
+
+    # --- Compute undamped natural frequencies ---
+    fns, _ = compute_modal(K, M, 2)
+    ω₁ = fns[1]*2π
+    ω₂ = fns[2]*2π
+
+    # --- Compute proportional coefficients ---
+    massPropConst = 2*ζ / (ω₁ + ω₂)
+    stiffPropConst = ω₁*ω₂ * massPropConst
+
+    return massPropConst, stiffPropConst
 end
 
 end # end module

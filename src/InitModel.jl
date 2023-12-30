@@ -56,7 +56,7 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
   #   Structure
   # ---------------------------
   ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(solverOptions["material"])
-  # g::Float64 = DVDict["g"]
+  # g::Float64 = DVDict["zeta"]
   # θ::Float64 = DVDict["θ"]
 
   # --- Compute the structural properties for the foil ---
@@ -137,7 +137,7 @@ function init_model_wrapper(DVDict::Dict, solverOptions; fSweep=0.1:0.1:1, uRang
   toc = DVDict["toc"]
   ab = DVDict["ab"]
   x_αb = DVDict["x_αb"]
-  g = DVDict["g"]
+  g = DVDict["zeta"]
   θ = DVDict["θ"]
 
   model = init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions; fSweep, uRange)

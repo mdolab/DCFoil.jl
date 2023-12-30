@@ -74,6 +74,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     Λ = DVDict["Λ"]
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
+    zeta = DVDict["zeta"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
@@ -81,6 +82,12 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ---------------------------
     globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+
+    # ---------------------------
+    #   Get damping
+    # ---------------------------
+    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta)
+    Cs = alphaConst * Ms .+ betaConst * Ks
 
     # --- Initialize stuff ---
     u = copy(globalF)
@@ -133,7 +140,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         Kf = Kf_r + 1im * Kf_i
 
         #  Dynamic matrix
-        D = -1 * ω^2 * (Ms + Mf) + im * ω * Cf + (Ks + Kf)
+        D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
 
         # Complex AIC
         AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)

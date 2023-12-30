@@ -24,7 +24,10 @@ cd postprocessing
 # python ./run_postprocessing.py --case IMOCA60Keel_ss_f0.0_w0.0 IMOCA60Keel_cfrp_f15.0_w0.0 --is_static
 # python ./run_postprocessing.py --case 2023-09-26_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal
 # python ./run_postprocessing.py --case 2023-09-26_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal
-python ./run_postprocessing.py --case 2023-11-06_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_static --is_forced --is_modal
+python ./run_postprocessing.py --case 2023-12-02_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_static --is_forced --is_modal
+# python ./run_postprocessing.py --case 2023-12-03_IMOCA60Keel_wov-ud-wov_f15.0_w0.0 2023-12-03_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal
+python ./run_postprocessing.py --case 2023-12-07_IMOCA60Keel_wov-ud-wov_f30.0_w0.0 --is_flutter --is_static --is_forced --is_modal
+python ./run_postprocessing.py --case 2023-12-03_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal
 
 
 # # ---------------------------
@@ -46,7 +49,7 @@ python ./run_postprocessing.py --case 2023-11-06_IMOCA60Keel_ss_f-10.0_w0.0 --is
 # python ./run_postprocessing.py --cases 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_comp2 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_bt2 --is_flutter 
 # python ./run_postprocessing.py --cases 2023-10-06_akcabay_cfrp_f-15.0_w0.0_comp2 2023-10-06_akcabay_cfrp_f-15.0_w0.0_bt2 --is_flutter 
 # python ./run_postprocessing.py --cases  2023-11-06_akcabay-swept_cfrp_f15.0_w-15.0  --is_flutter 
-python ./run_postprocessing.py --cases  2023-11-09_akcabay-swept_cfrp_f15.0_w-15.0  --is_flutter 
+# python ./run_postprocessing.py --cases  2023-11-09_akcabay-swept_cfrp_f15.0_w-15.0  --is_flutter 
 
 cd ..
 

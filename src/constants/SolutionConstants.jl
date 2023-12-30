@@ -16,7 +16,7 @@ using .HydroStrip, .StructProp
 # ==============================================================================
 #                         STRUCTS
 # ==============================================================================
-mutable struct DCFoilConstants{T<:Float64}
+mutable struct DCFoilConstants{T}
     """
     This is a catch all mutable struct to store variables that we do not
     want in function calls like r(u) or f(u)
@@ -24,19 +24,20 @@ mutable struct DCFoilConstants{T<:Float64}
     """
     Kmat::Matrix{T} # structural stiffness matrix (after BC blanking)
     Mmat::Matrix{T} # structural mass matrix (after BC blanking)
+    Cmat::Matrix{T} # structural damping matrix (after BC blanking)
     elemType::String
-    mesh
+    mesh::Array{T,2}
     AICmat::Matrix{T} # Aero influence coeff matrix
     mode::String # type of derivative for drdu
     planformArea::T
 end
 
-mutable struct DCFoilDynamicConstants{T<:Float64}
+mutable struct DCFoilDynamicConstants{T}
     """
     For the dynamic hydroelastic solve, there are more constants to store
     """
     elemType::String
-    mesh
+    mesh::Array{T,2}
     Dmat::Matrix{ComplexF64} # dynamic matrix 
     AICmat::Matrix{ComplexF64} # just the aero part of Dmat 
     extForceVec::Vector{T} # external force vector excluding BC nodes

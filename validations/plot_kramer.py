@@ -50,19 +50,18 @@ analysisDir = "../OUTPUT/kramer_theta"
 fiberAngles = np.arange(0, 90 + 10, 10)
 nModes = 5  # number of modes analyzed in DCFoil
 
-plt.style.use(niceplots.get_style())  # all settings
+# plt.style.use(niceplots.get_style())  # all settings
 # --- Adjust default options for matplotlib ---
 myOptions = {
-    "font.size": 35,
-    # "font.family": "sans-serif",  # set to "serif" to get the same as latex
-    "font.sans-serif": ["Helvetica"],  # this does not work on all systems
+    "font.size": 30,
+    "font.family": "serif",  # set to "serif" to get the same as latex
+    "font.serif": ["Times New Roman"],  # this does not work on all systems
     # "text.usetex": True, # use external latex for all text
     "text.latex.preamble": [
         r"\usepackage{lmodern}",  # latin modern font
         r"\usepackage{amsmath}",  # for using equation commands
-        r"\usepackage{helvet}",  # should make latex serif in helvet now
-        r"\usepackage{sansmath}",
-        r"\sansmath",  # supposed to force math to be rendered in serif font
+        # r"\usepackage{helvet}",  # should make latex serif in helvet now
+        r"\usepackage{newtxmath, newtxtext}",  # times new roman
     ],
 }
 plt.rcParams.update(myOptions)
@@ -108,7 +107,7 @@ if __name__ == "__main__":
             alpha=0.5,
         )
     ax.set_xlabel(r"$\theta_f$ [$\degree$]")
-    ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, labelpad=50)
+    ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, ha="right")
     ax.legend(fontsize=25, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_title("Modal validation")
 
@@ -118,10 +117,11 @@ if __name__ == "__main__":
     for ii in range(len(dryFreqHz)):
         ax.plot(dryThetaDeg[ii], dryFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
 
-    ax.annotate("Dry modes", xy=(0.25, 0.5), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.5)
-    ax.annotate("Wet modes", xy=(0.75, 0.5), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.5)
+    ax.annotate("Dry modes", xy=(0.25, 0.45), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.5)
+    ax.annotate("Wet modes", xy=(0.75, 0.45), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.5)
 
     ax.set_ylim(bottom=0.0)
+    ax.set_xticks(np.arange(-90, 90+45, 45))
 
     plt.show(block=(not dosave))
     niceplots.adjust_spines(ax, outward=True)

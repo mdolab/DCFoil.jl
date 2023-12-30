@@ -73,6 +73,13 @@ function return_constitutive(materialName::String)
         G₁₂ = 4.2e9
         ν₁₂ = 0.20
         constitutive = "orthotropic"
+    elseif (materialName == "wov-ud-wov") # woven-unidirectional-woven
+        ρₛ = 1560.0
+        E₁ = 77.1e9
+        E₂ = 39.7e9
+        G₁₂ = 4.6e9
+        ν₁₂ = 0.15
+        constitutive = "orthotropic"
     end # if
 
     return ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive

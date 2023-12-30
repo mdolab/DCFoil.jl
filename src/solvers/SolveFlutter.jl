@@ -36,12 +36,14 @@ include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
+include("../io/TecplotIO.jl")
 using .InitModel, .HydroStrip, .StructProp
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
 using .SolverRoutines
 using .DCFoilSolution
+
 
 # ==============================================================================
 #                         MODULE CONSTANTS
@@ -79,7 +81,8 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
         N_MAX_Q_ITER,
         nModes,
         CONSTANTS.Mmat,
-        CONSTANTS.Kmat;
+        CONSTANTS.Kmat,
+        CONSTANTS.Cmat;
         # --- Optional args ---
         # ΔdynP=0.5 * FOIL.ρ_f * 1^2,
         Δu=0.4,
@@ -105,7 +108,7 @@ function solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec,
     return obj, pmG, FLUTTERSOL
 end # end solve
 
-function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::Dict)
+function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOptions::Dict)
     """
     Setup function to be called before solve()
     """
@@ -121,7 +124,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     debug = solverOptions["debug"]
 
     # --- Init model structure ---
-    global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, solverOptions; uRange=uRange, fSweep=fSweep)
+    global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, zeta, θ, solverOptions; uRange=uRange, fSweep=fSweep)
 
     # --- Create mesh ---
     nElem = FOIL.nNodes - 1
@@ -154,6 +157,22 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
     #     FEM assembly
     # ************************************************
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    
+    # ---------------------------
+    #   Apply BC blanking
+    # ---------------------------
+    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    
+    # ---------------------------
+    #   Get damping
+    # ---------------------------
+    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta)
+    Cs = alphaConst * Ms .+ betaConst * Ks
+
+    # ---------------------------
+    #   Add any discrete masses
+    # ---------------------------
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
@@ -161,21 +180,15 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions::
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = norm(dR, 2)
         transMat = SolverRoutines.get_transMat(dR, elemLength, elemType)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb,transMat, elemType)
+        Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
     end
-
-    # ---------------------------
-    #   Apply BC blanking
-    # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
-    Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------
     #   Constants
     # ---------------------------
     u = copy(globalF)
     dim = size(Ks)[1] + length(globalDOFBlankingList)
-    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, Cs, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
 end
@@ -237,7 +250,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
-    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, elemType, structMesh, zeros(2, 2), derivMode, 0.0)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(Ks, Ms, copy(Ks), elemType, structMesh, zeros(2, 2), derivMode, 0.0)
 
     # ---------------------------
     #   Test eigensolver
@@ -338,8 +351,15 @@ function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeSh
     fname = workingOutput * "wetModal.jld2"
     save(fname, "wetNatFreqs", wetNatFreqs, "wetModeShapes", wetModeShapes)
 
-end # end function
+end
 
+function write_tecplot(DVDict, FLUTTERSOL, mesh, outputDir="./OUTPUT/")
+    """
+    General purpose tecplot writer wrapper for this module
+    """
+    TecplotIO.write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir, "mode")
+
+end
 # ==============================================================================
 #                         Flutter routines
 # ==============================================================================
@@ -569,7 +589,7 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
 end # end function
 
 function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr::Int64, globalDOFBlankingList,
-    N_MAX_Q_ITER, nModes, Mmat, Kmat;
+    N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat;
     ΔdynP=nothing, Δu=nothing, debug=false
 )
     """
@@ -603,6 +623,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
         mass matrix
     Kmat: array, size(dim, dim) [DESIGN VAR]
         stiffness matrix
+    Cmat: array, size(dim, dim) [DESIGN VAR]
+        damping matrix
     ΔdynP: float
         dynamic pressure increment [Pa], either do dynP or vel increments
     Δu: float
@@ -629,7 +651,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     # ---------------------------
     #   Modal method reduction
     # ---------------------------
-    Mr, Kr, Qr = compute_modalSpace(Mmat, Kmat; reducedSize=Nr)
+    Mr, Kr, Cr, Qr = compute_modalSpace(Mmat, Kmat, Cmat; reducedSize=Nr)
     ChainRulesCore.ignore_derivatives() do
         println(@sprintf("Modal matrix Qr ∈ (%i x %i)", size(Qr)[1], size(Qr)[2]))
         println(@sprintf("Running max q iter: %i", N_MAX_Q_ITER))
@@ -687,7 +709,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     nCorrNewModes::Int64 = 0 # number of new modes to correlate
     is_failed = false
     nK::Int64 = 22 # number of k values to sweep
-    maxK::Float64 = 3.5 # max reduced frequency k to search
+    maxK = 3.5 # max reduced frequency k to search
+    maxK = 60.0 # max reduced frequency k to search
 
 
     # --- Zygote buffers ---
@@ -729,7 +752,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
         # --- Compute generalized hydrodynamic loads ---
         Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, elemType)
         # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
-        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
+        p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Cr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
         # ---------------------------
         #   Mode correlations
@@ -739,10 +762,21 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
             nCorr = nModes
             NTotalModesFound = nModes
 
+            # --- Print out first flight condition ---
+            ChainRulesCore.ignore_derivatives() do
+                println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        000    |            %03d   |        %d  |",
+                    nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
+                # if debug
+                #     println("kCtr: ", kCtr)
+                # end
+            end
+
             # Sort eigenvalues based on the frequency (imaginary part)
             idxTmp = sortperm(p_cross_i[1:kCtr])
-
-            # Populate correlation matrix
+            
+            # --- Populate correlation matrix ---
+            # If there is an indexing error, chances are you did not find enough k crossings
+            # Run in debug mode and see where the Im(p) = k line is and adjust maxK
             ChainRulesCore.ignore_derivatives() do
                 for ii in 1:size(m)[1]
                     m[ii, 1] = 0
@@ -754,11 +788,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                 end
             end
 
-            # --- Print out first flight condition ---
-            ChainRulesCore.ignore_derivatives() do
-                println(@sprintf("|  %04d  | %1.9e  | %1.9e |   %03d |        000    |            %03d   |        %d  |",
-                    nFlow, dynPTmp, U∞, nCorr, NTotalModesFound, is_failed))
-            end
 
         else # not first condition; apply mode tracking between flow speeds
             # --- Compute correlation matrix btwn dynP increments ---
@@ -1059,13 +1088,14 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
 end # end function
 
-function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, MM, KK, Qr, structMesh, globalDOFBlankingList; debug=false, qiter=1)
+function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, MM, KK, CC, Qr, structMesh, globalDOFBlankingList; debug=false, qiter=1)
     """
     # This routine solves an eigenvalue problem over a range of reduced frequencies k searches for the
     # intersection of each mode with the diagonal line Im(p) = k and then does a linear interpolation
     # for the eigenvalue and eigenvector. This is method of van Zyl https://arc.aiaa.org/doi/abs/10.2514/2.2806
     MM - structural mass matrix (Nr, Nr)
     KK - structural stiffness matrix (Nr, Nr)
+    CC - structural damping matrix (Nr, Nr)
     Qr - modal matrix (dimwithBC, Nr)
 
     Outputs
@@ -1074,18 +1104,20 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
         p_cross_i - unsorted eigenvalues [rad/s]
         R_cross_r - unsorted eigenvectors [-]
         R_cross_i - unsorted eigenvectors [-]
-        ctr - reduced frequency counter
+        ctr - number of matched points
     """
 
     N_MAX_K_ITER = 5000 # max k iterations before code breaks
 
     # --- Loop over reduced frequency search range to construct lines ---
-    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
 
     if (debug)
         ChainRulesCore.ignore_derivatives() do
             nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
-            # Debugging CODE FOR VISUALIZING THE OUTPUT LINES WHERE MODES CROSS Im(p) = k
+            ######################################
+            # PLOT WHERE MODES CROSS Im(p) = k
+            ######################################
             marker = false
             plot(k_history[1:ik], p_eigs_i[1, 1:ik], label="mode 1", marker=marker)
             plot!(k_history[1:ik], p_eigs_i[2, 1:ik], label="mode 2", marker=marker)
@@ -1177,7 +1209,7 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
 end # end function
 
 function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ,
-    chordVec, abVec, ebVec, U∞, MM, KK, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    chordVec, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
     """
     Solve the eigenvalue problem over a range of reduced frequencies (k)
 
@@ -1191,6 +1223,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
         b_ref - reference semichord
         MM - structural mass matrix
         KK - structural stiffness matrix
+        CC - structural damping matrix
         Qr - modal matrix (Nr, Nr)
         globalDOFBlankingList - list of DOFs to blank out for the BCs
 
@@ -1272,7 +1305,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
         Cf_i = Qr' * Cffull_i * Qr
 
         # --- Solve eigenvalue problem ---
-        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+        p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, dimwithBC, b_ref, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK, CC)
         # --- Sort eigenvalues from small to large ---
         p_r = sort(real(p_r_tmp))
         idxs = sortperm(real(p_r_tmp))
@@ -1476,7 +1509,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, pkEqnTy
     # Nmr - the size of reduced problem
     Nmr = size(Ar_sweep_r)[1]
     # Nk - The number of reduced frequencies used to build the AIC.
-    Nk::Int64 = length(k_sweep)
+    Nk = length(k_sweep)
 
     # Calc the difference of current k and the k_sweep
     kDiff = k .- k_sweep
@@ -1533,7 +1566,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, pkEqnTy
     return Ar_r, Ar_i
 end
 
-function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK)
+function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK, CC)
     # """
     # This routine solves the following eigenvalue problem.
     #   [ (U/b)^2 * p^2 * M + (U/b) * C + K - F_aero ] * u = 0
@@ -1612,8 +1645,9 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
         # --- Form B matrix ---
         # B - Real part
         firstRow = hcat(zeroMat, iMat)
-        secondRow = hcat(-1 * (Kf_r + KK), -1 * nonDimFactor .* (Cf_r))
+        secondRow = hcat(-1 * (Kf_r + KK), -1 * nonDimFactor .* (Cf_r + CC))
         B_r = vcat(firstRow, secondRow)
+
         # B - Imag part
         firstRow = hcat(zeroMat, zeroMat)
         secondRow = hcat(-1 * (Kf_i), -1 * nonDimFactor .* (Cf_i))
@@ -1690,7 +1724,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     return p_r, p_i, R_aa_r, R_aa_i
 end # end solve_eigenvalueProblem
 
-function compute_modalSpace(Ms, Ks; Cs=nothing, reducedSize=20)
+function compute_modalSpace(Ms, Ks, Cs; reducedSize=20)
     """
     Reduce to modal space to reduce the size of the problem
 
@@ -1704,6 +1738,7 @@ function compute_modalSpace(Ms, Ks; Cs=nothing, reducedSize=20)
     -------
     Ms_r - reduced mass matrix. Array(Nr,Nr)
     Ks_r - reduced stiffness matrix. Array(Nr,Nr)
+    Cs_r - reduced damping matrix. Array(Nr,Nr)
     Qr - modal matrix. Array(dim,Nr)
     """
 
@@ -1714,8 +1749,9 @@ function compute_modalSpace(Ms, Ks; Cs=nothing, reducedSize=20)
     # --- Compute the reduced matrices ---
     Ms_r = Qr' * Ms * Qr
     Ks_r = Qr' * Ks * Qr
+    Cs_r = Qr' * Cs * Qr
 
-    return Ms_r, Ks_r, Qr
+    return Ms_r, Ks_r, Cs_r, Qr
 end
 
 function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound, nFlow, p_r, iblank, ρKS)
@@ -1837,13 +1873,14 @@ function compute_costFuncs(DVDict::Dict, solverOptions::Dict)
     This is the primal solver
     """
 
-    obj = cost_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+    obj = cost_funcs_with_derivs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
 
     return obj
 end
 
 function get_sol(DVDict::Dict, solverOptions::Dict)
     """
+    Wrapper function
     This does the primal solve and returns the solution
     It is used in the top-level evalFuncs call in DCFoil 
     to return the sol struct
@@ -1851,7 +1888,7 @@ function get_sol(DVDict::Dict, solverOptions::Dict)
 
     # Setup
     structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-        setup_solver(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions)
+        setup_solver(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
 
     # Solve
     obj, _, SOL = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
@@ -1914,7 +1951,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
         @time sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
                 cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
-            DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"])
+            DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"])
         # --- Order the sensitivities properly ---
         funcsSens["α₀"] = sensitivities[1]
         funcsSens["Λ"] = sensitivities[2]
@@ -1923,7 +1960,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
         funcsSens["toc"] = sensitivities[5]
         funcsSens["ab"] = sensitivities[6]
         funcsSens["x_αb"] = sensitivities[7]
-        funcsSens["g"] = sensitivities[8]
+        funcsSens["zeta"] = sensitivities[8]
         funcsSens["θ"] = sensitivities[9]
 
     elseif mode == "FAD"

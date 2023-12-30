@@ -54,7 +54,9 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
     figsize = (9 * ncols, 5 * nrows)
     moldColor = "black"
     alpha = 0.5
-    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
+    fig, ax = plt.subplots(
+        nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize
+    )
 
     y = np.linspace(0, DVDict["s"], nNodes)
 
@@ -65,7 +67,9 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
     # --- Plot outer mold shape ---
     ax.plot(y, -0.5 * np.array(DVDict["c"]), color=moldColor)
     ax.plot(y, 0.5 * np.array(DVDict["c"]), color=moldColor)
-    ax.plot([y[-1], y[-1]], [0.5 * DVDict["c"][-1], -0.5 * DVDict["c"][-1]], color=moldColor)
+    ax.plot(
+        [y[-1], y[-1]], [0.5 * DVDict["c"][-1], -0.5 * DVDict["c"][-1]], color=moldColor
+    )
 
     # --- Plot elastic axis (E.A.) ---
     ab = -np.array(DVDict["ab"])
@@ -275,18 +279,39 @@ def plot_static2d(
     ax.plot(nodes, spanLift, color=lc, label=label)
     ax.set_ylabel("$L$ [N]", rotation=0, labelpad=lpad)
     ax.set_xlabel("$y$ [m]")
-    ax.annotate(liftTitle, xy=(0, 0.1 * iic), color=lc, xycoords="axes fraction", fontsize=fs_lgd)
+    ax.annotate(
+        liftTitle,
+        xy=(0, 0.1 * iic),
+        color=lc,
+        xycoords="axes fraction",
+        fontsize=fs_lgd,
+    )
 
     ax = axes[1, 1]
     ax.plot(nodes, spanMoment, color=lc, label=label)
     ax.set_ylabel("$M_y$\n[N-m/m]", rotation=0, labelpad=lpad)
     ax.set_xlabel("$y$ [m]")
-    ax.annotate(momTitle, xy=(0, 0.1 * iic), color=lc, xycoords="axes fraction", fontsize=fs_lgd)
+    ax.annotate(
+        momTitle, xy=(0, 0.1 * iic), color=lc, xycoords="axes fraction", fontsize=fs_lgd
+    )
 
     return fig, axes
 
 
-def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, rao, flowSpeed, fs_lgd, elem, cm):
+def plot_forced(
+    fig,
+    axes,
+    fExtSweep,
+    dynTipBending,
+    dynTipTwisting,
+    dynLift,
+    dynMoment,
+    rao,
+    flowSpeed,
+    fs_lgd,
+    elem,
+    cm,
+):
     """
     Plot harmonically forced response of the tip of the wing
 
@@ -335,7 +360,9 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     realRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(rao[:, OOPIdx, OOPIdx]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(
+        fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed)
+    )
     # ax.annotate("$U_{\infty}=$%.1f" % (flowSpeed), xy=(0.8, 0.9), xycoords="axes fraction", color=cm[0])
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
     ax.set_xlabel(xLabel)
@@ -348,7 +375,9 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     realRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(rao[:, -2, -2]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(
+        fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed)
+    )
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
 
     # ************************************************
@@ -362,7 +391,9 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     realRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(rao[:, OOPIdx, TwistIdx]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(
+        fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed)
+    )
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
 
     ax = axes[1, 1]
@@ -373,7 +404,9 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     realRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(rao[:, TwistIdx, OOPIdx]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(
+        fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed)
+    )
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
 
     # NOTE: TBH these are not terribly useful unless you're looking at transmitted force into the hull of the boat
@@ -403,7 +436,9 @@ def plot_forced(fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dy
     return fig, axes
 
 
-def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12):
+def plot_naturalModeShapes(
+    fig, axes, y, nModes: int, modeShapes: dict, modeFreqs: dict, ls="-", nshift=12
+):
     """
     Plot the mode shapes for the structural and wet modes in quiescent fluid (U = 0 m/s)
 
@@ -459,7 +494,13 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
         # ax.plot(eta, structBM[ii, :], label=bendLabel, ls=ls, c=color)
         # ax.plot(eta, structTM[ii, :], label=twistLabel, ls=ls[1], c=color)
         labelString = f"({structNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, structBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii])
+        ax.plot(
+            eta,
+            structBM[ii, :],
+            label=f"Mode {ii+1} {labelString}",
+            ls=ls,
+            color=ccm[ii],
+        )
         # ax.annotate(
         #     f"Mode {ii+1} {labelString}",
         #     xy=(eta[-1 - nshift], structBM[ii, -1 - nshift]),
@@ -495,7 +536,13 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
         structTM[ii, :] /= maxVal
 
         labelString = f"({structNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, structTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii])
+        ax.plot(
+            eta,
+            structTM[ii, :],
+            label=f"Mode {ii+1} {labelString}",
+            ls=ls,
+            color=ccm[ii],
+        )
 
     ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel(r"$\widebar{y}$ [-]")
@@ -517,7 +564,9 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
         wetBM[ii, :] /= maxVal
 
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii])
+        ax.plot(
+            eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii]
+        )
         ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
         # ax.annotate(
         #     f"Mode {ii+1} {labelString}",
@@ -552,7 +601,9 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
         wetTM[ii, :] /= maxVal
 
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
-        ax.plot(eta, wetTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii])
+        ax.plot(
+            eta, wetTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii]
+        )
 
     ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
     ax.set_xlabel("$\\widebar{y}$ [-]")
@@ -566,7 +617,16 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
 
 
 def plot_modeShapes(
-    comm, vRange, y, chordVec, flutterSol: dict, fact: float, ls="-", alpha=1.0, units="m/s", outputDir=None
+    comm,
+    vRange,
+    y,
+    chordVec,
+    flutterSol: dict,
+    fact: float,
+    ls="-",
+    alpha=1.0,
+    units="m/s",
+    outputDir=None,
 ):
     """
     Plot the hydroelastic mode shapes where each processor has its own mode
@@ -621,11 +681,21 @@ def plot_modeShapes(
                     continue
                 else:
                     figsize = (8 * fact, 10 * fact)
-                    fig, axes = plt.subplots(nrows=2, ncols=1, sharey="row", constrained_layout=True, figsize=figsize)
+                    fig, axes = plt.subplots(
+                        nrows=2,
+                        ncols=1,
+                        sharey="row",
+                        constrained_layout=True,
+                        figsize=figsize,
+                    )
 
                     # --- Pull out shapes and normalize ---
-                    w_r, psi_r = get_bendingtwisting(flutterSol[key]["R_r"][:, jj], nDOF=4)
-                    w_i, psi_i = get_bendingtwisting(flutterSol[key]["R_i"][:, jj], nDOF=4)
+                    w_r, psi_r = get_bendingtwisting(
+                        flutterSol[key]["R_r"][:, jj], nDOF=4
+                    )
+                    w_i, psi_i = get_bendingtwisting(
+                        flutterSol[key]["R_i"][:, jj], nDOF=4
+                    )
                     w_mag = np.sqrt(w_r**2 + w_i**2)
                     psi_mag = np.sqrt(psi_r**2 + psi_i**2)
 
@@ -640,7 +710,13 @@ def plot_modeShapes(
                     # --- Bending ---
                     ax = axes[0]
                     mShape = np.hstack([0.0, w_mag / maxVal])  # add zero at root
-                    ax.plot(y, mShape, label=f"Mode {mm+1} {labelString}", ls=ls, color=cm[iic])
+                    ax.plot(
+                        y,
+                        mShape,
+                        label=f"Mode {mm+1} {labelString}",
+                        ls=ls,
+                        color=cm[iic],
+                    )
                     ax.set_ylabel("OOP\nBending", rotation=0, labelpad=labelpad)
                     ax.legend(labelcolor="linecolor", loc="best", frameon=False)
 
@@ -786,7 +862,12 @@ def plot_vg_vf_rl(
         # path_effects=[patheffects.withTickedStroke()], # ugly
     )
     ax.annotate(
-        "Hydroelastic instability", xy=(0.5, 0.9), ha="center", xycoords="axes fraction", size=legfs, color=flutterColor
+        "Hydroelastic instability",
+        xy=(0.5, 0.9),
+        ha="center",
+        xycoords="axes fraction",
+        size=legfs,
+        color=flutterColor,
     )
     # ax.set_yticks(yticks + [0])
 
@@ -821,7 +902,15 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            ax.plot(vSweep, fSweep, ls=ls, color=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
+            ax.plot(
+                vSweep,
+                fSweep,
+                ls=ls,
+                color=cm[iic],
+                label=f"Mode {key}",
+                marker=marker,
+                alpha=alpha,
+            )
             # ax.scatter(vSweep, fSweep, color=(cm[iic]), marker=marker)
             start = np.array([vSweep[0], fSweep[0]])
             end = np.array([vSweep[-1], fSweep[-1]])
@@ -849,7 +938,9 @@ def plot_vg_vf_rl(
                     fontsize=legfs,
                     xytext=xytext,
                     textcoords="offset points",
-                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    bbox=dict(
+                        boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5
+                    ),
                 )
         except Exception:
             continue
@@ -882,7 +973,15 @@ def plot_vg_vf_rl(
             raise ValueError(f"Unsupported units: {units}")
 
         try:  # Plot only if the data exists
-            ax.plot(gSweep, fSweep, ls=ls, color=cm[iic], label=f"Mode {key}", marker=marker, alpha=alpha)
+            ax.plot(
+                gSweep,
+                fSweep,
+                ls=ls,
+                color=cm[iic],
+                label=f"Mode {key}",
+                marker=marker,
+                alpha=alpha,
+            )
             # ax.scatter(gSweep, fSweep, color=(cm[iic]), marker=marker)
             start = np.array([gSweep[0], fSweep[0]])
             end = np.array([gSweep[-1], fSweep[-1]])
@@ -934,7 +1033,9 @@ def plot_vg_vf_rl(
                     fontsize=legfs * 0.8,
                     xytext=(5, -5),
                     textcoords="offset points",
-                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    bbox=dict(
+                        boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5
+                    ),
                     va="top",
                 )
 
@@ -942,7 +1043,9 @@ def plot_vg_vf_rl(
             nmid = int(len(vSweep) // 4)
             ax.annotate(
                 "",
-                xytext=(np.array([gSweep[-nmid - 1], fSweep[-nmid - 1]])),  # arrow start
+                xytext=(
+                    np.array([gSweep[-nmid - 1], fSweep[-nmid - 1]])
+                ),  # arrow start
                 xy=(np.array([gSweep[-nmid], fSweep[-nmid]])),  # arrow end
                 arrowprops=dict(arrowstyle="-|>", shrinkA=2, color=cm[iic], alpha=0.5),
             )
@@ -967,7 +1070,12 @@ def plot_vg_vf_rl(
         # path_effects=[patheffects.withTickedStroke()], # ugly
     )
     ax.annotate(
-        "Hydroelastic\ninstability", xy=(0.85, 0.5), ha="left", xycoords="axes fraction", size=legfs, color=flutterColor
+        "Hydroelastic\ninstability",
+        xy=(0.85, 0.5),
+        ha="left",
+        xycoords="axes fraction",
+        size=legfs,
+        color=flutterColor,
     )
 
     for ax in axes.flatten():
@@ -977,7 +1085,16 @@ def plot_vg_vf_rl(
 
 
 def plot_dlf(
-    fig, axes, flutterSol: dict, cm, semichord: float, sweepAng: float, ls="-", alpha=1.0, units="m/s", nShift=0
+    fig,
+    axes,
+    flutterSol: dict,
+    cm,
+    semichord: float,
+    sweepAng: float,
+    ls="-",
+    alpha=1.0,
+    units="m/s",
+    nShift=0,
 ):
     """
     Plot the damping loss factor diagrams.
@@ -1088,7 +1205,9 @@ def plot_dlf(
         dlf = -2 * np.divide(flutterSol[key]["pvals_r"], fSweep)
 
         try:
-            ax.loglog(kSweep, dlf, ls=ls, color=cm[iic], label=f"Mode {key}", alpha=alpha)
+            ax.loglog(
+                kSweep, dlf, ls=ls, color=cm[iic], label=f"Mode {key}", alpha=alpha
+            )
             start = np.array([kSweep[0], dlf[0]])
             end = np.array([kSweep[-1], dlf[-1]])
             # Label mode number on the line
@@ -1124,7 +1243,7 @@ def pytecplot_plotmesh(args, fname: str):
     lay = ntp.Layout()
 
 
-def set_my_plot_settings():
+def set_my_plot_settings(is_paper=False):
     fs_lgd = 20
     fs = 25
     plt.style.use(nplt.get_style())  # all settings
@@ -1138,9 +1257,21 @@ def set_my_plot_settings():
             r"\usepackage{amsmath}",  # for using equation commands
             r"\usepackage{helvet}",  # should make latex serif in helvet now
             r"\usepackage{sansmath}",
-            r"\sansmath",  # supposed to force math to be rendered in serif font
+            r"\sansmath",  # supposed to force math to be rendered in sans-serif font
         ],
     }
+    if is_paper:
+        myOptions.update(
+            {
+                "font.family": "serif",
+                "text.usetex": True,
+                "text.latex.preamble": [
+                    r"\usepackage{lmodern}",  # latin modern font
+                    r"\usepackage{amsmath}",  # for using equation commands
+                    r"\usepackage{helvet}",  # should make latex serif in helvet now
+                ],
+            }
+        )
     plt.rcParams.update(myOptions)
 
     # colormap

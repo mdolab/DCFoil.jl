@@ -1,4 +1,3 @@
-
 # --- Julia ---
 
 # @File    :   DesignConstants.jl
@@ -29,7 +28,7 @@ struct foil{T<:Float64}
     EAₛ::Vector{T} # axial stiffness vector [N-m²]
     α₀::T # rigid initial angle of attack [deg] THE ONLY TIME THIS IS USED IS WHEN A DERIVATIVE WRT ALPHA IS NOT NEEDED
     U∞::T # flow speed [m/s]
-    g::T # structural damping percentage
+    g::T # modal damping ratio at first 2 modes
     clα::Vector{T} # lift slopes [1/rad]
     ρ_f::T # fluid density [kg/m³]
     nNodes::Int64 # number of evaluation points on span
@@ -50,7 +49,7 @@ struct dynamicFoil{T<:Float64}
     EAₛ::Vector{T} # axial stiffness vector [N-m²]
     α₀::T # rigid initial angle of attack [deg]
     U∞::T # flow speed [m/s]
-    g::T # structural damping percentage
+    g::T # modal damping ratio at first 2 modes
     clα::Vector{T} # lift slopes [1/rad]
     ρ_f::T # fluid density [kg/m³]
     nNodes::Int64 # number of evaluation points on span
