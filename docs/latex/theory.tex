@@ -89,12 +89,12 @@
 % 
 DCFoil is a program for the dynamic analysis and design optimization of composite hydrofoils.
 \begin{figure}[htbp!]
-\centering
-      % reference: trim={<left> <lower> <right> <upper>}
-      \includegraphics[width=0.7\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{keel-dcfoil.pdf}
-      \caption{\label{fig:keel-dcfoil}
-      DCFoil modeling approach
-      }
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    \includegraphics[width=0.7\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{keel-dcfoil.pdf}
+    \caption{\label{fig:keel-dcfoil}
+        DCFoil modeling approach
+    }
 \end{figure}
 
 \clearpage
@@ -103,13 +103,51 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 %------------------------------------------------------------------------------
 \section{Coordinate system}
 % 
-
+Flow is in the $x$-direction, span is in the $y$-direction, and the vertical direction is $z$.
 %------------------------------------------------------------------------------
 \section{Discretization}
-\subsection{Structural beam model}
+\subsection{Structural model}
+% 
+The local beam model uses the spanwise direction as $x$ (subscript 1), the chordwise direction as $y$ (subscript 2), and the vertical direction as $z$ (subscript 3).
+It is transformed to the global coordinate system by the rotation matrices.
+\subsubsection{Beam finite element}
+% 
+The composite beam model uses the well-known slender beam parameters $EI_s$, $GJ_s$, $EA_s$, and additionally $S_s$ and $K_s$ to account for structural warping of non-circular cross sections and material bend-twist coupling, respectively.
+% 
+\subsubsection{Constitutive relations for composite beams}
+% 
+The beam parameters are computed from classical lamination theory (CLT) for composite plates using the high aspect ratio plate model from \citet{Weisshaar1985}.
+\be
+EI = c\left( D_{11} - \frac{D_{12}^2}{D_{22}}\right)      , \quad
+GJ = 4c \left(D_{66} - \frac{D_{26}^2}{D_{22}}\right)     , \quad
+K  = 2c \left(D_{16} - \frac{D_{26}D_{12}}{D_{22}}\right)
+\ee
+These relations do not restrict chordwise rigidity (camber), but they do assume zero chordwise moment.
+\citet{LOTTATI1985} used the chordwise rigid relations, which simplifies the algebra.
+
+The flexural stiffnesses $D_{ij}$ come CLT via
+\begin{align}
+    D_{11} & = Q_{11}\cos^4(\theta_f)+2\left( Q_{12}+2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{22}\sin^4(\theta_f)                             \\
+    D_{22} & = Q_{11}\sin^4(\theta_f)+2\left( Q_{12}+2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{22}\cos^4(\theta_f)                             \\
+    D_{66} & = \left(Q_{11} +Q_{22} - 2Q_{12}-2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{66}\left( \sin^4(\theta_f)+\cos^4(\theta_f) \right)    \\
+    D_{12} & = \left(Q_{11} +Q_{22} - 4Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f) + Q_{12}\left( \sin^4(\theta_f)+\cos^4(\theta_f) \right)          \\
+    D_{16} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin(\theta_f)\cos^3(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin^3(\theta_f)\cos(\theta_f) \\
+    D_{26} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin^3(\theta_f)\cos(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin(\theta_f)\cos^3(\theta_f) 
+\end{align}
+%
+The reduced in-plane stiffness coefficients $Q_{ij}$ for the individual plies are
+%
+\be
+Q_{11} = \frac{E_1}{1-\nu_{12}\nu_{21}}, \quad
+Q_{12} = \frac{\nu_{12} E_2}{1-\nu_{12}\nu_{21}}, \quad
+Q_{22} = \frac{E_2}{1-\nu_{12}\nu_{21}}, \quad
+Q_{66} = G_{12}
+\ee
+
 \subsection{Hydrodynamic loads}
 % 
 \subsubsection{Steady lifting line}
+% 
 The lifting line model derives from~\citet[Ch. XI]{Glauert1983a} and works for arbitrary chord.
 Specifically, we are after sectional lift slopes ($\textstyle c_{\ell_\alpha} = dc_\ell/d\alpha = a_0$).
 We assume
@@ -117,8 +155,9 @@ We assume
     \item the chord is small compared to the span,
     \item the wing is symmetric about the centerline,
     \item span is straight and orthogonal to the freestream
-    \item trailing vortices are shed from the trailing edge and align with the freestream
+    \item trailing vortices are shed from the trailing edge and align with the freestream (no sweep or dihedral)
 \end{itemize}
+
 The wing is represented by superimposing ``horseshoe'' systems of vortex lines (analagous to a wire with electrical current).
 This is because the circulation across a wing is not constant.
 The free vortex system is a sheet of trailing vortices springing from the trailing edge.
@@ -236,7 +275,7 @@ It is applied as a transfer function to the static hydrodynamics.
         \mbf{k_f}
         \left\{\begin{matrix}w \\ \psi + \alpha_0 \end{matrix}\right\}
         \right]_i
-        +
+    +
     \left[
         \mbf{\hat{c}_f}
         \left\{\begin{matrix}\dot{w}' \\ \dot{\psi}' \end{matrix}\right\}
@@ -264,7 +303,7 @@ where $\Delta y_i$ is the strip width at node $i$, which we assume to be equal t
     \mbf{c_f}(k) =
     \frac{1}{2}\rho_f b U_0
     \left(
-        \begin{aligned}
+    \begin{aligned}
             \cos(\Lambda)
             \begin{bmatrix}
                 \vspace{3mm}c_{\ell_{\alpha}} 2 C(k) & -b \left[2 \pi + c_{\ell_{\alpha}} (1-2a) C (k)\right]     \\
@@ -306,21 +345,21 @@ where $\Delta y_i$ is the strip width at node $i$, which we assume to be equal t
             2\pi ab^2           & 2\pi b^3\left(\frac{1}{8}+a^2\right)
         \end{bmatrix}
     \end{aligned}
-    \right)
-    \ee
-    %
+\right)
+\ee
+%
 \begin{eqnarray}
-\mbf{\hat{k}_f}(k) =
-\frac{1}{2}\rho_f b U_0
-\sin(\Lambda)
-\left(
-\begin{aligned}
-    U_0 \cos(\Lambda)
-        \begin{bmatrix}
-            \vspace{3mm} c_{\ell_{\alpha}}2 C (k) & - c_{\ell_{\alpha}} b (1-2a)C(k)          \\
-            2ebc_{\ell_{\alpha}} C (k)            & \pi b^2  -c_{\ell_{\alpha}}eb^2(1-2a)C(k)
-        \end{bmatrix}
-    \end{aligned}
+    \mbf{\hat{k}_f}(k) =
+    \frac{1}{2}\rho_f b U_0
+    \sin(\Lambda)
+    \left(
+    \begin{aligned}
+            U_0 \cos(\Lambda)
+            \begin{bmatrix}
+                \vspace{3mm} c_{\ell_{\alpha}}2 C (k) & - c_{\ell_{\alpha}} b (1-2a)C(k)          \\
+                2ebc_{\ell_{\alpha}} C (k)            & \pi b^2  -c_{\ell_{\alpha}}eb^2(1-2a)C(k)
+            \end{bmatrix}
+        \end{aligned}
     \right)
 \end{eqnarray}
 % 

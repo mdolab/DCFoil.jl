@@ -354,23 +354,23 @@ function test_pkflutterderiv(DVDict, solverOptions)
 
     @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
     @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-    @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+    # @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 
 
     # Print it out
-    for (key, val) in funcsSensFD
-        save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
+    for (key, val) in funcsSensAD
         save("RAD" * key * ".jld2", "derivs", funcsSensAD)
         println("AD: ", key, " = ", val)
-        println("FD: ", key, " = ", funcsSensFD[key])
+        # save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
+        # println("FD: ", key, " = ", funcsSensFD[key])
 
-        if val !== nothing
-            if maximum(funcsSensFD[key] - val) > 1e-3
-                println("Possibly bad derivative: ", key)
-                println("Abs difference btwn FD and AD: ", funcsSensFD[key] - val)
-                println("Check FD step size")
-            end
-        end
+        # if val !== nothing
+        #     if maximum(funcsSensFD[key] - val) > 1e-3
+        #         println("Possibly bad derivative: ", key)
+        #         println("Abs difference btwn FD and AD: ", funcsSensFD[key] - val)
+        #         println("Check FD step size")
+        #     end
+        # end
     end
 
     return 0.0

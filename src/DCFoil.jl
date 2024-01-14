@@ -91,7 +91,10 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     #                         Flutter solution
     # ==============================================================================
     if solverOptions["run_modal"]
-        @time SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
+        structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
+        if solverOptions["writeTecplotSolution"]
+            SolveFlutter.write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, structMesh, outputDir)
+        end
     end
     if solverOptions["run_flutter"]
         global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)

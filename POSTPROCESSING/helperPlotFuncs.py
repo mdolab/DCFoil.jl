@@ -545,7 +545,7 @@ def plot_naturalModeShapes(
         )
 
     ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
-    ax.set_xlabel(r"$\widebar{y}$ [-]")
+    ax.set_xlabel(r"$\bar{y}$ [-]")
 
     # ---------------------------
     #   Wet modes
@@ -606,7 +606,7 @@ def plot_naturalModeShapes(
         )
 
     ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
-    ax.set_xlabel("$\\widebar{y}$ [-]")
+    ax.set_xlabel("$\\bar{y}$ [-]")
 
     fig.suptitle("Normalized mode shapes", fontsize=40)
 
@@ -652,7 +652,7 @@ def plot_modeShapes(
 
     labelpad = 40
     legfs = 20
-    xLabel = r"$\widebar{y}$ [-]"
+    xLabel = r"$\bar{y}$ [-]"
 
     vLow = vRange[0]
     vHigh = vRange[1]

@@ -167,7 +167,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     # ---------------------------
     #   Get damping
     # ---------------------------
-    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta)
+    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta, solverOptions["nModes"])
     Cs = alphaConst * Ms .+ betaConst * Ks
 
     # ---------------------------
@@ -232,7 +232,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
-        dR = (structMesh[end-1, :] - structMesh[end, :])
+        dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = norm(dR, 2)
         transMat = SolverRoutines.get_transMat(dR, elemLength, elemType)
         globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
@@ -355,9 +355,17 @@ end
 
 function write_tecplot(DVDict, FLUTTERSOL, mesh, outputDir="./OUTPUT/")
     """
-    General purpose tecplot writer wrapper for this module
+    General purpose tecplot writer wrapper for flutter solution
     """
-    TecplotIO.write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir, "mode")
+    TecplotIO.write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir, "mode")
+
+end
+
+function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir="./OUTPUT/")
+    """
+    General purpose tecplot writer wrapper for modal solution
+    """
+    TecplotIO.write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir)
 
 end
 # ==============================================================================

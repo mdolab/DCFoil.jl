@@ -1193,8 +1193,9 @@ function compute_modal(K, M, nEig::Int64)
     return naturalFreqs, eVecs
 end
 
-function compute_proportional_damping(K, M, ζ)
+function compute_proportional_damping(K, M, ζ, nMode)
     """
+    TODO: MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
     Compute the proportional (Rayleigh) damping matrix
 
     C = alpha [M] + beta [K]
@@ -1207,17 +1208,29 @@ function compute_proportional_damping(K, M, ζ)
     ------
         K: stiffness matrix after BCs applied
         M: mass matrix after BCs applied
-        Zeta: damping ratio at the first two natural frequencies [-]
+        Zeta: damping ratio at the first min and max natural frequencies [-]
+        OR
+        damping ratio at the first natural frequency (vacuum)
     """
 
     # --- Compute undamped natural frequencies ---
-    fns, _ = compute_modal(K, M, 2)
-    ω₁ = fns[1]*2π
-    ω₂ = fns[2]*2π
+    fns, _ = compute_modal(K, M, nMode)
+    ω₁ = fns[1] * 2π
+    ω₂ = fns[nMode] * 2π
 
     # --- Compute proportional coefficients ---
-    massPropConst = 2*ζ / (ω₁ + ω₂)
-    stiffPropConst = ω₁*ω₂ * massPropConst
+    # # Mass and stiffness proportional damping
+    # All damping in between the first two natural frequencies is not overdamped artificially
+    # massPropConst = 2 * ζ / (ω₁ + ω₂)
+    # stiffPropConst = ω₁ * ω₂ * massPropConst
+
+    # Stiffness proportional damping (grows with increasing response freq)
+    massPropConst = 0.0
+    stiffPropConst = 2 * ζ / ω₂
+
+    # # Mass proportional damping
+    # massPropConst = 2 * ζ * ω₁
+    # stiffPropConst = 0.0
 
     return massPropConst, stiffPropConst
 end

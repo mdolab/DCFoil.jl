@@ -86,7 +86,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ---------------------------
     #   Get damping
     # ---------------------------
-    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta)
+    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta, solverOptions["nModes"])
     Cs = alphaConst * Ms .+ betaConst * Ks
 
     # --- Initialize stuff ---

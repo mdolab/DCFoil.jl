@@ -14,8 +14,8 @@ struct section_property
 	t: thickness
 	ab: 
 	ρₛ: density
-	E₁: Young's modulus in x direction
-	E₂: Young's modulus in y direction
+	E₁: Young's modulus in-plane fiber longitudinal direction (x)
+	E₂: Young's modulus in-plane fiber normal direction (y)
 	G₁₂: In-plane Shear modulus 
 	ν₁₂: Poisson ratio
 	θ: global frame orientation
@@ -34,9 +34,9 @@ end
 
 
 function compute_section_property(section::section_property, constitutive)
-
 	"""
 	Orthotropic material uses classic laminate theory (CLT) for composite cross section property computation.
+
 	Outputs
 	-------
 		EIₛ: scalar
@@ -47,7 +47,8 @@ function compute_section_property(section::section_property, constitutive)
 			bend-twist coupling [N - m²]
 		GJₛ: scalar
 			torsion stiffness [N - m²]
-		Sₛ: scalar, warping resistance
+		Sₛ: scalar
+			warping resistance [N - m⁴]
 		EAₛ: scalar
             axial stiffness [N]
         Iₛ: scalar
@@ -102,7 +103,7 @@ function compute_section_property(section::section_property, constitutive)
 		q₂₆ₚ = m * n * (q₁₁ * n^2 - q₂₂ * m^2 + (q₁₂ + 2 * q₆₆) * (m^2 - n^2))
 		q₆₆ₚ = (q₁₁ + q₂₂ - 2 * q₁₂) * m^2 * n^2 + q₆₆ * (m^2 - n^2)^2
 
-		# Flexural stiffnesses D_ij for single layer laminate
+		# Flexural stiffnesses D_ij for single layer laminate (M_i = D_ij k_i)
 		d₁₁ = q₁₁ₚ / 12
 		d₂₂ = q₂₂ₚ / 12
 		d₁₂ = q₁₂ₚ / 12
@@ -110,6 +111,7 @@ function compute_section_property(section::section_property, constitutive)
 		d₂₆ = q₂₆ₚ / 12
 		d₆₆ = q₆₆ₚ / 12
 
+		# Weisshaar and Foist 1985 for a zero chordwise moment beam via composite plate theory (t^3 comes here for computational speedup)
 		EIₛ = (d₁₁ - d₁₂^2 / d₂₂) * c * t^3
 		Kₛ = 2 * (d₁₆ - d₁₂ * d₂₆ / d₂₂) * c * t^3
 		GJₛ = 4 * (d₆₆ - d₂₆^2 / d₂₂) * c * t^3
@@ -117,6 +119,7 @@ function compute_section_property(section::section_property, constitutive)
 		# TODO: make these parts more accurate later
 		EIₛIP = E₁ * c^3 * t / 12 # in-plane EI for a rectangle
 		EAₛ = E₁ * c * t # EA for a rectangle
+		
 	elseif (constitutive == "isotropic")
 		EIₛ = E₁ * c * t^3 / 12 # EI for a rectangle
 		EIₛIP = E₁ * c^3 * t / 12 # EI for a rectangle
@@ -125,6 +128,10 @@ function compute_section_property(section::section_property, constitutive)
 		GJₛ = G₁₂ * c^3 * t * 0.333  # GJ for a rectangle
 	end
 	Sₛ = EIₛ * ((0.5 * ab)^2 + (c^2 / 12.0))
+
+	# # Bullshit factor to remove spurious modes
+	# EIₛIP *= 1e2
+	# EAₛ *= 1e2
 
 	# if (Kₛ < 1e-5)
 	#     Kₛ = Kₛ + 1e-5

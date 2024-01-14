@@ -46,7 +46,7 @@ function generate_naca4dig(toc)
     x = range(0, 1, length=50)
 
     # Thickness distribution (upper)
-    yt = 5 * toc * (0.2969 * x.^0.5 - 0.126 * x - 0.3516 * x.^2 + 0.2843 * x.^3 - C5 * x.^4)
+    yt = 5 * toc * (0.2969 * x .^ 0.5 - 0.126 * x - 0.3516 * x .^ 2 + 0.2843 * x .^ 3 - C5 * x .^ 4)
     lower_yt = -yt
     # Make CCW
     upper_yt = reverse(yt)
@@ -56,6 +56,52 @@ function generate_naca4dig(toc)
     return foil_coords
 end
 
+function transform_airfoil(foilCoords, localChord)
+    """
+    Unit airfoil to DCFoil frame
+    """
+    # Translate airfoil to be centered at the midchord
+    foilCoordsXform = copy(foilCoords)
+    foilCoordsXform[:, XDIM] .+= -0.5
+    # Scale airfoil
+    foilCoordsXform = localChord * foilCoordsXform
+    return foilCoordsXform
+end
+
+function write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+    """
+    TODO generalize to take in a normal vector in spanwise direction
+    """
+
+    foilCoords = generate_naca4dig(DVDict["toc"])
+
+    for ii in 1:size(mesh)[dim] # iterate over span
+        spanLoc = mesh[ii, :]
+        localChord = DVDict["c"][ii]
+        foilCoordsXform = transform_airfoil(foilCoords, localChord)
+
+        # Get u, v, w based on rotations
+        nAirfoilPts = size(foilCoordsXform)[1]
+        # uAirfoil = u[ii] * ones(size(foilCoordsScaled)[1])
+        dws = foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
+        dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
+        dus = foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
+
+        # --- Header ---
+        write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", spanLoc[XDIM], spanLoc[YDIM], spanLoc[ZDIM]))
+        write(io, @sprintf("NODES = %d, ", nAirfoilPts))
+        write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
+        write(io, "DATAPACKING = POINT\n")
+        # --- Values ---
+        for jj in 1:nAirfoilPts
+            write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM], spanLoc[YDIM], foilCoordsXform[jj, YDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
+        end
+        # --- Connectivities ---
+        for jj in 1:nAirfoilPts-1
+            write(io, @sprintf("%d\t%d\n", jj, jj + 1))
+        end
+    end
+end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
@@ -91,10 +137,10 @@ function write_1Dfemmesh(io, mesh)
 
 end # end write_mesh
 
-function write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode")
+function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode")
     """
     Write the mode shape to tecplot
-    # TODO: should mode 3 be in-plane??
+    # TODO: should mode 3 be in-plane?? No it shouldn't. Why does it appear?
     Currently writes out a NACA 4-digit airfoil
     """
 
@@ -105,11 +151,10 @@ function write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir::String, basename=
     iblank = FLUTTERSOL.iblank
     flowHistory = FLUTTERSOL.flowHistory
     nModes = FLUTTERSOL.NTotalModesFound
-    foilCoords = generate_naca4dig(DVDict["toc"])
 
-    @printf("Writing mode shape files for %i modes\n", nModes)
-    
-    nDOF = size(R_eigs_r)[1] ÷ 2 # no BC here right now
+    @printf("Writing hydroelastic mode shape files for %i modes to %s_<>.dat\n", nModes, basename)
+
+    nDOF = size(R_eigs_r)[1] ÷ 2 # no BC here right now and twice the size
     nDOFPerNode = 9
     nNode = nDOF ÷ nDOFPerNode + 1
     u = zeros(nNode)
@@ -123,13 +168,13 @@ function write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir::String, basename=
             if iblank[mm, qq] == 0
                 continue
             else
-                outfile = @sprintf("%s%s_%03i_%03i.dat", outputDir, basename, mm, qq)
+                outfile = @sprintf("%s%s_m%03i_q%03i.dat", outputDir, basename, mm, qq)
                 io = open(outfile, "w")
-                
+
                 # ************************************************
                 #     Header
                 # ************************************************
-                write(io, "TITLE = \"MODE SHAPE\"\n")
+                write(io, @sprintf("TITLE = \"MODE SHAPE %.8f HZ\"\n", true_eigs_i[mm, qq] / (2 * pi)))
                 write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
                 write(io, "ZONE T = \"1D BEAM\" \n")
                 write(io, @sprintf("NODES = %d, ", nNode))
@@ -155,18 +200,18 @@ function write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir::String, basename=
                 elseif ndims(mesh) == 2 # 1D beam in 3D space
                     dim = 1 # iterate over the first dimension
                     # with zero in the front
-                    u_r = [0; R_eigs_r[1 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    u_i = [0; R_eigs_i[1 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    v_r = [0; R_eigs_r[2 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    v_i = [0; R_eigs_i[2 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    w_r = [0; R_eigs_r[3 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    w_i = [0; R_eigs_i[3 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    phi_r = [0; R_eigs_r[4 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    phi_i = [0; R_eigs_i[4 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    theta_r = [0; R_eigs_r[5 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    theta_i = [0; R_eigs_i[5 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    psi_r = [0; R_eigs_r[6 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
-                    psi_i = [0; R_eigs_i[6 : nDOFPerNode : nNode*nDOFPerNode, mm, qq]]
+                    u_r = [0; R_eigs_r[1:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    u_i = [0; R_eigs_i[1:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    v_r = [0; R_eigs_r[2:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    v_i = [0; R_eigs_i[2:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    w_r = [0; R_eigs_r[3:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    w_i = [0; R_eigs_i[3:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    phi_r = [0; R_eigs_r[4:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    phi_i = [0; R_eigs_i[4:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    theta_r = [0; R_eigs_r[5:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    theta_i = [0; R_eigs_i[5:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    psi_r = [0; R_eigs_r[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+                    psi_i = [0; R_eigs_i[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
                     for ii in 1:size(mesh)[dim]
                         u[ii] = sqrt(u_r[ii]^2 + u_i[ii]^2)
                         v[ii] = sqrt(v_r[ii]^2 + v_i[ii]^2)
@@ -180,52 +225,156 @@ function write_mode_shape(DVDict, FLUTTERSOL, mesh, outputDir::String, basename=
                 for ii in 1:size(mesh)[dim]
                     nodeLoc = mesh[ii, :]
                     stringData = @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM], u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii])
-                        write(io, stringData)
+                    write(io, stringData)
                 end
                 # ---------------------------
                 #   Connectivities
                 # ---------------------------
-                for ii in 1:nNode - 1
+                for ii in 1:nNode-1
                     write(io, @sprintf("%d\t%d\n", ii, ii + 1))
                 end
 
                 # ************************************************
                 #     Airfoils
                 # ************************************************
-                for ii in 1:size(mesh)[dim] # iterate over span
-                    spanLoc = mesh[ii, :]
-                    localChord = DVDict["c"][ii]
-                    # Translate airfoil to be centered at the midchord
-                    foilCoordsXform = copy(foilCoords)
-                    foilCoordsXform[:,XDIM] .+= -0.5
-                    # Scale airfoil
-                    foilCoordsXform = localChord * foilCoordsXform
-                    
-                    # Get u, v, w based on rotations
-                    nAirfoilPts = size(foilCoordsXform)[1]
-                    # uAirfoil = u[ii] * ones(size(foilCoordsScaled)[1])
-                    dws = foilCoordsXform[:, XDIM]*sin(theta[ii])
-                    
-                    # --- Header ---
-                    write(io, @sprintf("ZONE T = \"Airfoil midchord (%d, %d, %d)\" \n", spanLoc[XDIM], spanLoc[YDIM], spanLoc[ZDIM]))
-                    write(io, @sprintf("NODES = %d, ", nAirfoilPts))
-                    write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
-                    write(io, "DATAPACKING = POINT\n")
-                    # --- Values ---
-                    for jj in 1:nAirfoilPts
-                        write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj,XDIM], spanLoc[YDIM], foilCoordsXform[jj,YDIM], u[ii], v[ii], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
-                    end
-                    # --- Connectivities ---
-                    for jj in 1:nAirfoilPts - 1
-                        write(io, @sprintf("%d\t%d\n", jj, jj + 1))
-                    end
-                end
+                write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
 
                 close(io)
             end
         end
     end
-end # end write_mode_shape
+end # end write_hydroelastic_mode
+
+function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String)
+    """
+    Write the mode shape to tecplot
+    Currently writes out a NACA 4-digit airfoil
+    """
+
+    nModes = length(structNatFreqs)
+
+    nDOF = size(structModeShapes)[1] # has BC
+    nDOFPerNode = 9
+    nNode = nDOF ÷ nDOFPerNode
+    u = zeros(nNode)
+    v = zeros(nNode)
+    w = zeros(nNode)
+    phi = zeros(nNode)
+    theta = zeros(nNode)
+    psi = zeros(nNode)
+    basename = "drymode"
+    @printf("Writing natural mode shape files for %i modes to %s_<>.dat\n", nModes, basename)
+    for mm in 1:nModes
+        outfile = @sprintf("%s%s_m%03i.dat", outputDir, basename, mm)
+        io = open(outfile, "w")
+
+        modeShape = structModeShapes[:, mm]
+
+        # ************************************************
+        #     Header
+        # ************************************************
+        write(io, @sprintf("TITLE = \"MODE SHAPE %.8f HZ\"\n", structNatFreqs[mm]))
+        write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
+        write(io, "ZONE T = \"1D BEAM\" \n")
+        write(io, @sprintf("NODES = %d, ", nNode))
+        write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
+        write(io, "DATAPACKING = POINT\n")
+
+        # ************************************************
+        #     Write contents
+        # ************************************************
+        # ---------------------------
+        #   Values
+        # ---------------------------
+        # --- Store displacements ---
+        if ndims(mesh) == 2 # 1D beam in 3D space
+            dim = 1 # iterate over the first dimension
+            # with zero in the front
+            u = modeShape[1:nDOFPerNode:nNode*nDOFPerNode]
+            v = modeShape[2:nDOFPerNode:nNode*nDOFPerNode]
+            w = modeShape[3:nDOFPerNode:nNode*nDOFPerNode]
+            phi = modeShape[4:nDOFPerNode:nNode*nDOFPerNode]
+            theta = modeShape[5:nDOFPerNode:nNode*nDOFPerNode]
+            psi = modeShape[6:nDOFPerNode:nNode*nDOFPerNode]
+        end
+        # --- Write them ---
+        for ii in 1:size(mesh)[dim]
+            nodeLoc = mesh[ii, :]
+            stringData = @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM], u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii])
+            write(io, stringData)
+        end
+        # ---------------------------
+        #   Connectivities
+        # ---------------------------
+        for ii in 1:nNode-1
+            write(io, @sprintf("%d\t%d\n", ii, ii + 1))
+        end
+
+        # ************************************************
+        #     Airfoils
+        # ************************************************
+        write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+
+        close(io)
+    end
+
+    basename = "wetmode"
+    @printf("Writing natural mode shape files for %i modes to %s_<>.dat\n", nModes, basename)
+    for mm in 1:nModes
+        outfile = @sprintf("%s%s_m%03i.dat", outputDir, basename, mm)
+        io = open(outfile, "w")
+
+        modeShape = wetModeShapes[:, mm]
+
+        # ************************************************
+        #     Header
+        # ************************************************
+        write(io, @sprintf("TITLE = \"MODE SHAPE %.8f HZ\"\n", wetNatFreqs[mm]))
+        write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
+        write(io, "ZONE T = \"1D BEAM\" \n")
+        write(io, @sprintf("NODES = %d, ", nNode))
+        write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
+        write(io, "DATAPACKING = POINT\n")
+
+        # ************************************************
+        #     Write contents
+        # ************************************************
+        # ---------------------------
+        #   Values
+        # ---------------------------
+        # --- Store displacements ---
+        if ndims(mesh) == 2 # 1D beam in 3D space
+            dim = 1 # iterate over the first dimension
+            # with zero in the front
+            u = modeShape[1:nDOFPerNode:nNode*nDOFPerNode]
+            v = modeShape[2:nDOFPerNode:nNode*nDOFPerNode]
+            w = modeShape[3:nDOFPerNode:nNode*nDOFPerNode]
+            phi = modeShape[4:nDOFPerNode:nNode*nDOFPerNode]
+            theta = modeShape[5:nDOFPerNode:nNode*nDOFPerNode]
+            psi = modeShape[6:nDOFPerNode:nNode*nDOFPerNode]
+        end
+        # --- Write them ---
+        for ii in 1:size(mesh)[dim]
+            nodeLoc = mesh[ii, :]
+            stringData = @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM], u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii])
+            write(io, stringData)
+        end
+        # ---------------------------
+        #   Connectivities
+        # ---------------------------
+        for ii in 1:nNode-1
+            write(io, @sprintf("%d\t%d\n", ii, ii + 1))
+        end
+
+        # ************************************************
+        #     Airfoils
+        # ************************************************
+        write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+
+        close(io)
+    end
+end # end write_natural_mode
+
 
 # ==============================================================================
 #                         Hydro Routines

@@ -71,6 +71,7 @@ solverOptions = Dict(
     # ---------------------------
     "name" => "akcabay",
     "debug" => debug,
+    "writeTecplotSolution" => false,
     # ---------------------------
     #   General appendage options
     # ---------------------------

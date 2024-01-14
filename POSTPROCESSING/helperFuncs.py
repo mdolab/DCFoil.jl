@@ -53,15 +53,23 @@ def get_bendingtwisting(states, nDOF=4):
         Twisting deflection about global y-axis
     """
     if nDOF == 4:
+        # [w, w', phi, phi']
         w = states[::nDOF]
-        psi = states[2::nDOF]
-    else:
+        phi = states[2::nDOF]
+    elif nDOF == 9:
         # Then it is probably the COMP2 element
         # Remember this IS 0-based indexing
+        # [u, v, w, phi, theta, psi, phi', theta', psi']
+        u = states[::nDOF]
+        v = states[1::nDOF]
         w = states[2::nDOF]
-        psi = states[4::nDOF]
+        phi = states[3::nDOF]
+        theta = states[4::nDOF]
+        psi = states[5::nDOF]
+    else:
+        raise NotImplementedError("nDOF = {0:d} not implemented".format(nDOF))
 
-    return w, psi
+    return w, phi
 
 
 def compute_normFactorModeShape(modeShape: dict):

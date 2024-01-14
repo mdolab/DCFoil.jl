@@ -80,6 +80,13 @@ function return_constitutive(materialName::String)
         G₁₂ = 4.6e9
         ν₁₂ = 0.15
         constitutive = "orthotropic"
+    elseif (materialName == "IM6-epoxy")
+        ρₛ = 1590.0
+        E₁ = 203.1e9
+        E₂ = 11.2e9
+        G₁₂ = 8.4e9
+        ν₁₂ = 0.32
+        constitutive = "orthotropic"
     end # if
 
     return ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive
