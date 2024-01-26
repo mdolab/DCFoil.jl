@@ -603,8 +603,6 @@ if __name__ == "__main__":
             # axes[0, 0].set_ylim(top=20)
             # axes[0, 0].set_xticks([20, 40] + [instabPtsDict[key][0][0]])
 
-
-
         dosave = not not fname
         plt.show(block=(not dosave))
         if dosave:

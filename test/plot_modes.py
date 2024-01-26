@@ -26,6 +26,7 @@ import seaborn as sns
 # Extension modules
 # ==============================================================================
 import niceplots
+
 current = os.path.dirname(os.path.realpath(__file__))  # Getting the parent directory name
 # adding the parent directory to the sys. path.
 sys.path.append(os.path.dirname(current))

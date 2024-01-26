@@ -7,11 +7,15 @@ Dynamic Composite Foil (DCFoil) in Julia
 ## Versions
 
 We test for `macOS-latest` and `Ubuntu-latest`.
+Check the Project.toml for version dependencies.
 
-v1.9.0 (stable)
-v1.9.3 (latest)
+## Package
 
-## Get started
+The code can be added with ```Pkg.add("DCFoil"); using DCFoil```
+
+## Developers Notes
+
+### Get started as a developer
 
 You must be in this root directory. From the terminal you can type
 
@@ -43,9 +47,6 @@ You can alternatively run the code from the terminal with
 NOTE:
 `run_main.sh` is a convenience script for the above. Running julia using shell script `nohup` does not work but a regular `nohup` command is fine
 
-
-## Developers Notes
-
 ### Conventions
 
 Please use this coding convention:
@@ -65,6 +66,11 @@ Please use this coding convention:
 
 * `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`
 * Mutating arrays that require the Zygote.Buffer data type. It is SUPER slow.
+
+### DCFoil as a package
+
+The Project.toml means this is a julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```
+However, in development mode, just go into julia for this directory and type ```] dev .```.
 
 ### Package Dependencies
 
@@ -110,6 +116,17 @@ The list is:
 pyspline
 pygeo
 ```
+
+The MACH2DCFoil wrapper requires TODO: GGGGGGGGGGGGGGGGGGGGGGGGGG
+```
+pip install julia
+```
+to install the pyjulia package and then in a python prompt
+```
+import julia
+julia.install("<your-version>") # if multiple versions of julia are installed
+```
+
 ### Tests
 
 Under the `./test/` directory, run

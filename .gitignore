@@ -8,6 +8,9 @@ POSTPROCESSING/MOVIES/
 POSTPROCESSING/PLOTS/
 *.jld*
 
+# MACH structural meshes
+*.bdf
+
 # Test files
 *.out
 test_out/

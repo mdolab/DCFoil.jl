@@ -1,15 +1,14 @@
 # --- Julia ---
-
-# @File    :   DCFoil.jl
-# @Time    :   2022/07/23
-# @Author  :   Galen Ng
-# @Desc    :   This is a required "gluing" file so the package management works properly
-
+"""
+@File    :   DCFoil.jl
+@Time    :   2022/07/23
+@Author  :   Galen Ng
+@Desc    :   This is a required "gluing" file so the package 
+             management works properly. This is the module imported
+"""
 module DCFoil
 
 
-# --- Public functions ---
-export run_model
 
 # --- Libraries ---
 include("./solvers/SolveStatic.jl")
@@ -18,27 +17,29 @@ include("./solvers/SolveFlutter.jl")
 include("./io/TecplotIO.jl")
 include("./InitModel.jl")
 include("./struct/FiniteElements.jl")
+
 using JSON
 using .InitModel
 using .TecplotIO
 using .FEMMethods
 using .SolveStatic, .SolveForced, .SolveFlutter
 
-function run_model(DVDict, evalFuncs; solverOptions=Dict())
+# --- Public functions ---
+# Don't need 'DCFoil.' prefix when importing
+export run_model, evalFuncs, evalFuncsSens
+
+# ==============================================================================
+#                         API functions
+# ==============================================================================
+function init_model(DVDict, evalFuncs; solverOptions=Dict())
     """
-    Runs the model but does not return anything.
-    The solution structures hang around as global variables.
+    Things that need to be done before running the model.
+    Global vars are used in run_model
     """
-    # ==============================================================================
-    #                         Initializations
-    # ==============================================================================
     # ---------------------------
     #   Default options
     # ---------------------------
-    if isempty(solverOptions)
-        solverOptions = set_defaultOptions()
-    end
-    outputDir = solverOptions["outputDir"]
+    global outputDir = solverOptions["outputDir"]
 
     # ---------------------------
     #   Write DVs and options
@@ -55,15 +56,15 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     # ---------------------------
     #   Cost functions
     # ---------------------------
-    costFuncsDict = Dict()
+    global costFuncsDict = Dict()
 
     # ---------------------------
     #   Mesh generation
     # ---------------------------
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
     nElStrut = solverOptions["nNodeStrut"] - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];
+    global structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];
         config=solverOptions["config"],
         nElStrut=nElStrut,
         spanStrut=DVDict["strut"],
@@ -72,7 +73,13 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
 
     # --- Write mesh to tecplot for later visualization ---
     TecplotIO.write_mesh(DVDict, structMesh, outputDir, "mesh.dat")
+end
 
+function run_model(DVDict, evalFuncs; solverOptions=Dict())
+    """
+    Runs the model but does not return anything.
+    The solution structures hang around as global variables.
+    """
     # ==============================================================================
     #                         Static hydroelastic solution
     # ==============================================================================
@@ -103,39 +110,6 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
         end
     end
 end
-
-function set_defaultOptions()
-    """
-    Set the default solver options
-    Case sensitive
-    """
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "./OUTPUT/",
-        # --- General solver options ---
-        "config" => "wing",
-        "gravityVector" => [0.0, 0.0, -9.81],
-        "rotation" => 0.0, # Rotation of the wing about the x-axis [deg]
-        "use_tipMass" => false,
-        "use_cavitation" => false,
-        "use_freeSurface" => false,
-        "use_ventilation" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 0:0.1:10,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => false,
-        "nModes" => 3, # Number of struct modes to solve for (starting)
-        "uRange" => nothing, # Range of velocities to sweep
-        "maxQIter" => 200, #max dyn pressure iters
-    )
-    return solverOptions
-end # set_defaultOptions
 
 # ==============================================================================
 #                         Cost func and sensitivity routines

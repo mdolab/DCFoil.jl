@@ -1,4 +1,4 @@
-\documentclass[9pt]{article}
+\documentclass[10pt]{article}
 \usepackage{siunitx,gensymb} % gensym gives degree
 \usepackage{amsmath}
 \usepackage{newtxtext,newtxmath}
@@ -7,6 +7,7 @@
 \usepackage{xcolor}
 \usepackage[bookmarks=true,bookmarksnumbered=true,hidelinks]{hyperref}
 \usepackage{cleveref}
+\usepackage{algorithm2e}
 \usepackage[margin=1in]{geometry}
 \usepackage[compact]{titlesec}
 
@@ -79,7 +80,7 @@
 
 \begin{document}
 
-\title{\vspace{-1.5cm} DCFoil Documentation}
+\title{\vspace{-1.5cm} DCFoil Developer and User Documentation}
 \author{Galen W.~Ng}
 \maketitle
 % ==============================================================================
@@ -104,7 +105,9 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 \section{Coordinate system}
 % 
 Flow is in the $x$-direction, span is in the $y$-direction, and the vertical direction is $z$.
+
 %------------------------------------------------------------------------------
+\clearpage
 \section{Discretization}
 \subsection{Structural model}
 % 
@@ -113,8 +116,10 @@ It is transformed to the global coordinate system by the rotation matrices.
 \subsubsection{Beam finite element}
 % 
 The composite beam model uses the well-known slender beam parameters $EI_s$, $GJ_s$, $EA_s$, and additionally $S_s$ and $K_s$ to account for structural warping of non-circular cross sections and material bend-twist coupling, respectively.
+No axial coupling to other degrees of freedom (DOF) is currently considered.
+The beam is discretized into 2-noded elements with 9 displacement DOFs denoted $u$, $v$, $w$, $\phi$, $\theta$, $\psi$, $\phi'$, $\theta'$, $\psi'$.
 % 
-\subsubsection{Constitutive relations for composite beams}
+\subsubsection{Beam parameters for composite materials via CLT}
 % 
 The beam parameters are computed from classical lamination theory (CLT) for composite plates using the high aspect ratio plate model from \citet{Weisshaar1985}.
 \be
@@ -125,14 +130,14 @@ K  = 2c \left(D_{16} - \frac{D_{26}D_{12}}{D_{22}}\right)
 These relations do not restrict chordwise rigidity (camber), but they do assume zero chordwise moment.
 \citet{LOTTATI1985} used the chordwise rigid relations, which simplifies the algebra.
 
-The flexural stiffnesses $D_{ij}$ come CLT via
+The flexural stiffnesses $D_{ij}$ (6x6 matrix) come via CLT
 \begin{align}
     D_{11} & = Q_{11}\cos^4(\theta_f)+2\left( Q_{12}+2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{22}\sin^4(\theta_f)                             \\
     D_{22} & = Q_{11}\sin^4(\theta_f)+2\left( Q_{12}+2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{22}\cos^4(\theta_f)                             \\
     D_{66} & = \left(Q_{11} +Q_{22} - 2Q_{12}-2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{66}\left( \sin^4(\theta_f)+\cos^4(\theta_f) \right)    \\
     D_{12} & = \left(Q_{11} +Q_{22} - 4Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f) + Q_{12}\left( \sin^4(\theta_f)+\cos^4(\theta_f) \right)          \\
     D_{16} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin(\theta_f)\cos^3(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin^3(\theta_f)\cos(\theta_f) \\
-    D_{26} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin^3(\theta_f)\cos(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin(\theta_f)\cos^3(\theta_f) 
+    D_{26} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin^3(\theta_f)\cos(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin(\theta_f)\cos^3(\theta_f)
 \end{align}
 %
 The reduced in-plane stiffness coefficients $Q_{ij}$ for the individual plies are
@@ -144,6 +149,47 @@ Q_{22} = \frac{E_2}{1-\nu_{12}\nu_{21}}, \quad
 Q_{66} = G_{12}
 \ee
 
+The following are numerical methods for computing structural properties of airfoils.
+The sectional mass properties are
+\be
+& m_s & = \int_{0}^{c} \rho \left(Z_u - Z_\ell \right)  dx \doteq \tn{kg-m}^{-1}
+\\
+& I_s & = \int_{0}^{c}\int_{0}^{t_{\tn{max}}} r^2 dm
+\ee
+where we evaluate the integrals numerically.
+
+The sectional geometric properties are\footnote{The torsional constant is NOT the same as the polar moment}
+\be
+& \bar{z} & =\frac{1}{A} \int_0^c \frac{1}{2}\left[Z_u^2-Z_{\ell}^2\right] d x \\
+& I & =\int_0^c \frac{1}{3}\left[\left(Z_u-\bar{z}\right)^3-\left(Z_{\ell}-\bar{z}\right)^3\right] d x \\
+& J &= \int \\
+\ee
+and torsional warping resistance due to tension from \citet{LOTTATI1985} is
+\be
+S = \int_{-b}^b D_{22} x_a^2 d x, \quad\tn{where } x_a = x - ba
+\ee
+\subsubsection{Structural damping}
+% 
+We use a proportional (Rayleigh) damping model, which is commonly used for multi-DOF structures because of mathematical conveniences
+\ben
+\mbf{C_s} = \alpha \mbf{M_s} + \beta \mbf{K_s}.
+\een
+The mass proportional damping decreases with increasing response frequency whereas the stiffness proportional damping increases.
+We specify $\zeta = 2\%$ damping ratio at an undamped, in-vacuum, natural frequency giving
+% We specify $\zeta = 2\%$ damping ratio at the minimum and maximum undamped, in-vacuum, natural frequencies to determine the unknown constants.
+% This simplifies the solution for the mass-proportional and stiffness-proportional constants to
+% \ben
+% \alpha = \frac{2 \zeta}{\omega_{\tn{min}} + \omega_{\tn{max}}} \qquad \beta = \omega_{\tn{min}} \omega_{\tn{max}} \alpha
+% \een
+% where $\omega_{\tn{min}}$ and $\omega_{\tn{max}}$ are the undamped natural frequencies in radians per second determined from modal analysis.
+% All response frequencies between $\omega_{\tn{min}}$ and $\omega_{\tn{max}}$ are damped by a smaller amount.
+$\beta = {2 \zeta}/{\omega_{\tn{max}}}$
+where $\omega_{\tn{max}}$ is the highest undamped, in-vacuum, natural frequency in radians per second determined from modal analysis--in this paper, the fourth natural mode.
+
+A few options are available but we typically use the stiffness proportional method ($\alpha=0$) because response frequencies in water tend to be on the lower side;
+we want to avoid artificial overdamping of critical hydroelastic modes with $\omega < \omega_{\tn{max}}$.
+Structural damping is typically small compared to hydrodynamic damping so its main role is as a margin of stability if fluid damping is close to zero, thus accuracy of the structural damping model is not critical.
+% 
 \subsection{Hydrodynamic loads}
 % 
 \subsubsection{Steady lifting line}
@@ -246,7 +292,7 @@ Here's the digestion of the Julia code which does the numerical solution of Equa
 \subsubsection{Extension to unsteady frequency domain}
 % 
 We are interested in the sectional lift and moments for a harmonically oscillating body.
-\citet{Theodorsen:1934} came up with the Theodorsen function $C(k)$ to account for the lag and deficit in forces.
+\citet{Theodorsen:1934} came up with the Theodorsen function $C(k)$ to account for the lag and deficit in forces with a farfield boundary condition.
 It is applied as a transfer function to the static hydrodynamics.
 \begin{eqnarray}
     \label{eqn:GenFluidTheod}
@@ -365,14 +411,176 @@ where $\Delta y_i$ is the strip width at node $i$, which we assume to be equal t
 % 
 The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady (damping and stiffness) aerodynamics and are lumped into their respective global matrices if they are in phase with velocity or displacements.
 %------------------------------------------------------------------------------
+\clearpage
 \section{Static solution}
 
 %------------------------------------------------------------------------------
+\clearpage
 \section{Forced vibration solution}
+\subsection{Governing equations}
+The {frequency response solver} separates the magnitudes of static and fluctuating parts of the solution
+%
+$\mbf{u_{tot}}= \mbf{{u}_{dyn}} + \mbf{u_{stat}}$.
+%
+% The $\tilde{\square}$ denotes a complex quantity.
+The static problem is solved the same way as previously described in, and we solve the dynamic part using the second-order dynamic governing equations for the user-prescribed harmonic forcing vector in the Laplace domain.
+We use $j = \sqrt{-1}$.
+Equation becomes
+\begin{equation}
+    \label{eqn:dyn}
+    \underbrace{
+        \left(-\omega^2  \left(\mbf{M_f + M_s}  \right) +
+        j\omega    \left(\mbf{C_f +C_s}\right) + \left(\mbf{K_f + K_s}\right) \right)
+    }_{\mbf{D}(\omega)}
+    \mbf{\tilde{u}}
+    = \mbf{\tilde{f}}.
+\end{equation}
+%
+In this case, we substituted $\mbf{u_{dyn}} =\mbf{\tilde{u}}e^{j \omega  t}$ and $\mbf{f_{ext,dyn}} = \mbf{\tilde{f}}e^{j \omega t}$ into  since we are looking at forced harmonic vibration, and we care more about the steady-state (particular) solution than the initial transience (complementary solution).
+The system dynamic matrix ($\mbf{D}(\omega)$), also known as the \emph{impedance matrix}, is not symmetric because of the fluid governing equations.
+We solve for the dynamic response with direct inversion of the dynamic matrix.
+% The residual for this solver becomes
+% \be
+% \mbf{r} =
+% \underbrace{\mbf{D}(\omega)}_{\mbf{H}(\omega)^{-1}} \mbf{{u}_{dyn}} -
+% \mbf{{f}_0}
+% \rightarrow \mbf{0}
+% \ee
+% where $\mbf{H}(\omega)$ is the response amplitude operator matrix that we typically do not solve for since it requires direct inversion.
+% The nice property of this is ${\partial r}/{\partial u} = D$.
+We solve this equation for a sweep of forcing frequencies ($f = \omega/(2 \pi)$) and then compute the frequency response curves.
+The steady-state, frequency response is $\mbf{\tilde{u}} = \mbf{D}^{-1}\mbf{\tilde{f}}$.
+
+The inverse matrix $\mbf{H}(\omega) = \mbf{D}^{-1}(\omega)$ is the RAO or frequency response function (FRF), and it is an nDOF$\times$nDOF matrix computed for every exciting frequency $\omega$.
+Knowing the RAO is extremely important for understanding foil response to dynamic loading such as from waves or cavity shedding.
 
 %------------------------------------------------------------------------------
+\clearpage
 \section{Flutter solution}
-\subsubsection{Mode space reduction}
+\subsection{Governing equations}
+% 
+The $p$-$k$ method is commonly used in aeroelastic flutter predictions.
+The governing equation is solved by assuming a solution of the form
+$    \mbf{u} = \tilde{\mbf{u}}e^{pt}$,
+%
+where $p=\xi + j k$ is our non-dimensional complex eigenvalue, $\xi$ is non-dimensional damping, and $k$ is the reduced frequency.
+Eigenvalues are non-dimensionalized using $\Uinf \cos(\Lambda)/\widebar{b}$ where $\widebar{b}$ is the mean semi-chord.
+% The complex amplitude ($\tilde{\square}$ terms) is a function of space $\mbf{\tilde{u}}=\mbf{\tilde{u}}(y)$.
+The generalized governing discrete equation takes the form
+\begin{multline}
+    \label{eqn:pkEqn}
+    % \underbrace{
+    \left[
+        \left( \frac{\Uinf\cos(\Lambda)}{\widebar{b}} \right)^2
+        p_n^2\left(   \mbf{M_s}   + \mbf{M_f}\right)
+        + \frac{\Uinf\cos(\Lambda)}{\widebar{b}}
+        p_n\mbf{C_s}
+        + \mbf{K_s}
+        - \mbf{f_{hydro,quasi}}
+        \right]
+    % }_{\Delta}
+    \mbf{\tilde{u}}_n = \mbf{0}
+    \hfill
+    \tn{for }n = 1,\ldots,\tn{nmode}.
+\end{multline}
+where $\mbf{f_{hydro,quasi}}$ are the quasi-steady hydrodynamic forces.
+For a non-trivial solution of $\mbf{\tilde{u}}$, the flutter determinant $\det(\Delta)$ is zero, where the bracketed matrix in Equation~\eqref{eqn:pkEqn} is $\Delta$.
+We need to find the $p$'s that satisfies the quadratic eigenproblem so that $\det(\Delta) = 0$.
+The corresponding $\mbf{\tilde{u}}$ is then the complex eigenvector describing the flutter mode shape.
+Simulations sweep flow speed ($\Uinf$).
+We can compute in-vacuum natural frequencies by setting all fluid matrices and total damping to zero, giving a linear eigenvalue problem with symmetric matrices;
+the eigenvector is the corresponding in-vacuum mode shape.
+
+We can linearize the quadratic eigenvalue problem using the identity $\mbf{I}\dot{\mbf{u}} = \mbf{I}\dot{\mbf{u}}$ to obtain this linear, generalized eigenvalue problem
+%
+\be
+\label{eqn:NgForm}
+% A matrix
+p_n
+\begin{bmatrix}
+    \mbf{I} & \mbf{0}                                                         \\
+    \mbf{0} & \left( \frac{\Uinf\cos(\Lambda)}{\widebar{b}} \right)^2 \mbf{M}
+\end{bmatrix}
+\left\{
+\begin{matrix}
+    \mbf{\tilde{u}} \\
+    p_n\mbf{\tilde{u}}
+\end{matrix}
+\right\}
+% B matrix
+-
+\begin{bmatrix}
+    \mbf{0}  & \mbf{I}                                         \\
+    -\mbf{K} & - \frac{\Uinf\cos(\Lambda)}{\widebar{b}}\mbf{C}
+\end{bmatrix}
+\left\{
+\begin{matrix}
+    \mbf{\tilde{u}} \\
+    p_n\mbf{\tilde{u}}
+\end{matrix}
+\right\}
+=
+\mbf{0},
+\ee
+% Note that since fluid-added mass and damping might not be symmetric in marine applications, we
+% Equation~\eqref{eqn:NgForm} is the Rodden form~\cite{rodden2011theoretical};
+% Other forms are given in~\ref{sec:Eigen}.
+We solve Equation~\eqref{eqn:NgForm} following the method of \citet{Zyl2001a} since \citet{Jonsson2020b} has shown the method is suitable and sufficiently robust enough for gradient-based optimization.
+The flutter solution method is
+\begin{enumerate}
+    \item For a given velocity, solve the eigenvalue problem (Equation~\eqref{eqn:NgForm}) for a range of reduced frequencies $k$.
+    \item Eigenvalues ($p$) are valid roots if $\Im(p)$ matches the assumed $k$ (matched point solution).
+    \item Monitor the difference $\Im(p) - k$. A change in sign indicates a root.
+    \item Determine the root by linear interpolation.
+\end{enumerate}
+where we follow the methodology outlined in~\citet{Jonsson2019a} and \citet[Ch. 3]{Jonsson2020b}.
+Since the linear system is quite large, we also use a mode space reduction technique commonly known as the \emph{normal mode} (or modal) method to reduce the size of the matrices and computational cost.
+
+\subsection{Mode tracking}
+% 
+The mode tracking method prevents mode swapping or hopping during two stages of the flutter analysis:
+\begin{enumerate}
+    \item during the reduced frequency sweep at a given flight condition and
+    \item during the dynamic pressure increments between flight conditions.
+\end{enumerate}
+We employ the mode tracking method from \citet{Zyl1993}, which uses complex inner products between current and previous eigenvectors to populate a correlation matrix.
+$\mbf{\tilde{C}}$.
+We search the matrix for largest elements (maximum of one) where the row and column denote previous iteration and current iteration, respectively.
+We do this for all modes.
+In the frequency sweep, building $\mbf{\tilde{C}}$ is simpler because it is square as the number of eigenvectors between $k$ iterations is the same, resulting in one-to-one mapping.
+Between dynamic pressure increments, modes can show up or disappear so $\mbf{\tilde{C}}$ is rectangular.
+Therefore, we use a correlation metric (vector $\mbf{c}$) to determine if the computed set of eigenvalues are too far from previously computed values, the process of which is outlined in Algorithm~\ref{alg:ModeTracking}.
+Based on the correlation metric value, we either accept or reject the eigenvalues and eigenvectors.
+If they are rejected, the dynamic pressure step is halved and we re-run the reduced frequency sweep;
+however, the halving process is controlled by a minimum allowed increment $\Delta q_{\tn{min}}$ to prevent excessively long computation times.
+If $\Delta q_{\tn{min}}$ is reached, then we accept the roots.
+
+\RestyleAlgo{ruled}
+\begin{algorithm}
+    \LinesNumbered
+    % \SetKwComment{Comment}{/* }{ */}
+    \caption{\label{alg:ModeTracking}
+        Mode tracking between dynamic pressure increments $q^{(n)}$ and $q^{(n+1)}$ of~\citet{Jonsson2020b} adapted from~\citet{Zyl1993}.
+    }
+    \KwData{Complex eigenvector matrix $\mbf{V}^{(n)}$ and $\mbf{V}^{(n+1)}$ at succesive $q$'s of size $n_{\tn{dof}} \times n_v^{(n)}$ and $n_{\tn{dof}} \times n_v^{(n+1)}$}
+    \KwResult{Vector $\mbf{c}$ of size $n_v^{(n+1)}$ and array $\mbf{m}$ of size $2 \times n_v^{(n+1)}$}
+    % \Comment{=== Populate correlation matrix ===}
+    Compute ${S_3}_i = {|| \mbf{v}_i^{(n)} ||_2}$ and
+    ${S_4}_i = { || \mbf{v}_i^{(n+1)} ||_2}$\;
+    % Compute Hadamard product
+    % $\mbf{\tilde{C}} = \mbf{V}^{(n)} \circ \mbf{V}^{(n+1)}\quad$\;
+    Compute Hadamard product
+    $\mbf{C} = | \mbf{V}^{(n)^H} \circ \mbf{V}^{(n+1)}|$\;
+    $\mbf{\tilde{C}} = \mbf{C}_{ij}/ \left( {{S_3}_i {S_4}_j }  \right)$\;
+    Search $\mbf{\tilde{C}}$ for maximum element\;
+    Store row and column indices in array $\mbf{m}$ and then the correlation values in $\mbf{c}$\;
+    Set the corresponding rows and columns in $\mbf{\tilde{C}}$ to zero\;
+    Repeat process until all elements in $\mbf{\tilde{C}}$ are zero\;
+\end{algorithm}
+
+
+% 
+\subsection{Mode space reduction}
 %
 To reduce the problem size, we use mode space reduction to a reduced set of $N_r$ generalized coordinates.
 The displacement field is approximated by
@@ -395,10 +603,10 @@ where $\omega_i$ is the natural frequency.
 We compute $\widebar{  \mbf{u} }_i$ and collect them in the matrix
 %
 \be
-\mathbf{Q}_r=\left[\begin{array}{cccc}
-        \mid                    & \mid                    &        & \mid                        \\
-        \overline{\mathbf{u}}_1 & \overline{\mathbf{u}}_2 & \cdots & \overline{\mathbf{u}}_{N_r} \\
-        \mid                    & \mid                    &        & \mid
+\mbf{Q}_r=\left[\begin{array}{cccc}
+        \mid                 & \mid                 &        & \mid                     \\
+        \overline{\mbf{u}}_1 & \overline{\mbf{u}}_2 & \cdots & \overline{\mbf{u}}_{N_r} \\
+        \mid                 & \mid                 &        & \mid
     \end{array}\right]
 .
 \ee
@@ -432,7 +640,168 @@ where the matrices are
 \mbf{K_f}_r = \mbf{Q}_r^T \mbf{K_f} \mbf{Q}_r.
 \ee
 Note, since cavitating flow leads to non-symmetric matrices, we cannot do all the simplifications \citet{Jonsson2017a} uses.
+TODO: OK, this is not actually true because we wouldn't be able to solve in the frequency domain...
 
+\twocolumn
+\subsection{Cost functions}
+% 
+Reverse mode algorithmic differentiation is applied on the upper-most flutter routine called \texttt{cost\_funcs\_with\_derivs}
+
+\subsubsection{Flutter}
+% 
+The single flutter constraint uses the damping values ($g = \Re\{p\}$).
+We use a two-level KS function aggregation to compute the single constraint first used by \citet{Jonsson2017a}.
+It is
+%
+\be
+\label{eqn:KS}
+\tn{KS}_{\tn{flutter}} = \tn{KS}\left(\tn{KS} \left( \Re\{p_{n,q}\} \right)\right)
+\ee
+%
+where the first level is over all dynamic pressures $q = 1,\dots,N_q$ and then over all modes $n = 1,\dots,\tn{nmodes}$.
+The KS function is
+\be
+\tn{KS}(\mbf{a}) = a_{\tn{max}} + \frac{1}{\rho}  \ln \sum_i e^{\rho \left( a_i - a_{\tn{max}}\right)}
+\ee
+where we set the aggregation parameter $\rho=80$ by default.
+
+
+\subsubsection{Coalescence}
+
+% ==============================================================================
+%                         Rigid body dynamics
+% ==============================================================================
+\section{Rigid body dynamics}
+% 
+The two coordinate systems are the \emph{earth-fixed} and \emph{body-fixed} (stability) axes, abbreviated EFS and BFS.
+\subsection{Governing equations}
+% 
+The BFS and EFS origin is at the center of mass of the craft.
+Forward is $x$, port is $y$, and up is $z$.
+These are different axes from the foil.
+There are six degrees of freedom in the BFS $\boldsymbol{\eta} = [\eta_1,\eta_2,\eta_3,\eta_4,\eta_5,\eta_6]^T$.
+The six velocities in BFS are $[v_x,v_y,v_z,\omega_x,\omega_y,\omega_z]^T$ where the first three are $\mbf{v}_B$ and the last three are $\boldsymbol{\omega}_B$.
+The orientation in EFS are \emph{Euler angles} $[\phi, \theta, \psi]$.
+\subsection{Kinematics}
+
+A quantity of interest is the vessel velocity in the EFS denoted $\mbf{v}_E$.
+Using Euler angles (from EFS obviously), the relationship between BFS and EFS center of mass velocity is
+\ben
+\mbf{v}_E = \mbf{R}_{BE} \mbf{v}_B.
+\een
+% 
+Now for some point $P$ on the vessel not at the center of mass, the velocity is
+\ben
+\mbf{v}_E^P = \dot{\mcal{P}}_E + \dot{\mbf{r}}_E^P = \mbf{v}_E + \underbrace{\dot{\mbf{r}}_E^P}_{
+    \dot{\mbf{R}}_{BE} \mbf{r}_B^P
+},
+\een
+% 
+where ship velocity is $\mbf{v}_E = \dot{\mcal{P}}_E$.
+The orientation of the ship in EFS is
+\ben
+\boxed{
+    \left\{\begin{array}{c}
+        \dot{\phi}   \\
+        \dot{\theta} \\
+        \dot{\psi}
+    \end{array}\right\}=\mbf{T}^{-1} \boldsymbol{\omega}_B=\left[\begin{array}{ccc}
+            1 & \sin \phi \tan \theta & \cos \phi \tan \theta \\
+            0 & \cos \phi             & -\sin \phi            \\
+            0 & \sin \phi \sec \theta & \cos \phi \sec \theta
+        \end{array}\right]\left\{\begin{array}{l}
+        \omega_x \\
+        \omega_y \\
+        \omega_z
+    \end{array}\right\}}.
+\een
+This is the equation you would plug into the time integration scheme.
+The \emph{tangential operator} $\mbf{T}(\phi,\theta,\psi)$ based on Euler angles is
+\ben
+\mbf{T}(\phi, \theta, \psi)=\left[\begin{array}{ccc}
+        1 & 0          & -\sin \theta          \\
+        0 & \cos \phi  & \sin \phi \cos \theta \\
+        0 & -\sin \phi & \cos \phi \cos \theta
+    \end{array}\right].
+\een
+% 
+We wrote it this way to not use Euler angles.
+Finally, the \emph{transport theorem} is
+\ben
+\mbf{R}_{B E} \dot{\mbf{v}}_E=\dot{\mbf{v}}_B+\tilde{\boldsymbol{\omega}}_B \mbf{v}_B
+\een
+% 
+where
+% 
+\ben
+\mbf{R}_{B E} \dot{\mbf{R}}_{E B} = \tilde{\boldsymbol{\omega}}_B=\left[\begin{array}{ccc}
+        0         & -\omega_z & \omega_y  \\
+        \omega_z  & 0         & -\omega_x \\
+        -\omega_y & \omega_x  & 0
+    \end{array}\right].
+\een
+\subsection{Inertia}
+Total linear momentum is
+\ben
+\mbf{p}_B=\int_{\mathcal{V}} \mbf{v}_B^P \mathrm{~d} m
+= m \mbf{v}_B
+\een
+and the total angular momentum about the center of mass is
+\ben
+\mbf{h}_B=\int_{\mathcal{V}} \tilde{\mbf{r}}_B^P \mbf{v}_B^P \mathrm{~d} m
+= \mbf{I}_B \boldsymbol{\omega}_B
+\een
+%
+where
+\ben
+\mbf{I}_B=-\int_{\mathcal{V}} \tilde{\mbf{r}}_B^P \tilde{\mbf{r}}_B^P \mathrm{~d} m=\left[\begin{array}{ccc}
+        I_{x x}  & -I_{x y} & -I_{x z} \\
+        -I_{y x} & I_{y y}  & -I_{y z} \\
+        -I_{z x} & -I_{z y} & I_{z z}
+    \end{array}\right]
+\een
+and $I_{xy} = I_{zy} = 0$ for P/S symmetry.
+Example quantities are $\textstyle I_{xx} = \int_{\mcal{V}}\left(y^2+z^2\right) dm$ and $\textstyle I_{yz}=I_{zy}=\int_{\mcal{V}} yz dm$
+In EFS, angular momentum is
+\ben
+\mbf{h}_E=\mbf{R}_{E B} \mbf{h}_B= \underbrace{\mbf{R}_{E B} \mbf{I}_B \mbf{R}_{B E}}_{\mbf{I}_E} \boldsymbol{\omega}_E
+\een
+\subsection{Equations of motion}
+% 
+If we plug into Lagrange's equations, we get
+%
+\ben
+& m\dot{\mbf{v}}_B + m \tilde{\boldsymbol{\omega}}_B\mbf{v}_B  & =  \mbf{f}_{\tn{h}B} + \mbf{f}_{pB}  + \mbf{f}_{\tn{g}B}  \\
+& \mbf{I}_B \dot{\boldsymbol{\omega}}_B+\tilde{\boldsymbol{\omega}}_B \mbf{I}_B \boldsymbol{\omega}_B & = \mbf{m}_{a B}+\mbf{m}_{p B}
+\een
+where the RHS are hydrodynamic, propulsive, and gravitational loads acting on the center of mass.
+\be
+\begin{bmatrix}
+    m & 0 & 0 & 0   & 0   & 0   \\
+    0 & m & 0 & 0   & 0   & 0   \\
+    0 & 0 & m & 0   & 0   & 0   \\
+    0 & 0 & 0 & I_1 & 0   & 0   \\
+    0 & 0 & 0 & 0   & I_2 & 0   \\
+    0 & 0 & 0 & 0   & 0   & I_3
+\end{bmatrix}
+\ddot{\mbf{\eta}}
+= \sum_i \mbf{f}_i.
+\ee
+% 
+\subsubsection{Gravitational loads}
+For simplified purposes, the loads are
+\ben
+& \sum_i \mbf{f}_i &= [f_x, f_y, f_z, m_x, m_y, m_z]^T\\
+& f_x & =  F_{\tn{prop}} \\
+& f_y & =  0 \\
+& f_z & =  -mg + F_{\tn{foil}} = 0 \\
+& m_x & =  0 \\
+& m_y & =  M_{\tn{foil}} \\
+& m_z & =  0
+\een
+where we assume the foil and propulsion plant forces act .
+
+\appendix
 \bibliography{./gng-link,./mdolab-link}
 
 \end{document}

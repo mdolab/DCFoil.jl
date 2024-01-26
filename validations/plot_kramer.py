@@ -121,7 +121,7 @@ if __name__ == "__main__":
     ax.annotate("Wet modes", xy=(0.75, 0.45), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.5)
 
     ax.set_ylim(bottom=0.0)
-    ax.set_xticks(np.arange(-90, 90+45, 45))
+    ax.set_xticks(np.arange(-90, 90 + 45, 45))
 
     plt.show(block=(not dosave))
     niceplots.adjust_spines(ax, outward=True)

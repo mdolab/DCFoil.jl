@@ -101,7 +101,6 @@ def compute_normFactorModeShape(modeShape: dict):
     #         maxVal *= -1
     #     normFactor.append(maxVal)
 
-    
     maxValList = []
     maxValListNoabs = []
     for k, v in modeShape.items():

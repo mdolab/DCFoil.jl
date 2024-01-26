@@ -2,7 +2,7 @@
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "785314cf6d26152b68ba53578a7cc830fe2c3971"
+project_hash = "e7600766691e49e494d8e91495e521d2d3747c8b"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5d2e21d7b0d8c22f67483ef95ebdc39c0e6b6003"
@@ -169,6 +169,12 @@ deps = ["Static", "StaticArrayInterface"]
 git-tree-sha1 = "70232f82ffaab9dc52585e0dd043b5e0c6b714f1"
 uuid = "fb6a15b2-703c-40df-9091-08a04967cfa9"
 version = "0.1.12"
+
+[[deps.CodeTracking]]
+deps = ["InteractiveUtils", "UUIDs"]
+git-tree-sha1 = "c0216e792f518b39b22212127d4a84dc31e4e386"
+uuid = "da1fd8a2-8d9e-5ec2-8556-3022fb5608a2"
+version = "1.3.5"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -746,6 +752,12 @@ git-tree-sha1 = "6f2675ef130a300a112286de91973805fcc5ffbc"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
 version = "2.1.91+0"
 
+[[deps.JuliaInterpreter]]
+deps = ["CodeTracking", "InteractiveUtils", "Random", "UUIDs"]
+git-tree-sha1 = "04663b9e1eb0d0eabf76a6d0752e0dac83d53b36"
+uuid = "aa1ae85d-cabe-5617-a682-6adf51b2e16a"
+version = "0.9.28"
+
 [[deps.JumpProcesses]]
 deps = ["ArrayInterface", "DataStructures", "DiffEqBase", "DocStringExtensions", "FunctionWrappers", "Graphs", "LinearAlgebra", "Markdown", "PoissonRandom", "Random", "RandomNumbers", "RecursiveArrayTools", "Reexport", "SciMLBase", "StaticArrays", "TreeViews", "UnPack"]
 git-tree-sha1 = "3de1d557e382cad270d921fbc22351f5628e7b1f"
@@ -998,6 +1010,12 @@ weakdeps = ["ChainRulesCore", "ForwardDiff", "SpecialFunctions"]
     [deps.LoopVectorization.extensions]
     ForwardDiffExt = ["ChainRulesCore", "ForwardDiff"]
     SpecialFunctionsExt = "SpecialFunctions"
+
+[[deps.LoweredCodeUtils]]
+deps = ["JuliaInterpreter"]
+git-tree-sha1 = "20ce1091ba18bcdae71ad9b71ee2367796ba6c48"
+uuid = "6f1432cf-f94c-5a45-995e-cdbf5db27b0b"
+version = "2.4.4"
 
 [[deps.MKL]]
 deps = ["Artifacts", "Libdl", "LinearAlgebra", "MKL_jll"]
@@ -1396,6 +1414,12 @@ deps = ["StaticArrays"]
 git-tree-sha1 = "256eeeec186fa7f26f2801732774ccf277f05db9"
 uuid = "ae5879a3-cd67-5da8-be7f-38c6eb64a37b"
 version = "1.1.1"
+
+[[deps.Revise]]
+deps = ["CodeTracking", "Distributed", "FileWatching", "JuliaInterpreter", "LibGit2", "LoweredCodeUtils", "OrderedCollections", "Pkg", "REPL", "Requires", "UUIDs", "Unicode"]
+git-tree-sha1 = "3fe4e5b9cdbb9bbc851c57b149e516acc07f8f72"
+uuid = "295af30f-e4ad-537b-8983-00126c2a3abe"
+version = "3.5.13"
 
 [[deps.Richardson]]
 deps = ["LinearAlgebra"]
