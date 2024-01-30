@@ -62,7 +62,7 @@ DVDict = Dict(
     "toc" => 0.03459, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(0), # fiber angle global [rad]
-    "strut" => 0.4, # from Yingqian
+    "s_strut" => 0.4, # from Yingqian
 )
 
 solverOptions = Dict(

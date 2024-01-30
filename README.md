@@ -1,4 +1,9 @@
+
 # DCFoil.jl
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gawng.github.io/DCFoil.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gawng.github.io/DCFoil.jl/dev/)
+[![Build Status](https://github.com/gawng/DCFoil.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/gawng/DCFoil.jl/actions/workflows/CI.yml?query=branch%3Amain)
+
 
 ![Alt text](./media/logo.svg "logo-text")
 
@@ -56,7 +61,7 @@ Please use this coding convention:
 * `snake_case` - functions (all functions should contain a verb) and non-module filenames
 * `SCREAMING_SNAKE_CASE` - constants
 
-### Sensitivites
+### Sensitivities
 
 #### Adding new cost functions or design variables
 

@@ -9,9 +9,9 @@
 
 module SolutionConstants
 
-include("../hydro/HydroStrip.jl")
-include("../struct/BeamProperties.jl")
-using .HydroStrip, .StructProp
+# include("../hydro/HydroStrip.jl")
+# include("../struct/BeamProperties.jl")
+# using .HydroStrip, .BeamProperties
 
 # ==============================================================================
 #                         STRUCTS
@@ -50,6 +50,10 @@ const mepsLarge = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it i
 const p_i_tol = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on static div # tolerance on real root criteria 
 # NOTE: this is tested to work. 
 # Bigger values catch the real roots and too small cause them to disappear
-# You just don't want them too big that they pick up wrong roots 
+# You just don't want them too big that they pick up wrong roots
+
+const XDIM = 1
+const YDIM = 2
+const ZDIM = 3
 
 end # end module

@@ -14,7 +14,7 @@ include("../src/solvers/SolveFlutter.jl")
 using .SolveFlutter
 include("../src/InitModel.jl")
 using .InitModel
-include("../src/struct/FiniteElements.jl")
+include("../src/struct/FEMMethods.jl")
 using .FEMMethods
 include("../src/solvers/SolverRoutines.jl")
 using .SolverRoutines
@@ -51,7 +51,7 @@ function test_SolveStaticRigid()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
-        "strut" => 0.4, # from Yingqian
+        "s_strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
         "ρ_f" => 1000.0, # fluid density [kg/m³]
@@ -288,7 +288,7 @@ function test_SolveStaticComp()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
-        "strut" => 0.4, # from Yingqian
+        "s_strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
         "ρ_f" => 1000.0, # fluid density [kg/m³]
@@ -507,7 +507,7 @@ function test_pk_staticDiv()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(-15), # fiber angle global [rad]
-        "strut" => 0.4, # from Yingqian
+        "s_strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(
@@ -583,7 +583,7 @@ function test_pk_flutter()
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
-        "strut" => 0.4, # from Yingqian
+        "s_strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(

@@ -87,6 +87,8 @@ function return_constitutive(materialName::String)
         G₁₂ = 8.4e9
         ν₁₂ = 0.32
         constitutive = "orthotropic"
+    elseif (materialName == "new composite material ")
+        println("not done yet")
     end # if
 
     return ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive

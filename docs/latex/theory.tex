@@ -674,6 +674,8 @@ where we set the aggregation parameter $\rho=80$ by default.
 \section{Rigid body dynamics}
 % 
 The two coordinate systems are the \emph{earth-fixed} and \emph{body-fixed} (stability) axes, abbreviated EFS and BFS.
+DCFoil assumes an equilibrium state is provided (such as from a VPP).
+% 
 \subsection{Governing equations}
 % 
 The BFS and EFS origin is at the center of mass of the craft.
@@ -682,6 +684,13 @@ These are different axes from the foil.
 There are six degrees of freedom in the BFS $\boldsymbol{\eta} = [\eta_1,\eta_2,\eta_3,\eta_4,\eta_5,\eta_6]^T$.
 The six velocities in BFS are $[v_x,v_y,v_z,\omega_x,\omega_y,\omega_z]^T$ where the first three are $\mbf{v}_B$ and the last three are $\boldsymbol{\omega}_B$.
 The orientation in EFS are \emph{Euler angles} $[\phi, \theta, \psi]$.
+See \Cref{fig:Coordinates}.
+\begin{figure}[htb!]
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    \includegraphics[width=\linewidth,clip,trim={0cm 0cm 37cm 20cm}]{SeakeepingDiagram.pdf}
+    \caption{\label{fig:Coordinates}Coordinate system and degrees of freedom}
+\end{figure}
 \subsection{Kinematics}
 
 A quantity of interest is the vessel velocity in the EFS denoted $\mbf{v}_E$.
@@ -699,7 +708,7 @@ Now for some point $P$ on the vessel not at the center of mass, the velocity is
 % 
 where ship velocity is $\mbf{v}_E = \dot{\mcal{P}}_E$.
 The orientation of the ship in EFS is
-\ben
+\be
 \boxed{
     \left\{\begin{array}{c}
         \dot{\phi}   \\
@@ -714,7 +723,7 @@ The orientation of the ship in EFS is
         \omega_y \\
         \omega_z
     \end{array}\right\}}.
-\een
+\ee
 This is the equation you would plug into the time integration scheme.
 The \emph{tangential operator} $\mbf{T}(\phi,\theta,\psi)$ based on Euler angles is
 \ben
@@ -768,38 +777,167 @@ In EFS, angular momentum is
 \een
 \subsection{Equations of motion}
 % 
-If we plug into Lagrange's equations, we get
+If we plug into Lagrange's equations, we get the equations of motion in BFS
 %
-\ben
-& m\dot{\mbf{v}}_B + m \tilde{\boldsymbol{\omega}}_B\mbf{v}_B  & =  \mbf{f}_{\tn{h}B} + \mbf{f}_{pB}  + \mbf{f}_{\tn{g}B}  \\
-& \mbf{I}_B \dot{\boldsymbol{\omega}}_B+\tilde{\boldsymbol{\omega}}_B \mbf{I}_B \boldsymbol{\omega}_B & = \mbf{m}_{a B}+\mbf{m}_{p B}
-\een
+\begin{align}
+    m\dot{\mbf{v}}_B + m \tilde{\boldsymbol{\omega}}_B\mbf{v}_B                                         & =  \mbf{f}_{\tn{h}B} + \mbf{f}_{pB}  + \mbf{f}_{\tn{g}B} \\
+    \mbf{I}_B \dot{\boldsymbol{\omega}}_B+\tilde{\boldsymbol{\omega}}_B \mbf{I}_B \boldsymbol{\omega}_B & = \mbf{m}_{a B}+\mbf{m}_{p B}
+\end{align}
 where the RHS are hydrodynamic, propulsive, and gravitational loads acting on the center of mass.
-\be
-\begin{bmatrix}
-    m & 0 & 0 & 0   & 0   & 0   \\
-    0 & m & 0 & 0   & 0   & 0   \\
-    0 & 0 & m & 0   & 0   & 0   \\
-    0 & 0 & 0 & I_1 & 0   & 0   \\
-    0 & 0 & 0 & 0   & I_2 & 0   \\
-    0 & 0 & 0 & 0   & 0   & I_3
-\end{bmatrix}
-\ddot{\mbf{\eta}}
-= \sum_i \mbf{f}_i.
-\ee
+% \be
+% \begin{bmatrix}
+%     m & 0 & 0 & 0   & 0   & 0   \\
+%     0 & m & 0 & 0   & 0   & 0   \\
+%     0 & 0 & m & 0   & 0   & 0   \\
+%     0 & 0 & 0 & I_1 & 0   & 0   \\
+%     0 & 0 & 0 & 0   & I_2 & 0   \\
+%     0 & 0 & 0 & 0   & 0   & I_3
+% \end{bmatrix}
+% \ddot{\mbf{\eta}}
+% = \sum_i \mbf{f}_i.
+% \ee
 % 
 \subsubsection{Gravitational loads}
-For simplified purposes, the loads are
+% 
+The gravitational loads have explicit dependence on vehicle orientation.
 \ben
-& \sum_i \mbf{f}_i &= [f_x, f_y, f_z, m_x, m_y, m_z]^T\\
-& f_x & =  F_{\tn{prop}} \\
-& f_y & =  0 \\
-& f_z & =  -mg + F_{\tn{foil}} = 0 \\
-& m_x & =  0 \\
-& m_y & =  M_{\tn{foil}} \\
-& m_z & =  0
+\mbf{f}_{g B}= mg \mbf{R}_{BE} \mbf{e}_3 = \left\{\begin{array}{c}
+    -m g \sin \theta          \\
+    m g \cos \theta \sin \phi \\
+    m g \cos \theta \cos \phi
+\end{array}\right\}
 \een
-where we assume the foil and propulsion plant forces act .
+\begin{figure}[htb!]
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    \includegraphics[width=\linewidth,clip,trim={37cm 0cm 0cm 30cm}]{SeakeepingDiagram.pdf}
+    \caption{\label{fig:Loads}
+        Gravitational and propulsive loads.
+    }
+\end{figure}
+
+\subsubsection{Propulsive forces}
+% 
+Assume the propulsion system acts at a point at $(x_T,0,z_T)$ from the CM with some rake angle $\theta_T$.
+The propulsive loads are then
+\ben
+\mbf{f}_{p B}=\left\{\begin{array}{c}
+    T \cos \theta_T \\
+    0               \\
+    -T \sin \theta_T
+\end{array}\right\},
+\quad
+\mbf{m}_{p B}=\left\{\begin{array}{c}
+    0                                                 \\
+    T\left(z_T \cos \theta_T+x_T \sin \theta_T\right) \\
+    0
+\end{array}\right\}
+\een
+% 
+\subsubsection{Hydrodynamic loads}
+% 
+The craft instantaneous angle of attack is
+\ben
+\alpha(t)=\tan^{-1} \frac{v_z(t)-v_{g z}(t)}{v_x(t)-v_{g x}(t)} \quad \text { and } \quad-{\pi} \leq \alpha \leq {\pi}
+\een
+where $\mbf{w} = -[v_{gx}, v_{gy}, v_{gz}, \omega_{gx}, \omega_{gy}, \omega_{gz}]^T$ is the disturbance vector of gusts (assume constant).
+Leeway angle is
+\ben
+\beta = \tan ^{-1} \frac{v_y-v_{g y}}{\sqrt{\left(v_x-v_{g x}\right)^2+\left(v_z-v_{g z}\right)^2}} \quad \text { and } \quad-\frac{\pi}{2} \leq \beta \leq \frac{\pi}{2}.
+\een
+% 
+Finally, the velocity vector is
+\ben
+\mbf{v}_B-\mbf{v}_{g B}=\left\{\begin{array}{c}
+    v_x-v_{g x} \\
+    v_y-v_{g y} \\
+    v_z-v_{g z}
+\end{array}\right\}=V_{\mathrm{TAS}}\left\{\begin{array}{c}
+    \cos \alpha \cos \beta \\
+    -\sin \beta            \\
+    \sin \alpha \cos \beta
+\end{array}\right\}
+\een
+where $V_{TAS} = ||\mbf{v}_B-\mbf{v}_{g B} ||$ is the magnitude of the true foiling speed.
+\ben
+& \mbf{f}_{a B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \mathbf{c}_{\mathbf{f}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),                                     \\
+& \mbf{m}_{a B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \boldsymbol{\Lambda}_{\mathrm{ref}} \mathbf{c}_{\mathbf{m}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),
+\een
+% 
+\begin{figure}[htb!]
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    \includegraphics[width=\linewidth,clip,trim={0cm 22cm 0cm 0cm}]{SeakeepingDiagram.pdf}
+    \caption{\label{fig:HydroLoads}
+        Hydrodynamic loads.
+    }
+\end{figure}
+
+\subsubsection{Elastified equations of motion}
+Defining the state vector as $\mbf{x}_r(t) = [v_x, v_y, v_z, \omega_x, \omega_y, \omega_z, \phi, \theta]^T$ and the control inputs as $\mbf{u} = [\delta_e, \delta_r]^T$ where $\delta_e$ and $\delta_r$ are elevator (main foil rake) and rudder command inputs, the dynamics of the system are
+\be
+\label{eqn:RigidBody}
+\dot{\mbf{x}}_r = f^{(r)}(\mbf{x}_r, \mbf{x}_s, \mbf{u}, \mbf{w})
+= \\f_{\tn{gyr}}^{(r)}\left(\mbf{x}_r\right) + f_{\tn{grav}} \left(\mbf{x}_r\right)
++ f_{\tn{hydro}}^{(r)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
++ f_{\tn{prop}}^{(r)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
+\ee
+and (under the small amplitude structural deformation assumption) the deformations are determined by
+\be
+\label{eqn:Struct}
+\mbf{K}_{ss} \mbf{x}_s = f^{(s)}\left(\mbf{x}_r, \mbf{x_s}, \mbf{u}\right)
+=\\f_{\tn{gyr}}^{(s)}\left(\mbf{x}_r\right) + f_{\tn{grav}}\left(\mbf{x}_r\right)
++ f_{\tn{hydro}}^{(s)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
++ f_{\tn{prop}}^{(s)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
+\ee
+where $\mbf{x}_s(t)$ is the structural state vector.
+
+Equations~\eqref{eqn:RigidBody} and~\eqref{eqn:Struct} are coupled and must be solved simultaneously.
+Static trim is $\mbf{x}_{s0}$ and $\mbf{x}_{r0}$.
+We solve the coupled system
+\be
+& f^{(r)}\left( \mbf{x}_{s0}, \mbf{x}_{r0}, \mbf{u}_{0} \right) & = \mbf{0}
+\\
+& f^{(s)}\left( \mbf{x}_{s0}, \mbf{x}_{r0}, \mbf{u}_{0} \right)
+&=
+\mbf{K}_{ss} \mbf{x}_{s0}
+\ee
+
+Assuming small perturbations around the trimmed flight condition, the force Equations~\eqref{eqn:RigidBody} and \eqref{eqn:Struct} can be linearized to
+% 
+\ben
+\Delta \dot{\mbf{x}}_r = \mbf{A}_{rr} \Delta \mbf{x}_r
++ \mbf{A}_{rs} \Delta \mbf{x}_s 
++ \mbf{B}_{r} \Delta \mbf{u}
+\\
+\mbf{K}_{ss} \Delta {\mbf{x}}_s =
+\mbf{A}_{sr} \Delta \mbf{x}_r
++ \mbf{A}_{ss} \Delta \mbf{x}_s
++ \mbf{B}_{s} \Delta \mbf{u}
+\een
+% 
+where the state ($\mbf{A}$) and input ($\mbf{B}$) matrices are partitions of the Jacobian of nonlinear forcing terms.
+This coupled system is linear so we can first solve for
+\ben
+\Delta \mbf{x}_s = \left(\mbf{K}_{ss} - \mbf{A}_{ss}\right)^{-1} \left(\mbf{A}_{sr} \Delta \mbf{x}_r + \mbf{B}_s \Delta \mbf{u} \right)
+\een
+and this is substituted back into the linearized coupled equations.
+The structural effects are a constant feedback on the rigid equations.
+
+Now in the vibrating mode, if we assume small-amplitude vibrations, we must consider the shift of vehicle center of mass and its impact on the vehicle dynamics.
+If the elastic deformations are sufficiently small to not change global inertial characteristics, then modal coordinates can be used.
+
+% For simplified purposes, the loads are
+% \ben
+% & \sum_i \mbf{f}_i &= [f_x, f_y, f_z, m_x, m_y, m_z]^T\\
+% & f_x & =  F_{\tn{prop}} \\
+% & f_y & =  0 \\
+% & f_z & =  -mg + F_{\tn{foil}} = 0 \\
+% & m_x & =  0 \\
+% & m_y & =  M_{\tn{foil}} \\
+% & m_z & =  0
+% \een
+% where we assume the foil and propulsion plant forces act .
 
 \appendix
 \bibliography{./gng-link,./mdolab-link}

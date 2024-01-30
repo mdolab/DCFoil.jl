@@ -124,7 +124,7 @@ evalFunc = "ksflutter"
 # # Right now, we require a complete solve to get the derivatives
 include("../../src/solvers/SolveFlutter.jl")
 include("../../src/InitModel.jl")
-include("../../src/struct/FiniteElements.jl")
+include("../../src/struct/FEMMethods.jl")
 include("../../src/solvers/SolverRoutines.jl")
 include("../../src/hydro/HydroStrip.jl")
 include("../../src/constants/SolutionConstants.jl")

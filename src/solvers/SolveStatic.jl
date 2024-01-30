@@ -11,7 +11,7 @@ Static hydroelastic solver
 """
 
 # --- Public functions ---
-export solve, do_newton_rhapson
+export solve
 
 # --- Libraries ---
 using FiniteDifferences
@@ -24,13 +24,13 @@ using Printf, DelimitedFiles
 # First include them
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
-include("../struct/FiniteElements.jl")
+include("../struct/FEMMethods.jl")
 include("../hydro/HydroStrip.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
 # then use them
-using .InitModel, .HydroStrip, .StructProp
+using .InitModel, .HydroStrip, .BeamProperties
 using .FEMMethods
 using .SolutionConstants
 using .SolverRoutines
@@ -45,7 +45,7 @@ loadType = "torque"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dict)
+function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
     Inputs
@@ -66,8 +66,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     outputDir = solverOptions["outputDir"]
     nNodes = solverOptions["nNodes"]
-    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
-
+    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
+    
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
     println("====================================================================================")
@@ -79,9 +79,20 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     x_αbVec = DVDict["x_αb"]
     global chordVec = DVDict["c"] # need for evalFuncs
     ebVec = 0.25 * chordVec .+ abVec
+    if solverOptions["config"] == "t-foil"
+        strutchordVec = DVDict["c_strut"]
+        strutabVec = DVDict["ab_strut"]
+        strutebVec = 0.25 * strutchordVec .+ strutabVec
+    else
+        strutchordVec = nothing
+        strutabVec = nothing
+        strutebVec = nothing
+    end
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    structMesh = FEMESH.mesh
+    elemConn = FEMESH.elemConn
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=solverOptions["config"], STRUT=STRUT)
     # if elemType == "COMP2"
     #     # Get transformation matrix for the tip load
     #     angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
@@ -100,6 +111,9 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
     # ]
     # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
+    # if solverOptions["config"] == "t-foil"
+
+    # end
 
     # --- Initialize states ---
     u = zeros(length(globalF))
@@ -108,8 +122,9 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #   Get initial fluid tracts
     # ---------------------------
 
-    # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
-    fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fTractions, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"])
     globalF = fTractions
 
     # # --- Debug printout of matrices in human readable form ---
@@ -124,7 +139,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; config=solverOptions["config"])
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---

@@ -30,19 +30,20 @@ using ChainRulesCore
 # --- DCFoil modules ---
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
-include("../struct/FiniteElements.jl")
+include("../struct/FEMMethods.jl")
 include("../hydro/HydroStrip.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 include("./DCFoilSolution.jl")
 include("../io/TecplotIO.jl")
-using .InitModel, .HydroStrip, .StructProp
+using .InitModel, .HydroStrip, .BeamProperties
 using .FEMMethods
 using .SolveStatic
-using .SolutionConstants
 using .SolverRoutines
 using .DCFoilSolution
+# --- Globals ---
+using .SolutionConstants: mepsLarge, SolutionConstants
 
 
 # ==============================================================================
@@ -124,7 +125,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     debug = solverOptions["debug"]
 
     # --- Init model structure ---
-    global FOIL = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, zeta, θ, solverOptions; uRange=uRange, fSweep=fSweep)
+    global FOIL, _ = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, zeta, θ, nothing, nothing, nothing, nothing, nothing, nothing, nothing, solverOptions; uRange=uRange, fSweep=fSweep)
 
     # --- Create mesh ---
     nElem = FOIL.nNodes - 1
@@ -161,7 +162,10 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = 0
+    ChainRulesCore.ignore_derivatives() do
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    end
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
     
     # ---------------------------
@@ -206,7 +210,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
-    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -241,7 +245,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------
@@ -380,6 +384,7 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
 
     Although I think the output here is the square of the above equation.
 
+    **Arguments
     Inputs
     ------
         old_r, old_i - the real/imaginary part of the old eigenvectors from previous iteration. The size is (Mold, Mold)
@@ -425,7 +430,7 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
 
     for jj in 1:N_new # loop cols
         for ii in 1:N_old # loop rows
-            if Ctmp[ii, jj] == 0.0 || normOld[ii] < SolutionConstants.mepsLarge || normNew[jj] < SolutionConstants.mepsLarge # do not allow divide by zero
+            if Ctmp[ii, jj] == 0.0 || normOld[ii] < mepsLarge || normNew[jj] < mepsLarge # do not allow divide by zero
                 C[ii, jj] = 0.0
             else
                 C[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
@@ -517,9 +522,9 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
 
     # Rows and columns of old and new eigenvectors
     # M_old::Int64 = size(old_r)[1] # TODO: why aren't these used
-    N_old = size(old_r)[2]
+    N_old::Int64 = size(old_r)[2]
     # M_new::Int64 = size(new_r)[1] # TODO: why aren't these used
-    N_new = size(new_r)[2]
+    N_new::Int64 = size(new_r)[2]
 
     # --- Initialize outputs ---
     corr = zeros(N_old)
@@ -667,14 +672,14 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     dimwithBC = Nr
 
     # --- Outputs ---
-    p_r = zeros(3 * nModes, N_MAX_Q_ITER)
-    p_i = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_r = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_i = zeros(3 * nModes, N_MAX_Q_ITER)
-    R_eigs_r = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    p_r::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
+    p_i::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
+    true_eigs_r::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
+    true_eigs_i::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r::Array{Float64,3} = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i::Array{Float64,3} = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank::Matrix{Int64} = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
-    flowHistory = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
+    flowHistory::Matrix{Float64} = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
 
 
     # ---------------------------
@@ -1019,7 +1024,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     ΔdynP = dynPTmp - flowHistory_z[nFlow-1, 3]
                     diff = ((dynPTmp - ΔdynP) - dynPMax)
                 end
-                if (diff^2 < SolutionConstants.mepsLarge^2)
+                if (diff^2 < mepsLarge^2)
                     # Exit the loop
                     break
                 else # Try max value

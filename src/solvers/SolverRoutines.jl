@@ -13,9 +13,9 @@ In julia, the chainrules rrule is '_b'
 # --- Libraries ---
 using LinearAlgebra
 using ChainRulesCore
-include("./NewtonRhapson.jl")
+include("./NewtonRaphson.jl")
 include("./EigenvalueProblem.jl")
-using .NewtonRhapson, .EigenvalueProblem
+using .NewtonRaphson, .EigenvalueProblem
 using Zygote
 
 # --- Globals ---
@@ -42,8 +42,8 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
         println("+", "-"^50, "+")
     end
 
-    # Somewhere here, you could do something besides Newton-Rhapson if you want
-    converged_u, converged_r, iters = NewtonRhapson.do_newton_rhapson(compute_residuals, compute_∂r∂u, u, maxIters, tol, is_verbose, mode, is_cmplx)
+    # Somewhere here, you could do something besides Newton-Raphson if you want
+    converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(compute_residuals, compute_∂r∂u, u, maxIters, tol, is_verbose, mode, is_cmplx)
 
     return converged_u, converged_r
 
@@ -697,7 +697,7 @@ end
 
 function get_rotate3dMat(rot; axis="x")
     """
-    Rotates a 3D vector about axis by rot radians (RH rule!)
+    Give rotation matrix about axis by rot radians (RH rule!)
     """
     rotMat = Array{Float64}(undef, 3, 3)
     c = cos(rot)
@@ -726,13 +726,41 @@ function get_rotate3dMat(rot; axis="x")
     return rotMat
 end
 
+function transform_euler_ang(phi, theta, psi; rotType=1)
+    """
+    Parameters
+    ----------
+    phi : float
+        Rotation about x axis, radians
+    theta : float
+        Rotation about y axis
+    rotType : int, by default 1
+        1 - This is 3-2-1 rotation (yaw, pitch, roll)
+        2 - This is 1-2-3 rotation (roll, pitch, yaw)
+    """
+    taux = get_rotate3dMat(phi, axis="x")
+    tauy = get_rotate3dMat(theta, axis="y")
+    tauz = get_rotate3dMat(psi, axis="z")
+
+    if rotType == 1
+        RMat = taux * tauy * tauz
+    elseif rotType == 2
+        RMat = tauz * tauy * taux
+    else
+        error("Only 3-2-1 rotation implemented")
+    end
+
+    return RMat
+end
+
+
 function get_transMat(dR, l, elemType="BT2")
     """
     Returns the transformation matrix for a given element type into 3D space
 
     Inputs
     -------
-        dR: normal vector
+        dR: vector along beam length
         l: length of element
         elemType: element type
     """

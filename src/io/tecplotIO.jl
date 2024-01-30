@@ -11,13 +11,15 @@ When in doubt, refer to the Tecplot Data Format Guide
 module TecplotIO
 
 using Printf
+include("../constants/SolutionConstants.jl")
+using .SolutionConstants
 
 # --- Globals ---
-global XDIM = 1
-global YDIM = 2
-global ZDIM = 3
+XDIM = SolutionConstants.XDIM
+YDIM = SolutionConstants.YDIM
+ZDIM = SolutionConstants.ZDIM
 
-function write_mesh(DVDict::Dict, mesh, outputDir::String, fname="mesh.dat")
+function write_mesh(DVDict::Dict, FEMESH, solverOptions::Dict, outputDir::String, fname="mesh.dat")
     """
     Top level routine to write the mesh file
     """
@@ -27,11 +29,11 @@ function write_mesh(DVDict::Dict, mesh, outputDir::String, fname="mesh.dat")
 
     io = open(outfile, "w")
     write(io, "TITLE = \"Mesh Data\"\n")
-    write(io, "VARIABLES = \"X\" \"Y\" \"Z\"\n")
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
 
-    write_1Dfemmesh(io, mesh)
-    write_strips(io, DVDict, mesh)
-    write_oml(io, DVDict, mesh)
+    write_1Dfemmesh(io, FEMESH)
+    write_strips(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=solverOptions["nNodes"])
+    write_oml(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=solverOptions["nNodes"])
 
     close(io)
 end
@@ -73,7 +75,7 @@ function write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
     TODO generalize to take in a normal vector in spanwise direction
     """
 
-    foilCoords = generate_naca4dig(DVDict["toc"])
+    foilCoords = generate_naca4dig(DVDict["toc"][1])
 
     for ii in 1:size(mesh)[dim] # iterate over span
         spanLoc = mesh[ii, :]
@@ -105,17 +107,22 @@ end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
-function write_1Dfemmesh(io, mesh)
+function write_1Dfemmesh(io, FEMESH)
     """
     Write the jig shape FEM stick mesh to tecplot
     """
 
+    mesh = FEMESH.mesh
+    nNodes = length(mesh[:, 1])
+    nElem = length(FEMESH.elemConn[:,1])
     # ************************************************
     #     Header
     # ************************************************
     write(io, "ZONE T = \"Mesh\"\n")
+    write(io, @sprintf("NODES = %d,", nNodes))
+    write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nElem))
     write(io, "DATAPACKING = POINT\n")
-
+    
     # ************************************************
     #     Write contents
     # ************************************************
@@ -126,12 +133,16 @@ function write_1Dfemmesh(io, mesh)
             write(io, stringData)
         end
     elseif ndims(mesh) == 2 # 1D beam in 3D space
-        dim = 1 # iterate over the first dimension
-
-        for ii in 1:size(mesh)[dim]
-            nodeLoc = mesh[ii, :]
+        # Loop by nodes
+        for ii in 1:nNodes
+            nodeLoc = mesh[ii, :]            
             stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
             write(io, stringData)
+        end
+
+        # Loop by elements to write connectivities
+        for ii in 1:nElem
+            write(io, @sprintf("%d\t%d\n", FEMESH.elemConn[ii, 1], FEMESH.elemConn[ii, 2]))
         end
     end
 
@@ -379,11 +390,11 @@ end # end write_natural_mode
 # ==============================================================================
 #                         Hydro Routines
 # ==============================================================================
-function write_strips(io, DVDict, mesh)
+function write_strips(io, DVDict, FEMESH; config="wing", nNodeWing=10)
     # ************************************************
     #     Header
     # ************************************************
-    nnode = size(mesh)[1]
+    nnode = size(FEMESH.mesh)[1]
     write(io, "ZONE T=\"Hydrodynamic Strips\" \n")
     write(io, @sprintf("NODES = %d,", nnode * 2))
     write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nnode))
@@ -392,9 +403,9 @@ function write_strips(io, DVDict, mesh)
     # ************************************************
     #     Write contents
     # ************************************************
-    if ndims(mesh) == 1 # 1D beam in a straight line
+    if ndims(FEMESH.mesh) == 1 # 1D beam in a straight line
         ii = 1 # spanwise counter
-        for nodeLoc in mesh
+        for nodeLoc in FEMESH.mesh
             localChord = DVDict["c"][ii]
             b = localChord * 0.5
 
@@ -410,23 +421,62 @@ function write_strips(io, DVDict, mesh)
 
             ii += 1
         end
-    elseif ndims(mesh) == 2 # 1D beam in 3D space
+    elseif ndims(FEMESH.mesh) == 2 # 1D beam in 3D space
         dim = 1 # iterate over the first dimension
 
         for ii in 1:nnode
-            localChord = DVDict["c"][ii]
-            b = localChord * 0.5
-            nodeLoc = mesh[ii, :]
+            if ii <= nNodeWing
+                localChord = DVDict["c"][ii]
+                b = localChord * 0.5
+                nodeLoc = FEMESH.mesh[ii, :]
 
-            # ---------------------------
-            #   Write aero strip
-            # ---------------------------
-            XYZCoords1 = nodeLoc - [b, 0.0, 0.0]
-            stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords1[XDIM], XYZCoords1[YDIM], XYZCoords1[ZDIM])
-            write(io, stringData)
-            XYZCoords2 = nodeLoc + [b, 0.0, 0.0]
-            stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords2[XDIM], XYZCoords2[YDIM], XYZCoords2[ZDIM])
-            write(io, stringData)
+                # ---------------------------
+                #   Write aero strip
+                # ---------------------------
+                XYZCoords1 = nodeLoc - [b, 0.0, 0.0]
+                stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords1[XDIM], XYZCoords1[YDIM], XYZCoords1[ZDIM])
+                write(io, stringData)
+                XYZCoords2 = nodeLoc + [b, 0.0, 0.0]
+                stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords2[XDIM], XYZCoords2[YDIM], XYZCoords2[ZDIM])
+                write(io, stringData)
+            else
+                if config == "t-foil"
+                    if ii <= (nNodeWing*2 - 1)
+                        iwing = ii - nNodeWing
+                        localChord = DVDict["c"][iwing]
+                        b = localChord * 0.5
+                        nodeLoc = FEMESH.mesh[iwing, :]
+                        nodeLoc[YDIM] *= -1.0
+
+                        # ---------------------------
+                        #   Write aero strip
+                        # ---------------------------
+                        XYZCoords1 = nodeLoc - [b, 0.0, 0.0]
+                        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords1[XDIM], XYZCoords1[YDIM], XYZCoords1[ZDIM])
+                        write(io, stringData)
+                        XYZCoords2 = nodeLoc + [b, 0.0, 0.0]
+                        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords2[XDIM], XYZCoords2[YDIM], XYZCoords2[ZDIM])
+                        write(io, stringData)
+                    else
+                        istrut = ii - nNodeWing*2 + 1
+                        localChord = DVDict["c_strut"][istrut]
+                        b = localChord * 0.5
+                        nodeLoc = FEMESH.mesh[ii, :]
+        
+                        # ---------------------------
+                        #   Write aero strip
+                        # ---------------------------
+                        XYZCoords1 = nodeLoc - [b, 0.0, 0.0]
+                        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords1[XDIM], XYZCoords1[YDIM], XYZCoords1[ZDIM])
+                        write(io, stringData)
+                        XYZCoords2 = nodeLoc + [b, 0.0, 0.0]
+                        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords2[XDIM], XYZCoords2[YDIM], XYZCoords2[ZDIM])
+                        write(io, stringData)
+                    end
+                end
+            end
+
+
         end
     end
     # ************************************************
@@ -440,7 +490,10 @@ function write_strips(io, DVDict, mesh)
 
 end
 
-function write_oml(io, DVDict, mesh)
+function write_oml(io, DVDict, FEMESH; config="wing", nNodeWing=10)
+    """
+    There is abug in this code that writes the OML a little funky
+    """
     # ************************************************
     #     Header
     # ************************************************
@@ -450,7 +503,7 @@ function write_oml(io, DVDict, mesh)
     # ************************************************
     #     Write contents
     # ************************************************
-    if ndims(mesh) == 1
+    if ndims(FEMESH.mesh) == 1
         ii = 1 # spanwise counter
         for nodeLoc in mesh
             localChord = DVDict["c"][ii]
@@ -473,22 +526,54 @@ function write_oml(io, DVDict, mesh)
 
             ii += 1
         end
-    elseif ndims(mesh) == 2
+    elseif ndims(FEMESH.mesh) == 2
         dim = 1 # iterate over the first dimension
         # Iterate over LE and TE
         for factor in [-1, 1]
-            for ii in 1:size(mesh)[dim]
-                localChord = DVDict["c"][ii]
-                b = localChord * 0.5
+            for ii in 1:size(FEMESH.mesh)[dim]
 
-                nodeLoc = mesh[ii, :]
-                if factor == -1
-                    nodeLoc = mesh[end-ii+1, :]
+                if ii <= nNodeWing
+                    localChord = DVDict["c"][ii]
+                    b = localChord * 0.5
+                    
+                    nodeLoc = FEMESH.mesh[ii, :]
+                    if factor == -1
+                        nodeLoc = FEMESH.mesh[end-ii+1, :]
+                    end
+                    
+                    XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
+                    stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
+                    write(io, stringData)
+                else
+                    if ii <= (nNodeWing*2 - 1)
+                        iwing = ii - nNodeWing
+                        localChord = DVDict["c"][iwing]
+                        b = localChord * 0.5
+                        
+                        nodeLoc = FEMESH.mesh[iwing, :]
+                        nodeLoc[YDIM] *= -1.0
+                        if factor == -1
+                            nodeLoc = FEMESH.mesh[end-iwing+1, :]
+                        end
+                        
+                        XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
+                        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
+                        write(io, stringData)
+                    else
+                        istrut = ii - 2*nNodeWing +1
+                        localChord = DVDict["c_strut"][istrut]
+                        b = localChord * 0.5
+                        
+                        nodeLoc = FEMESH.mesh[ii, :]
+                        if factor == -1
+                            nodeLoc = FEMESH.mesh[end-ii+1, :]
+                        end
+                        
+                        XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
+                        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
+                        write(io, stringData)
+                    end
                 end
-
-                XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
-                stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
-                write(io, stringData)
             end
         end
     end

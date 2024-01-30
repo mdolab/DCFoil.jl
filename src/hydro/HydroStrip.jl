@@ -20,14 +20,13 @@ using LinearAlgebra
 using Statistics
 using Zygote, ChainRulesCore
 using Printf, DelimitedFiles
+using SparseArrays
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
-using SparseArrays
 
 # --- Globals ---
-global XDIM = 1
-global YDIM = 2
-global ZDIM = 3
+include("../constants/SolutionConstants.jl")
+using .SolutionConstants: XDIM, YDIM, ZDIM
 
 # ==============================================================================
 #                         Unsteady hydro functions
@@ -575,7 +574,7 @@ function compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, e
     AIC: Matrix
         Aerodynamic influence coefficient matrix
     aeroMesh: Array
-        Mesh of the foil
+        Mesh of the foil (it's the same as the struct one)
     FOIL: struct
         Struct containing the foil implicit constants
     elemType: String
@@ -696,8 +695,12 @@ function compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, e
         # println("=============================")
         # println("Using 3D mesh code")
         # println("=============================")
-        for yⁿ in aeroMesh[:, YDIM]
+        for jj in 1:length(aeroMesh[:,1])
             # --- compute strip width ---
+            XN = aeroMesh[jj, :]
+            yⁿ = XN[YDIM]
+            zⁿ = XN[ZDIM]
+
             Δy = 0.0
             if jj < FOIL.nNodes
                 nVec = (aeroMesh[jj+1, :] - aeroMesh[jj, :])
@@ -795,14 +798,14 @@ function compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, e
             # Add rectangle to planform area
             planformArea += c * Δy
 
-            jj += 1 # increment strip counter
+            # jj += 1 # increment strip counter
         end
     end
 
     return AIC, planformArea
 end
 
-function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2")
+function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2"; config="wing", STRUT=nothing, strutchordVec=nothing, strutabVec=nothing, strutebVec=nothing)
     """
     Compute the AIC matrix for a given aeroMesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
@@ -814,7 +817,7 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             {F} = -([Mf]{udd} + [Cf]{ud} + [Kf]{u})
         These are matrices
     aeroMesh: Array
-        Mesh of the foil
+        Mesh of the foil (same as struct)
     FOIL: struct
         Struct containing the foil implicit constants
     elemType: String
@@ -974,7 +977,13 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             jj += 1 # increment strip counter
         end
     elseif ndims(aeroMesh) == 2
-        for yⁿ in aeroMesh[:, YDIM]
+        # for yⁿ in aeroMesh[:, YDIM]
+        for jj in 1:length(aeroMesh[:,1])
+            # --- compute strip width ---
+            XN = aeroMesh[jj, :]
+            yⁿ = XN[YDIM]
+            zⁿ = XN[ZDIM]
+
             # --- compute strip width ---
             Δy = 0.0
             if jj < FOIL.nNodes
@@ -992,23 +1001,44 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             nVec = nVec / lᵉ # normalize
 
             # --- Linearly interpolate values based on y loc ---
-            clα::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], FOIL.clα, yⁿ)
-            c::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], chordVec, yⁿ)
-            ab::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], abVec, yⁿ)
-            eb::Float64 = SolverRoutines.do_linear_interp(aeroMesh[:, YDIM], ebVec, yⁿ)
-            b::Float64 = 0.5 * c # semichord for more readable code
-
+            if jj <= FOIL.nNodes 
+                xDom = aeroMesh[1:FOIL.nNodes, YDIM]
+                clα = SolverRoutines.do_linear_interp(xDom, FOIL.clα, yⁿ)
+                c = SolverRoutines.do_linear_interp(xDom, chordVec, yⁿ)
+                ab = SolverRoutines.do_linear_interp(xDom, abVec, yⁿ)
+                eb = SolverRoutines.do_linear_interp(xDom, ebVec, yⁿ)
+            else
+                if config == "t-foil"
+                    junctionNode = aeroMesh[1,:]
+                    if FOIL.nNodes < jj <= FOIL.nNodes * 2 - 1
+                        xDom = vcat(junctionNode[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM] )       
+                        clα = SolverRoutines.do_linear_interp(xDom, FOIL.clα, yⁿ)
+                        c = SolverRoutines.do_linear_interp(xDom, chordVec, yⁿ)
+                        ab = SolverRoutines.do_linear_interp(xDom, abVec, yⁿ)
+                        eb = SolverRoutines.do_linear_interp(xDom, ebVec, yⁿ)
+                    else
+                        xDom = vcat(junctionNode[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
+                        clα = SolverRoutines.do_linear_interp(xDom, STRUT.clα, zⁿ)
+                        c = SolverRoutines.do_linear_interp(xDom, strutchordVec, zⁿ)
+                        ab = SolverRoutines.do_linear_interp(xDom, strutabVec, zⁿ)
+                        eb = SolverRoutines.do_linear_interp(xDom, strutebVec, zⁿ)
+                    end
+                end
+            end
+            b = 0.5 * c # semichord for more readable code
 
             # --- Precomputes ---
             clambda = cos(Λ)
             slambda = sin(Λ)
             k = ω * b / (U∞ * clambda) # local reduced frequency
-            # Do computation once for efficiency
-            CKVec = compute_theodorsen(k)
-            Ck = CKVec[1] + 1im * CKVec[2]
+            # Do Theodorsen computation once for efficiency
+            if abs(ω) <= SolutionConstants.mepsLarge
+                Ck = 1.0
+            else
+                CKVec = compute_theodorsen(k)
+                Ck = CKVec[1] + 1im * CKVec[2]
+            end
 
-            # K_f, K̂_f = compute_node_stiff(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
-            # C_f, Ĉ_f = compute_node_damp(clα, b, eb, ab, U∞, Λ, FOIL.ρ_f, Ck)
             K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
             C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
             M_f = compute_node_mass(b, ab, FOIL.ρ_f)
@@ -1118,12 +1148,23 @@ function compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω,
             # Add rectangle to planform area
             planformArea += c * Δy
 
-            jj += 1 # increment strip counter
+            # jj += 1 # increment strip counter
         end
     end
 
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
 end
+
+# function ChainRulesCore.rrule(::typeof(compute_AICs), dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2"; config="wing", STRUT=nothing)
+
+#     y = compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType, config, STRUT)
+
+#     function compute_AICs_pullback(y)
+        # return
+#     end
+
+#     return y, compute_AICs_pullback
+# end
 
 function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType="bend-twist",)
     """
@@ -1143,10 +1184,12 @@ function compute_steady_hydroLoads(foilStructuralStates, mesh, α₀, chordVec, 
     #   Strip theory
     # ---------------------------
     AIC = zeros(nGDOF, nGDOF)
+    # Mf, Cf_r,Cf_i, Kf_r, Kf_i, planformArea = compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, 0.0,)
     _, planformArea = compute_steady_AICs!(AIC, mesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
 
     # --- Compute fluid tractions ---
     hydroTractions = -1 * AIC * foilTotalStates # aerodynamic forces are on the RHS so we negate
+    # hydroTractions = Kf_r * foilTotalStates # aerodynamic forces are on the RHS so we negate
 
     # # --- Debug printout ---
     # println("AIC")
@@ -1255,7 +1298,7 @@ function compute_genHydroLoadsMatrices(kMax, nk::Int64, U∞, b_ref, dim::Int64,
 end
 
 # function integrate_hydroLoads(foilStructuralStates, fullAIC, DFOIL, elemType="BT2")
-function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2")
+function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2", config="wing")
     """
     Inputs
     ------
@@ -1265,13 +1308,11 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT
     Returns
     -------
         force vector and total lift and moment
-
-    TODO: have steady solver call this too
     """
 
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
-    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType)
+    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType; )
 
     # --- Strip theory ---
     # This is the hydro force traction vector
@@ -1306,7 +1347,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT
     return ForceVector, TotalLift, TotalMoment
 end
 
-function apply_BCs(K, C, M, globalDOFBlankingList::Vector{Int64})
+function apply_BCs(K, C, M, globalDOFBlankingList::UnitRange{Int64})
     """
     Applies BCs for nodal displacements
     """
@@ -1317,6 +1358,15 @@ function apply_BCs(K, C, M, globalDOFBlankingList::Vector{Int64})
 
     return newK, newC, newM
 end
+
+
+# # ==============================================================================
+# #                         Time domain hydrodynamics
+# # ==============================================================================
+# function ()
+    
+# end
+
 
 end # end module
 

@@ -30,13 +30,14 @@ run_static = true
 run_forced = true
 run_modal = true
 run_flutter = true
-# debug = true
+debug = true
 # tipMass = true
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
 nNodes = 10 # spatial nodes
+nNodesStrut = 10 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -57,10 +58,17 @@ DVDict = Dict(
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12, # thickness-to-chord ratio
+    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
-    "strut" => 0.4, # from Yingqian
+    # --- Strut vars ---
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(15), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -77,7 +85,7 @@ solverOptions = Dict(
     "config" => "wing",
     # "config" => "t-foil",
     "nNodes" => nNodes, # number of nodes on foil half wing
-    "nNodeStrut" => 10, # nodes on strut
+    "nNodeStrut" => nNodesStrut, # nodes on strut
     "rotation" => 0.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => tipMass,
@@ -93,6 +101,7 @@ solverOptions = Dict(
     #   Structure
     # ---------------------------
     "material" => "cfrp", # preselect from material library
+    "strut_material" => "cfrp",
     # ---------------------------
     #   Solver modes
     # ---------------------------
@@ -135,6 +144,7 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
+DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions) 
 costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")

@@ -5,7 +5,7 @@
 include("../src/struct/BeamProperties.jl")
 
 using LinearAlgebra
-using .StructProp
+using .BeamProperties
 using Plots, DelimitedFiles
 
 # ==============================================================================
@@ -39,8 +39,8 @@ function test_struct()
 
 	for i in 1:N
 		θₗ = θₐ[i]
-		section = StructProp.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
-		EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = StructProp.compute_section_property(section, "orthotropic")
+		section = BeamProperties.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
+		EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = BeamProperties.compute_section_property(section, "orthotropic")
 
 		EIₛₐ[i] = EIₛ
 		EIIPₛₐ[i] = EIIP
@@ -88,7 +88,7 @@ unit tests to verify the beam bend and bend-twist element
 """
 
 include("../src/InitModel.jl")
-include("../src/struct/FiniteElements.jl")
+include("../src/struct/FEMMethods.jl")
 include("../src/solvers/SolverRoutines.jl")
 using .FEMMethods, .InitModel
 using .LinearBeamElem, .SolverRoutines
@@ -387,7 +387,7 @@ function test_FiniteElementIso()
 	#     bend element
 	# ************************************************
 	elemType = "bend"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType)
 
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
@@ -408,7 +408,7 @@ function test_FiniteElementIso()
 	#   Tip force only
 	# ---------------------------
 	elemType = "bend-twist"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
@@ -480,7 +480,7 @@ function test_FiniteElementComp()
 	#   Tip force only
 	# ---------------------------
 	elemType = "BT2"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -557,7 +557,7 @@ function test_FiniteElementIso3D()
 		"toc" => 1.0, # thickness-to-chord ratio
 		"x_αb" => 0 * ones(nNodes), # static imbalance [m]
 		"θ" => deg2rad(0.0), # fiber angle global [rad]
-		"strut" => 0.4, # from Yingqian
+		"s_strut" => 0.4, # from Yingqian
 	)
 	solverOptions = Dict(
 		# ---------------------------
@@ -617,7 +617,7 @@ function test_FiniteElementIso3D()
 	#   Tip force only
 	# ---------------------------
 	elemType = "BEAM3D"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -696,7 +696,7 @@ function test_FiniteElementBend()
 		"toc" => 1.0, # thickness-to-chord ratio
 		"x_αb" => 0 * ones(nNodes), # static imbalance [m]
 		"θ" => deg2rad(0.0), # fiber angle global [rad]
-		"strut" => 0.4, # from Yingqian
+		"s_strut" => 0.4, # from Yingqian
 	)
 	solverOptions = Dict(
 		# ---------------------------
@@ -756,7 +756,7 @@ function test_FiniteElementBend()
 	#   Tip force only
 	# ---------------------------
 	elemType = "bend"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -852,7 +852,7 @@ function test_FEBT3()
 	#   Tip force only
 	# ---------------------------
 	elemType = "BT3"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -952,7 +952,7 @@ function test_FECOMP2()
 	#   Tip force only
 	# ---------------------------
 	elemType = "COMP2"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]

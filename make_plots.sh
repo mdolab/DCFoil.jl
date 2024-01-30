@@ -31,10 +31,11 @@ cd postprocessing
 
 
 # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
-python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
-python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_IM6-epoxy_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
+# python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
+# python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_IM6-epoxy_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_IM6-epoxy_f30.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 
+python ./run_postprocessing.py --case 2024-01-28_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 
 # # ---------------------------
 # #     No bulb IMOCA

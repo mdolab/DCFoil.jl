@@ -24,13 +24,13 @@ using FileIO
 # First include them
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
-include("../struct/FiniteElements.jl")
+include("../struct/FEMMethods.jl")
 include("../hydro/HydroStrip.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 # then use them
-using .InitModel, .HydroStrip, .StructProp
+using .InitModel, .HydroStrip, .BeamProperties
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
@@ -57,7 +57,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
+    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -80,7 +80,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------

@@ -16,9 +16,10 @@ include("./solvers/SolveForced.jl")
 include("./solvers/SolveFlutter.jl")
 include("./io/TecplotIO.jl")
 include("./InitModel.jl")
-include("./struct/FiniteElements.jl")
+include("./struct/FEMMethods.jl")
 
 using JSON
+using Printf
 using .InitModel
 using .TecplotIO
 using .FEMMethods
@@ -61,18 +62,31 @@ function init_model(DVDict, evalFuncs; solverOptions=Dict())
     # ---------------------------
     #   Mesh generation
     # ---------------------------
-    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
-    nElStrut = solverOptions["nNodeStrut"] - 1
+    if solverOptions["config"] == "wing"
+        nElStrut = 0
+    elseif solverOptions["config"] == "t-foil"
+        nElStrut = STRUT.nNodes - 1
+    end
     global structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];
         config=solverOptions["config"],
         nElStrut=nElStrut,
-        spanStrut=DVDict["strut"],
+        spanStrut=DVDict["s_strut"],
         rotation=solverOptions["rotation"]
     )
 
+    global FEMESH = FEMMethods.FEMESH(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["θ"], zeros(10,2))
+
     # --- Write mesh to tecplot for later visualization ---
-    TecplotIO.write_mesh(DVDict, structMesh, outputDir, "mesh.dat")
+    TecplotIO.write_mesh(DVDict, FEMESH, solverOptions, outputDir, "mesh.dat")
+    if solverOptions["debug"]
+        open(outputDir * "elemConn.txt", "w") do io
+            for iElem in 1:length(elemConn[:, 1])
+                write(io, @sprintf("%03d\t%03d\n", elemConn[iElem, 1], elemConn[iElem, 2]))
+            end
+        end
+    end
 end
 
 function run_model(DVDict, evalFuncs; solverOptions=Dict())
@@ -84,7 +98,7 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
     #                         Static hydroelastic solution
     # ==============================================================================
     if solverOptions["run_static"]
-        global STATSOL = SolveStatic.solve(structMesh, elemConn, DVDict, evalFuncs, solverOptions)
+        global STATSOL = SolveStatic.solve(FEMESH, DVDict, evalFuncs, solverOptions)
     end
 
     # ==============================================================================

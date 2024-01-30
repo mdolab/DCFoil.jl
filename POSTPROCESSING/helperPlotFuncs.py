@@ -129,7 +129,7 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
         + "$^{{\\circ}}$\n"
         + f"{DVDict['θ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
-        + f"{DVDict['toc']*100:0.1f}%\n"
+        + f"{DVDict['toc'][0]*100:0.1f}%\n"
         + f"{nNodes}\n"
         + f"{nNodes*3}"
     )
