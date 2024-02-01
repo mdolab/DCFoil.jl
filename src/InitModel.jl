@@ -20,7 +20,6 @@ include("./constants/DesignConstants.jl")
 using .HydroStrip, .BeamProperties, .MaterialLibrary
 using .DesignConstants
 
-# function init_static(DVDict::Dict, solverOptions)
 function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, solverOptions::Dict)
   """
   Initialize a static hydrofoil model
@@ -159,7 +158,6 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
 
 end
 
-# function init_dynamic(DVDict::Dict, solverOptions::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
 function init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, solverOptions::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
   """
   Perform much of the same initializations as init_static() except with other features

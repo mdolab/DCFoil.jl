@@ -96,7 +96,7 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
         dlStrut = spanStrut / (nElStrut)
         strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
         # This is basically avoiding double counting the nodes
-        if abs(rot) < SolutionConstants.mepsLarge # no rotation, just a straight wing
+        if abs(rot) < MEPSLARGE # no rotation, just a straight wing
             elemCtr = 1 # elem counter
             nodeCtr = 1 # node counter traversing nodes
             
@@ -544,14 +544,6 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     Applies BCs for nodal displacements and blanks them
     """
 
-    # newK = K[
-    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    # ]
-    # newM = M[
-    #     setdiff(1:end, (globalDOFBlankingList)), setdiff(1:end, (globalDOFBlankingList))
-    # ]
-    # newF = F[setdiff(1:end, (globalDOFBlankingList))]
-
     newK = K[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newM = M[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newF = F[1:end.∉[globalDOFBlankingList]]
@@ -589,6 +581,16 @@ function solve_structure(K, M, F)
 
     return q
 end
+
+# function ChainRulesCore.rrule(::typeof(solve_structure), K, M, F)
+#     """
+#     Reverse mode rule for solve_structure (look at Giles 2008)
+#     """
+
+#     # q = (K) \ F # TODO: should probably replace this with an iterative solver
+
+#     # return q
+# end
 
 function compute_modal(K, M, nEig::Int64)
     """

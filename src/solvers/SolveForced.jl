@@ -17,7 +17,7 @@ export solve
 # --- Libraries ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote
+using Zygote, ChainRulesCore
 using FileIO
 
 # --- DCFoil modules ---
@@ -80,7 +80,10 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    globalDOFBlankingList = 0
+    ChainRulesCore.ignore_derivatives() do
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    end 
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------

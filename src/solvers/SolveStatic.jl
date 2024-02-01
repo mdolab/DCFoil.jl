@@ -14,7 +14,7 @@ Static hydroelastic solver
 export solve
 
 # --- Libraries ---
-using FiniteDifferences
+using FiniteDifferences, ChainRulesCore
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
@@ -139,7 +139,10 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; config=solverOptions["config"])
+    globalDOFBlankingList = 0
+    ChainRulesCore.ignore_derivatives() do
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    end 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---

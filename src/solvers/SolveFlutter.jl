@@ -43,7 +43,7 @@ using .SolveStatic
 using .SolverRoutines
 using .DCFoilSolution
 # --- Globals ---
-using .SolutionConstants: mepsLarge, SolutionConstants
+using .SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants
 
 
 # ==============================================================================
@@ -231,7 +231,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    # TODO: pickup here, there appears to be some sort of bug related to the tip mass
+
     if tipMass
         bulbMass = 2200 #[kg]
         bulbInertia = 900 #[kg-m²]
@@ -245,7 +245,10 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    globalDOFBlankingList = 0
+    ChainRulesCore.ignore_derivatives() do
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    end 
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------
@@ -430,7 +433,7 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
 
     for jj in 1:N_new # loop cols
         for ii in 1:N_old # loop rows
-            if Ctmp[ii, jj] == 0.0 || normOld[ii] < mepsLarge || normNew[jj] < mepsLarge # do not allow divide by zero
+            if Ctmp[ii, jj] == 0.0 || normOld[ii] < MEPSLARGE || normNew[jj] < MEPSLARGE # do not allow divide by zero
                 C[ii, jj] = 0.0
             else
                 C[ii, jj] = Ctmp[ii, jj] / (normOld[ii] * normNew[jj])
@@ -521,8 +524,8 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     """
 
     # Rows and columns of old and new eigenvectors
-    # M_old::Int64 = size(old_r)[1] # TODO: why aren't these used
-    N_old::Int64 = size(old_r)[2]
+    # M_old::Int64 = size(old_r)[1] # nrows
+    N_old::Int64 = size(old_r)[2] # ncols or the number of modes
     # M_new::Int64 = size(new_r)[1] # TODO: why aren't these used
     N_new::Int64 = size(new_r)[2]
 
@@ -544,10 +547,6 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     end
 
     # --- Compute correlation matrix ---
-    M_old = size(old_r)[1] # nrows
-    N_old = size(old_r)[2] # ncols or the number of modes
-    M_new = size(new_r)[1]
-    N_new = size(new_r)[2]
     C = compute_correlationMatrix(old_r, old_i, new_r, new_i)
 
     # save correlation matrix
@@ -601,7 +600,8 @@ function compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i
     return corr, m, newModesIdx, nCorrelatedModes, nNewModes
 end # end function
 
-function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, Nr::Int64, globalDOFBlankingList,
+function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, ebVec, 
+    FOIL, dim::Int64, Nr::Int64, globalDOFBlankingList,
     N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat;
     ΔdynP=nothing, Δu=nothing, debug=false
 )
@@ -1024,7 +1024,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
                     ΔdynP = dynPTmp - flowHistory_z[nFlow-1, 3]
                     diff = ((dynPTmp - ΔdynP) - dynPMax)
                 end
-                if (diff^2 < mepsLarge^2)
+                if (diff^2 < MEPSLARGE^2)
                     # Exit the loop
                     break
                 else # Try max value
@@ -1037,12 +1037,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
 
             end
 
-            # # NOTE: THIS IS OK ON QITER = 1
-            # # another DEBUG part
-            # # return p_cross_r # OK
-            # println("tmpFactor: ", tmpFactor)
-            # # return copy(p_r_z[:,1]) # as long as this is right, probably no issue
-            # return copy(true_eigs_r_z[:, 1]) # Somehow dividing by tmpFactor makes it right...
         end
 
 
@@ -1094,9 +1088,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, b_ref, Λ, chordVec, abVec, 
     R_eigs_r = copy(R_eigs_r_z)
     R_eigs_i = copy(R_eigs_i_z)
 
-    # NOTE: the function output signature had to change 
-    # because the derivatives were only correct for nondim 'p'
-    # return true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
     return p_r, p_i, true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, iblank, flowHistory, NTotalModesFound, nFlow
 
 end # end function
@@ -1289,7 +1280,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     keepLooping = true
     # first 'k' guess close to zero as possible
     # NOTE: we do not want too small since AD breaks below 1e-15
-    # But we do not want to large since we want to get static div modes
+    # But we do not want too large since we want to get static div modes
     # k = 1e-12 # don't use this
     k = 2e-13 # this is a good value that catches static div modes
     ik = 1 # k counter
@@ -1444,8 +1435,8 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
             # Check if we found a real root
             # If your flutter analyses are failing, this is probably why
-            if (k_history[jj] < SolutionConstants.p_i_tol) &&
-               (abs(p_eigs_i[ii, jj]) < SolutionConstants.p_i_tol)
+            if (k_history[jj] < P_IM_TOL) &&
+               (abs(p_eigs_i[ii, jj]) < P_IM_TOL)
                 # There should be another real root coming up or we already processed
                 # one matching the zero freq
                 p_cross_r_z[ctr] = p_eigs_r[ii, jj]
@@ -1790,21 +1781,16 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
     #     Initializations
     # ************************************************
     # Array with same size as nFlow
-    # idx = zeros(Int64, nFlow)
-    # idx_z = Zygote.Buffer(idx)
-    # idx = copy(idx_z)
-    idx = [ii for ii = 1:nFlow]
-    # for ii in 1:nFlow
-    #     idx_z[ii] = ii
-    # end
+    # idx = [ii for ii = 1:nFlow]
+    idx = 1:nFlow
 
     # This variable stores the aggregated damping for every mode
     # It mutates in the for loop below so we need to use 'Buffer' and work with that variable instead
     ksTmp = zeros(Float64, NTotalModesFound)
     ksTmp_z = Zygote.Buffer(ksTmp)
 
-    G = zeros(Float64, nFlow)
     # TODO: safety window
+    # G = zeros(Float64, nFlow)
     # if useSafetyWindow
     #     G[1:nFound] = compute_safetyWindow(flowHistory[1:nFlow,1], nFlow)
     # end
