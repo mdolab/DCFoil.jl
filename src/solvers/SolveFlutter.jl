@@ -43,7 +43,7 @@ using .SolveStatic
 using .SolverRoutines
 using .DCFoilSolution
 # --- Globals ---
-using .SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants
+using .SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
 
 
 # ==============================================================================
@@ -182,7 +182,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
-        elemLength = norm(dR, 2)
+        elemLength = sqrt(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         transMat = SolverRoutines.get_transMat(dR, elemLength, elemType)
         Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
     end
@@ -237,7 +237,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
-        elemLength = norm(dR, 2)
+        elemLength = sqrt(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         transMat = SolverRoutines.get_transMat(dR, elemLength, elemType)
         globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
     end
@@ -1287,7 +1287,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     # pkEqnType = "rodden"
     pkEqnType = "ng"
     while keepLooping
-        failed = false # fail flag on k jump must be reset to false on every k iteration
+        failed::Bool = false # fail flag on k jump must be reset to false on every k iteration
 
         # ---------------------------
         #   Compute hydrodynamics
@@ -1520,15 +1520,17 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, pkEqnTy
 
     # Find where the sign changes for the interpolation
     bound = SolverRoutines.find_signChange(kDiff)
-    # Based on the pk eqauation we are solving it depends how we handle k=0
+    b1::Int64 = bound[1]
+    b2::Int64 = bound[2]
+    # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L = [k_sweep[bound[1]], k_sweep[bound[2]]]
+        x0L = [k_sweep[b1], k_sweep[b2]]
 
-        y0L = cat(Ar_sweep_r[:, :, bound[1]], Ar_sweep_r[:, :, bound[2]], dims=3)
+        y0L = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
         Ar_r = SolverRoutines.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
 
-        y0L = cat(Ar_sweep_i[:, :, bound[1]], Ar_sweep_i[:, :, bound[2]], dims=3)
+        y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
         Ar_i = SolverRoutines.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
 
 
@@ -1716,8 +1718,6 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # --- Compute the eigenvalues ---
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb(FlutterMat_r, FlutterMat_i, 2 * dim)
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb_fad(FlutterMat_r, FlutterMat_i, 2 * dim)
-    # println("p_r orig = ", p_r)
-    # println("p_i orig = ", p_i)
     y = SolverRoutines.cmplxStdEigValProb2(FlutterMat_r, FlutterMat_i, 2 * dim)
     n = 2 * dim
     p_r = y[1:n]

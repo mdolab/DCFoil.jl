@@ -18,7 +18,7 @@ using Zygote, ChainRulesCore
 using DelimitedFiles
 using LinearAlgebra
 include("./EBBeam.jl")
-using .EBBeam: EBBeam as BeamElement
+using .EBBeam: EBBeam as BeamElement, NDOF
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
 include("../constants/SolutionConstants.jl")
@@ -215,21 +215,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
 
     # --- Local nodal DOF vector ---
     # Determine the number of dofs per node
-    if elemType == "bend"
-        nnd = 2
-    elseif elemType == "bend-twist"
-        nnd = 3
-    elseif elemType == "BT2"
-        nnd = 4
-    elseif elemType == "BT3"
-        nnd = 5
-    elseif elemType == "BEAM3D"
-        nnd = 6
-    elseif elemType == "COMP2"
-        nnd = 9
-    else
-        error(elemType, " element type not implemented")
-    end
+    nnd = NDOF
     qLocal = zeros(nnd * 2)
 
     # --- Initialize matrices ---
@@ -237,6 +223,8 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     nNodes::Int64 = nElem + 1
     ndim::Int64 = ndims(coordMat[1, :])
     nElemWing::Int64 = (FOIL.nNodes - 1)
+    # Note: sparse arrays does not work through Zygote without some workarounds (that I haven't figured out yet)
+    # globalK::SparseMatrixCSC{Float64,Int64} = spzeros(nnd * (nNodes), nnd * (nNodes))
     globalK::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
     globalM::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
     globalF::Vector{Float64} = zeros(nnd * (nNodes))
@@ -269,7 +257,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         #   Extract element info
         # ---------------------------
         dR::Vector{Float64} = (coordMat[elemIdx+1, :] - coordMat[elemIdx, :])
-        lᵉ::Float64 = norm(dR, 2) # length of elem
+        lᵉ::Float64 = sqrt(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2) # length of elem
         nVec = dR / lᵉ # normalize
         # EIₛ = 0.0
         # EIIPₛ = 0.0

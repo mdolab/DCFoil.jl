@@ -9,9 +9,19 @@
 
 module SolutionConstants
 
-# include("../hydro/HydroStrip.jl")
-# include("../struct/BeamProperties.jl")
-# using .HydroStrip, .BeamProperties
+# using SparseArrays: SparseMatrixCSC
+# ==============================================================================
+#                         CONSTANTS
+# ==============================================================================
+const MEPSLARGE = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it is a more robust value for solving
+const P_IM_TOL = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on static div # tolerance on real root criteria 
+# NOTE: this is tested to work. 
+# Bigger values catch the real roots and too small cause them to disappear
+# You just don't want them too big that they pick up wrong roots
+
+const XDIM = 1
+const YDIM = 2
+const ZDIM = 3
 
 # ==============================================================================
 #                         STRUCTS
@@ -42,18 +52,5 @@ mutable struct DCFoilDynamicConstants{T}
     AICmat::Matrix{ComplexF64} # just the aero part of Dmat 
     extForceVec::Vector{T} # external force vector excluding BC nodes
 end
-
-# ==============================================================================
-#                         CONSTANTS
-# ==============================================================================
-const MEPSLARGE = 1.11e-14 # machine epsilon but 1e-14 instead of 1e-16 b/c it is a more robust value for solving
-const P_IM_TOL = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on static div # tolerance on real root criteria 
-# NOTE: this is tested to work. 
-# Bigger values catch the real roots and too small cause them to disappear
-# You just don't want them too big that they pick up wrong roots
-
-const XDIM = 1
-const YDIM = 2
-const ZDIM = 3
 
 end # end module

@@ -9,7 +9,7 @@
 module Unsteady
 
 # --- Public functions ---
-export compute_theodorsen, compute_sears
+export compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
 
 # --- Libraries ---
 using SpecialFunctions
@@ -143,6 +143,98 @@ function compute_fraccalc_d(k)
     C_i = imag(C)
     ans = [C_r, C_i]
     return ans
+end
+
+function compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f, Ck)
+    """
+    Hydrodynamic stiffness force
+    """
+    # --- Precomputes ---
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    Uclambda = U∞ * clambda
+    clalphabCk = clα * b * Ck
+    # Aerodynamic quasi-steady stiffness
+    # (1st row is lift, 2nd row is pitching moment)
+
+
+    k_hα = -2 * b * clα * Ck # lift due to angle of attack
+    k_αα = k_hα * eb # moment due to angle of attack (disturbing)
+    K_f = qf * clambda * clambda *
+          [
+              0.0 k_hα
+              0.0 k_αα
+          ]
+
+    # Sweep correction to aerodynamic quasi-steady stiffness
+    e_hh = Uclambda * 2 * clα * Ck
+    e_hα = Uclambda * (1 - a) * (-clalphabCk)
+    e_αh = Uclambda * (1 + a) * clalphabCk
+    e_αα = Uclambda *
+           (π * b * b - clalphabCk * eb * (1 - 2 * (a)))
+    K̂_f = qf / U∞ * slambda * b *
+           [
+               e_hh e_hα
+               e_αh e_αα
+           ]
+
+    return K_f, K̂_f
+end
+
+function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f, Ck)
+    """
+    Fluid-added damping matrix
+    """
+    # --- Precomputes ---
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    coeff = qf / U∞ * b
+
+    # Aerodynamic quasi-steady damping
+    # (1st row is lift, 2nd row is pitching moment)
+    c_hh = 2 * clα * Ck
+    c_hα = -b * (2π + clα * (1 - 2 * a) * Ck)
+    c_αh = 2 * eb * clα * Ck
+    c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
+    C_f = coeff * clambda *
+          [
+              c_hh c_hα
+              c_αh c_αα
+          ]
+
+    # Sweep correction to aerodynamic quasi-steady damping
+    e_hh = 2π * b
+    e_hα = 2π * ab * b
+    e_αh = e_hα
+    e_αα = 2π * b^3 * (0.125 + a * a)
+    Ĉ_f = coeff * slambda *
+           [
+               e_hh e_hα
+               e_αh e_αα
+           ]
+
+    return C_f, Ĉ_f
+end
+
+function compute_node_mass(b, ab, rho_f)
+    """
+    Fluid-added mass matrix
+    """
+    # --- Precomputes ---
+    bSquared = b * b # precompute square of b
+    a = ab / b # precompute division by b to get a
+
+    m_hh = 1.0
+    m_hα = ab
+    m_αh = ab
+    m_αα = bSquared * (0.125 + a * a)
+    M_f = π * rho_f * bSquared *
+          [
+              m_hh m_hα
+              m_αh m_αα
+          ]
+
+    return M_f
 end
 
 end # end module
