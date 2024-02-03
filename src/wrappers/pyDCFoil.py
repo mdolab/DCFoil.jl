@@ -43,7 +43,7 @@ class DCFOILWarning(object):
 #                         Wrapper class
 # ==============================================================================
 class pyDCFOIL:
-    def __init__(self, DVDict:dict, evalFuncs, options=None, debug=False):
+    def __init__(self, DVDict: dict, evalFuncs, options=None, debug=False):
         """
         Create the flutter solver class
 
@@ -100,11 +100,15 @@ class pyDCFOIL:
 
         self.solverOptions = {}
         # --- Set all solver options ---
-        for (key,val) in defaultOptions.items():
-            if key not in options: # Use default
+        for key, val in defaultOptions.items():
+            if key not in options:  # Use default
                 self.solverOptions[key] = val
             else:
                 self.solverOptions[key] = options[key]
+        self.solverOptions = options
+        
+        # --- Make output directory ---
+        Path(self.solverOptions["outputDir"]).mkdir(parents=True, exist_ok=True)
 
         initTime = time.time()
 
@@ -126,49 +130,48 @@ class pyDCFOIL:
             # ---------------------------
             #   I/O
             # ---------------------------
-            "name": [str, None],
-            "debug": [bool, False],
-            "outputDir": [str, "./OUTPUT/"],
-            "writeTecplotSolution": [bool, True],
+            "name": "default",
+            "debug": False,
+            "outputDir": "./OUTPUT/",
+            "writeTecplotSolution": True,
             # ---------------------------
             #   General appendage options
             # ---------------------------
-            "config": [str, "wing"],
-            "nNodes": [int, 10],  # number of nodes on foil half wing
-            "nNodeStrut": [int, 10],  # nodes on strut
-            "rotation": [float, 0.0],  # Rotation of the wing about the x-axis [deg]
-            "gravityVector": [list, [0.0, 0.0, -9.81]],
-            "use_tipMass": [bool, False],
+            "config": "wing",
+            "nNodes": 10,  # number of nodes on foil half wing
+            "nNodeStrut": 10,  # nodes on strut
+            "rotation": 0.0,  # Rotation of the wing about the x-axis [deg]
+            "gravityVector": [0.0, 0.0, -9.81],
+            "use_tipMass": False,
             # ---------------------------
             #   Flow
             # ---------------------------
-            "Uinf": [float, 5.0],  # free stream velocity [m/s]
-            "rhof": [float, 1000.0],  # fluid density [kg/m³]
-            "use_cavitation": [bool, False],
-            "use_freeSurface": [bool, False],
-            "use_ventilation": [bool, False],
+            "U∞": 5.0,  # free stream velocity [m/s]
+            "ρ_f": 1000.0,  # fluid density [kg/m³]
+            "use_cavitation": False,
+            "use_freeSurface": False,
+            "use_ventilation": False,
             # ---------------------------
             #   Structure
             # ---------------------------
-            "material": [str, "cfrp"],  # preselect from material library
+            "material": "cfrp",  # preselect from material library
+            "strut_material": "cfrp",
             # ---------------------------
             #   Solver modes
             # ---------------------------
-            # --- General solver options ---
-            "config": [str, "wing"],
             # --- Static solve ---
-            "run_static": [bool, False],
+            "run_static": False,
             # --- Forced solve ---
-            "run_forced": [bool, False],
-            "fSweep": [list, [0.0]],
-            "tipForceMag": [float, 0.0],
+            "run_forced": False,
+            "fSweep": np.linspace(0.0, 1.0, 10),
+            "tipForceMag": 0.0,
             # --- p-k (Eigen) solve ---
-            "run_modal": [bool, False],
-            "run_flutter": [bool, False],
-            "nModes": [int, 3],  # Number of struct modes to solve for (starting)
-            "uRange": [list, [1.0, 5.0]],  # Range of velocities to sweep
-            "maxQIter": [int, 200],  # max dyn pressure iters
-            "rhoKS": [float, 80.0],
+            "run_modal": False,
+            "run_flutter": False,
+            "nModes": 3,  # Number of struct modes to solve for (starting)
+            "uRange": [1.0, 5.0],  # Range of velocities to sweep
+            "maxQIter": 100,  # max dyn pressure iters
+            "rhoKS":  80.0,
         }
         return defaultOptions
 
@@ -181,9 +184,11 @@ class pyDCFOIL:
         evalFuncs = self.evalFuncs
 
         solverOptions = self.solverOptions
-        
+
         self.DCFoil.init_model(DVDict, evalFuncs, solverOptions)
-        FLUTTERSOL = self.DCFoil.run_model(DVDict, evalFuncs, solverOptions=solverOptions) 
+        FLUTTERSOL = self.DCFoil.run_model(
+            DVDict, evalFuncs, solverOptions=solverOptions
+        )
 
         self.FLUTTERSOL = FLUTTERSOL
 
@@ -225,13 +230,15 @@ class pyDCFOIL:
         solverOptions = self.solverOptions
 
         FLUTTERSOL = self.FLUTTERSOL
-        
+
         costFuncs = self.DCFoil.evalFuncs(FLUTTERSOL, evalFuncs, solverOptions)
         # funcs = DCFoil.evalFuncs(FLUTTERSOL, evalFuncs, solverOptions)
         # Convert costFuncs to a dictionary to fill 'funcs'
 
+        for key, val in costFuncs.items():
+            funcs[key] = val
         self.costFuncs = costFuncs
-        
+
         # if self.getOption("printTiming"):
         #     print("+---------------------------------------------------+")
         #     print("|")
@@ -265,7 +272,9 @@ class pyDCFOIL:
 
         solverOptions = self.solverOptions
 
-        costFuncsSens = self.DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions, mode="RAD")
+        costFuncsSens = self.DCFoil.evalFuncsSens(
+            DVDict, evalFuncs, solverOptions, mode="RAD"
+        )
 
         self.costFuncsSens = costFuncsSens
 
@@ -292,7 +301,7 @@ class pyDCFOIL:
         #     print("|")
         #     print("| %-30s: %10.3f sec" % ("Complete Sensitivity Time", finalEvalSensTime - startEvalSensTime))
         #     print("+--------------------------------------------------+")
-        
+
         return costFuncsSens
 
     def writeSolution():
@@ -339,6 +348,7 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         Extension modules
     # ==============================================================================
+    from pprint import pprint as pp
     from pyoptsparse import Optimization, OPT, History
     import pyDCFoil
 
@@ -354,6 +364,7 @@ if __name__ == "__main__":
         "name": "test",
         "debug": True,
         "writeTecplotSolution": True,
+        "outputDir": "./OUTPUT/",
         # ---------------------------
         #   General appendage options
         # ---------------------------
@@ -423,42 +434,51 @@ if __name__ == "__main__":
     def cruiseFuncs(x):
         funcs = {}
 
-        # # Update design variables
-        # DVDict["c"] = x["chord"]
-        # DVDict["θ"] = x["fiberangle"]
-        # DynamicSolver.setDesignVars(DVDict)
-        # TODO: SOMETHING HERE IS FAILING WITH THE DATA TYPE
+        # Update design variables
+        DVDict["c"] = x["chord"]
+        DVDict["θ"] = x["fiberangle"].item()
+        DynamicSolver.setDesignVars(DVDict)
 
         # --- Solve ---
         DynamicSolver.solve()
 
         # --- Grab cost funcs ---
-        funcs = DynamicSolver.evalFunctions()
+        funcs = DynamicSolver.evalFunctions(funcs)
+
+        # --- Set objective ---
+        funcs["obj"] = funcs["ksflutter"]
+
+        pp(funcs)
 
         return funcs
-    
-    def cruiseFuncsSens(x):
+
+    def cruiseFuncsSens(x, funcs):
         funcsSens = {}
 
         # Update design variables
         DVDict["c"] = x["chord"]
-        DVDict["θ"] = x["fiberangle"]
+        DVDict["θ"] = x["fiberangle"].item()
         DynamicSolver.setDesignVars(DVDict)
 
         # --- Solve sensitivity ---
         funcsSens = DynamicSolver.evalFunctionsSens(funcsSens)
 
+        # --- Set objective ---
+        funcsSens["obj"] = funcsSens["ksflutter"]
+
+        pp(funcsSens)
+
         return funcsSens
-    
+
     # def objCon(funcs): # this part is only for multipoint
-        
+
     #     funcs["obj"] = funcs["ksflutter"]
 
     #     if printOK:
     #         print("funcs in obj: ", funcs)
 
     #     return funcs
-    
+
     # ************************************************
     #     Setup optimizer
     # ************************************************
@@ -469,9 +489,24 @@ if __name__ == "__main__":
     # ---------------------------
     #   DVs
     # ---------------------------
-    optProb.addVarGroup(name="chord", nVars=nNodes, varType="c", value=DVDict["c"], lower=0.01, upper=0.2)
+    optProb.addVarGroup(
+        name="chord",
+        nVars=nNodes,
+        varType="c",
+        value=DVDict["c"],
+        lower=0.01,
+        upper=0.2,
+    )
     # optProb.addVarGroup(name="ab", nVars=nNodes,varType="c", value=DVDict["ab"], lower=-0.1, upper=0.1)
-    optProb.addVarGroup(name="fiberangle", nVars=1,varType="c", value=DVDict["θ"], lower=-np.deg2rad(-45), upper=np.deg2rad(45), scale=1.0)
+    optProb.addVarGroup(
+        name="fiberangle",
+        nVars=1,
+        varType="c",
+        value=DVDict["θ"],
+        lower=-np.deg2rad(-45),
+        upper=np.deg2rad(45),
+        scale=1.0,
+    )
 
     optProb.printSparsity()
 
