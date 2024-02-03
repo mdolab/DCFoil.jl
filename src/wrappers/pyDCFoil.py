@@ -2,7 +2,7 @@
 """
 @File    :   mach2dcfoil.py
 @Time    :   2024/01/22
-@Author  :   Galen Ng
+@Author  :   Galen Ng, Prof. Sicheng He
 @Desc    :   Python interface to DCFoil
 """
 
