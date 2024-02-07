@@ -106,7 +106,7 @@ class pyDCFOIL:
             else:
                 self.solverOptions[key] = options[key]
         self.solverOptions = options
-        
+
         # --- Make output directory ---
         Path(self.solverOptions["outputDir"]).mkdir(parents=True, exist_ok=True)
 
@@ -171,7 +171,7 @@ class pyDCFOIL:
             "nModes": 3,  # Number of struct modes to solve for (starting)
             "uRange": [1.0, 5.0],  # Range of velocities to sweep
             "maxQIter": 100,  # max dyn pressure iters
-            "rhoKS":  80.0,
+            "rhoKS": 80.0,
         }
         return defaultOptions
 
@@ -185,10 +185,8 @@ class pyDCFOIL:
 
         solverOptions = self.solverOptions
 
-        self.DCFoil.init_model(DVDict, evalFuncs, solverOptions)
-        FLUTTERSOL = self.DCFoil.run_model(
-            DVDict, evalFuncs, solverOptions=solverOptions
-        )
+        self.DCFoil.init_model(DVDict, evalFuncs, solverOptions=solverOptions)
+        FLUTTERSOL = self.DCFoil.run_model(DVDict, evalFuncs, solverOptions=solverOptions)
 
         self.FLUTTERSOL = FLUTTERSOL
 
@@ -272,9 +270,7 @@ class pyDCFOIL:
 
         solverOptions = self.solverOptions
 
-        costFuncsSens = self.DCFoil.evalFuncsSens(
-            DVDict, evalFuncs, solverOptions, mode="RAD"
-        )
+        costFuncsSens = self.DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions, mode="RAD")
 
         self.costFuncsSens = costFuncsSens
 

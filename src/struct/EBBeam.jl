@@ -34,6 +34,8 @@ module EBBeam
 
     This has already been derived so no need to redo getting [N] in the code
 
+    The coordinate system is origin at the midchord
+
 """
 
 # --- Constants ---

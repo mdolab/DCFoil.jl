@@ -1,5 +1,9 @@
+# --- Julia 1.9---
 """
-Computes the sectional properties of composite beams
+@File    :   BeamProperties.jl
+@Time    :   2024/01/30
+@Author  :   Galen Ng
+@Desc    :   Module for computing sectional properties of composite beams
 """
 module BeamProperties
 
@@ -222,6 +226,7 @@ function compute_simple_airfoil(chord, tau, eps)
 end
 
 function compute_CLT_multilayer()
+    # TODO: 
 end
 
 end # end of module

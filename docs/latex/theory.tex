@@ -92,7 +92,7 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 \begin{figure}[htbp!]
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
-    \includegraphics[width=0.7\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{keel-dcfoil.pdf}
+    \includegraphics[width=0.9\linewidth,clip,trim={0cm 0cm 0cm 10cm}]{keel-dcfoil.pdf}
     \caption{\label{fig:keel-dcfoil}
         DCFoil modeling approach
     }
@@ -113,6 +113,11 @@ Flow is in the $x$-direction, span is in the $y$-direction, and the vertical dir
 % 
 The local beam model uses the spanwise direction as $x$ (subscript 1), the chordwise direction as $y$ (subscript 2), and the vertical direction as $z$ (subscript 3).
 It is transformed to the global coordinate system by the rotation matrices.
+The rotation matrices are
+\be
+\mbf{T}
+=
+\ee
 \subsubsection{Beam finite element}
 % 
 The composite beam model uses the well-known slender beam parameters $EI_s$, $GJ_s$, $EA_s$, and additionally $S_s$ and $K_s$ to account for structural warping of non-circular cross sections and material bend-twist coupling, respectively.
@@ -928,6 +933,48 @@ Now in the vibrating mode, if we assume small-amplitude vibrations, we must cons
 If the elastic deformations are sufficiently small to not change global inertial characteristics, then modal coordinates can be used.
 We introduce a \emph{body-attached frame} (BAF) rigidly linked to a point on the vessel and a \emph{floating frame} (FF).
 
+\section{Writing derivative routines}
+% 
+The forward and reverse mode AD logic from \citet{Martins2022} is
+\ben
+\dd{v_i}{v_j} = \dot{v}_i = \sum_{k=j}^{i-1}\pp{v_i}{v_k} \underbrace{\dot{v}_k}_{\dd{v_k}{v_j}}
+\\
+\dd{v_i}{v_j} = \bar{v}_j = \sum_{k=j+1}^{i}{\pp{v_k}{v_j}} \underbrace{\bar{v}_k}_{\dd{v_i}{v_k}}
+\een
+where the goal is the LHS (alternative notation $\dd{y}{x}$) over a massive length of code.
+
+The reverse AD routines are in Julia syntax.
+Consider the primal function somewhere in the chain of code
+\ben
+y = f(x)
+\een
+with a Jacobian matrix $dy/dx$.
+The vector-Jacobian product computed by $\mcal{B}$ is
+\ben
+\pp{a}{x} =
+\underbrace{\pp{a}{y}}_{\bar{y}}
+\underbrace{\dd{y}{x}}_{\tn{Jacobian }}
+= \mcal{B}({\bar{y}})
+\een
+where $\bar{y}$ is called the \emph{cotangent} vector and $a$ is some known quantity at this stage of the chain rule.
+The analog in forward mode are the tangent vector and pushforward function.
+
+The \texttt{pullback} functionality in AD packages typically returns two things: the evaluated point $f(x)$ (also called primal) and the pullback function $\mcal{B}(\bar{y})$
+There are situations in which one has a manual implementation they want the {AD} package to bypass, for example, matrix operations.
+
+We write manual rules through \texttt{ChainRules.jl}.
+An example is 
+% \usepackage{algorithm2e}
+\RestyleAlgo{ruled}
+\begin{algorithm}
+    \caption{\label{alg:}}
+    function rrule(::typeof($f(x)$), $x$)\\
+    \quad Evaluate $y = f(x)$ (Primal)\\
+    \quad function $\mcal{B}(\bar{y})$\\
+    \quad \quad Code up $\bar{x}= \bar{y} \dd{y}{x}$ (Ex. $\cos(x) \bar{y} $ if $f(x)=\sin(x)$)\\
+    \quad return $\bar{x}$\\
+    return $y$, $\mcal{B}()$
+\end{algorithm}
 
 \appendix
 \bibliography{./gng-link,./mdolab-link}

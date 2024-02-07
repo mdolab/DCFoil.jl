@@ -21,19 +21,19 @@ using Zygote
 using Printf, DelimitedFiles
 
 # --- DCFoil modules ---
-# First include them
 include("../InitModel.jl")
+using .InitModel
 include("../struct/BeamProperties.jl")
+using .BeamProperties
 include("../struct/FEMMethods.jl")
-include("../hydro/HydroStrip.jl")
-include("../constants/SolutionConstants.jl")
-include("./SolverRoutines.jl")
-include("./DCFoilSolution.jl")
-# then use them
-using .InitModel, .HydroStrip, .BeamProperties
 using .FEMMethods
+include("../hydro/HydroStrip.jl")
+using .HydroStrip
+include("../constants/SolutionConstants.jl")
 using .SolutionConstants
+include("./SolverRoutines.jl")
 using .SolverRoutines
+include("./DCFoilSolution.jl")
 using .DCFoilSolution
 
 # ==============================================================================
@@ -153,75 +153,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     #   Pre-solve system
     # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
-    # # Write answer to file DEBUG
-    # open(outputDir * "presolve_w.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 3
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 1
-    #     end
-    #     for qⁿ ∈ q[nStart:nDOF:end]
-    #         stringData = @sprintf("%.16f\n", qⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir*"presolve_twist.dat","w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 5
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 3 # torque
-    #     end
-    #     for qⁿ ∈ q[nStart:nDOF:end]
-    #         stringData = @sprintf("%.16f\n", qⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir *"presolve_hydro.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 3
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 1
-    #     end
-    #     for fⁿ ∈ F[nStart:nDOF:end]
-    #         stringData = @sprintf("%.16f\n", fⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir * "presolve_hydrotorque.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 5
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 3 # torque
-    #     end
-    #     for fⁿ ∈ F[nStart:nDOF:end]
-    #         stringData = @sprintf("%.16f\n", fⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir *"presolve_F.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     for fⁿ ∈ F#[nStart:nDOF:end]
-    #         stringData = @sprintf("%.16f\n", fⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
+    
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
@@ -260,6 +192,11 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
 
     global STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro)
 
+    # ************************************************
+    #     Get obj funcs
+    # ************************************************
+    # compute_CostFuncs(STATSOL, evalFuncs, solverOptions)
+
     return STATSOL
 end
 
@@ -275,19 +212,7 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
     workingOutputDir = outputDir * "static/"
     mkpath(workingOutputDir)
 
-    # # --- First print costFuncs to screen in a box ---
-    # println("+", "-"^50, "+")
-    # println("|                costFunc dictionary:              |")
-    # println("+", "-"^50, "+")
-    # for kv in funcs
-    #     println("| ", kv)
-    # end
 
-    # fname = workingOutputDir * "funcs.json"
-    # stringData = JSON.json(funcs)
-    # open(fname, "w") do io
-    #     write(io, stringData)
-    # end
 
     if elemType == "bend"
         nDOF = 2
@@ -348,6 +273,63 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
 
 end
 
+function postprocess_statics(states, forces)
+    """
+    TODO: make it so this is differentiable
+    """
+
+    if constants.elemType == "BT2"
+        nDOF = 4
+        Ψ = states[3:nDOF:end]
+        Moments = forces[3:nDOF:end]
+        W = states[1:nDOF:end]
+        Lift = forces[1:nDOF:end]
+    elseif constants.elemType == "COMP2"
+        nDOF = 9
+        Ψ = states[5:nDOF:end]
+        Moments = forces[5:nDOF:end]
+        W = states[3:nDOF:end]
+        Lift = forces[3:nDOF:end]
+    else
+        error("Invalid element type")
+    end
+
+    # ************************************************
+    #     COMPUTE COST FUNCS
+    # ************************************************
+    costFuncs = Dict() # initialize empty costFunc dictionary
+    if "wtip" in evalFuncs
+        w_tip = W[end]
+        costFuncs["wtip"] = w_tip
+    end
+    if "psitip" in evalFuncs
+        psi_tip = Ψ[end]
+        costFuncs["psitip"] = psi_tip
+    end
+    if "lift" in evalFuncs
+        TotalLift = sum(Lift)
+        costFuncs["lift"] = TotalLift
+    end
+    if "moment" in evalFuncs
+        TotalMoment = sum(Moments)
+        costFuncs["moment"] = TotalMoment
+    end
+    if "cl" in evalFuncs
+        CL = TotalLift / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea)
+        costFuncs["cl"] = CL
+    end
+    if "cmy" in evalFuncs
+        CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(chordVec))
+        costFuncs["cmy"] = CM
+    end
+    if "cd" in evalFuncs
+        CD = 0.0
+        costFuncs["cd"] = CD
+    end
+
+    return obj
+end
+
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
@@ -400,8 +382,104 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(chordVec))
         costFuncs["cmy"] = CM
     end
+    if "cd" in evalFuncs
+        CD = 0.0
+        costFuncs["cd"] = CD
+    end
 
     return costFuncs
+end
+
+function get_sol(DVDict, solverOptions)
+    """
+    Wrapper function to do primal solve and return solution struct
+    """
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+    setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+
+    # Solve
+    obj, SOL = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
+    return SOL
+end
+
+function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+    """
+    Do primal solve with function signature compatible with Zygote
+    """
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+        setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+
+    # Solve
+    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
+    return obj
+end
+
+function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
+    """
+    Wrapper to compute total sensitivities
+    """
+    println("===================================================================================================")
+    println("        STATIC SENSITIVITIES: ", mode)
+    println("===================================================================================================")
+
+    # Initialize output dictionary
+    funcsSens = Dict()
+
+    if mode == "FiDi" # use finite differences the stupid way
+
+        @time sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveStatic.compute_costFuncs(x, solverOptions),
+            DVDict)
+
+        # --- Iterate over DVDict keys ---
+        dv_ctr = 1 # counter for total DVs
+        for (key_ctr, pair) in enumerate(DVDict)
+            key = pair[1]
+            val = pair[2]
+            x_len = length(val)
+            if x_len == 1
+                funcsSens[key] = sensitivities[dv_ctr]
+                dv_ctr += 1
+            elseif x_len > 1
+                funcsSens[key] = sensitivities[dv_ctr:(dv_ctr+x_len-1)]
+                dv_ctr += x_len
+            end
+        end
+
+    elseif mode == "RAD" # use automatic differentiation via Zygote
+
+        @time sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
+                cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
+            DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"])
+        # --- Order the sensitivities properly ---
+        funcsSens["α₀"] = sensitivities[1]
+        funcsSens["Λ"] = sensitivities[2]
+        funcsSens["s"] = sensitivities[3]
+        funcsSens["c"] = sensitivities[4]
+        funcsSens["toc"] = sensitivities[5]
+        funcsSens["ab"] = sensitivities[6]
+        funcsSens["x_αb"] = sensitivities[7]
+        funcsSens["zeta"] = sensitivities[8]
+        funcsSens["θ"] = sensitivities[9]
+
+    elseif mode == "FAD"
+        error("FAD not implemented yet")
+    end
+
+    # ************************************************
+    #     Sort the sensitivities by key (alphabetical)
+    # ************************************************
+    sorted_keys = sort(collect(keys(funcsSens)))
+    sorted_dict = Dict()
+    for key in sorted_keys
+        sorted_dict[key] = funcsSens[key]
+    end
+    funcsSens = sorted_dict
+
+    return funcsSens
 end
 
 function compute_∂f∂x(foilPDESol)
