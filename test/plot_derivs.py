@@ -98,9 +98,10 @@ def plot_adderivs(fname):
     tablefmt = "latex"
     print(tabulate(table, headers, tablefmt=tablefmt, floatfmt=".15f"))
 
+
 def plot_pkderivs(fname):
     dosave = not not fname
-    
+
     # ************************************************
     #     Load data
     # ************************************************
@@ -109,7 +110,6 @@ def plot_pkderivs(fname):
 
     data = load_jld("./RAD-BT2.jld2")
     bt2adderivs = np.asarray(data["derivs"])
-
 
     data = load_jld("./FWDDiff-COMP2.jld2")
     comp2fdderivs = np.asarray(data["derivs"])
@@ -120,9 +120,7 @@ def plot_pkderivs(fname):
     breakpoint()
     # Create figure object
     fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10))
-    
-    
-    
+
     plt.show(block=(not dosave))
     for ax in axes.flatten():
         niceplots.adjust_spines(ax, outward=True)
@@ -130,6 +128,7 @@ def plot_pkderivs(fname):
         plt.savefig(fname, format="pdf")
         print("Saved to:", fname)
     plt.close()
+
 
 # ==============================================================================
 #                         Main driver

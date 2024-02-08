@@ -1,0 +1,3 @@
+[deps]
+DCFoil = "ff014b77-bfde-4136-9f5f-5c175a67d307"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"

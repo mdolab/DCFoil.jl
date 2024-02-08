@@ -6,7 +6,7 @@ include("../src/solvers/SolverRoutines.jl")
 using .SolverRoutines
 include("../src/hydro/HydroStrip.jl")
 include("../src/InitModel.jl")
-include("../src/struct/FiniteElements.jl")
+include("../src/struct/FEMMethods.jl")
 include("../src/solvers/SolveFlutter.jl")
 using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, Zygote
@@ -115,7 +115,7 @@ function test_hydroderiv(DVDict, solverOptions)
     nElem = solverOptions["nNodes"] - 1
     mesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
-        DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["g"], DVDict["θ"], solverOptions
+        DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions
     )
     globalKs, _, _ = FEMMethods.assemble(mesh, elemConn, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
 
@@ -358,13 +358,13 @@ function test_pkflutterderiv(DVDict, solverOptions)
 
 
     # Print it out
-    for (key, val) in funcsSensFD
-        save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
+    for (key, val) in funcsSensAD
         save("RAD" * key * ".jld2", "derivs", funcsSensAD)
         println("AD: ", key, " = ", val)
+        save("FWDDiff" * key * ".jld2", "derivs", funcsSensFD)
         println("FD: ", key, " = ", funcsSensFD[key])
 
-        if val != nothing
+        if val !== nothing
             if maximum(funcsSensFD[key] - val) > 1e-3
                 println("Possibly bad derivative: ", key)
                 println("Abs difference btwn FD and AD: ", funcsSensFD[key] - val)
@@ -387,11 +387,11 @@ end
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-nNodes = 4
+nNodes = 10
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
-    "g" => 0.04, # structural damping percentage
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
@@ -427,7 +427,7 @@ solverOptions = Dict(
     "run_modal" => false,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [187.0, 190.0],
+    "uRange" => [180, 190.0],
     "maxQIter" => 100,
     "rhoKS" => 80.0,
 )
@@ -437,6 +437,8 @@ using BenchmarkTools
 using TimerOutputs
 using Profile
 
-@profview test_pkprofile(DVDict, solverOptions)
+test_pkflutterderiv(DVDict, solverOptions) # primal
+@profview test_pkprofile(DVDict, solverOptions) #deriv
+# Zygote.@profile test_pkprofile(DVDict, solverOptions) # this doesn't work
 Profile.clear() # run to clear compilation stuff
 

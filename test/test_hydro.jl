@@ -8,7 +8,7 @@ include("../src/hydro/HydroStrip.jl")
 using .HydroStrip # Using the Hydro module
 include("../src/solvers/DCFoilSolution.jl")
 include("../src/constants/SolutionConstants.jl")
-include("../src/struct/FiniteElements.jl")
+include("../src/struct/FEMMethods.jl")
 include("../src/InitModel.jl")
 include("../src/solvers/SolveStatic.jl")
 using .FEMMethods # Using the FEMMethods module just for some mesh gen methods
@@ -160,14 +160,14 @@ function test_AICs()
     DVDict = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
         "Λ" => deg2rad(-15.0), # sweep angle [rad]
-        "g" => 0.04, # structural damping percentage
+        "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
         "x_αb" => 0 * ones(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
-        "strut" => 0.4, # from Yingqian
+        "s_strut" => 0.4, # from Yingqian
     )
 
     solverOptions = Dict(

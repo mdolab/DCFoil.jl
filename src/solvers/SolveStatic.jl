@@ -11,29 +11,31 @@ Static hydroelastic solver
 """
 
 # --- Public functions ---
-export solve, do_newton_rhapson
+export solve
 
 # --- Libraries ---
-using FiniteDifferences
+using FiniteDifferences, ChainRulesCore
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
 using Printf, DelimitedFiles
 
 # --- DCFoil modules ---
-# First include them
 include("../InitModel.jl")
+using .InitModel
 include("../struct/BeamProperties.jl")
-include("../struct/FiniteElements.jl")
-include("../hydro/HydroStrip.jl")
-include("../constants/SolutionConstants.jl")
-include("./SolverRoutines.jl")
-include("./DCFoilSolution.jl")
-# then use them
-using .InitModel, .HydroStrip, .StructProp
+using .BeamProperties
+include("../struct/EBBeam.jl")
+using .EBBeam: NDOF
+include("../struct/FEMMethods.jl")
 using .FEMMethods
+include("../hydro/HydroStrip.jl")
+using .HydroStrip
+include("../constants/SolutionConstants.jl")
 using .SolutionConstants
+include("./SolverRoutines.jl")
 using .SolverRoutines
+include("./DCFoilSolution.jl")
 using .DCFoilSolution
 
 # ==============================================================================
@@ -45,7 +47,7 @@ loadType = "torque"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dict)
+function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
     Inputs
@@ -66,8 +68,8 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ************************************************
     outputDir = solverOptions["outputDir"]
     nNodes = solverOptions["nNodes"]
-    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
-
+    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
+    global globsolverOptions = solverOptions
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
     println("====================================================================================")
@@ -79,9 +81,22 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     x_αbVec = DVDict["x_αb"]
     global chordVec = DVDict["c"] # need for evalFuncs
     ebVec = 0.25 * chordVec .+ abVec
+    if solverOptions["config"] == "t-foil"
+        strutchordVec = DVDict["c_strut"]
+        strutabVec = DVDict["ab_strut"]
+        strutx_αbVec = DVDict["x_αb_strut"]
+        strutebVec = 0.25 * strutchordVec .+ strutabVec
+    else
+        strutchordVec = nothing
+        strutabVec = nothing
+        strutx_αbVec = nothing
+        strutebVec = nothing
+    end
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    structMesh = FEMESH.mesh
+    elemConn = FEMESH.elemConn
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=solverOptions["config"], STRUT=STRUT, ab_strut=strutabVec, x_αb_strut=strutx_αbVec)
     # if elemType == "COMP2"
     #     # Get transformation matrix for the tip load
     #     angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
@@ -100,6 +115,9 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
     # ]
     # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
+    # if solverOptions["config"] == "t-foil"
+
+    # end
 
     # --- Initialize states ---
     u = zeros(length(globalF))
@@ -108,9 +126,11 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #   Get initial fluid tracts
     # ---------------------------
 
-    # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, FOIL, elemType)
-    fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fTractions, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
     globalF = fTractions
+    global AICnoBC = AIC
 
     # # --- Debug printout of matrices in human readable form ---
     # println("Global stiffness matrix:")
@@ -124,7 +144,10 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = 0
+    ChainRulesCore.ignore_derivatives() do
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
+    end 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---
@@ -135,75 +158,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     #   Pre-solve system
     # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
-    # # Write answer to file DEBUG
-    # open(outputDir * "presolve_w.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 3
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 1
-    #     end
-    #     for qⁿ ∈ q[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir*"presolve_twist.dat","w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 5
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 3 # torque
-    #     end
-    #     for qⁿ ∈ q[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", qⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir *"presolve_hydro.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 3
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 1
-    #     end
-    #     for fⁿ ∈ F[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", fⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir * "presolve_hydrotorque.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     if elemType == "COMP2"
-    #         nDOF = 9
-    #         nStart = 5
-    #     elseif elemType == "BT2"
-    #         nDOF = 4
-    #         nStart = 3 # torque
-    #     end
-    #     for fⁿ ∈ F[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", fⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
-    # open(outputDir *"presolve_F.dat", "w") do io
-    #     stringData = elemType * "\n"
-    #     write(io, stringData)
-    #     for fⁿ ∈ F#[nStart:nDOF:end]
-    #         stringData = @sprintf("%.8f\n", fⁿ)
-    #         write(io, stringData)
-    #     end
-    # end
+    
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
@@ -217,7 +172,7 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
     derivMode = "RAD"
-    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), zeros(2,2), elemType, structMesh, AIC, derivMode, planformArea)
 
     # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
@@ -226,7 +181,10 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
 
     # --- Get hydroLoads again on solution ---
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
-    fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fHydro, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
+    global Kf = AIC
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -241,6 +199,11 @@ function solve(structMesh, elemConn, DVDict::Dict, evalFuncs, solverOptions::Dic
     write_sol(uSol, fHydro, elemType, outputDir)
 
     global STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro)
+
+    # ************************************************
+    #     Get obj funcs
+    # ************************************************
+    # compute_CostFuncs(STATSOL, evalFuncs, solverOptions)
 
     return STATSOL
 end
@@ -257,19 +220,7 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
     workingOutputDir = outputDir * "static/"
     mkpath(workingOutputDir)
 
-    # # --- First print costFuncs to screen in a box ---
-    # println("+", "-"^50, "+")
-    # println("|                costFunc dictionary:              |")
-    # println("+", "-"^50, "+")
-    # for kv in funcs
-    #     println("| ", kv)
-    # end
 
-    # fname = workingOutputDir * "funcs.json"
-    # stringData = JSON.json(funcs)
-    # open(fname, "w") do io
-    #     write(io, stringData)
-    # end
 
     if elemType == "bend"
         nDOF = 2
@@ -330,6 +281,63 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
 
 end
 
+function postprocess_statics(states, forces)
+    """
+    TODO: make it so this is differentiable
+    """
+
+    if constants.elemType == "BT2"
+        nDOF = 4
+        Ψ = states[3:nDOF:end]
+        Moments = forces[3:nDOF:end]
+        W = states[1:nDOF:end]
+        Lift = forces[1:nDOF:end]
+    elseif constants.elemType == "COMP2"
+        nDOF = 9
+        Ψ = states[5:nDOF:end]
+        Moments = forces[5:nDOF:end]
+        W = states[3:nDOF:end]
+        Lift = forces[3:nDOF:end]
+    else
+        error("Invalid element type")
+    end
+
+    # ************************************************
+    #     COMPUTE COST FUNCS
+    # ************************************************
+    costFuncs = Dict() # initialize empty costFunc dictionary
+    if "wtip" in evalFuncs
+        w_tip = W[end]
+        costFuncs["wtip"] = w_tip
+    end
+    if "psitip" in evalFuncs
+        psi_tip = Ψ[end]
+        costFuncs["psitip"] = psi_tip
+    end
+    if "lift" in evalFuncs
+        TotalLift = sum(Lift)
+        costFuncs["lift"] = TotalLift
+    end
+    if "moment" in evalFuncs
+        TotalMoment = sum(Moments)
+        costFuncs["moment"] = TotalMoment
+    end
+    if "cl" in evalFuncs
+        CL = TotalLift / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea)
+        costFuncs["cl"] = CL
+    end
+    if "cmy" in evalFuncs
+        CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(chordVec))
+        costFuncs["cmy"] = CM
+    end
+    if "cd" in evalFuncs
+        CD = 0.0
+        costFuncs["cd"] = CD
+    end
+
+    return obj
+end
+
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
@@ -382,8 +390,104 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(chordVec))
         costFuncs["cmy"] = CM
     end
+    if "cd" in evalFuncs
+        CD = 0.0
+        costFuncs["cd"] = CD
+    end
 
     return costFuncs
+end
+
+function get_sol(DVDict, solverOptions)
+    """
+    Wrapper function to do primal solve and return solution struct
+    """
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+    setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+
+    # Solve
+    obj, SOL = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
+    return SOL
+end
+
+function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+    """
+    Do primal solve with function signature compatible with Zygote
+    """
+    # Setup
+    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+        setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+
+    # Solve
+    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+
+    return obj
+end
+
+function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
+    """
+    Wrapper to compute total sensitivities
+    """
+    println("===================================================================================================")
+    println("        STATIC SENSITIVITIES: ", mode)
+    println("===================================================================================================")
+
+    # Initialize output dictionary
+    funcsSens = Dict()
+
+    if mode == "FiDi" # use finite differences the stupid way
+
+        @time sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveStatic.compute_costFuncs(x, solverOptions),
+            DVDict)
+
+        # --- Iterate over DVDict keys ---
+        dv_ctr = 1 # counter for total DVs
+        for (key_ctr, pair) in enumerate(DVDict)
+            key = pair[1]
+            val = pair[2]
+            x_len = length(val)
+            if x_len == 1
+                funcsSens[key] = sensitivities[dv_ctr]
+                dv_ctr += 1
+            elseif x_len > 1
+                funcsSens[key] = sensitivities[dv_ctr:(dv_ctr+x_len-1)]
+                dv_ctr += x_len
+            end
+        end
+
+    elseif mode == "RAD" # use automatic differentiation via Zygote
+
+        @time sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
+                cost_funcs_with_derivs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
+            DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"])
+        # --- Order the sensitivities properly ---
+        funcsSens["α₀"] = sensitivities[1]
+        funcsSens["Λ"] = sensitivities[2]
+        funcsSens["s"] = sensitivities[3]
+        funcsSens["c"] = sensitivities[4]
+        funcsSens["toc"] = sensitivities[5]
+        funcsSens["ab"] = sensitivities[6]
+        funcsSens["x_αb"] = sensitivities[7]
+        funcsSens["zeta"] = sensitivities[8]
+        funcsSens["θ"] = sensitivities[9]
+
+    elseif mode == "FAD"
+        error("FAD not implemented yet")
+    end
+
+    # ************************************************
+    #     Sort the sensitivities by key (alphabetical)
+    # ************************************************
+    sorted_keys = sort(collect(keys(funcsSens)))
+    sorted_dict = Dict()
+    for key in sorted_keys
+        sorted_dict[key] = funcsSens[key]
+    end
+    funcsSens = sorted_dict
+
+    return funcsSens
 end
 
 function compute_∂f∂x(foilPDESol)
@@ -409,11 +513,18 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
     elseif mode == "RAD" # Reverse automatic differentiation
+        # This is a tuple
         ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif mode == "RAD" # Reverse automatic differentiation
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
+    elseif mode == "analytic" 
+        # In the case of a linear elastic beam under static fluid loading, 
+        # dr/du = Ks - Kf
+        ∂r∂u = CONSTANTS.Kmat - AICnoBC[NDOF+1:end,NDOF+1:end]
+        # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
+        # converge to the same solution as the RAD, which only takes 2 NL iterations.
     else
         error("Invalid mode")
     end
@@ -445,7 +556,7 @@ function compute_residuals(structuralStates)
         FOut = F[5:end]
     elseif CONSTANTS.elemType == "COMP2"
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
-        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType; STRUT=STRUT, solverOptions=globsolverOptions)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[10:end]
     else

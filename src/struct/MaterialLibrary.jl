@@ -15,7 +15,7 @@ function return_constitutive(materialName::String)
     """
     Based on material string name, return the material properties
     """
-    if (materialName == "cfrp") # carbon-fiber reinforced plastic
+    if (materialName == "cfrp") # carbon-fiber reinforced plastic UD
         ρₛ = 1590.0
         E₁ = 117.8e9
         E₂ = 13.4e9
@@ -66,6 +66,29 @@ function return_constitutive(materialName::String)
         G₁₂ = 1e9
         ν₁₂ = 0.25
         constitutive = "isotropic"
+    elseif (materialName == "ud-wov-ud") # unidirectional-woven-unidirectional
+        ρₛ = 1570.0
+        E₁ = 98.0e9
+        E₂ = 25.2e9
+        G₁₂ = 4.2e9
+        ν₁₂ = 0.20
+        constitutive = "orthotropic"
+    elseif (materialName == "wov-ud-wov") # woven-unidirectional-woven
+        ρₛ = 1560.0
+        E₁ = 77.1e9
+        E₂ = 39.7e9
+        G₁₂ = 4.6e9
+        ν₁₂ = 0.15
+        constitutive = "orthotropic"
+    elseif (materialName == "IM6-epoxy")
+        ρₛ = 1590.0
+        E₁ = 203.1e9
+        E₂ = 11.2e9
+        G₁₂ = 8.4e9
+        ν₁₂ = 0.32
+        constitutive = "orthotropic"
+    elseif (materialName == "new composite material ")
+        println("not done yet")
     end # if
 
     return ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive

@@ -17,20 +17,20 @@ export solve
 # --- Libraries ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote
+using Zygote, ChainRulesCore
 using FileIO
 
 # --- DCFoil modules ---
 # First include them
 include("../InitModel.jl")
 include("../struct/BeamProperties.jl")
-include("../struct/FiniteElements.jl")
+include("../struct/FEMMethods.jl")
 include("../hydro/HydroStrip.jl")
 include("SolveStatic.jl")
 include("../constants/SolutionConstants.jl")
 include("./SolverRoutines.jl")
 # then use them
-using .InitModel, .HydroStrip, .StructProp
+using .InitModel, .HydroStrip, .BeamProperties
 using .FEMMethods
 using .SolveStatic
 using .SolutionConstants
@@ -57,7 +57,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
+    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -74,13 +74,23 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     Λ = DVDict["Λ"]
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
+    zeta = DVDict["zeta"]
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped")
+    globalDOFBlankingList = 0
+    ChainRulesCore.ignore_derivatives() do
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+    end 
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+
+    # ---------------------------
+    #   Get damping
+    # ---------------------------
+    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta, solverOptions["nModes"])
+    Cs = alphaConst * Ms .+ betaConst * Ks
 
     # --- Initialize stuff ---
     u = copy(globalF)
@@ -112,7 +122,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     #     For every frequency, solve the system
     # ************************************************
     f_ctr = 1
-    for f in fSweep
+    @time for f in fSweep
 
         if f_ctr % 20 == 1 # header every 10 iterations
             println("Forcing: ", f, "Hz")
@@ -125,7 +135,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         # ---------------------------
         # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
         # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
@@ -133,7 +143,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         Kf = Kf_r + 1im * Kf_i
 
         #  Dynamic matrix
-        D = -1 * ω^2 * (Ms + Mf) + im * ω * Cf + (Ks + Kf)
+        D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
 
         # Complex AIC
         AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)

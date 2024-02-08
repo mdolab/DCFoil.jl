@@ -41,38 +41,40 @@ from helperPlotFuncs import (
 )
 
 # ==============================================================================
+#                         Command line arguments
+# ==============================================================================
+parser = argparse.ArgumentParser()
+parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
+parser.add_argument("--output", type=str, default=None)
+parser.add_argument("--is_static", action="store_true", default=False)
+parser.add_argument("--is_forced", action="store_true", default=False)
+parser.add_argument("--is_modal", action="store_true", default=False)
+parser.add_argument("--is_flutter", action="store_true", default=False)
+parser.add_argument(
+    "--make_eigenvectors",
+    help="Do you want to make the hydroelastic mode shape plots and movie?",
+    action="store_true",
+    default=False,
+)
+parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
+parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
+parser.add_argument("--elem", type=int, default=1, help="Type of beam element: 0=BT2, 1=COMP2")
+parser.add_argument("--is_paper", action="store_true", default=False)
+args = parser.parse_args()
+
+# ==============================================================================
 #                         COMMON PLOT SETTINGS
 # ==============================================================================
 dataDir = "../OUTPUT/"
-cm, fs_lgd, fs, ls, markers = set_my_plot_settings()
 labels = ["SS", "CFRP"]
 labels = ["CFRP"]
+cm, fs_lgd, fs, ls, markers = set_my_plot_settings(args.is_paper)
 
-# Linestyles for different cases
-ls = ["-", "--", "-.", ":"]
 
 # ==============================================================================
 #                         Main driver
 # ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
-    parser.add_argument("--output", type=str, default=None)
-    parser.add_argument("--is_static", action="store_true", default=False)
-    parser.add_argument("--is_forced", action="store_true", default=False)
-    parser.add_argument("--is_modal", action="store_true", default=False)
-    parser.add_argument("--is_flutter", action="store_true", default=False)
-    parser.add_argument(
-        "--make_eigenvectors",
-        help="Do you want to make the hydroelastic mode shape plots and movie?",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument("--debug_plots", help="flutter debug plots", action="store_true", default=False)
-    parser.add_argument("--batch", help="Run pytecplot in batch", action="store_true", default=False)
-    parser.add_argument("--elem", type=int, default=1, help="Type of beam element: 0=BT2, 1=COMP2")
-    args = parser.parse_args()
-
     # Echo the args
     print(30 * "-")
     print("Arguments are", flush=True)
@@ -342,7 +344,7 @@ if __name__ == "__main__":
             # cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
             # for mode in range(nModes):
             #     iic = mode % len(cm)
-            #     axes[0, 1].plot(flowList, gSweep[mode, :], label=f"Mode {mode+1}", c=cm[iic])
+            #     axes[0, 1].plot(flowList, gSweep[mode, :], label=f"Mode {mode+1}", color=cm[iic])
             # axes[0, 1].set_xlabel("nFlow")
             # axes[0, 1].legend(fontsize=10, labelcolor="linecolor", loc="best", frameon=False)
             # axes[0, 1].set_xlim(50, 60)
@@ -365,7 +367,7 @@ if __name__ == "__main__":
     for key in args.cases:
         fname = f"{outputDir}/wing-geom-{key}.pdf"
         DVDict = DVDictDict[key]
-        fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"])
+        fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"], cm=cm)
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -388,7 +390,6 @@ if __name__ == "__main__":
         ytickTwist = []
 
         for iic, key in enumerate(args.cases):
-            breakpoint()
             funcs = funcsDict[key]
             bending = bendingDict[key]
             twisting = np.rad2deg(twistingDict[key])
@@ -475,7 +476,18 @@ if __name__ == "__main__":
         flowSpeed = SolverOptions[key]["U∞"]
         # --- Plot ---
         fig, axes = plot_forced(
-            fig, axes, fExtSweep, dynTipBending, dynTipTwisting, dynLift, dynMoment, rao, flowSpeed, fs_lgd, args.elem
+            fig,
+            axes,
+            fExtSweep,
+            dynTipBending,
+            dynTipTwisting,
+            dynLift,
+            dynMoment,
+            rao,
+            flowSpeed,
+            fs_lgd,
+            args.elem,
+            cm,
         )
 
         fig.suptitle("Tip frequency response spectra")
@@ -558,26 +570,38 @@ if __name__ == "__main__":
                 fig,
                 axes,
                 flutterSol=flutterSolDict[key],
+                cm=cm,
                 ls=ls[ii],
-                # units="kts",
+                units="kts",
                 # marker="o",
                 showRLlabels=True,
                 annotateModes=annotateModes,
-                nShift=2000,
+                nShift=60,
                 instabPts=instabPtsDict[key],
             )
 
-            # # --- Set limits ---
-            # axes[0, 0].set_ylim(top=1, bottom=-4)
+            # --- Set limits ---
+            # IMOCA60 paper
+            axes[0, 0].set_ylim(top=0.8, bottom=-4)
+            axes[1, 0].set_ylim(top=18.0)
             # axes[0, 0].set_xlim(right=50, left=5)
             # axes[0,0].set_xlim(right=40, left=25)
-            # axes[0, 0].set_ylim(top=60, bottom=-100)
+            # axes[0, 0].set_ylim(top=1, bottom=-5)
             # axes[0, 0].set_xlim(right=190, left=170)
             # axes[0, 0].set_ylim(top=1, bottom=-5)
             # axes[1, 1].set_xlim(right=1, left=-5)
             # axes[1, 1].set_ylim(top=20, bottom=0)
-            # axes[0, 0].set_xticks([10, 55] + [instabPtsDict[key][0][0] * 1.9438])
+            axes[0, 0].set_xticks([10, 60] + [instabPtsDict[key][0][0] * 1.9438])
             # axes[0, 0].set_xticks([10, 55])
+
+            # # akcabay limits
+            # # # swept flutter
+            # # axes[0, 0].set_ylim(top=50)
+            # # axes[0, 0].set_xlim(right=185)
+            # # axes[0, 0].set_xticks([170, 185] + [instabPtsDict[key][0][0]])
+            # # static div
+            # axes[0, 0].set_ylim(top=20)
+            # axes[0, 0].set_xticks([20, 40] + [instabPtsDict[key][0][0]])
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -602,6 +626,7 @@ if __name__ == "__main__":
                 fig,
                 axes,
                 flutterSol=flutterSolDict[key],
+                cm=cm,
                 semichord=0.5 * np.mean(DVDictDict[key]["c"]),
                 sweepAng=DVDictDict[key]["Λ"],
                 ls=ls[ii],

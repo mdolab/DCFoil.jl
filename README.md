@@ -1,4 +1,9 @@
+
 # DCFoil.jl
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://gawng.github.io/DCFoil.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://gawng.github.io/DCFoil.jl/dev/)
+[![Build Status](https://github.com/gawng/DCFoil.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/gawng/DCFoil.jl/actions/workflows/CI.yml?query=branch%3Amain)
+
 
 ![Alt text](./media/logo.svg "logo-text")
 
@@ -7,11 +12,15 @@ Dynamic Composite Foil (DCFoil) in Julia
 ## Versions
 
 We test for `macOS-latest` and `Ubuntu-latest`.
+Check the Project.toml for version dependencies.
 
-v1.7.3 (stable)
-v1.9.0 (latest)
+## Package
 
-## Get started
+The code can be added with ```Pkg.add("DCFoil"); using DCFoil```
+
+## Developers Notes
+
+### Get started as a developer
 
 You must be in this root directory. From the terminal you can type
 
@@ -29,7 +38,7 @@ and all the dependencies in the `Project.toml` should be queued to compile at ru
 You can double-check that all the right packages are present with `status` in the Pkg REPL.
 You may need to type into the Pkg REPL
 
-`instantiate()`
+`instantiate`
 
 Now you are ready to run the solver in the Julia REPL with
 
@@ -43,9 +52,6 @@ You can alternatively run the code from the terminal with
 NOTE:
 `run_main.sh` is a convenience script for the above. Running julia using shell script `nohup` does not work but a regular `nohup` command is fine
 
-
-## Developers Notes
-
 ### Conventions
 
 Please use this coding convention:
@@ -55,15 +61,21 @@ Please use this coding convention:
 * `snake_case` - functions (all functions should contain a verb) and non-module filenames
 * `SCREAMING_SNAKE_CASE` - constants
 
-### Sensitivites
+### Sensitivities
 
 #### Adding new cost functions or design variables
 
 * For the given solver you're adding the DV or cost func to, check its `.evalFuncsSens()`
+
 #### Try not to do this
 
-* `LinRange()` because it isn't easily differentiated. Do something like `start:step:end`
-* Mutating arrays
+* `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`
+* Mutating arrays that require the Zygote.Buffer data type. It is SUPER slow.
+
+### DCFoil as a package
+
+The Project.toml means this is a julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```
+However, in development mode, just go into julia for this directory and type ```] dev .```.
 
 ### Package Dependencies
 
@@ -79,7 +91,7 @@ to keep the version of the package static.
 To update all dependencies (be careful with this in case it breaks tests)
 
 ```
-Pkg.update(level=UPLEVEL_PATCH)
+Pkg.update()
 ```
 
 Use `Pkg.rm("<module-name>")` to remove a package.
@@ -109,6 +121,17 @@ The list is:
 pyspline
 pygeo
 ```
+
+The MACH2DCFoil wrapper requires TODO: GGGGGGGGGGGGGGGGGGGGGGGGGG
+```
+pip install julia
+```
+to install the pyjulia package and then in a python prompt
+```
+import julia
+julia.install("<your-version>") # if multiple versions of julia are installed
+```
+
 ### Tests
 
 Under the `./test/` directory, run
@@ -117,5 +140,6 @@ run_tests.jl
 ```
 
 ## Citation
+
 TODO: paper links
 For more, see the formal documentation <> and journal paper

@@ -1,16 +1,31 @@
-# Unit test
-# Check Fig 4.1 from
-# Deniz Tolga Akcabaya, Yin Lu Young "Steady and dynamic hydroelastic behavior of composite lifting surfaces"
-
-include("../src/struct/BeamProperties.jl")
+# --- Julia 1.9---
+"""
+@File    :   test_struct.jl
+@Time    :   2024/02/07
+@Desc    :   Tests for the structural module
+"""
 
 using LinearAlgebra
-using .StructProp
 using Plots, DelimitedFiles
+include("../src/struct/BeamProperties.jl")
+using .BeamProperties
+include("../src/InitModel.jl")
+using .InitModel
+include("../src/struct/FEMMethods.jl")
+using .FEMMethods
+include("../src/solvers/SolverRoutines.jl")
+using .SolverRoutines
+include("../src/struct/EBBeam.jl")
+using .EBBeam: EBBeam as BeamElem
 
 # ==============================================================================
 #                         BEAM PROPERTIES
 # ==============================================================================
+"""
+# Unit test
+# Check Fig 4.1 from
+# Deniz Tolga Akcabaya, Yin Lu Young "Steady and dynamic hydroelastic behavior of composite lifting surfaces"
+"""
 function test_struct()
 	"""
 	Test the constitutive relations (the beam stiffnesses)
@@ -39,8 +54,8 @@ function test_struct()
 
 	for i in 1:N
 		θₗ = θₐ[i]
-		section = StructProp.section_property(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ)
-		EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = StructProp.compute_section_property(section, "orthotropic")
+		section = BeamProperties.SectionProperty(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ, zeros(20, 2))
+		EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = BeamProperties.compute_section_property(section, "orthotropic")
 
 		EIₛₐ[i] = EIₛ
 		EIIPₛₐ[i] = EIIP
@@ -81,19 +96,6 @@ function test_struct()
 end
 
 # ==============================================================================
-#                         FINITE ELEMENT
-# ==============================================================================
-"""
-unit tests to verify the beam bend and bend-twist element
-"""
-
-include("../src/InitModel.jl")
-include("../src/struct/FiniteElements.jl")
-include("../src/solvers/SolverRoutines.jl")
-using .FEMMethods, .InitModel
-using .LinearBeamElem, .SolverRoutines
-
-# ==============================================================================
 #                         Test elemental matrices
 # ==============================================================================
 function test_BT2_stiff()
@@ -106,7 +108,7 @@ function test_BT2_stiff()
 	# ************************************************
 	elemType = "BT2"
 
-	Ktest = LinearBeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
+	Ktest = BeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
 	# show(stdout, "text/plain", Ktest[1:end, 1:end])
 
 	# --- Reference value ---
@@ -157,7 +159,7 @@ function test_BT2_mass()
 	le = 2
 	xalphab = -1
 	# Test
-	Mtest = LinearBeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
+	Mtest = BeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
 	# show(stdout, "text/plain", Mtest[5:end, 5:end])
 
 	totalMass = ms * le
@@ -204,7 +206,7 @@ function test_COMP2_stiff()
 	# ************************************************
 	elemType = "COMP2"
 
-	Ktest = LinearBeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
+	Ktest = BeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
 	# show(stdout, "text/plain", Ktest[1:end, 1:end])
 
 	# # Reduce the full size to what we actually test
@@ -280,7 +282,7 @@ function test_COMP2_mass()
 	le = 2
 	xalphab = -1.0 # you can't just change xalpha without changing isea btw
 	# Test
-	Mtest = LinearBeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
+	Mtest = BeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
 	# show(stdout, "text/plain", Mtest[5:end, 5:end])
 
 	totalMass = ms * le
@@ -356,29 +358,12 @@ end
 # ==============================================================================
 #                         Test finite element solver with unit loads
 # ==============================================================================
-function test_FiniteElementIso()
+function test_FiniteElementIso(DVDict, solverOptions)
 	"""
 	Test the finite elements with unit loads, thickness, length, and structural moduli
 	"""
-	nNodes = 30
-	DVDict = Dict(
-		"α₀" => 6.0, # initial angle of attack [deg]
-		"Λ" => 30.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
-		"c" => 1 * ones(nNodes), # chord length [m]
-		"s" => 1.0, # semispan [m]
-		"ab" => zeros(nNodes), # dist from midchord to EA [m]
-		"toc" => 1, # thickness-to-chord ratio
-		"x_αb" => zeros(nNodes), # static imbalance [m]
-		"θ" => 0 * π / 180, # fiber angle global [rad]
-	)
-	solverOptions = Dict(
-		"nNodes" => nNodes,
-		"material" => "test-iso", # preselect from material library
-		"U∞" => 5.0, # free stream velocity [m/s]
-		"ρ_f" => 1000.0, # fluid density [kg/m³]
-	)
-	FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
@@ -387,7 +372,7 @@ function test_FiniteElementIso()
 	#     bend element
 	# ************************************************
 	elemType = "bend"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
 
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
@@ -408,7 +393,7 @@ function test_FiniteElementIso()
 	#   Tip force only
 	# ---------------------------
 	elemType = "bend-twist"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType;solverOptions=solverOptions)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
@@ -447,29 +432,12 @@ function test_FiniteElementIso()
 	return rel_err
 end
 
-function test_FiniteElementComp()
+function test_FiniteElementComp(DVDict, solverOptions)
 	"""
 	Test the finite elements with unit loads, thickness, length, and structural moduli
 	"""
-	nNodes = 40
-	DVDict = Dict(
-		"α₀" => 6.0, # initial angle of attack [deg]
-		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
-		"c" => 1 * ones(nNodes), # chord length [m]
-		"s" => 1.0, # semispan [m]
-		"ab" => zeros(nNodes), # dist from midchord to EA [m]
-		"toc" => 1, # thickness-to-chord ratio
-		"x_αb" => zeros(nNodes), # static imbalance [m]
-		"θ" => deg2rad(15), # fiber angle global [rad]
-	)
-	solverOptions = Dict(
-		"material" => "test-comp", # preselect from material library
-		"nNodes" => nNodes,
-		"U∞" => 5.0, # free stream velocity [m/s]
-		"ρ_f" => 1000.0, # fluid density [kg/m³]
-	)
-	FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
@@ -480,7 +448,7 @@ function test_FiniteElementComp()
 	#   Tip force only
 	# ---------------------------
 	elemType = "BT2"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -538,26 +506,31 @@ function test_FiniteElementComp()
 	return rel_err
 end
 
-# test_FiniteElementComp()
-
-using DelimitedFiles, LinearAlgebra
-
 function test_FiniteElementIso3D()
 	"""
 	Test the finite elements with unit loads, thickness, length, and structural moduli
 	"""
 	nNodes = 15
+	nNodesStrut = 2
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => deg2rad(0.0), # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 10, # semispan [m]
 		"ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
 		"toc" => 1.0, # thickness-to-chord ratio
 		"x_αb" => 0 * ones(nNodes), # static imbalance [m]
 		"θ" => deg2rad(0.0), # fiber angle global [rad]
-		"strut" => 0.4, # from Yingqian
+		"s_strut" => 0.4, # from Yingqian
+		# --- Strut vars ---
+		"beta" => 0.0, # yaw angle wrt flow [deg]
+		"s_strut" => 0.4, # from Yingqian
+		"c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+		"toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+		"ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+		"x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+		"θ_strut" => deg2rad(15), # fiber angle global [rad]
 	)
 	solverOptions = Dict(
 		# ---------------------------
@@ -604,7 +577,7 @@ function test_FiniteElementIso3D()
 		"maxQIter" => 100, # that didn't fix the slow run time...
 		"rhoKS" => 80.0,
 	)
-	FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
@@ -617,7 +590,7 @@ function test_FiniteElementIso3D()
 	#   Tip force only
 	# ---------------------------
 	elemType = "BEAM3D"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -689,14 +662,14 @@ function test_FiniteElementBend()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => deg2rad(0.0), # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1.0 * ones(nNodes), # chord length [m]
 		"s" => 10, # semispan [m]
 		"ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
 		"toc" => 1.0, # thickness-to-chord ratio
 		"x_αb" => 0 * ones(nNodes), # static imbalance [m]
 		"θ" => deg2rad(0.0), # fiber angle global [rad]
-		"strut" => 0.4, # from Yingqian
+		"s_strut" => 0.4, # from Yingqian
 	)
 	solverOptions = Dict(
 		# ---------------------------
@@ -743,7 +716,7 @@ function test_FiniteElementBend()
 		"maxQIter" => 100, # that didn't fix the slow run time...
 		"rhoKS" => 80.0,
 	)
-	FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
@@ -756,7 +729,7 @@ function test_FiniteElementBend()
 	#   Tip force only
 	# ---------------------------
 	elemType = "bend"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType, "clamped", dim)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -815,11 +788,6 @@ function test_FiniteElementBend()
 end
 
 
-# q1, K, M, F, omegaSquared, modeShapes = test_FiniteElementBend()
-# println("tip deflection = ", q1[end-1], " m")
-# # println("tip rotation about y axis = ", q1[end-1], " rad")
-# natFreqs = sqrt.(Complex.(omegaSquared)) / (2 * pi)
-
 function test_FEBT3()
 	"""
 	Test the finite elements with unit loads, thickness, length, and structural moduli
@@ -828,7 +796,7 @@ function test_FEBT3()
 	DVDict = Dict(
 		"α₀" => 6.0, # initial angle of attack [deg]
 		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
 		"c" => 1 * ones(nNodes), # chord length [m]
 		"s" => 1.0, # semispan [m]
 		"ab" => zeros(nNodes), # dist from midchord to EA [m]
@@ -842,7 +810,7 @@ function test_FEBT3()
 		"U∞" => 5.0, # free stream velocity [m/s]
 		"ρ_f" => 1000.0, # fluid density [kg/m³]
 	)
-	FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
@@ -852,7 +820,7 @@ function test_FEBT3()
 	#   Tip force only
 	# ---------------------------
 	elemType = "BT3"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
@@ -914,51 +882,33 @@ end
 # test_FiniteElementComp()
 # ans = test_FEBT3()
 
-function test_FECOMP2()
+function test_FECOMP2(DVDict, solverOptions)
 	"""
 	Test simple tip force and torque on a composite beam
 	"""
-	nNodes = 40
+
 	testAngle = 0.0 # [deg] angle of rotation from default (NONZERO WORKS  )
 	angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
 
 	axisDefault = "z"
 
-	DVDict = Dict(
-		"α₀" => 6.0, # initial angle of attack [deg]
-		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"g" => 0.04, # structural damping percentage
-		"c" => 1 * ones(nNodes), # chord length [m]
-		"s" => 1.0, # semispan [m]
-		"ab" => zeros(nNodes), # dist from midchord to EA [m]
-		"toc" => 1, # thickness-to-chord ratio
-		"x_αb" => zeros(nNodes), # static imbalance [m]
-		"θ" => deg2rad(15), # fiber angle global [rad]
-	)
-	solverOptions = Dict(
-		"material" => "test-comp", # preselect from material library
-		"nNodes" => nNodes,
-		"U∞" => 5.0, # free stream velocity [m/s]
-		"ρ_f" => 1000.0, # fluid density [kg/m³]
-	)
-
-	FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation = testAngle)
+	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=testAngle)
 
 	# ---------------------------
 	#   Tip force only
 	# ---------------------------
 	elemType = "COMP2"
-	globalDOFBlankingList = FEMMethods.get_fixed_nodes(elemType)
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
 	abVec = DVDict["ab"]
 	x_αbVec = DVDict["x_αb"]
 	chordVec = DVDict["c"]
 	ebVec = 0.25 * chordVec .+ abVec
 	globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-	# T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault) 
+	T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
 	# T = T1
 	T = I(3)
 	transMatL2G = [
@@ -1021,7 +971,7 @@ function test_FECOMP2()
 	# --- Reference value ---
 	# the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
 	# Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
-	ref_sol = [4.0, 0.0, 0.0, 2.56699]
+	ref_sol = [0.0499, deg2rad(-4.47), -0.078, deg2rad(9.24)]
 
 	# --- Relative error ---
 	answers = [BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here

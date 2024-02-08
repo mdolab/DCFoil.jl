@@ -55,14 +55,14 @@ DVDict = Dict(
     "Λ" => deg2rad(0.0), # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
-    "g" => 0.04, # structural damping percentage
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.0925 * ones(nNodes), # chord length [m]
     "s" => 0.2438, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(0), # fiber angle global [rad]
-    "strut" => 0.4, # from Yingqian
+    "s_strut" => 0.4, # from Yingqian
 )
 
 solverOptions = Dict(
