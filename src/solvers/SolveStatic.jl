@@ -25,6 +25,8 @@ include("../InitModel.jl")
 using .InitModel
 include("../struct/BeamProperties.jl")
 using .BeamProperties
+include("../struct/EBBeam.jl")
+using .EBBeam: NDOF
 include("../struct/FEMMethods.jl")
 using .FEMMethods
 include("../hydro/HydroStrip.jl")
@@ -67,7 +69,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     outputDir = solverOptions["outputDir"]
     nNodes = solverOptions["nNodes"]
     global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
-    
+    global globsolverOptions = solverOptions
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
     println("====================================================================================")
@@ -82,17 +84,19 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     if solverOptions["config"] == "t-foil"
         strutchordVec = DVDict["c_strut"]
         strutabVec = DVDict["ab_strut"]
+        strutx_αbVec = DVDict["x_αb_strut"]
         strutebVec = 0.25 * strutchordVec .+ strutabVec
     else
         strutchordVec = nothing
         strutabVec = nothing
+        strutx_αbVec = nothing
         strutebVec = nothing
     end
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=solverOptions["config"], STRUT=STRUT)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=solverOptions["config"], STRUT=STRUT, ab_strut=strutabVec, x_αb_strut=strutx_αbVec)
     # if elemType == "COMP2"
     #     # Get transformation matrix for the tip load
     #     angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
@@ -123,9 +127,10 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # ---------------------------
 
     # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fTractions, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"])
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fTractions, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
     globalF = fTractions
+    global AICnoBC = AIC
 
     # # --- Debug printout of matrices in human readable form ---
     # println("Global stiffness matrix:")
@@ -141,7 +146,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # ---------------------------
     globalDOFBlankingList = 0
     ChainRulesCore.ignore_derivatives() do
-        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
     end 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
@@ -176,7 +181,10 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
 
     # --- Get hydroLoads again on solution ---
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
-    fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fHydro, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
+    global Kf = AIC
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -505,6 +513,7 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
 
     elseif mode == "RAD" # Reverse automatic differentiation
+        # This is a tuple
         ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif mode == "RAD" # Reverse automatic differentiation
@@ -513,7 +522,9 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
     elseif mode == "analytic" 
         # In the case of a linear elastic beam under static fluid loading, 
         # dr/du = Ks - Kf
-        ∂r∂u = zeros(length(structuralStates), length(structuralStates))
+        ∂r∂u = CONSTANTS.Kmat - AICnoBC[NDOF+1:end,NDOF+1:end]
+        # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
+        # converge to the same solution as the RAD, which only takes 2 NL iterations.
     else
         error("Invalid mode")
     end
@@ -545,7 +556,7 @@ function compute_residuals(structuralStates)
         FOut = F[5:end]
     elseif CONSTANTS.elemType == "COMP2"
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
-        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType; STRUT=STRUT, solverOptions=globsolverOptions)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[10:end]
     else

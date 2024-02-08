@@ -12,22 +12,25 @@ In julia, the chainrules rrule is '_b'
 
 # --- Libraries ---
 using LinearAlgebra
+using Zygote
 using ChainRulesCore
 include("./NewtonRaphson.jl")
+using .NewtonRaphson
 include("./EigenvalueProblem.jl")
-using .NewtonRaphson, .EigenvalueProblem
-using Zygote
+using .EigenvalueProblem
 
 # --- Globals ---
-global XDIM = 1
-global YDIM = 2
-global ZDIM = 3
+include("../constants/SolutionConstants.jl")
+using .SolutionConstants: XDIM, YDIM, ZDIM
+include("../struct/EBBeam.jl")
+using .EBBeam: EBBeam as BeamElement
+
 
 const RealOrComplex = Union{Real,Complex}
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="RAD", is_cmplx=false)
+function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="analytic", is_cmplx=false)
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
@@ -49,7 +52,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
+function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=nothing, solverOptions=Dict())
     """
     Returns the deflected + rigid shape of the foil
     Inputs
@@ -57,6 +60,7 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
         foilStructuralStates - structural states of the foil in global ref frame!
         α₀ - angle of attack
         elemType - element type
+        beta - yaw angle
     Outputs
     -------
         foilTotalStates - total states of the foil in global reference frame
@@ -65,7 +69,15 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
 
     # alfaRad = α₀ * π / 180
     alfaRad = deg2rad(α₀)
-
+    if STRUT != nothing
+        beta = STRUT.α₀
+    else
+        beta = 0.0
+    end
+    betaRad = deg2rad(beta)
+    nDOF = BeamElement.NDOF
+    # Get flow angles of attack in local beam coords first
+    #TODO: pretwist will change this
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
     elseif elemType == "bend-twist"
@@ -74,33 +86,63 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2")
     elseif elemType == "BT2"
         nDOF = 4
         nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
-        staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
-    # staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+        staticOffset = [0, 0, alfaRad, 0] 
     elseif elemType == "COMP2"
-        nDOF = 9
-        staticOffset = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+        staticOffset_wing = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+        staticOffset_strut = [0, 0, 0, betaRad, 0, 0, 0, 0, 0]
     end
 
     # ---------------------------
     #   Transformation into global ref frame
     # ---------------------------
     if elemType == "COMP2"
-        # Get transformation matrix for the tip load
-        angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+        angleDefault = deg2rad(90) # default angle of rotation of the axes from global wing to match local beam
         axisDefault = "z"
         T1 = get_rotate3dMat(angleDefault, axis=axisDefault)
         T = T1
+        Z = zeros(3, 3)
         transMatL2G = [
-            T zeros(3, 3) zeros(3, 3)
-            zeros(3, 3) T zeros(3, 3)
-            zeros(3, 3) zeros(3, 3) T
+            T Z Z
+            Z T Z
+            Z Z T
         ]
-        staticOffset = transMatL2G' * staticOffset
+        staticOffset_wing = transMatL2G * staticOffset_wing
+        staticOffset_junctionNode = staticOffset_wing
+        if solverOptions["config"] == "t-foil"
+            # TODO: MAKE IT SO ALL WING NODES ARE YAWED ALSO
+            angleDefault = deg2rad(-90)
+            axisDefault = "x"
+            T2 = get_rotate3dMat(angleDefault, axis=axisDefault)
+            T = T2*T1
+            transMatL2G = [
+                T Z Z
+                Z T Z
+                Z Z T
+            ]
+            staticOffset_strut = transMatL2G * staticOffset_strut
+
+            staticOffset_junctionNode = staticOffset_strut + staticOffset_wing
+        end
     else
         angleDefault = 0.0
     end
-    w = foilStructuralStates[1:nDOF:end]
-    staticOffsetGlobalRef = repeat(staticOffset, outer=[length(w)])
+
+    # In the following formulation, we assume junction node is always first!
+    nStrutDOFs = 0
+    staticOffsetGlobalRef_strut = []
+    if solverOptions["config"] == "t-foil"
+        nStrutDOFs = (solverOptions["nNodeStrut"]-1)*nDOF # subtract 1 because of the junction node
+        w_strut = foilStructuralStates[end-nStrutDOFs+1:nDOF:end]
+        staticOffsetGlobalRef_strut = repeat(staticOffset_strut, outer=[length(w_strut)])
+    end
+    w_wing = foilStructuralStates[1:nDOF:end-nStrutDOFs] # These wing DOFS include the junction node
+    
+    # # Correct the root "junction" node
+    staticOffsetGlobalRef_wing = vcat(staticOffset_junctionNode, repeat(staticOffset_wing, outer=[length(w_wing)-1]))
+    # staticOffsetGlobalRef_wing[1:nDOF] = staticOffset_junctionNode
+
+    staticOffsetGlobalRef = vcat(staticOffsetGlobalRef_wing, staticOffsetGlobalRef_strut)
+
     # Add static angle of attack to deflected foil
     foilTotalStates = copy(foilStructuralStates) + staticOffsetGlobalRef
 
@@ -124,7 +166,7 @@ function compute_eigsolve(K, M, nEigs; issym=true)
     return eVals, eVecs
 end # compute_eigsolve
 
-function cmplxInverse(A_r, A_i, n)
+function cmplxInverse(A_r::Matrix{Float64}, A_i::Matrix{Float64}, n::Int64)
     """
     Compute inverse of a complex square matrix
 
@@ -147,17 +189,18 @@ function cmplxInverse(A_r, A_i, n)
     # --- First compute LU factorization ---
     luA = lu(Acopy)
     # RHS identity matrix for inverse
-    RHS = Matrix{Float64}(I, 2 * n, 2 * n)
+    RHS = Matrix{Int64}(I, 2 * n, 2 * n)
 
     # --- Then solve linear system with multiple RHS's ---
     Ainvcopy = luA \ RHS
 
     # --- Extract solution ---
-    Ainv_r = Ainvcopy[1:n, 1:n]
+    @inbounds begin
+        Ainv_r = Ainvcopy[1:n, 1:n]
 
-    # TODO: you could add the option for transpose here like Eirikur
-    Ainv_i = Ainvcopy[n+1:end, 1:n]
-
+        # TODO: you could add the option for transpose here like Eirikur
+        Ainv_i = Ainvcopy[n+1:end, 1:n]
+    end
     return Ainv_r, Ainv_i
 end # cmplxInverse
 
@@ -467,17 +510,22 @@ function cmplxStdEigValProb_b(A_r, A_i, n, w̄_r, w̄_i, VR̄_r, VR̄_i)
 
 end # cmplxStdEigValProb_b
 
-function cmplxStdEigValProb2(A_r, A_i, n)
+function cmplxStdEigValProb2(A_r, A_i, n; nEigs=10)
     """
     Give back eigenvalues and vectors as an unrolled vector
+    where the real and imaginary parts are concatenated (eigenvalues first, then eigenvectors)
     """
 
     # --- Solve standard eigenvalue problem (Ax = λx) ---
     # This method uses the julia built-in eigendecomposition
     # eigen() is a spectral decomposition
-    A = A_r + 1im * A_i
-    w, Vr = eigen(A)
-
+    @fastmath begin
+        A = A_r + 1im * A_i
+        
+        w, Vr = eigen(A)
+        # TODO: swap this out with a more efficient eigen method
+        # w, Vr = lanczos(A, nEigs)
+    end
     # Eigenvalues
     w_r = real(w)
     w_i = imag(w)
@@ -498,6 +546,105 @@ function cmplxStdEigValProb2(A_r, A_i, n)
     return y
 end # cmplxStdEigValProb
 
+function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
+    """
+    Reverse rule for the eigenvalue problem
+    """
+    
+    # Primal function
+    y = cmplxStdEigValProb2(A_r, A_i, n)
+
+    function cmplxStdEigen_pullback(yb)
+        """
+        Reverse mode analytic derivative for the standard eigenvalue problem [A] v= λ v
+            with eigenvalues d_k
+            Ā = U^-H * (D̄ + F ∘ (U^H * Ū)) * U^H
+            where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
+    
+            overbar terms are the reverse seeds
+    
+        See:
+            Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
+    
+        Inputs
+        ------
+        A_r - nxn real part matrix
+        A_i - nxn imag part matrix
+        Outputs
+        -------
+        w_r - real part of eigenvalues
+        w_i - imag part of eigenvalues
+        VR_r - real right eigenvectors
+        VR_i - imag right eigenvectors
+        """
+        # We unpack the y vector into the real and imaginary parts of the eigenvalues and eigenvectors
+        w̄ = yb[1:n] + 1im * yb[n+1:2*n]
+        vr_r = reshape(yb[2*n+1:2*n+n^2], n, n)
+        vr_i = reshape(yb[2*n+n^2+1:end], n, n)
+        VR̄ = vr_r + 1im * vr_i
+        # No need to transpose to get the right shape even though julia is column major
+        # --- Initialize matrices ---
+        E = zeros(ComplexF64, n, n)
+        F = zeros(ComplexF64, n, n)
+        A = A_r + 1im * A_i
+
+        # --- Solve standard eigenvalue problem (Ax = λx) ---
+        # This method uses the julia built-in eigendecomposition
+        # eigen() is a spectral decomposition and is allegedly the fastest
+        w, Vr = eigen(A)
+        # TODO: swap this out with a more efficient eigen method using Sicheng and Eirikur's eigenvalue derivative method
+        # Paper: 
+        # that does not require all eigenvalues and vectors
+
+        # ---------------------------
+        #   Hermitian transpose (U^-H) conj transpose
+        # ---------------------------
+        VrHerm = Vr'
+        VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
+
+        # --- E ---
+        # @simd for jj in 1:n SIMD MADE IT SLOWER THUS DEFAULT VECTORIZATIONS ARE GOOD
+        for jj in 1:n
+            for ii in 1:n
+                @inbounds @fastmath E[ii, jj] = w[jj] - w[ii]
+            end
+        end
+
+        # --- F ---
+        # @simd for jj in 1:n
+        for jj in 1:n
+            for ii in 1:n
+                if ii != jj
+                    @inbounds @fastmath F[ii, jj] = 1.0 / E[ii, jj]
+                end
+            end
+        end
+
+        # --- Calculate F ∘ (U^H * Ū) ---
+        @fastmath tmp1 = F .* (VrHerm * VR̄)
+
+        # Add D̄
+        # @simd for ii = 1:n
+        for ii = 1:n
+            @inbounds @fastmath tmp1[ii, ii] += w̄[ii]
+        end
+
+        Ā = ((VrHerminv_r + 1im * VrHerminv_i) * tmp1) * VrHerm
+        Ā_r = real(Ā)
+        Ā_i = imag(Ā)
+
+        # Return NoTangent() because of order of args in this parent function
+        return (NoTangent(), Ā_r, Ā_i, NoTangent())
+
+    end # cmplxStdEigValProb_b
+
+
+    return y, cmplxStdEigen_pullback
+end
+
+# ==============================================================================
+#                         Utility routines
+# ==============================================================================
 function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
     """
     Interpolate/extrapolate polynomials of order 'd-1'
@@ -506,8 +653,8 @@ function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
 
     Inputs
     ------
-        x0 - input array size(d)
-        y0 - input array y0(x0) size(m,n,d)
+        x0 - input array size(d) (domain)
+        y0 - input array y0(x0) size(m,n,d) (values)
         m, n  - size of array
         d - number of points to use for interpolation
         x  - the location we want to inter/extrapolate at - scalar
@@ -517,26 +664,20 @@ function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
     """
 
     # 2 dimensional array interpolation
-    y = zeros(m, n)
-    for ii in 1:d
-        L = 1.0
-        for k in 1:d
-            if k != ii
-                L *= (x - x0[k]) / (x0[ii] - x0[k])
-            end
-        end
-        y += y0[:, :, ii] .* L
-    end
+    y::Matrix{Float64} = zeros(m, n)
 
-    # # --- Call underlying interpolation function over m and n ---
-    # This routine was way too slow so we use the one above
-    # y = zeros(m, n)
-    # y_z = Zygote.Buffer(y)
-    # for ii in 1:m
-    #     for kk in 1:n
-    #         y[ii, kk] = lagrangeInterp(x0, y0[ii, kk, :], d, x)
-    #     end
-    # end
+    # @simd for ii in 1:d
+    @inbounds @fastmath begin
+        for ii in 1:d
+            L = 1.0
+            for jj in 1:d
+                if jj != ii
+                    L *= (x - x0[jj]) / (x0[ii] - x0[jj])
+                end
+            end
+            y += y0[:, :, ii] .* L
+        end
+    end
 
     return y
 end
@@ -571,9 +712,7 @@ function lagrangeInterp(x0, y0, n, x)
 
     return y
 end
-# ==============================================================================
-#                         Utility routines
-# ==============================================================================
+
 function argmax2d(A)
     """
     Find the indices of maximum value for each column of 2d array A
@@ -669,7 +808,7 @@ function ipack1d(A, mask, nFlow)
     return B, nFound
 end # ipack1d
 
-function find_signChange(x)
+function find_signChange(x::Vector{Float64})
     """
     Find the location where a sign changes in an array
     Inputs
@@ -685,11 +824,12 @@ function find_signChange(x)
     n = length(sgn)
 
     for ii in 1:n-1
-        if sgn[ii+1] != sgn[ii]
-            locs = [ii, ii + 1]
-            return locs
-        else
-            continue
+        @fastmath @inbounds begin
+            if sgn[ii+1] != sgn[ii]
+                return ii, ii+1
+            else
+                continue
+            end
         end
     end
 
@@ -699,9 +839,10 @@ function get_rotate3dMat(rot; axis="x")
     """
     Give rotation matrix about axis by rot radians (RH rule!)
     """
-    rotMat = Array{Float64}(undef, 3, 3)
-    c = cos(rot)
-    s = sin(rot)
+    rotMat = zeros(Float64, 3, 3)
+    # rotMat = @SMatrix zeros(Float64, 3, 3)
+    c::Float64 = cos(rot)
+    s::Float64 = sin(rot)
     if axis == "x"
         rotMat = [
             1 0 0
@@ -754,7 +895,7 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
 end
 
 
-function get_transMat(dR, l, elemType="BT2")
+function get_transMat(dR1::Float64, dR2::Float64, dR3::Float64, l::Float64, elemType="BT2")
     """
     Returns the transformation matrix for a given element type into 3D space
 
@@ -764,19 +905,31 @@ function get_transMat(dR, l, elemType="BT2")
         l: length of element
         elemType: element type
     """
+    # This line breaks when the vector is straight up and down
+    # TODO: there is probably a better angle parametrization like Rodrigues or quaternions!
+    if dR1 == 0.0 && dR2 == 0.0
+        rxyz_div = 1.0 / sqrt(dR1^2 + dR2^2 + dR3^2)
+        ca = dR1 * rxyz_div
+        cb = dR2 * rxyz_div
+        cc = dR3 * rxyz_div
+        T1 = get_rotate3dMat(-deg2rad(90); axis="x")
+        T2 = get_rotate3dMat(-deg2rad(90); axis="z")
+        T = T2*T1
+    else    
+        # beta is the angle above the xy plane
+        rxy_div::Float64 = 1 / sqrt(dR1^2 + dR2^2) # length of projection onto xy plane
+        calpha::Float64 = dR1 * rxy_div
+        salpha::Float64 = dR2 * rxy_div
+        cbeta::Float64 = 1 / rxy_div / l
+        sbeta::Float64 = dR3 / l
+        # Direction cosine matrix to get from 3d space to having x-axis be the long dimension
+        T =  [
+            calpha*cbeta salpha calpha*sbeta
+            -salpha*cbeta calpha -salpha*sbeta
+            -sbeta 0.0 cbeta
+        ]
+    end
 
-    rxy_div = 1 / sqrt(dR[XDIM]^2 + dR[YDIM]^2) # length of projection onto xy plane
-    calpha = dR[1] * rxy_div
-    salpha = dR[2] * rxy_div
-    cbeta = 1 / rxy_div / l
-    sbeta = dR[3] / l
-
-    # Direction cosine matrix
-    T = [
-        calpha*cbeta salpha calpha*sbeta
-        -salpha*cbeta calpha -salpha*sbeta
-        -sbeta 0.0 cbeta
-    ]
     Z = zeros(3, 3)
 
     if elemType == "BT2"
@@ -991,37 +1144,38 @@ function do_linear_interp(xpt, ypt, xqvec)
 
 
     for jj in 1:n
+        @inbounds @fastmath begin
+            xq = xqvec[jj]
 
-        xq = xqvec[jj]
+            # Catch cases in case we're just outside the domain
+            # This extends the slope of the first/last segment
+            if xq <= xpt[1]
+                x0 = xpt[1]
+                x1 = xpt[2]
+                y0 = ypt[1]
+                y1 = ypt[2]
+            elseif xq >= xpt[npt]
+                x0 = xpt[npt-1]
+                x1 = xpt[npt]
+                y0 = ypt[npt-1]
+                y1 = ypt[npt]
+            else
+                # Perform search
+                ii = 1
+                while xq > xpt[ii+1]
+                    ii += 1
+                end
 
-        # Catch cases in case we're just outside the domain
-        # This extends the slope of the first/last segment
-        if xq <= xpt[1]
-            x0 = xpt[1]
-            x1 = xpt[2]
-            y0 = ypt[1]
-            y1 = ypt[2]
-        elseif xq >= xpt[npt]
-            x0 = xpt[npt-1]
-            x1 = xpt[npt]
-            y0 = ypt[npt-1]
-            y1 = ypt[npt]
-        else
-            # Perform search
-            ii = 1
-            while xq > xpt[ii+1]
-                ii += 1
+                x0 = xpt[ii]
+                x1 = xpt[ii+1]
+                y0 = ypt[ii]
+                y1 = ypt[ii+1]
+
             end
 
-            x0 = xpt[ii]
-            x1 = xpt[ii+1]
-            y0 = ypt[ii]
-            y1 = ypt[ii+1]
-
+            m = (y1 - y0) / (x1 - x0) # slope
+            y_z[jj] = y0 + m * (xq - x0)
         end
-
-        m = (y1 - y0) / (x1 - x0) # slope
-        y_z[jj] = y0 + m * (xq - x0)
     end
     y = copy(y_z)
 
@@ -1030,81 +1184,6 @@ function do_linear_interp(xpt, ypt, xqvec)
     else
         return y
     end
-end
-# ==============================================================================
-#                         Custom derivative routines
-# ==============================================================================
-function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
-    """
-    Reverse rule for the eigenvalue problem
-    """
-
-    # TODO: redo using Sicheng and Eirikur's eigenvalue derivative method
-    # that does not require the full eigenvalue solve
-
-    y = cmplxStdEigValProb2(A_r, A_i, n)
-
-    function cmplxStdEigen_pullback(y)
-        """
-        See cmplxStdEigValProb_b()
-        """
-        # We unpack the y vector into the real and imaginary parts of the eigenvalues and eigenvectors
-        w̄ = y[1:n] + 1im * y[n+1:2*n]
-        vr_r = reshape(y[2*n+1:2*n+n^2], n, n)
-        vr_i = reshape(y[2*n+n^2+1:end], n, n)
-        VR̄ = vr_r + 1im * vr_i
-        # No need to transpose to get the right shape even though julia is column major
-        # --- Initialize matrices ---
-        E = zeros(ComplexF64, n, n)
-        F = zeros(ComplexF64, n, n)
-        A = A_r + 1im * A_i
-
-        # --- Solve standard eigenvalue problem (Ax = λx) ---
-        # This method uses the julia built-in eigendecomposition
-        # eigen() is a spectral decomposition
-        w, Vr = eigen(A)
-
-        # ---------------------------
-        #   Hermitian transpose (U^-H) conj transpose
-        # ---------------------------
-        VrHerm = Vr'
-        VrHerminv_r, VrHerminv_i = cmplxInverse(real(VrHerm), imag(VrHerm), n)
-
-        # --- E ---
-        for jj in 1:n
-            for ii in 1:n
-                E[ii, jj] = w[jj] - w[ii]
-            end
-        end
-
-        # --- F ---
-        for jj in 1:n
-            for ii in 1:n
-                if ii != jj
-                    F[ii, jj] = 1.0 / E[ii, jj]
-                end
-            end
-        end
-
-        # --- Calculate F ∘ (U^H * Ū) ---
-        tmp1 = F .* (VrHerm * VR̄)
-
-        # Add D̄
-        for ii = 1:n
-            tmp1[ii, ii] += w̄[ii]
-        end
-
-        Ā = ((VrHerminv_r + 1im * VrHerminv_i) * tmp1) * VrHerm
-        Ā_r = real(Ā)
-        Ā_i = imag(Ā)
-
-        # Return NoTangent() because of order of args in this parent function
-        return (NoTangent(), Ā_r, Ā_i, NoTangent())
-
-    end # cmplxStdEigValProb_b
-
-
-    return y, cmplxStdEigen_pullback
 end
 
 function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})

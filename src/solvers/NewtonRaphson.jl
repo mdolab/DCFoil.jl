@@ -50,7 +50,12 @@ function do_newton_raphson(compute_residuals, compute_∂r∂u, u0, maxIters=200
             # println(u)
             res = compute_residuals(u)
             ∂r∂u = compute_∂r∂u(u, mode)
-            jac = ∂r∂u[1]
+            jac::Matrix{Float64} = zeros(length(u), length(u))
+            if mode == "RAD"
+                jac = ∂r∂u[1]
+            elseif mode == "analytic"
+                jac = ∂r∂u
+            end
 
             # ************************************************
             #     Compute Newton step
