@@ -264,6 +264,7 @@ After substitution of the Fourier series form and combining Equations~\eqref{eq:
 \mu \alpha \sin(\theta)
 \quad \tn{where }\mu(\theta) = \frac{a_0 c(\theta)}{ 4 s}
 \ee
+where the impact of geometric twist can be captured via $\alpha = \alpha_0 + f(\theta)$ where $f(\theta)$ is the twist as a function of the spatial variable.
 
 Here's the digestion of the Julia code which does the numerical solution of Equation~\eqref{eq:circulation2} but symmetrically about the centerline.
 \begin{align*}
@@ -418,7 +419,12 @@ The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady
 %------------------------------------------------------------------------------
 \clearpage
 \section{Static solution}
-
+The static hydrostructural equation is
+\be
+&\mbf{K_s} \mbf{u} & = \mbf{f}_{\tn{hydro}}
+\\
+&\left(\mbf{K_s} - \mbf{K_f}\right)\mbf{u} & = \mbf{0}
+\ee
 %------------------------------------------------------------------------------
 \clearpage
 \section{Forced vibration solution}
@@ -912,7 +918,7 @@ Assuming small perturbations around the trimmed flight condition, the force Equa
 % 
 \ben
 \Delta \dot{\mbf{x}}_r = \mbf{A}_{rr} \Delta \mbf{x}_r
-+ \mbf{A}_{rs} \Delta \mbf{x}_s 
++ \mbf{A}_{rs} \Delta \mbf{x}_s
 + \mbf{B}_{r} \Delta \mbf{u}
 \\
 \mbf{K}_{ss} \Delta {\mbf{x}}_s =
@@ -963,18 +969,27 @@ The \texttt{pullback} functionality in AD packages typically returns two things:
 There are situations in which one has a manual implementation they want the {AD} package to bypass, for example, matrix operations.
 
 We write manual rules through \texttt{ChainRules.jl}.
-An example is 
+An example is Algorithm~\ref{alg:ConceptualRAD}.
 % \usepackage{algorithm2e}
 \RestyleAlgo{ruled}
-\begin{algorithm}
-    \caption{\label{alg:}}
-    function rrule(::typeof($f(x)$), $x$)\\
+\begin{algorithm}[htb!]
+    \caption{\label{alg:ConceptualRAD} Basic reverse rule in Julia ChainRulesCore}
+    function ChainRulesCore.rrule(::typeof($f(x)$), $x$)\\
     \quad Evaluate $y = f(x)$ (Primal)\\
     \quad function $\mcal{B}(\bar{y})$\\
     \quad \quad Code up $\bar{x}= \bar{y} \dd{y}{x}$ (Ex. $\cos(x) \bar{y} $ if $f(x)=\sin(x)$)\\
     \quad return $\bar{x}$\\
     return $y$, $\mcal{B}()$
 \end{algorithm}
+
+Now that you understand the conceptual level, this is a more applied example for the eigenvalue derivative routine.
+\begin{algorithm}[htb!]
+    \caption{\label{alg:EigenRAD} Reverse rule for eigenvalue problem}
+    function ChainRulesCore.rrule(::typeof(eigvals()), A::AbstractMatrix)\\
+    \quad $\lambda_n, \phi_n = \tn{eigvals}(A)$ \\
+    return
+\end{algorithm}
+
 
 \appendix
 \bibliography{./gng-link,./mdolab-link}

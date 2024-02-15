@@ -36,8 +36,8 @@ mutable struct DCFoilConstants{T}
     Mmat::Matrix{T} # structural mass matrix (after BC blanking)
     Cmat::Matrix{T} # structural damping matrix (after BC blanking)
     elemType::String
-    mesh::Array{T,2}
-    AICmat::Matrix{T} # Aero influence coeff matrix
+    mesh::Matrix{T}
+    AICmat::Matrix{T} # Aero influence coeff matrix (no BC blanking)
     mode::String # type of derivative for drdu
     planformArea::T
 end

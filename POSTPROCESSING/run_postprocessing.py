@@ -30,6 +30,7 @@ import niceplots
 from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals, find_DivAndFlutterPoints
 from helperPlotFuncs import (
     plot_static2d,
+    plot_dragbuildup,
     plot_deformedShape,
     plot_naturalModeShapes,
     plot_modeShapes,
@@ -47,6 +48,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
 parser.add_argument("--output", type=str, default=None)
 parser.add_argument("--is_static", action="store_true", default=False)
+parser.add_argument("--drag_buildup", action="store_true", default=False)
 parser.add_argument("--is_forced", action="store_true", default=False)
 parser.add_argument("--is_modal", action="store_true", default=False)
 parser.add_argument("--is_flutter", action="store_true", default=False)
@@ -66,8 +68,8 @@ args = parser.parse_args()
 #                         COMMON PLOT SETTINGS
 # ==============================================================================
 dataDir = "../OUTPUT/"
-labels = ["SS", "CFRP"]
-labels = ["CFRP"]
+labels = ["NOFS", "FS"]
+labels = ["-15", "+15", "0"]
 cm, fs_lgd, fs, ls, markers = set_my_plot_settings(args.is_paper)
 
 
@@ -140,7 +142,7 @@ if __name__ == "__main__":
     # ************************************************
     #     Static hydroelastic
     # ************************************************
-    if args.is_static:
+    if args.is_static or args.drag_buildup:
         # ************************************************
         #     Read in data
         # ************************************************
@@ -384,7 +386,7 @@ if __name__ == "__main__":
         dosave = not not fname
 
         # Create figure object
-        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, constrained_layout=True, figsize=(14, 8))
+        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, constrained_layout=True, figsize=(15, 8))
         lpad = 40
         ytickBend = []
         ytickTwist = []
@@ -400,18 +402,19 @@ if __name__ == "__main__":
             spanLift[0] *= 2
             spanMoment[0] *= 2
 
-            ytickBend.append(np.max(np.abs(bending)))
-            ytickTwist.append(np.max(np.abs(twisting)))
+            if iic < 1:
+                ytickBend.append(np.max(np.abs(bending)))
+                ytickTwist.append(np.max(np.abs(twisting)))
 
             fig, axes = plot_static2d(
-                fig, axes, nodes, bending, twisting, spanLift, spanMoment, funcs, labels[iic], cm[iic], fs_lgd, iic
+                fig, axes, nodes, bending, twisting, spanLift, spanMoment, funcs, labels[iic], cm[iic], fs_lgd, iic, solverOptions=SolverOptions[key]
             )
 
         fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
         flowSpeed = SolverOptions[key]["U∞"]
         AOA = DVDictDict[key]["α₀"]
         sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
-        flowString = "$U_{\\infty} =$" + f"{flowSpeed*1.9438:.1f}" + " kts"
+        flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
         alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
         sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
         fiberString = "$\\theta_f$ = " + f"{fiberAngle:.1f}" + "$^{\\circ}$"
@@ -420,18 +423,27 @@ if __name__ == "__main__":
         fig.suptitle(titleTxt)
 
         axes[0, 0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+
         yticks = np.array(ytickBend)
-        ytickBend = np.concatenate((yticks, -yticks)).tolist()
+        # ytickBend = np.concatenate((yticks, -yticks)).tolist()
+        ytickBend = yticks.tolist()
         axes[0, 0].set_yticks(ytickBend + [0.0])
-        axes[0, 0].set_ylim(-1.1 * np.max(ytickBend), 1.1 * np.max(ytickBend))
+        axes[0, 0].set_ylim(-0.2 * np.max(ytickBend), 1.1 * np.max(ytickBend))
+        
         yticks = np.array(ytickTwist)
-        ytickTwist = np.concatenate((yticks, -yticks)).tolist()
+        # ytickTwist = np.concatenate((yticks, -yticks)).tolist()
+        ytickTwist = yticks.tolist()
         axes[0, 1].set_yticks(ytickTwist + [0.0])
-        axes[0, 1].set_ylim(-1.1 * np.max(ytickTwist), 1.1 * np.max(ytickTwist))
+        axes[0, 1].set_ylim(-0.1 * np.max(ytickTwist), 1.1 * np.max(ytickTwist))
+        
+        xticks = [0.0, DVDictDict[key]["s"]]
+        axes[0, 0].set_xticks(xticks)
 
         plt.show(block=(not dosave))
-        for ax in axes.flatten():
-            niceplots.adjust_spines(ax, outward=True)
+        for ii, ax in enumerate(axes.flatten()):
+            niceplots.adjust_spines(ax, ["left", "bottom"], outward=True)
+            if ii < 2:
+                niceplots.adjust_spines(ax, ["right", "bottom"], outward=True)
         if dosave:
             plt.savefig(fname, format="pdf")
             print("Saved to:", fname)
@@ -461,6 +473,38 @@ if __name__ == "__main__":
         #     plt.savefig(fname, format="pdf")
         #     print("Saved to:", fname)
         # plt.close()
+
+    if args.drag_buildup:
+        fname = f"{outputDir}/drag-buildup.pdf"
+        dosave = not not fname
+
+        fig, axes = plt.subplots(nrows=1, ncols=3, constrained_layout=True, figsize=(15, 10))
+        
+        for iic, key in enumerate(args.cases):
+            funcs = funcsDict[key]
+
+            fig, axes = plot_dragbuildup(
+                fig, axes, funcs, labels[iic], cm, fs_lgd, iic, solverOptions=SolverOptions[key]
+            )
+
+        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
+        flowSpeed = SolverOptions[key]["U∞"]
+        AOA = DVDictDict[key]["α₀"]
+        sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
+        flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
+        alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
+        sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
+        fiberString = "$\\theta_f$ = " + f"{fiberAngle:.1f}" + "$^{\\circ}$"
+        titleTxt = flowString + ", " + alfaString + ", " + sweepString + ", " + fiberString
+
+        fig.suptitle(titleTxt)
+
+
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
 
     if args.is_forced:
         # --- File name ---

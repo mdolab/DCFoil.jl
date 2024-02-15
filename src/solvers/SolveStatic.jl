@@ -37,12 +37,14 @@ include("./SolverRoutines.jl")
 using .SolverRoutines
 include("./DCFoilSolution.jl")
 using .DCFoilSolution
+include("../io/TecplotIO.jl")
+using .TecplotIO
 
 # ==============================================================================
 #                         COMMON VARIABLES
 # ==============================================================================
 elemType = "COMP2"
-loadType = "torque"
+loadType = "force"
 
 # ==============================================================================
 #                         Top level API routines
@@ -70,6 +72,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     nNodes = solverOptions["nNodes"]
     global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
     global globsolverOptions = solverOptions
+    global gDVDict = DVDict
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
     println("====================================================================================")
@@ -86,49 +89,66 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
         strutabVec = DVDict["ab_strut"]
         strutx_αbVec = DVDict["x_αb_strut"]
         strutebVec = 0.25 * strutchordVec .+ strutabVec
-    else
+    elseif solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
         strutchordVec = nothing
         strutabVec = nothing
         strutx_αbVec = nothing
         strutebVec = nothing
+    else
+        error("Unsupported config: ", solverOptions["config"])
     end
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=solverOptions["config"], STRUT=STRUT, ab_strut=strutabVec, x_αb_strut=strutx_αbVec)
-    # if elemType == "COMP2"
-    #     # Get transformation matrix for the tip load
-    #     angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
-    # else
-    #     angleDefault = 0.0
-    # end
-    # axisDefault = "z"
-    # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    # T = T1
-    # transMatL2G = [
-    #     T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
-    #     zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
-    # ]
-    # FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType)
-    # if solverOptions["config"] == "t-foil"
-
-    # end
 
     # --- Initialize states ---
     u = zeros(length(globalF))
-
+    
+    # if solverOptions["debug"]
+    #     if elemType == "COMP2"
+    #         # Get transformation matrix for the tip load
+    #         angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+    #     else
+    #         angleDefault = 0.0
+    #     end
+    #     axisDefault = "z"
+    #     T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    #     T = T1
+    #     Z = zeros(3, 3)
+    #     transMatL2G = [
+    #         T Z Z Z Z Z
+    #         Z T Z Z Z Z
+    #         Z Z T Z Z Z
+    #         Z Z Z T Z Z
+    #         Z Z Z Z T Z
+    #         Z Z Z Z Z T
+    #     ]
+    #     FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType; solverOptions=solverOptions)
+    #     global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
+    #     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+    
+    #     # # --- Debug printout of matrices in human readable form after BC application ---
+    #     # writedlm(outputDir * "K.csv", K,",")
+    #     # writedlm(outputDir * "M.csv", M,",")
+    
+    #     # ---------------------------
+    #     #   Pre-solve system
+    #     # ---------------------------
+    #     q = FEMMethods.solve_structure(K, M, F)
+    #     # --- Populate displacement vector ---
+    #     u[globalDOFBlankingList] .= 0.0
+    #     idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
+    #     u[idxNotBlanked] .= q
+    # end
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
 
     # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fTractions, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; solverOptions=solverOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
     globalF = fTractions
     global AICnoBC = AIC
 
@@ -144,9 +164,8 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # ---------------------------
     #   Apply BC blanking
     # ---------------------------
-    globalDOFBlankingList = 0
     ChainRulesCore.ignore_derivatives() do
-        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
+        global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
     end 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
@@ -158,13 +177,16 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     #   Pre-solve system
     # ---------------------------
     q = FEMMethods.solve_structure(K, M, F)
-    
 
     # --- Populate displacement vector ---
     u[globalDOFBlankingList] .= 0.0
     idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
-
+    
+    # hydrolift = fTractions[3:NDOF:end]
+    # println("hydro lift on half wing", hydrolift[1:solverOptions["nNodes"]])
+    # println("hydro moments", fTractions[5:NDOF:end])
+    # println("w deflections", u[3:NDOF:end])
 
     # ************************************************
     #     CONVERGE r(u) = 0
@@ -177,14 +199,14 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
     # qSol = q # just use pre-solve solution
-    uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
+    uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType; solverOptions=solverOptions)
 
     # --- Get hydroLoads again on solution ---
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; config=solverOptions["config"], STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, TotalLift, TotalMoment = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
-    global Kf = AIC
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; solverOptions=solverOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
+    # global Kf = AIC
 
     # ************************************************
     #     WRITE SOLUTION OUT TO FILES
@@ -196,6 +218,11 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     #     println("|  PRODUCT OF FIBER ANGLE AND TIP TWIST ARE +VE     |")
     #     println("+---------------------------------------------------+")
     # end
+    # println("Post converged")
+    # println("hydro lift", fHydro[3:NDOF:end])
+    # println("hydro moments", fHydro[5:NDOF:end])
+    # println("w deflections", uSol[3:NDOF:end])
+
     write_sol(uSol, fHydro, elemType, outputDir)
 
     global STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro)
@@ -226,17 +253,17 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
         nDOF = 2
     elseif elemType == "bend-twist"
         nDOF = 3
-        Ψ = states[nDOF:nDOF:end]
+        theta = states[nDOF:nDOF:end]
         Moments = fHydro[nDOF:nDOF:end]
     elseif elemType == "BT2"
         nDOF = 4
-        Ψ = states[3:nDOF:end]
+        theta = states[3:nDOF:end]
         Moments = fHydro[3:nDOF:end]
         W = states[1:nDOF:end]
         Lift = fHydro[1:nDOF:end]
     elseif elemType == "COMP2"
         nDOF = 9
-        Ψ = states[5:nDOF:end]
+        theta = states[5:nDOF:end]
         Moments = fHydro[5:nDOF:end]
         W = states[3:nDOF:end]
         Lift = fHydro[3:nDOF:end]
@@ -255,12 +282,12 @@ function write_sol(states, fHydro, elemType="bend", outputDir="./OUTPUT/")
     close(outfile)
 
     # --- Write twist ---
-    if @isdefined(Ψ)
+    if @isdefined(theta)
         fname = workingOutputDir * "twisting.dat"
         outfile = open(fname, "w")
         # write(outfile, "Twist\n")
-        for Ψⁿ ∈ Ψ
-            write(outfile, string(Ψⁿ, "\n"))
+        for thetaⁿ ∈ theta
+            write(outfile, string(thetaⁿ, "\n"))
         end
         close(outfile)
     end
@@ -288,13 +315,13 @@ function postprocess_statics(states, forces)
 
     if constants.elemType == "BT2"
         nDOF = 4
-        Ψ = states[3:nDOF:end]
+        theta = states[3:nDOF:end]
         Moments = forces[3:nDOF:end]
         W = states[1:nDOF:end]
         Lift = forces[1:nDOF:end]
     elseif constants.elemType == "COMP2"
         nDOF = 9
-        Ψ = states[5:nDOF:end]
+        theta = states[5:nDOF:end]
         Moments = forces[5:nDOF:end]
         W = states[3:nDOF:end]
         Lift = forces[3:nDOF:end]
@@ -311,7 +338,7 @@ function postprocess_statics(states, forces)
         costFuncs["wtip"] = w_tip
     end
     if "psitip" in evalFuncs
-        psi_tip = Ψ[end]
+        psi_tip = theta[end]
         costFuncs["psitip"] = psi_tip
     end
     if "lift" in evalFuncs
@@ -338,23 +365,30 @@ function postprocess_statics(states, forces)
     return obj
 end
 
+function write_tecplot(DVDict, STATICSOL, FEMESH, outputDir="./OUTPUT/";solverOptions=Dict("config"=>"wing"))
+    """
+    General purpose tecplot writer wrapper for flutter solution
+    """
+    TecplotIO.write_deflections(DVDict, STATICSOL, FEMESH, outputDir;solverOptions=solverOptions)
+
+end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, chordVec=chordVec)
+function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, chordVec=chordVec, DVDict=gDVDict)
     """
     Given {u} and the forces, compute the cost functions
     """
 
     if constants.elemType == "BT2"
         nDOF = 4
-        Ψ = states[3:nDOF:end]
+        theta = states[3:nDOF:end]
         Moments = forces[3:nDOF:end]
         W = states[1:nDOF:end]
         Lift = forces[1:nDOF:end]
     elseif constants.elemType == "COMP2"
         nDOF = 9
-        Ψ = states[5:nDOF:end]
+        theta = states[5:nDOF:end]
         Moments = forces[5:nDOF:end]
         W = states[3:nDOF:end]
         Lift = forces[3:nDOF:end]
@@ -366,12 +400,18 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
     #     COMPUTE COST FUNCS
     # ************************************************
     costFuncs = Dict() # initialize empty costFunc dictionary
+    if globsolverOptions["config"] == "wing"
+        ADIM = constants.planformArea
+    elseif globsolverOptions["config"] == "t-foil" || globsolverOptions["config"] == "full-wing"
+        ADIM = 2 * constants.planformArea
+    end
+    qdyn = 0.5 * foil.ρ_f * foil.U∞^2
     if "wtip" in evalFuncs
-        w_tip = W[end]
+        w_tip = W[globsolverOptions["nNodes"]]
         costFuncs["wtip"] = w_tip
     end
     if "psitip" in evalFuncs
-        psi_tip = Ψ[end]
+        psi_tip = theta[globsolverOptions["nNodes"]]
         costFuncs["psitip"] = psi_tip
     end
     if "lift" in evalFuncs
@@ -383,16 +423,78 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         costFuncs["moment"] = TotalMoment
     end
     if "cl" in evalFuncs
-        CL = TotalLift / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea)
+        CL = TotalLift / (qdyn * ADIM)
         costFuncs["cl"] = CL
     end
     if "cmy" in evalFuncs
-        CM = TotalMoment / (0.5 * foil.ρ_f * foil.U∞^2 * constants.planformArea * mean(chordVec))
+        CM = TotalMoment / (qdyn * ADIM * mean(chordVec))
         costFuncs["cmy"] = CM
     end
     if "cd" in evalFuncs
         CD = 0.0
         costFuncs["cd"] = CD
+    end
+    if "cdi" in evalFuncs || "fxi" in evalFuncs
+        twist = theta[1:globsolverOptions["nNodes"]]
+        
+        clalpha, Fxi, CDi = HydroStrip.compute_glauert_circ(DVDict["s"], chordVec, deg2rad(DVDict["α₀"]), globsolverOptions["U∞"], globsolverOptions["nNodes"];
+        h=DVDict["s_strut"],
+        useFS=globsolverOptions["use_freeSurface"],
+        rho=globsolverOptions["ρ_f"],
+        twist=twist,
+        debug=globsolverOptions["debug"],
+        solverOptions=globsolverOptions, # TODO: this should probably happen on the solve mode too
+        )
+        
+        if "cdi" in evalFuncs
+            costFuncs["cdi"] = CDi
+        end
+        if "fxi" in evalFuncs
+            costFuncs["fxi"] = Fxi
+        end
+    end
+    # From Hörner Chapter 8
+    if "cdj" in evalFuncs || "fxj" in evalFuncs
+        tocbar = 0.5*(DVDict["toc"][1] + DVDict["toc_strut"][1])
+        CDt = 17*(tocbar)^2 - 0.05
+        dj = CDt * (qdyn*(tocbar*DVDict["c"][1])^2 )
+        CDj = dj / (qdyn * ADIM)
+        costFuncs["cdj"] = CDj
+        costFuncs["fxj"] = dj
+    end
+    # Hörner CHapter 10
+    if "cds" in evalFuncs || "fxs" in evalFuncs
+        t = DVDict["toc_strut"][end]*DVDict["c_strut"][end]
+        CDts = 0.24
+        ds = CDts * (qdyn * (t)^2 )
+        CDs = dj / (qdyn * ADIM)
+        costFuncs["cds"] = CDs
+        costFuncs["fxs"] = ds
+    end
+    # # TODO:
+    # if "cdw" in evalFuncs || "fxw" in evalFuncs
+    #     # rws = EQ 6.149 FALTINSEN thickness effect on wave resistance
+    #     # rwgamma = EQ 6.145 FALTINSEN wave resistance due to lift
+    # end
+    if "cdpr" in evalFuncs || "fxpr" in evalFuncs
+        if globsolverOptions["config"] == "wing" || globsolverOptions["config"] == "full-wing"
+            WSA = 2 * ADIM # both sides
+        elseif globsolverOptions["config"] == "t-foil"
+            WSA = 2 * ADIM + 2*DVDict["s_strut"] * mean(DVDict["c_strut"])
+        end
+        println("I'm not debugged")
+        # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
+        NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
+        Re = globsolverOptions["U∞"] * mean(chordVec) / NU
+        Ma = globsolverOptions["U∞"] / 1500
+        cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
+        xcmax = 0.3 # chordwise position of the maximum thickness
+        FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["Λ"])^0.28)
+        FF= mean(FF)
+        Df = qdyn*WSA*cfittc
+        Dpr = Df * FF
+        costFuncs["fxpr"] = Dpr
+        costFuncs["cdpr"] = Dpr / (qdyn * ADIM)
     end
 
     return costFuncs
@@ -521,8 +623,12 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
 
     elseif mode == "analytic" 
         # In the case of a linear elastic beam under static fluid loading, 
-        # dr/du = Ks - Kf
-        ∂r∂u = CONSTANTS.Kmat - AICnoBC[NDOF+1:end,NDOF+1:end]
+        # dr/du = Ks + Kf
+        # NOTE Kf = AIC matrix
+        # where AIC * states = forces on RHS (external)
+        # TODO: longer term, the AIC is influenced by the structural states b/c of the twist distribution
+        ∂r∂u = CONSTANTS.Kmat + CONSTANTS.AICmat[1:end.∉[globalDOFBlankingList],1:end.∉[globalDOFBlankingList]]
+
         # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
         # converge to the same solution as the RAD, which only takes 2 NL iterations.
     else
@@ -555,10 +661,16 @@ function compute_residuals(structuralStates)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     elseif CONSTANTS.elemType == "COMP2"
-        completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
+        completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType; solverOptions=globsolverOptions)
         foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType; STRUT=STRUT, solverOptions=globsolverOptions)
         F = -CONSTANTS.AICmat * foilTotalStates
-        FOut = F[10:end]
+        if globsolverOptions["config"] == "t-foil"
+            FOut = F[1:end-NDOF]
+        elseif globsolverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+            FOut = F[NDOF+1:end]
+        else
+            error("Unsupported config: ", globsolverOptions["config"])
+        end
     else
         error("Invalid element type")
         println(CONSTANTS.elemType)

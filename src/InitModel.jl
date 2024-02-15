@@ -92,7 +92,13 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα = HydroStrip.compute_glauert_circ(span, c, deg2rad(α₀), solverOptions["U∞"], nNodes)
+  clα = Vector{Float64}(undef, nNodes)
+  clα, _, _ = HydroStrip.compute_glauert_circ(span, c, deg2rad(α₀), solverOptions["U∞"], nNodes;
+    h=span_strut,
+    useFS=solverOptions["use_freeSurface"],
+    rho=solverOptions["ρ_f"],
+    solverOptions=solverOptions,
+  )
 
   # ---------------------------
   #   Build final model
@@ -142,15 +148,17 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
     # ---------------------------
     #   Hydrodynamics
     # ---------------------------
-    clα = HydroStrip.compute_glauert_circ(span_strut, c_strut, deg2rad(0.001), solverOptions["U∞"], nNodesStrut)
+    clα, _, _ = HydroStrip.compute_glauert_circ(span_strut, c_strut, deg2rad(0.001), solverOptions["U∞"], nNodesStrut)
 
     # ---------------------------
     #   Build final model
     # ---------------------------
     strutModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, beta, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], solverOptions["nNodeStrut"], constitutive)
 
-  else
+  elseif solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
     strutModel = nothing
+  else
+    error("Unsupported config: ", solverOptions["config"])
   end
 
 

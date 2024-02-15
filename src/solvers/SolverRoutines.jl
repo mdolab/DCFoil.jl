@@ -30,7 +30,11 @@ const RealOrComplex = Union{Real,Complex}
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="analytic", is_cmplx=false)
+function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, 
+    mode="analytic", 
+    # mode="RAD",
+    is_cmplx=false
+    )
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
@@ -122,6 +126,8 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
             staticOffset_strut = transMatL2G * staticOffset_strut
 
             staticOffset_junctionNode = staticOffset_strut + staticOffset_wing
+        elseif solverOptions["config"] == "full-wing" || solverOptions["config"] == "wing"
+            staticOffset_junctionNode = staticOffset_wing
         end
     else
         angleDefault = 0.0
@@ -1133,6 +1139,9 @@ function do_akima_interp(xpt, ypt, xq, Δx=1e-7)
 end
 
 function do_linear_interp(xpt, ypt, xqvec)
+    """
+    KNOWN BUG, DOES NOT LIKE NEGATIVE DOMAINS
+    """
     npt = length(xpt)
     n = length(xqvec)
     y = zeros(n)

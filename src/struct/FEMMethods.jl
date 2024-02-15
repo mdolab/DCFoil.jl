@@ -8,6 +8,7 @@ Module with generic FEM methods
 
 # KNOWN BUGS:
     span derivative may result in array size being wrong
+    NaN shows up in structural matrices that breaks the solve
 """
 
 
@@ -84,16 +85,71 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
             elemConn_z[ee, 1] = ee
             elemConn_z[ee, 2] = ee + 1
         end
+    elseif config == "full-wing"
+        mesh = Array{Float64}(undef, 2 * nElem + 1, 3)
+        elemConn = Array{Int64}(undef, 2 * nElem, 2)
+        # Simple meshes starting from junction at zero
+        # Mesh foil wing
+        dl = span / (nElem) # dist btwn nodes
+        foilwingMesh = collect(0:dl:span)
+        if abs(rot) < MEPSLARGE # no rotation, just a straight wing
+            elemCtr = 1 # elem counter
+            nodeCtr = 1 # node counter traversing nodes
+
+            # ************************************************
+            #     Wing mesh
+            # ************************************************
+            # Add foil wing first
+            for nodeIdx in 1:nElem
+                mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeIdx
+                elemConn[nodeCtr, 2] = nodeIdx + 1
+                elemCtr += 1
+                nodeCtr += 1
+            end
+
+            # Grab end of wing
+            mesh[nodeCtr, :] = [0.0, foilwingMesh[end], 0.0]
+            nodeCtr += 1
+
+            # Mirror wing nodes skipping first, but adding junction connectivity
+            elemConn[elemCtr, 1] = 1
+            elemConn[elemCtr, 2] = nodeCtr
+            for nodeIdx in 2:nElem
+                mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeCtr
+                elemConn[nodeCtr, 2] = nodeCtr + 1
+                elemCtr += 1
+                nodeCtr += 1
+            end
+
+            # Grab end of wing
+            mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
+            elemConn[elemCtr, 1] = nodeCtr - 1
+            elemConn[elemCtr, 2] = nodeCtr
+            nodeCtr += 1
+            elemCtr += 1
+
+            # in the extreme case of 3 elements, elem conn is wrong
+            if (2 * nElem == 2)
+                elemConn[2, 1] = 1
+                elemConn[2, 2] = 3
+            end
+        end
+
+        return mesh, elemConn
     elseif config == "t-foil"
         mesh = Array{Float64}(undef, 2 * nElem + nElStrut + 1, 3)
         elemConn = Array{Int64}(undef, 2 * nElem + nElStrut, 2)
         # Simple meshes starting from junction at zero
         # Mesh foil wing
         dl = span / (nElem) # dist btwn nodes
-        foilwingMesh = collect(0:dl:span)
+        # foilwingMesh = collect(0:dl:span)
+        foilwingMesh = LinRange(0, span, nElem + 1)
         # Mesh strut
         dlStrut = spanStrut / (nElStrut)
-        strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
+        # strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
+        strutMesh = LinRange(dlStrut, spanStrut, nElStrut)
         # This is basically avoiding double counting the nodes
         if abs(rot) < MEPSLARGE # no rotation, just a straight wing
             elemCtr = 1 # elem counter
@@ -152,6 +208,12 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
                 nodeIdx += 1
                 elemCtr += 1
                 nodeCtr += 1
+            end
+
+            # in the extreme case of 3 elements, elem conn is wrong
+            if (2 * nElem + nElStrut == 3)
+                elemConn[2, 1] = 1
+                elemConn[2, 2] = 3
             end
         else
             println("Rotation of ", rot, " radians")
@@ -284,7 +346,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
                     EIIPₛ = FOIL.EIIPₛ[wingElem]
                     EAₛ = FOIL.EAₛ[wingElem]
                     GJₛ = FOIL.GJₛ[wingElem]
-                    Kₛ = FOIL.Kₛ[wingElem]
+                    Kₛ = -FOIL.Kₛ[wingElem] # negative to account for the opposite sign in the strut
                     Sₛ = FOIL.Sₛ[wingElem]
                     mₛ = FOIL.mₛ[wingElem]
                     iₛ = FOIL.Iₛ[wingElem]
@@ -304,6 +366,20 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
                     # These are currently DVs
                     ab = ab_strut[strutElem]
                     x_αb = x_αb_strut[strutElem]
+                end
+            elseif config == "full-wing"
+                if elemIdx > nElemWing # port wing
+                    wingElem = elemIdx - nElemWing
+                    EIₛ = FOIL.EIₛ[wingElem]
+                    EIIPₛ = FOIL.EIIPₛ[wingElem]
+                    EAₛ = FOIL.EAₛ[wingElem]
+                    GJₛ = FOIL.GJₛ[wingElem]
+                    Kₛ = -FOIL.Kₛ[wingElem] #MATERIAL COUPLING MUST BE NEGATED (I debugged this)
+                    Sₛ = FOIL.Sₛ[wingElem]
+                    mₛ = FOIL.mₛ[wingElem]
+                    iₛ = FOIL.Iₛ[wingElem]
+                    ab = abVec[wingElem]
+                    x_αb = x_αbVec[wingElem]
                 end
             end
         end
@@ -399,16 +475,20 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     return globalK, globalM, globalF
 end
 
-function get_fixed_dofs(elemType::String, BCCond="clamped"; solverOptions=Dict())
+function get_fixed_dofs(elemType::String, BCCond="clamped"; solverOptions=Dict("config" => "wing"))
     """
     Depending on the elemType, return the indices of fixed nodes
     """
     if BCCond == "clamped"
-        if solverOptions["config"] == "wing"
+        if solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
             fixedDOFs = 1:BeamElement.NDOF
         elseif solverOptions["config"] == "t-foil"
             nElemTot = (solverOptions["nNodes"] - 1) * 2 + solverOptions["nNodeStrut"] - 1
-            fixedDOFs = (nElemTot+1)*BeamElement.NDOF:-1:(nElemTot-1)*BeamElement.NDOF+1
+            nNodeTot = nElemTot + 1
+            fixedDOFs = nNodeTot*BeamElement.NDOF:-1:nElemTot*BeamElement.NDOF+1
+
+        else
+            error("config not recognized")
         end
 
     else
@@ -422,7 +502,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; solverOptions=Dict()
     return fixedDOFs
 end
 
-function apply_tip_load!(globalF, elemType, transMat, loadType="force")
+function apply_tip_load!(globalF, elemType, transMat, loadType="force"; solverOptions=Dict("config" => "wing"))
     """
     Routine for applying unit tip load to the end node
         globalF
@@ -467,7 +547,22 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
     if elemType == "COMP2"
         FLocalVec = transMat[1:m÷2, 1:n÷2]' * FLocalVec
     end
-    globalF[end-length(FLocalVec)+1:end] += FLocalVec * MAG
+    if solverOptions["config"] == "wing"
+        globalF[end-NDOF+1:end] += FLocalVec * MAG
+    elseif solverOptions["config"] == "full-wing" || solverOptions["config"] == "t-foil"
+        nElemWing = solverOptions["nNodes"] - 1
+        # STBD wing
+        inodestart = nElemWing + 1
+        idofstart = (inodestart - 1) * NDOF + 1
+        globalF[idofstart:idofstart+NDOF-1] += FLocalVec * MAG
+        # Port wing
+        inodestart = nElemWing * 2 + 1
+        idofstart = (inodestart - 1) * NDOF + 1
+        globalF[idofstart:idofstart+NDOF-1] += FLocalVec * MAG
+    else
+        error("config not recognized")
+
+    end
 
 end
 
@@ -545,7 +640,7 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     return newK, newM, newF
 end
 
-function put_BC_back(q, elemType::String, BCType="clamped")
+function put_BC_back(q, elemType::String, BCType="clamped"; solverOptions=Dict("config" => "wing"))
     """
     appends the BCs back into the solution
     """
@@ -554,7 +649,13 @@ function put_BC_back(q, elemType::String, BCType="clamped")
         if elemType == "BT2"
             uSol = vcat([0, 0, 0, 0], q)
         elseif elemType == "COMP2"
-            uSol = vcat(zeros(9), q)
+            if solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+                uSol = vcat(zeros(9), q)
+            elseif solverOptions["config"] == "t-foil"
+                uSol = vcat(q, zeros(9))
+            else
+                error("Unsuppported config")
+            end
         else
             println("Not working")
             exit()
