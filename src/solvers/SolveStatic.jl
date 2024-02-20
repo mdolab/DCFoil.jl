@@ -105,7 +105,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
 
     # --- Initialize states ---
     u = zeros(length(globalF))
-    
+
     # if solverOptions["debug"]
     #     if elemType == "COMP2"
     #         # Get transformation matrix for the tip load
@@ -128,11 +128,11 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     #     FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType; solverOptions=solverOptions)
     #     global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
     #     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-    
+
     #     # # --- Debug printout of matrices in human readable form after BC application ---
     #     # writedlm(outputDir * "K.csv", K,",")
     #     # writedlm(outputDir * "M.csv", M,",")
-    
+
     #     # ---------------------------
     #     #   Pre-solve system
     #     # ---------------------------
@@ -166,7 +166,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # ---------------------------
     ChainRulesCore.ignore_derivatives() do
         global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
-    end 
+    end
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
     # # --- Debug printout of matrices in human readable form after BC application ---
@@ -182,7 +182,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     u[globalDOFBlankingList] .= 0.0
     idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
     u[idxNotBlanked] .= q
-    
+
     # hydrolift = fTractions[3:NDOF:end]
     # println("hydro lift on half wing", hydrolift[1:solverOptions["nNodes"]])
     # println("hydro moments", fTractions[5:NDOF:end])
@@ -194,7 +194,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # --- Assign constants accessible in this module ---
     # This is needed for derivatives!
     derivMode = "RAD"
-    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), zeros(2,2), elemType, structMesh, AIC, derivMode, planformArea)
+    global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
 
     # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
@@ -365,11 +365,11 @@ function postprocess_statics(states, forces)
     return obj
 end
 
-function write_tecplot(DVDict, STATICSOL, FEMESH, outputDir="./OUTPUT/";solverOptions=Dict("config"=>"wing"))
+function write_tecplot(DVDict, STATICSOL, FEMESH, outputDir="./OUTPUT/"; solverOptions=Dict("config" => "wing"))
     """
     General purpose tecplot writer wrapper for flutter solution
     """
-    TecplotIO.write_deflections(DVDict, STATICSOL, FEMESH, outputDir;solverOptions=solverOptions)
+    TecplotIO.write_deflections(DVDict, STATICSOL, FEMESH, outputDir; solverOptions=solverOptions)
 
 end
 # ==============================================================================
@@ -436,16 +436,16 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
     end
     if "cdi" in evalFuncs || "fxi" in evalFuncs
         twist = theta[1:globsolverOptions["nNodes"]]
-        
+
         clalpha, Fxi, CDi = HydroStrip.compute_glauert_circ(DVDict["s"], chordVec, deg2rad(DVDict["α₀"]), globsolverOptions["U∞"], globsolverOptions["nNodes"];
-        h=DVDict["s_strut"],
-        useFS=globsolverOptions["use_freeSurface"],
-        rho=globsolverOptions["ρ_f"],
-        twist=twist,
-        debug=globsolverOptions["debug"],
-        solverOptions=globsolverOptions, # TODO: this should probably happen on the solve mode too
+            h=DVDict["s_strut"],
+            useFS=globsolverOptions["use_freeSurface"],
+            rho=globsolverOptions["ρ_f"],
+            twist=twist,
+            debug=globsolverOptions["debug"],
+            solverOptions=globsolverOptions, # TODO: this should probably happen on the solve mode too
         )
-        
+
         if "cdi" in evalFuncs
             costFuncs["cdi"] = CDi
         end
@@ -455,19 +455,19 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
     end
     # From Hörner Chapter 8
     if "cdj" in evalFuncs || "fxj" in evalFuncs
-        tocbar = 0.5*(DVDict["toc"][1] + DVDict["toc_strut"][1])
-        CDt = 17*(tocbar)^2 - 0.05
-        dj = CDt * (qdyn*(tocbar*DVDict["c"][1])^2 )
+        tocbar = 0.5 * (DVDict["toc"][1] + DVDict["toc_strut"][1])
+        CDt = 17 * (tocbar)^2 - 0.05
+        dj = CDt * (qdyn * (tocbar * DVDict["c"][1])^2)
         CDj = dj / (qdyn * ADIM)
         costFuncs["cdj"] = CDj
         costFuncs["fxj"] = dj
     end
     # Hörner CHapter 10
     if "cds" in evalFuncs || "fxs" in evalFuncs
-        t = DVDict["toc_strut"][end]*DVDict["c_strut"][end]
+        t = DVDict["toc_strut"][end] * DVDict["c_strut"][end]
         CDts = 0.24
-        ds = CDts * (qdyn * (t)^2 )
-        CDs = dj / (qdyn * ADIM)
+        ds = CDts * (qdyn * (t)^2)
+        CDs = ds / (qdyn * ADIM)
         costFuncs["cds"] = CDs
         costFuncs["fxs"] = ds
     end
@@ -480,7 +480,7 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         if globsolverOptions["config"] == "wing" || globsolverOptions["config"] == "full-wing"
             WSA = 2 * ADIM # both sides
         elseif globsolverOptions["config"] == "t-foil"
-            WSA = 2 * ADIM + 2*DVDict["s_strut"] * mean(DVDict["c_strut"])
+            WSA = 2 * ADIM + 2 * DVDict["s_strut"] * mean(DVDict["c_strut"])
         end
         println("I'm not debugged")
         # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
@@ -489,9 +489,13 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         Ma = globsolverOptions["U∞"] / 1500
         cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
         xcmax = 0.3 # chordwise position of the maximum thickness
-        FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["Λ"])^0.28)
-        FF= mean(FF)
-        Df = qdyn*WSA*cfittc
+        # # --- Raymer equation 12.30 ---
+        # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["Λ"])^0.28)
+        # --- Torenbeek 1990 ---
+        # First term is increase in skin friction due to thickness and quartic is separation drag
+        FF = 1 + 2.7 .* DVDict["toc"] + 100 .* DVDict["toc"] .^ 4
+        FF = mean(FF)
+        Df = qdyn * WSA * cfittc
         Dpr = Df * FF
         costFuncs["fxpr"] = Dpr
         costFuncs["cdpr"] = Dpr / (qdyn * ADIM)
@@ -506,7 +510,7 @@ function get_sol(DVDict, solverOptions)
     """
     # Setup
     structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-    setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+        setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
 
     # Solve
     obj, SOL = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
@@ -621,13 +625,13 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
         # elseif mode == "RAD" # Reverse automatic differentiation
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
-    elseif mode == "analytic" 
+    elseif mode == "analytic"
         # In the case of a linear elastic beam under static fluid loading, 
         # dr/du = Ks + Kf
         # NOTE Kf = AIC matrix
         # where AIC * states = forces on RHS (external)
         # TODO: longer term, the AIC is influenced by the structural states b/c of the twist distribution
-        ∂r∂u = CONSTANTS.Kmat + CONSTANTS.AICmat[1:end.∉[globalDOFBlankingList],1:end.∉[globalDOFBlankingList]]
+        ∂r∂u = CONSTANTS.Kmat + CONSTANTS.AICmat[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
 
         # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
         # converge to the same solution as the RAD, which only takes 2 NL iterations.

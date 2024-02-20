@@ -5,9 +5,13 @@
 # @Desc    :   Main executable for running DCFoil
 
 using Printf, Dates, Profile
-include("src/DCFoil.jl")
 
+
+# This is the way to import it manually in dev mode
+include("src/DCFoil.jl")
 using .DCFoil
+# Import static package
+# using DCFoil
 
 # ==============================================================================
 # Setup hydrofoil model and solver settings
@@ -52,23 +56,24 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # ************************************************
 # Anything in DVDict is what we calculate derivatives wrt
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "α₀" => 2.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
-    "c" => 0.1 * ones(nNodes), # chord length [m]
-    "s" => 0.3, # semispan [m]
+    # "c" => 0.14 * ones(nNodes), # chord length [m]
+    "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
+    "s" => 0.333, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
+    "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (mean)
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "θ" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
-    "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
-    "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+    "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -82,8 +87,9 @@ solverOptions = Dict(
     # ---------------------------
     #   General appendage options
     # ---------------------------
-    "config" => "wing",
-    # "config" => "t-foil",
+    # "config" => "wing",
+    "config" => "t-foil",
+    # "config" => "full-wing",
     "nNodes" => nNodes, # number of nodes on foil half wing
     "nNodeStrut" => nNodesStrut, # nodes on strut
     "rotation" => 0.0, # deg
@@ -92,8 +98,8 @@ solverOptions = Dict(
     # ---------------------------
     #   Flow
     # ---------------------------
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "U∞" => 18.0, # free stream velocity [m/s]
+    "ρ_f" => 1025.0, # fluid density [kg/m³]
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
@@ -145,6 +151,6 @@ solverOptions["outputDir"] = outputDir
 #                         Call DCFoil
 # ==============================================================================
 DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
-DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions) 
-costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+SOL = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")

@@ -261,7 +261,7 @@ function test_SolveStaticIso()
     return rel_err
 end # test_SolveStaticIso
 
-function test_SolveStaticComp()
+function test_SolveStaticComp(DVDict, solverOptions)
     """
     Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
@@ -278,51 +278,11 @@ function test_SolveStaticComp()
     # ************************************************
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
-    DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
-        "s_strut" => 0.4, # from Yingqian
-    )
-    solverOptions = Dict(
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "U∞" => 6.0, # free stream velocity [m/s]
-        # --- I/O ---
-        "name" => "akcabay",
-        "debug" => false,
-        "outputDir" => "test_out/",
-        # --- General solver options ---
-        "config" => "wing",
-        # "config" => "t-foil",
-        "nNodes" => nNodes, # number of nodes on foil half wing
-        "nNodeStrut" => 10, # nodes on strut
-        "use_tipMass" => false,
-        "material" => "cfrp", # preselect from material library
-        "rotation" => 0.0, # deg
-        # --------------------------------
-        #   Flow
-        # --------------------------------
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        # --- Static solve ---
-        "run_static" => true,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 0:0.1:10,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => false,
-        "nModes" => 5,
-        "uRange" => nothing,
-        "config" => "wing",
-    )
+    DVDict["c"] = 0.1 * ones(nNodes) # chord length [m]
+    DVDict["ab"] => 0 * ones(nNodes) # dist from midchord to EA [m]
+    DVDict["x_αb"] => 0 * ones(nNodes) # static imbalance [m]
+    DVDict["toc"] => 0.12 * ones(nNodes) # static imbalance [m]
+    solverOptions["nNodes"]= nNodes # number of nodes on foil half wing
     mkpath(solverOptions["outputDir"])
 
     # ************************************************
@@ -343,9 +303,11 @@ function test_SolveStaticComp()
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
+        DVDict["toc"] = 0.12 * ones(nNodes)
 
-        DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+        DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
+        SOL = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
+        costFuncs = DCFoil.evalFuncs(nothing, evalFuncs, solverOptions)
 
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
@@ -398,7 +360,7 @@ end # end test_SolveForcedComp
 # ==============================================================================
 #                         Test Flutter Solver
 # ==============================================================================
-function test_modal()
+function test_modal(DVDict, solverOptions)
     """
     Test modal solver
     NOTE: only testing the frequencies bc it is assumed the eigenvector coming out is right
@@ -414,42 +376,6 @@ function test_modal()
     # ************************************************
     nNodes = 40 # spatial nodes
 
-    # --- Yingqian's Viscous FSI Paper (2019) ---
-    DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "c" => 0.0925 * ones(nNodes), # chord length [m]
-        "s" => 0.2438, # semispan [m]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.03459, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(0), # fiber angle global [rad]
-    )
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "",
-        # --- General solver options ---
-        "nNodes" => nNodes,
-        "use_tipMass" => false,
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        "material" => "cfrp", # preselect from material library
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 0:0.1:10,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => true,
-        "run_flutter" => false,
-        "nModes" => 5,
-        "uRange" => nothing,
-    )
     # --- Mesh ---
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = nNodes - 1

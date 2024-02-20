@@ -985,3 +985,47 @@ function test_FECOMP2(DVDict, solverOptions)
 end
 
 # test_FECOMP2()
+
+function test_fullwing(DVDict, solverOptions)
+
+	testAngle = 0.0 # [deg] angle of rotation from default (NONZERO WORKS  )
+	angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+
+	axisDefault = "z"
+
+	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+
+	nElem = nNodes - 1
+	constitutive = FOIL.constitutive
+	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=testAngle)
+
+	# ---------------------------
+	#   Tip force only
+	# ---------------------------
+	elemType = "COMP2"
+	globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
+	abVec = DVDict["ab"]
+	x_αbVec = DVDict["x_αb"]
+	chordVec = DVDict["c"]
+	ebVec = 0.25 * chordVec .+ abVec
+	globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+	T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+	# T = T1
+	T = I(3)
+	transMatL2G = [
+		T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+		zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+		zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+		zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+		zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+		zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+	]
+	FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, "force")
+
+	u = copy(globalF)
+
+
+	K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
+	u3 = FEMMethods.solve_structure(K, M, F)
+end

@@ -61,10 +61,56 @@ args = parser.parse_args()
 # ==============================================================================
 dataDir = "../OUTPUT/"
 # labels = ["NOFS", "FS"]
-labels = ["-15", "+15", "0"]
+labels = ["-15", "0", "+15"]
 cm, fs_lgd, fs, ls, markers = set_my_plot_settings(args.is_paper)
 alphas = np.arange(-5, 15.5, 0.5)
-fiberangles = [0.0, 15.0, -15.0]
+fiberangles = [-15, 0.0, 15.0]
+
+# ************************************************
+#     EXPERIMENTAL DATA
+# ************************************************
+CLCDX = [
+    0.015514018691588782,
+    0.01775700934579439,
+    0.022242990654205604,
+    0.02785046728971962,
+    0.031495327102803734,
+    0.038130841121495326,
+    0.04514018691588785,
+    0.05523364485981308,
+]
+CLCDY = [
+    0.013011152416356864,
+    0.08884758364312273,
+    0.19144981412639406,
+    0.2568773234200744,
+    0.35650557620817847,
+    0.4204460966542751,
+    0.5423791821561339,
+    0.6241635687732342,
+]
+
+CLALPHAX = [
+    -0.1904761904761907,
+    0.8095238095238093,
+    1.746031746031746,
+    2.7777777777777777,
+    3.761904761904762,
+    4.809523809523809,
+    5.7777777777777795,
+    6.746031746031746,
+]
+
+CLALPHAY = [
+    0.010905730129390001,
+    0.0878003696857671,
+    0.18835489833641406,
+    0.254898336414048,
+    0.3554528650646949,
+    0.41903881700554524,
+    0.5388170055452863,
+    0.6231053604436227,
+]
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -103,13 +149,9 @@ if __name__ == "__main__":
         caseFSDirs = []
         if args.cases is not None:
             for alpha in alphas:
-                caseDirs.append(
-                    dataDir + args.cases + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
-                )
+                caseDirs.append(dataDir + args.cases + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}")
                 caseFSDirs.append(
-                    dataDir
-                    + args.cases.replace("t-foil", "t-foil-fs")
-                    + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
+                    dataDir + args.cases.replace("t-foil", "t-foil-fs") + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
                 )
         else:
             raise ValueError("Please specify a case to run postprocessing on")
@@ -161,9 +203,7 @@ if __name__ == "__main__":
     dosave = not not fname
 
     # Create figure object
-    fig, axes = plt.subplots(
-        nrows=1, ncols=2, sharey=True, constrained_layout=True, figsize=(14, 6)
-    )
+    fig, axes = plt.subplots(nrows=1, ncols=2, sharey=True, constrained_layout=True, figsize=(14, 6))
 
     for ii, fiberang in enumerate(fiberangles):
         axes[0].plot(
@@ -172,12 +212,14 @@ if __name__ == "__main__":
             label=f"$\\theta_f={fiberang}^" + "{\\circ}$",
             c=cm[ii],
         )
+        cdtick = np.min(CDDict[fiberang])
         axes[0].plot(
             CDFSDict[fiberang],
             CLFSDict[fiberang],
             # label=f"$\\theta_f={fiberang}^" + "{\\circ}$",
             c=cm[ii],
             ls="--",
+            # alpha=0.3,
         )
         axes[1].plot(
             AlfaList,
@@ -191,16 +233,18 @@ if __name__ == "__main__":
             # label=f"$\\theta_f{fiberang}^" + "{\\circ}$",
             c=cm[ii],
             ls="--",
+            # alpha=0.3,
         )
 
+    axes[0].plot(CLCDX, CLCDY, "ko", label="Experiment (Ref. 1)")
+    axes[1].plot(CLALPHAX, CLALPHAY, "ko", label="Exp.")
     axes[1].axvline(2.0, color="gray", alpha=0.5)
     axes[1].set_xticks([-5, 0, 2, 10, 15])
-    axes[0].set_xlim(0.0, 0.5)
-    axes[0].set_ylim(-0.25, 1.0)
+    axes[0].set_xticks([cdtick, 0.1, 0.2, 0.3, 0.4, 0.5])
+    axes[0].set_xlim(0.0, 0.3)
+    axes[0].set_ylim(-0.15, 0.8)
 
-    axes[0].legend(
-        fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1
-    )
+    axes[0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
     axes[0].set_xlabel("$C_D$")
     axes[0].set_ylabel("$C_L$", rotation="horizontal", ha="right")

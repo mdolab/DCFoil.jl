@@ -13,6 +13,7 @@ struct StaticSolution{T<:Float64}
     structStates::Vector{T}
     fHydro::Vector{T}
 end
+
 struct FlutterSolution{T<:Float64}
     eigs_r::Matrix{T} # dimensional eigvals
     eigs_i::Matrix{T} # dimensional eigvals

@@ -7,13 +7,14 @@ using Printf
 include("../src/hydro/HydroStrip.jl")
 using .HydroStrip # Using the Hydro module
 include("../src/solvers/DCFoilSolution.jl")
-include("../src/constants/SolutionConstants.jl")
 include("../src/struct/FEMMethods.jl")
-include("../src/InitModel.jl")
-include("../src/solvers/SolveStatic.jl")
 using .FEMMethods # Using the FEMMethods module just for some mesh gen methods
+include("../src/InitModel.jl")
 using .InitModel # Using the InitModel module
-using .SolutionConstants, .SolveStatic
+include("../src/constants/SolutionConstants.jl")
+using .SolutionConstants
+include("../src/solvers/SolveStatic.jl")
+using .SolveStatic
 
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -38,15 +39,17 @@ function test_stiffness()
     clα = 2 * π
     b = 0.5
     eb = 0.25
-    ab = 0
-    U = 5
+    ab = 0.0
+    U = 5.0
     Λ = 45 * π / 180 # 45 deg
+    clambda = cos(Λ)
+    slambda = sin(Λ)
     ω = 1e10 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
     CKVec = HydroStrip.compute_theodorsen(k)
     Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
-    Matrix, SweepMatrix = HydroStrip.compute_node_stiff(clα, b, eb, ab, U, Λ, ρ, Ck)
+    Matrix, SweepMatrix = HydroStrip.compute_node_stiff_faster(clα, b, eb, ab, U, clambda, slambda, ρ, Ck)
 
     # show(stdout, "text/plain", real(Matrix))
     # show(stdout, "text/plain", imag(Matrix))
@@ -85,15 +88,17 @@ function test_damping()
     clα = 2 * π
     b = 0.5
     eb = 0.25
-    ab = 0
-    U = 5
+    ab = 0.0
+    U = 5.0
     Λ = 45 * π / 180 # 45 deg
+    clambda = cos(Λ)
+    slambda = sin(Λ)
     ω = 1e10 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
     CKVec = HydroStrip.compute_theodorsen(k)
     Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2] # TODO: for now, put it back together so solve is easy to debug
-    Matrix, SweepMatrix = HydroStrip.compute_node_damp(clα, b, eb, ab, U, Λ, ρ, Ck)
+    Matrix, SweepMatrix = HydroStrip.compute_node_damp_faster(clα, b, eb, ab, U, clambda, slambda, ρ, Ck)
 
     # --- Relative error ---
     answers = vec(real(Matrix)) # put computed solutions here
@@ -246,4 +251,14 @@ function test_AICs()
     return AIC, fHydro
 end
 
-AIC, fHydro = test_AICs()
+# function run_hydrofoil()
+#     chordVec = ones(10)
+#     alpha = 1.0
+#     Uinf = 5.0
+#     clalpha, cl, gamma = HydroStrip.compute_spanwise_vortex(semispan, chordVec, alpha, Uinf, nNodes, "elliptical")
+#     clalpha, cl, gamma = HydroStrip.compute_spanwise_vortex(semispan, chordVec, alpha, Uinf, nNodes, "chord")
+
+#     # plotTODO: PICKUP HERE WITH PLOTTING AND DOING FS EFFECT
+# end
+
+# AIC, fHydro = test_AICs()

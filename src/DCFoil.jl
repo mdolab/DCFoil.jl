@@ -8,34 +8,41 @@
 """
 module DCFoil
 
-
-
 # --- Libraries ---
-include("./solvers/SolveStatic.jl")
-include("./solvers/SolveForced.jl")
-include("./solvers/SolveFlutter.jl")
-include("./io/TecplotIO.jl")
-include("./InitModel.jl")
-include("./struct/FEMMethods.jl")
-
 using JSON
 using Printf
-using .InitModel
+
+include("./solvers/SolveStatic.jl")
+using .SolveStatic
+
+include("./solvers/SolveForced.jl")
+using .SolveForced
+
+include("./solvers/SolveFlutter.jl")
+using .SolveFlutter
+
+include("./io/TecplotIO.jl")
 using .TecplotIO
+
+include("./InitModel.jl")
+using .InitModel
+
+include("./struct/FEMMethods.jl")
 using .FEMMethods
-using .SolveStatic, .SolveForced, .SolveFlutter
 
 # --- Public functions ---
 # Don't need 'DCFoil.' prefix when importing
-export run_model, evalFuncs, evalFuncsSens
+export init_model, run_model, evalFuncs, evalFuncsSens
 
 # ==============================================================================
 #                         API functions
 # ==============================================================================
-function init_model(DVDict, evalFuncs; solverOptions=Dict())
+function init_model(DVDict, evalFuncs; solverOptions)
     """
     Things that need to be done before running the model.
     Global vars are used in run_model
+
+    TODOS: make it so it returns the init model struct (better memory handling)
     """
     # ---------------------------
     #   Default options
@@ -64,10 +71,12 @@ function init_model(DVDict, evalFuncs; solverOptions=Dict())
     # ---------------------------
     global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = FOIL.nNodes - 1
-    if solverOptions["config"] == "wing"
+    if solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
         nElStrut = 0
     elseif solverOptions["config"] == "t-foil"
         nElStrut = STRUT.nNodes - 1
+    else
+        error("Unsupported config: ", solverOptions["config"])
     end
     global structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"];
         config=solverOptions["config"],
@@ -89,16 +98,21 @@ function init_model(DVDict, evalFuncs; solverOptions=Dict())
     end
 end
 
-function run_model(DVDict, evalFuncs; solverOptions=Dict())
+function run_model(DVDict::Dict, evalFuncs::Vector{String}; solverOptions=Dict())
     """
     Runs the model but does not return anything.
     The solution structures hang around as global variables.
+
+    TODOS: make it so it returns the solution struct
     """
     # ==============================================================================
     #                         Static hydroelastic solution
     # ==============================================================================
     if solverOptions["run_static"]
         global STATSOL = SolveStatic.solve(FEMESH, DVDict, evalFuncs, solverOptions)
+        if solverOptions["writeTecplotSolution"]
+            SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; solverOptions=solverOptions)
+        end
     end
 
     # ==============================================================================
@@ -117,18 +131,22 @@ function run_model(DVDict, evalFuncs; solverOptions=Dict())
             SolveFlutter.write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, structMesh, outputDir)
         end
     end
+    global FLUTTERSOL = nothing
     if solverOptions["run_flutter"]
         global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
         if solverOptions["writeTecplotSolution"]
             SolveFlutter.write_tecplot(DVDict, FLUTTERSOL, structMesh, outputDir)
         end
     end
+
+    return FLUTTERSOL
 end
 
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(evalFuncs, solverOptions)
+# function evalFuncs(evalFuncs::Vector{String}, solverOptions=Dict())
+function evalFuncs(FLUTTERSOL, evalFuncs::Vector{String}, solverOptions=Dict())
     """
     Common interface to compute cost functions
 
@@ -148,6 +166,18 @@ function evalFuncs(evalFuncs, solverOptions)
         "moment"
         "cl"
         "cmy"
+        # Lift-induced drag
+        "cdi"
+        "fxi"
+        # Junction drag (empirical relation interference)
+        "cdj"
+        "fxj"
+        # Spray drag
+        "cds"
+        "fxs"
+        # Profile drag
+        "cdpr"
+        "fxpr"
     ]
     forcedCostFuncs = [
         "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
@@ -197,7 +227,7 @@ function evalFuncs(evalFuncs, solverOptions)
     return evalFuncsDict
 end # evalFuncs
 
-function evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="FiDi")
+function evalFuncsSens(DVDict::Dict, evalFuncs::Vector{String}, solverOptions=Dict(); mode="FiDi")
 
     # # ---------------------------
     # #   Mesh generation
@@ -220,5 +250,11 @@ function evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="FiDi")
 
     return costFuncsSensDict
 end
+
+
+# precompile(init_model, (Dict, Vector{String},))
+# precompile(run_model, (Dict, Vector{String},))
+# precompile(evalFuncs, (Vector{String}, Dict,))
+# precompile(evalFuncsSens, (Dict, Vector{String}, Dict,))
 
 end # module
