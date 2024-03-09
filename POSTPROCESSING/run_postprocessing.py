@@ -325,9 +325,9 @@ if __name__ == "__main__":
                 R_r=evecs_r,
                 R_i=evecs_i,
             )
-            # breakpoint()
             # You only need to know the stability point on one processor really
-            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
+            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U",altKey="pvals_i")
+
         # ************************************************
         #     Debug code
         # ************************************************
@@ -743,28 +743,28 @@ if __name__ == "__main__":
                 instabPts=instabPtsDict[key],
             )
 
-            # --- Set limits ---
-            # IMOCA60 paper
-            axes[0, 0].set_ylim(top=0.8, bottom=-4)
-            axes[1, 0].set_ylim(top=18.0)
-            # axes[0, 0].set_xlim(right=50, left=5)
-            # axes[0,0].set_xlim(right=40, left=25)
-            # axes[0, 0].set_ylim(top=1, bottom=-5)
-            # axes[0, 0].set_xlim(right=190, left=170)
-            # axes[0, 0].set_ylim(top=1, bottom=-5)
-            # axes[1, 1].set_xlim(right=1, left=-5)
-            # axes[1, 1].set_ylim(top=20, bottom=0)
-            axes[0, 0].set_xticks([10, 60] + [instabPtsDict[key][0][0] * 1.9438])
-            # axes[0, 0].set_xticks([10, 55])
+            # # --- Set limits ---
+            # # IMOCA60 paper
+            # axes[0, 0].set_ylim(top=0.8, bottom=-4)
+            # axes[1, 0].set_ylim(top=18.0)
+            # # axes[0, 0].set_xlim(right=50, left=5)
+            # # axes[0,0].set_xlim(right=40, left=25)
+            # # axes[0, 0].set_ylim(top=1, bottom=-5)
+            # # axes[0, 0].set_xlim(right=190, left=170)
+            # # axes[0, 0].set_ylim(top=1, bottom=-5)
+            # # axes[1, 1].set_xlim(right=1, left=-5)
+            # # axes[1, 1].set_ylim(top=20, bottom=0)
+            # axes[0, 0].set_xticks([10, 60] + [instabPtsDict[key][0][0] * 1.9438])
+            # # axes[0, 0].set_xticks([10, 55])
 
             # # akcabay limits
-            # # # swept flutter
-            # # axes[0, 0].set_ylim(top=50)
-            # # axes[0, 0].set_xlim(right=185)
-            # # axes[0, 0].set_xticks([170, 185] + [instabPtsDict[key][0][0]])
-            # # static div
-            # axes[0, 0].set_ylim(top=20)
-            # axes[0, 0].set_xticks([20, 40] + [instabPtsDict[key][0][0]])
+            # # swept flutter
+            # axes[0, 0].set_ylim(top=50)
+            # axes[0, 0].set_xlim(left=160,right=175)
+            # axes[0, 0].set_xticks([160, 175] + [instabPtsDict[key][0][0]])
+            # static div
+            axes[0, 0].set_ylim(top=20)
+            axes[0, 0].set_xticks([20, 40] + [instabPtsDict[key][0][0]])
 
         dosave = not not fname
         plt.show(block=(not dosave))

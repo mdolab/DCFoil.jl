@@ -8,8 +8,8 @@
 \usepackage[bookmarks=true,bookmarksnumbered=true,hidelinks]{hyperref}
 \usepackage{cleveref}
 \usepackage{algorithm2e}
-\usepackage[margin=1in]{geometry}
 \usepackage[compact]{titlesec}
+\graphicspath{{../figures/}}
 
 % --- Math ---
 \newcommand{\pp}[2]{\frac{\partial #1}{\partial #2}}
@@ -92,9 +92,10 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 \begin{figure}[htbp!]
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
-    \includegraphics[width=0.9\linewidth,clip,trim={0cm 0cm 0cm 10cm}]{keel-dcfoil.pdf}
+    \includegraphics[width=1.0\linewidth,clip,trim={0cm 0cm 0cm 10cm}]{keel-dcfoil.pdf}
+    \includegraphics[width=0.5\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dcfoilkeelfrontview.pdf}
     \caption{\label{fig:keel-dcfoil}
-        DCFoil modeling approach
+        DCFoil modeling approach for an appendage
     }
 \end{figure}
 
@@ -104,7 +105,7 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 %------------------------------------------------------------------------------
 \section{Coordinate system}
 % 
-Flow is in the $x$-direction, span is in the $y$-direction, and the vertical direction is $z$.
+The appendage coordinate system is flow is in the $x$-direction, span is in the $y$-direction, and the vertical direction is $z$.
 
 %------------------------------------------------------------------------------
 \clearpage
@@ -137,13 +138,19 @@ These relations do not restrict chordwise rigidity (camber), but they do assume 
 
 The flexural stiffnesses $D_{ij}$ (6x6 matrix) come via CLT
 \begin{align}
-    D_{11} & = Q_{11}\cos^4(\theta_f)+2\left( Q_{12}+2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{22}\sin^4(\theta_f)                             \\
-    D_{22} & = Q_{11}\sin^4(\theta_f)+2\left( Q_{12}+2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{22}\cos^4(\theta_f)                             \\
-    D_{66} & = \left(Q_{11} +Q_{22} - 2Q_{12}-2Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f)+Q_{66}\left( \sin^4(\theta_f)+\cos^4(\theta_f) \right)    \\
-    D_{12} & = \left(Q_{11} +Q_{22} - 4Q_{66}\right)\sin^2(\theta_f)\cos^2(\theta_f) + Q_{12}\left( \sin^4(\theta_f)+\cos^4(\theta_f) \right)          \\
-    D_{16} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin(\theta_f)\cos^3(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin^3(\theta_f)\cos(\theta_f) \\
-    D_{26} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)\sin^3(\theta_f)\cos(\theta_f) + \left(Q_{12}-Q_{22}+2Q_{66}\right) \sin(\theta_f)\cos^3(\theta_f)
+    D_{11} & = Q_{11}m^4 + 2\left( Q_{12}+2Q_{66}\right)n^2m^2 + Q_{22}n^4                               \\
+    D_{22} & = Q_{11}n^4+2\left( Q_{12} + 2Q_{66}\right)n^2m^2 + Q_{22}m^4                               \\
+    D_{66} & = \left(Q_{11} +Q_{22} - 2Q_{12}-2Q_{66}\right)n^2m^2 + Q_{66}\left( n^4 + m^4 \right)      \\
+    D_{12} & = \left(Q_{11} +Q_{22} - 4Q_{66}\right)n^2 m^2 + Q_{12}\left( n^4 + m^4 \right)             \\
+    D_{16} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)n m^3 + \left(Q_{12} - Q_{22} + 2Q_{66}\right) n^3 m \\
+    D_{26} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)n^3 m + \left(Q_{12} - Q_{22} + 2Q_{66}\right) n m^3
 \end{align}
+where
+\be
+m= \cos\theta_f,
+\quad
+n= \sin\theta_f.
+\ee
 %
 The reduced in-plane stiffness coefficients $Q_{ij}$ for the individual plies are
 %
@@ -653,7 +660,7 @@ where the matrices are
 Note, since cavitating flow leads to non-symmetric matrices, we cannot do all the simplifications \citet{Jonsson2017a} uses.
 TODO: OK, this is not actually true because we wouldn't be able to solve in the frequency domain...
 
-\twocolumn
+% \twocolumn
 \subsection{Cost functions}
 % 
 Reverse mode algorithmic differentiation is applied on the upper-most flutter routine called \texttt{cost\_funcs\_with\_derivs}
@@ -699,7 +706,7 @@ See \Cref{fig:Coordinates}.
 \begin{figure}[htb!]
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
-    \includegraphics[width=\linewidth,clip,trim={0cm 0cm 37cm 20cm}]{SeakeepingDiagram.pdf}
+    \includegraphics[width=0.6\linewidth,clip,trim={0cm 0cm 37cm 20cm}]{SeakeepingDiagram.pdf}
     \caption{\label{fig:Coordinates}Coordinate system and degrees of freedom}
 \end{figure}
 \subsection{Kinematics}
@@ -821,7 +828,7 @@ The gravitational loads have explicit dependence on vehicle orientation.
 \begin{figure}[htb!]
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
-    \includegraphics[width=\linewidth,clip,trim={37cm 0cm 0cm 30cm}]{SeakeepingDiagram.pdf}
+    \includegraphics[width=0.6\linewidth,clip,trim={37cm 0cm 0cm 30cm}]{SeakeepingDiagram.pdf}
     \caption{\label{fig:Loads}
         Gravitational and propulsive loads.
     }
@@ -875,14 +882,14 @@ where $V_{TAS} = ||\mbf{v}_B-\mbf{v}_{g B} ||$ is the magnitude of the true foil
 & \mbf{m}_{a B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \boldsymbol{\Lambda}_{\mathrm{ref}} \mathbf{c}_{\mathbf{m}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),
 \een
 % 
-\begin{figure}[htb!]
+\begin{figure*}[htb!]
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
     \includegraphics[width=\linewidth,clip,trim={0cm 22cm 0cm 0cm}]{SeakeepingDiagram.pdf}
     \caption{\label{fig:HydroLoads}
         Hydrodynamic loads.
     }
-\end{figure}
+\end{figure*}
 
 \subsubsection{Elastified equations of motion}
 Defining the state vector as $\mbf{x}_r(t) = [v_x, v_y, v_z, \omega_x, \omega_y, \omega_z, \phi, \theta]^T$ and the control inputs as $\mbf{u} = [\delta_e, \delta_r]^T$ where $\delta_e$ and $\delta_r$ are elevator (main foil rake) and rudder command inputs, the dynamics of the system are
@@ -990,7 +997,11 @@ Now that you understand the conceptual level, this is a more applied example for
     return
 \end{algorithm}
 
+% \cite{Garg2015,Garg2015a,Garg2016,Garg2017a,Garg2017b,Garg2019a}
+% \cite{Liao2019a,Liao2019b,Liao2020a,Liao2020b,Liao2021,Liao2021a,Liao2022,Liao2023}
+% \cite{Ng2022a,Ng2022b,Ng2023a}
 
+\onecolumn
 \appendix
 \bibliography{./gng-link,./mdolab-link}
 

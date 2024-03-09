@@ -122,6 +122,10 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
 
     # --- Text annotations ---
     geomText = f"$\\alpha_0$\n$\\Lambda$\n$\\theta_f$\n$t/c$\nnNode\nnDOF"
+    try:
+        toc = DVDict['toc'][0]*100
+    except:
+        toc = DVDict['toc']*100
     valText = (
         f"{DVDict['α₀']}"
         + "$^{{\\circ}}$\n"
@@ -129,7 +133,7 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
         + "$^{{\\circ}}$\n"
         + f"{DVDict['θ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
-        + f"{DVDict['toc'][0]*100:0.1f}%\n"
+        + f"{toc:0.1f}%\n"
         + f"{nNodes}\n"
         + f"{nNodes*3}"
     )
@@ -998,6 +1002,10 @@ def plot_vg_vf_rl(
                     va = "top"
                 ha = "right"
                 bifCtr += 1
+            # elif fSweep[0] < 80:
+            #     va="top"
+            #     xytext = (-5, -3)
+            #     ha="left"
             else:
                 ha = "left"
                 va = "bottom"
@@ -1016,6 +1024,19 @@ def plot_vg_vf_rl(
                 )
         except Exception:
             continue
+    
+    # --- Instability points ---
+    # Also plot point at frequency of instability 
+    if instabPts is not None:
+        for pt in instabPts:
+            iic = (int(pt[2]) - 1) % len(cm)
+            if units == "kts":
+                critSpeed = 1.94384 * pt[0]
+            elif units == "m/s":
+                critSpeed = pt[0]
+            else:
+                print(f"Unsupported units: {units}")
+            ax.scatter(critSpeed, pt[-1], color=cm[iic], marker="x", s=100)
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("$V$-$f$", pad=labelpad)

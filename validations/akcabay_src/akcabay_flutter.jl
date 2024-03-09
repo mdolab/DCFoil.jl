@@ -38,6 +38,7 @@ debug = true
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
 nNodes = 10 # spatial nodes
+nNodesStrut = 10 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -45,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [180.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [160.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************
@@ -59,10 +60,17 @@ DVDict = Dict(
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12, # thickness-to-chord ratio
+    "toc" => 0.12*ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+    # --- Strut vars ---
+    "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -76,7 +84,7 @@ solverOptions = Dict(
     "nNodeStrut" => 10,
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "rotation" => 45.0, # deg rotation about x-axis
+    "rotation" => 0.0, # deg rotation about x-axis
     "material" => "cfrp", # preselect from material library
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => tipMass,
@@ -130,13 +138,14 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.run_model(
+DCFoil.init_model(DVDict,evalFuncs; solverOptions=solverOptions)
+SOL = DCFoil.run_model(
     DVDict,
     evalFuncs;
     # --- Optional args ---
     solverOptions=solverOptions
 )
-costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")
 
 # Manual FD
