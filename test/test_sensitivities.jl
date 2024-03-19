@@ -9,7 +9,7 @@ include("../src/InitModel.jl")
 include("../src/struct/FEMMethods.jl")
 include("../src/solvers/SolveFlutter.jl")
 using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
-using FiniteDifferences, Zygote
+using FiniteDifferences, Zygote, Enzyme
 using Plots
 using Printf
 using LinearAlgebra
@@ -87,7 +87,7 @@ end
 function test_interp()
     """Test the my linear interpolation"""
     mesh = collect(0:0.1:2)
-    yVec = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
+    yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
     xq = 0.5
 
     derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
@@ -134,10 +134,16 @@ function test_hydroderiv(DVDict, solverOptions)
         # return globalCf_r
     end
 
+    function new_compute_AICs(Mf, dim, x1, x2, x3, x4, x5, FOIL, U∞, ω)
+        Mf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω, "BT2")
+    end
+
 
     # --- AD ---
     derivs = Zygote.jacobian((x1, x2, x3, x4, x5) -> my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω),
         mesh, Λ, chordVec, abVec, ebVec)
+
+    Enzyme.jacobian(Reverse, my_compute_AICs, dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω)
 
     # --- FD ---
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, x, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω),
@@ -251,7 +257,7 @@ function test_theodorsenDeriv()
     # ---------------------------
     #   Test glauert lift distribution
     # ---------------------------
-    cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
+    cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
     pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
     plot!(title="lift slope")
 
@@ -387,7 +393,7 @@ end
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-nNodes = 10
+nNodes = 4
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
@@ -427,7 +433,7 @@ solverOptions = Dict(
     "run_modal" => false,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [180, 190.0],
+    "uRange" => [185, 190.0],
     "maxQIter" => 100,
     "rhoKS" => 80.0,
 )
@@ -437,8 +443,8 @@ using BenchmarkTools
 using TimerOutputs
 using Profile
 
-test_pkflutterderiv(DVDict, solverOptions) # primal
-@profview test_pkprofile(DVDict, solverOptions) #deriv
+# test_pkflutterderiv(DVDict, solverOptions) # primal
+# @profview test_pkprofile(DVDict, solverOptions) #deriv
+# @benchmark test_pkprofile(DVDict, solverOptions) #benchmark
 # Zygote.@profile test_pkprofile(DVDict, solverOptions) # this doesn't work
-Profile.clear() # run to clear compilation stuff
-
+# Profile.clear() # run to clear compilation stuff

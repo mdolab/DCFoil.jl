@@ -14,12 +14,13 @@ export return_constitutive
 function return_constitutive(materialName::String)
     """
     Based on material string name, return the material properties
+    SI units
     """
-    ρₛ::Float64=0.0
-    E₁::Float64=0.0
-    E₂::Float64=0.0
-    G₁₂::Float64=0.0
-    ν₁₂::Float64=0.0
+    ρₛ::Float64 = 0.0
+    E₁::Float64 = 0.0
+    E₂::Float64 = 0.0
+    G₁₂::Float64 = 0.0
+    ν₁₂::Float64 = 0.0
     if (materialName == "cfrp") # carbon-fiber reinforced plastic UD
         ρₛ = 1590.0
         E₁ = 117.8e9

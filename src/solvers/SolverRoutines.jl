@@ -12,12 +12,16 @@ In julia, the chainrules rrule is '_b'
 
 # --- Libraries ---
 using LinearAlgebra
-using Zygote
-using ChainRulesCore
+using Zygote, ChainRulesCore
+
 include("./NewtonRaphson.jl")
 using .NewtonRaphson
+
 include("./EigenvalueProblem.jl")
 using .EigenvalueProblem
+
+include("../adrules/CustomRules.jl")
+using .CustomRules
 
 # --- Globals ---
 include("../constants/SolutionConstants.jl")
@@ -26,7 +30,6 @@ include("../struct/EBBeam.jl")
 using .EBBeam: EBBeam as BeamElement
 
 
-const RealOrComplex = Union{Real,Complex}
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
@@ -1193,34 +1196,6 @@ function do_linear_interp(xpt, ypt, xqvec)
     else
         return y
     end
-end
-
-function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
-    """
-    MATRIX MULTIPLY RULE
-    """
-    function times_pullback(ΔΩ)
-        ∂A = @thunk(ΔΩ * B')
-        ∂B = @thunk(A' * ΔΩ)
-        return (NoTangent(), ∂A, ∂B)
-    end
-    return A * B, times_pullback
-end
-
-function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
-    """
-    MATRIX INVERSE
-    """
-    Ω = inv(A)
-
-    function inv_pullback(ΔΩ)
-
-        ∂A = -Ω' * ΔΩ * Ω'
-
-        return (NoTangent(), ∂A)
-    end
-
-    return Ω, inv_pullback
 end
 
 end # SolverRoutines

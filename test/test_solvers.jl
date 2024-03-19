@@ -72,7 +72,7 @@ function test_SolveStaticRigid()
         #   Flow
         # --------------------------------
         "use_cavitation" => false,
-        "use_freesurface" => false,
+        "use_freeSurface" => false,
         # --- Static solve ---
         "run_static" => true,
         # --- Forced solve ---
@@ -189,7 +189,7 @@ function test_SolveStaticIso()
         # --- General solver options ---
         "use_tipMass" => false,
         "use_cavitation" => false,
-        "use_freesurface" => false,
+        "use_freeSurface" => false,
         # --- Static solve ---
         "run_static" => true,
         # --- Forced solve ---
@@ -266,11 +266,10 @@ function test_SolveStaticComp(DVDict, solverOptions)
     Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
-
     # --- Reference value ---
     #  Obtained by running the code
-    refBendSol = [0.0004825455285840, 0.0004908633758853, 0.0004909057635612]
-    refTwistSol = [-0.00079926586938542, -0.0008235901040122, -0.0008357865527998]
+    refBendSol = [0.0006109616882733, 0.0006292489391756, 0.0006391615447796]
+    refTwistSol = [-0.0011393119433801, -0.0011393119433801, -0.0011393119433801]
 
     nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************

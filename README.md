@@ -70,6 +70,7 @@ Please use this coding convention:
 #### Try not to do this
 
 * `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`
+NOTE: as of February 24 2024, LinRange is actually better and improves the flutter prediction accuracy. I wrote the custom rule with the help of the Julia slack channel
 * Mutating arrays that require the Zygote.Buffer data type. It is SUPER slow.
 
 ### DCFoil as a package

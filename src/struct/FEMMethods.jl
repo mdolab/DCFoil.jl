@@ -18,12 +18,18 @@ module FEMMethods
 using Zygote, ChainRulesCore
 using DelimitedFiles
 using LinearAlgebra, StaticArrays
+
 include("./EBBeam.jl")
 using .EBBeam: EBBeam as BeamElement, NDOF
+
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
+
 include("../struct/BeamProperties.jl")
 using .BeamProperties
+
+include("../adrules/CustomRules.jl")
+using .CustomRules
 
 # --- Globals ---
 include("../constants/SolutionConstants.jl")

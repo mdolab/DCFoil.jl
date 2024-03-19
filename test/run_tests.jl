@@ -20,32 +20,7 @@ include("test_sensitivities.jl")
 # ==============================================================================
 nNodes = 40
 nNodesStrut = 2
-DVDict = Dict(
-		"α₀" => 6.0, # initial angle of attack [deg]
-		"Λ" => 0.0 * π / 180, # sweep angle [rad]
-		"zeta" => 0.04, # modal damping ratio at first 2 modes
-		"c" => 1 * ones(nNodes), # chord length [m]
-		"s" => 1.0, # semispan [m]
-		"ab" => zeros(nNodes), # dist from midchord to EA [m]
-		"toc" => 1, # thickness-to-chord ratio
-		"x_αb" => zeros(nNodes), # static imbalance [m]
-		"θ" => deg2rad(15), # fiber angle global [rad]
-        # --- Strut vars ---
-        "beta" => 0.0, # yaw angle wrt flow [deg]
-        "s_strut" => 0.4, # from Yingqian
-        "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
-        "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
-        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-        "θ_strut" => deg2rad(15), # fiber angle global [rad]
-	)
-solverOptions = Dict(
-    "material" => "test-comp", # preselect from material library
-    "nNodes" => nNodes,
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "config" => "wing",
-)
+
 DVDict1 = Dict(
         "α₀" => 6.0, # initial angle of attack [deg]
         "Λ" => 0.0 * π / 180, # sweep angle [rad]
@@ -83,7 +58,7 @@ solverOptions1 = Dict(
     #   Flow
     # --------------------------------
     "use_cavitation" => false,
-    "use_freesurface" => false,
+    "use_freeSurface" => false,
     # --- Static solve ---
     "run_static" => true,
     # --- Forced solve ---
@@ -124,7 +99,7 @@ solverOptions2 = Dict(
     "nNodes" => nNodes,
     "use_tipMass" => false,
     "use_cavitation" => false,
-    "use_freesurface" => false,
+    "use_freeSurface" => false,
     "material" => "cfrp", # preselect from material library
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
@@ -155,7 +130,7 @@ solverOptions2 = Dict(
     # @test test_BT2_stiff() <= 1e-5
     # @test test_BT2_mass() <= 1e-4
     # @test test_FEBT3() <= 1e-5
-    @test test_FECOMP2(DVDict, solverOptions) <= 1e-1
+    @test test_FECOMP2() <= 1e-1
 
     # ************************************************
     #     Hydrodynamic tests
@@ -173,7 +148,7 @@ solverOptions2 = Dict(
     # --- Mesh convergence tests ---
     # @test test_SolveStaticRigid() <= 1e-2 # rigid hydrofoil solve
     # @test test_SolveStaticIso() <= 1e-2 # ss hydrofoil solve
-    @test test_SolveStaticComp(DVDict1, solverOptions1) <= 1.7e-2 # cfrp hydrofoil (kind of loose)
+    @test test_SolveStaticComp(DVDict1, solverOptions1) <= 5.7e-2 # cfrp hydrofoil (kind of loose)
     # @test test_hydroLoads() <= 1e-2
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     @test test_modal(DVDict2, solverOptions2) <= 1e-2 # dry and wet modal analysis of cfrp

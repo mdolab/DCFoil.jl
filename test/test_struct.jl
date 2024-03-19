@@ -882,10 +882,40 @@ end
 # test_FiniteElementComp()
 # ans = test_FEBT3()
 
-function test_FECOMP2(DVDict, solverOptions)
+function test_FECOMP2()
 	"""
 	Test simple tip force and torque on a composite beam
 	"""
+	nNodes = 40
+	nNodesStrut = 2
+
+	DVDict = Dict(
+		"α₀" => 6.0, # initial angle of attack [deg]
+		"Λ" => 0.0 * π / 180, # sweep angle [rad]
+		"zeta" => 0.04, # modal damping ratio at first 2 modes
+		"c" => 1 * ones(nNodes), # chord length [m]
+		"s" => 1.0, # semispan [m]
+		"ab" => zeros(nNodes), # dist from midchord to EA [m]
+		"toc" => 1, # thickness-to-chord ratio
+		"x_αb" => zeros(nNodes), # static imbalance [m]
+		"θ" => deg2rad(15), # fiber angle global [rad]
+        # --- Strut vars ---
+        "beta" => 0.0, # yaw angle wrt flow [deg]
+        "s_strut" => 0.4, # from Yingqian
+        "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+        "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "θ_strut" => deg2rad(15), # fiber angle global [rad]
+	)
+	solverOptions = Dict(
+    "material" => "test-comp", # preselect from material library
+    "nNodes" => nNodes,
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "config" => "wing",
+    "use_freeSurface" => false,
+)
 
 	testAngle = 0.0 # [deg] angle of rotation from default (NONZERO WORKS  )
 	angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
