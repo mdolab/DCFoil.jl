@@ -9,23 +9,32 @@
 
 module InitModel
 
-# --- Public functions ---
-export init_static, init_dynamic
+# # --- Public functions ---
+# export init_static, init_dynamic
+
 # --- Libraries ---
 using Zygote
 include("./hydro/HydroStrip.jl")
+using .HydroStrip
+
 include("./struct/BeamProperties.jl")
+using .BeamProperties
+
 include("./struct/MaterialLibrary.jl")
+using .MaterialLibrary
+
 include("./constants/DesignConstants.jl")
-using .HydroStrip, .BeamProperties, .MaterialLibrary
 using .DesignConstants
 
-function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, solverOptions::Dict)
+include("./bodydynamics/HullLibrary.jl")
+using .HullLibrary
+
+function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions::Dict, solverOptions::Dict)
   """
   Initialize a static hydrofoil model
 
   Inputs:
-      
+      DVs for derivative computation
 
   returns:
     foil: struct
@@ -57,7 +66,7 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
   # θ::Float64 = DVDict["θ"]
 
   # --- Compute the structural properties for the foil ---
-  nNodes = solverOptions["nNodes"]
+  nNodes = foilOptions["nNodes"]
   EIₛ = zeros(Float64, nNodes)
   Kₛ = zeros(Float64, nNodes)
   GJₛ = zeros(Float64, nNodes)
@@ -103,14 +112,14 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
   # ---------------------------
   #   Build final model
   # ---------------------------
-  wingModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, α₀, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], solverOptions["nNodes"], constitutive)
+  wingModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, α₀, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodes"], constitutive)
 
   # ************************************************
   #     Strut properties
   # ************************************************
-  if solverOptions["config"] == "t-foil"
+  if foilOptions["config"] == "t-foil"
     # Do it again using the strut properties
-    nNodesStrut = solverOptions["nNodeStrut"]
+    nNodesStrut = foilOptions["nNodeStrut"]
     ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(solverOptions["strut_material"])
     t_strut::Vector{Float64} = toc_strut .* c_strut
     eb_strut::Vector{Float64} = 0.25 * c_strut .+ ab_strut
@@ -153,12 +162,12 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
     # ---------------------------
     #   Build final model
     # ---------------------------
-    strutModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, beta, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], solverOptions["nNodeStrut"], constitutive)
+    strutModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, beta, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodeStrut"], constitutive)
 
-  elseif solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+  elseif foilOptions["config"] == "wing" || foilOptions["config"] == "full-wing"
     strutModel = nothing
   else
-    error("Unsupported config: ", solverOptions["config"])
+    error("Unsupported config: ", foilOptions["config"])
   end
 
 
@@ -166,12 +175,12 @@ function init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_
 
 end
 
-function init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, solverOptions::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
+function init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions::Dict, solverOptions::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
   """
   Perform much of the same initializations as init_static() except with other features
   """
   # statModel = init_static(DVDict, solverOptions)
-  statWingModel, statStrutModel = init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, solverOptions)
+  statWingModel, statStrutModel = init_static(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions, solverOptions)
 
   # model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
   WingModel = DesignConstants.dynamicFoil(
@@ -186,6 +195,15 @@ function init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_st
   end
 
   return WingModel, StrutModel
+end
+
+function init_hull(solverOptions::Dict)
+  """
+  Initialize the hull model
+  """
+  mass, length, beam, Ib = HullLibrary.return_hullprop(solverOptions["hull"])
+  HullModel = DesignConstants.hull(mass, Ib, length, beam)
+  return HullModel
 end
 
 function init_model_wrapper(DVDict::Dict, solverOptions; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
@@ -213,7 +231,19 @@ function init_model_wrapper(DVDict::Dict, solverOptions; fSweep=0.1:0.1:1, uRang
   x_αb_strut = DVDict["x_αb_strut"]
   θ_strut = DVDict["θ_strut"]
 
-  WingModel, StrutModel = init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, solverOptions; fSweep, uRange)
+  # if length(solverOptions["appendageList"]) == 1
+  foilOptions = solverOptions["appendageList"][1]
+  WingModel, StrutModel = init_dynamic(α₀, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions, solverOptions; fSweep, uRange)
+  # else
+    # error("Only one appendage is supported at the moment")
+  # end
+
+
+  if solverOptions["run_body"]
+    HullModel = init_hull(solverOptions)
+  else
+    HullModel = nothing
+  end
 
   return WingModel, StrutModel
 end

@@ -201,3 +201,57 @@ DVDict = Dict()
 #             "t_over_c": 0.126,  # Eppler E836.
 #             "c_max_t": 0.428,  # Eppler E836.
 #         }
+
+# ==============================================================================
+#                         Moth T-foils
+# ==============================================================================
+# ************************************************
+#     Rudder T-foil
+# ************************************************
+# Dimensions are from Yingqian
+DVDict = Dict(
+    "α₀" => 2.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    # "c" => 0.14 * ones(nNodes), # chord length [m]
+    "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
+    "s" => 0.333, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (mean)
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(0), # fiber angle global [rad]
+    # --- Strut vars ---
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+)
+
+
+# ************************************************
+#     Main T-foil (aka daggerboard)
+# ************************************************
+# Dimensions are from Day 2019
+DVDict = Dict(
+    "α₀" => 2.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    # "c" => 0.14 * ones(nNodes), # chord length [m]
+    "c" => collect(LinRange(0.125, 0.045, nNodes)), # chord length [m]
+    "s" => 0.494, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.128 * ones(nNodes), # thickness-to-chord ratio (max from paper)
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(0), # fiber angle global [rad]
+    # --- Strut vars ---
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 1.0, # from Yingqian
+    "c_strut" => 0.11 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.145 * ones(nNodesStrut), # thickness-to-chord ratio (max from paper)
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+)

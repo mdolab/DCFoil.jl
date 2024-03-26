@@ -23,20 +23,28 @@ using Printf, DelimitedFiles
 # --- DCFoil modules ---
 include("../InitModel.jl")
 using .InitModel
+
 include("../struct/BeamProperties.jl")
 using .BeamProperties
+
 include("../struct/EBBeam.jl")
 using .EBBeam: NDOF
+
 include("../struct/FEMMethods.jl")
 using .FEMMethods
+
 include("../hydro/HydroStrip.jl")
 using .HydroStrip
+
 include("../constants/SolutionConstants.jl")
 using .SolutionConstants
+
 include("./SolverRoutines.jl")
 using .SolverRoutines
+
 include("./DCFoilSolution.jl")
 using .DCFoilSolution
+
 include("../io/TecplotIO.jl")
 using .TecplotIO
 
@@ -49,7 +57,7 @@ loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
+function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOptions::Dict)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
     Inputs
@@ -69,9 +77,10 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     #     INITIALIZE
     # ************************************************
     outputDir = solverOptions["outputDir"]
-    nNodes = solverOptions["nNodes"]
     global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
-    global globsolverOptions = solverOptions
+    nNodes = FOIL.nNodes
+    global globappendageOptions = appendageOptions
+    # global globsolverOptions = solverOptions
     global gDVDict = DVDict
     println("====================================================================================")
     println("          BEGINNING STATIC HYDROELASTIC SOLUTION")
@@ -84,24 +93,24 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     x_αbVec = DVDict["x_αb"]
     global chordVec = DVDict["c"] # need for evalFuncs
     ebVec = 0.25 * chordVec .+ abVec
-    if solverOptions["config"] == "t-foil"
+    if appendageOptions["config"] == "t-foil"
         strutchordVec = DVDict["c_strut"]
         strutabVec = DVDict["ab_strut"]
         strutx_αbVec = DVDict["x_αb_strut"]
         strutebVec = 0.25 * strutchordVec .+ strutabVec
-    elseif solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+    elseif appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
         strutchordVec = nothing
         strutabVec = nothing
         strutx_αbVec = nothing
         strutebVec = nothing
     else
-        error("Unsupported config: ", solverOptions["config"])
+        error("Unsupported config: ", appendageOptions["config"])
     end
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=solverOptions["config"], STRUT=STRUT, ab_strut=strutabVec, x_αb_strut=strutx_αbVec)
+    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=appendageOptions["config"], STRUT=STRUT, ab_strut=strutabVec, x_αb_strut=strutx_αbVec)
 
     # --- Initialize states ---
     u = zeros(length(globalF))
@@ -147,8 +156,8 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # ---------------------------
 
     # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; solverOptions=solverOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; appendageOptions=appendageOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, appendageOptions["config"]; appendageOptions=appendageOptions, solverOptions=solverOptions)
     globalF = fTractions
     global AICnoBC = AIC
 
@@ -165,7 +174,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     #   Apply BC blanking
     # ---------------------------
     ChainRulesCore.ignore_derivatives() do
-        global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
+        global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
     end
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
@@ -199,13 +208,13 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict)
     # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
     # qSol = q # just use pre-solve solution
-    uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType; solverOptions=solverOptions)
+    uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType; appendageOptions=appendageOptions)
 
     # --- Get hydroLoads again on solution ---
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; solverOptions=solverOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, solverOptions["config"]; solverOptions=solverOptions)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; appendageOptions=appendageOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, appendageOptions["config"]; appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
 
     # ************************************************
@@ -365,11 +374,11 @@ function postprocess_statics(states, forces)
     return obj
 end
 
-function write_tecplot(DVDict, STATICSOL, FEMESH, outputDir="./OUTPUT/"; solverOptions=Dict("config" => "wing"))
+function write_tecplot(DVDict, STATICSOL, FEMESH, outputDir="./OUTPUT/"; appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1)
     """
     General purpose tecplot writer wrapper for flutter solution
     """
-    TecplotIO.write_deflections(DVDict, STATICSOL, FEMESH, outputDir; solverOptions=solverOptions)
+    TecplotIO.write_deflections(DVDict, STATICSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
 
 end
 # ==============================================================================
@@ -400,18 +409,18 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
     #     COMPUTE COST FUNCS
     # ************************************************
     costFuncs = Dict() # initialize empty costFunc dictionary
-    if globsolverOptions["config"] == "wing"
+    if globappendageOptions["config"] == "wing"
         ADIM = constants.planformArea
-    elseif globsolverOptions["config"] == "t-foil" || globsolverOptions["config"] == "full-wing"
+    elseif globappendageOptions["config"] == "t-foil" || globappendageOptions["config"] == "full-wing"
         ADIM = 2 * constants.planformArea
     end
     qdyn = 0.5 * foil.ρ_f * foil.U∞^2
     if "wtip" in evalFuncs
-        w_tip = W[globsolverOptions["nNodes"]]
+        w_tip = W[globappendageOptions["nNodes"]]
         costFuncs["wtip"] = w_tip
     end
     if "psitip" in evalFuncs
-        psi_tip = theta[globsolverOptions["nNodes"]]
+        psi_tip = theta[globappendageOptions["nNodes"]]
         costFuncs["psitip"] = psi_tip
     end
     if "lift" in evalFuncs
@@ -435,9 +444,9 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         costFuncs["cd"] = CD
     end
     if "cdi" in evalFuncs || "fxi" in evalFuncs
-        twist = theta[1:globsolverOptions["nNodes"]]
+        twist = theta[1:globappendageOptions["nNodes"]]
 
-        clalpha, Fxi, CDi = HydroStrip.compute_glauert_circ(DVDict["s"], chordVec, deg2rad(DVDict["α₀"]), globsolverOptions["U∞"], globsolverOptions["nNodes"];
+        clalpha, Fxi, CDi = HydroStrip.compute_glauert_circ(DVDict["s"], chordVec, deg2rad(DVDict["α₀"]), globsolverOptions["U∞"], globappendageOptions["nNodes"];
             h=DVDict["s_strut"],
             useFS=globsolverOptions["use_freeSurface"],
             rho=globsolverOptions["ρ_f"],
@@ -462,24 +471,28 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         costFuncs["cdj"] = CDj
         costFuncs["fxj"] = dj
     end
-    # Hörner CHapter 10
     if "cds" in evalFuncs || "fxs" in evalFuncs
         t = DVDict["toc_strut"][end] * DVDict["c_strut"][end]
-        CDts = 0.24
-        ds = CDts * (qdyn * (t)^2)
-        CDs = ds / (qdyn * ADIM)
+        # --- Hörner CHapter 10 ---
+        # CDts = 0.24
+        # ds = CDts * (qdyn * (t)^2)
+        # CDs = ds / (qdyn * ADIM)
+        # Chapman 1971 assuming x/c = 0.35
+        CDs = 0.009 + 0.013 * DVDict["toc_strut"][end]
+        ds = CDs * qdyn * t * DVDict["c_strut"][end]
         costFuncs["cds"] = CDs
         costFuncs["fxs"] = ds
     end
+    # TODO: PICKUP HERE GET COL AS AN OUTPUT!!
     # # TODO:
     # if "cdw" in evalFuncs || "fxw" in evalFuncs
     #     # rws = EQ 6.149 FALTINSEN thickness effect on wave resistance
     #     # rwgamma = EQ 6.145 FALTINSEN wave resistance due to lift
     # end
     if "cdpr" in evalFuncs || "fxpr" in evalFuncs
-        if globsolverOptions["config"] == "wing" || globsolverOptions["config"] == "full-wing"
+        if globappendageOptions["config"] == "wing" || globappendageOptions["config"] == "full-wing"
             WSA = 2 * ADIM # both sides
-        elseif globsolverOptions["config"] == "t-foil"
+        elseif globappendageOptions["config"] == "t-foil"
             WSA = 2 * ADIM + 2 * DVDict["s_strut"] * mean(DVDict["c_strut"])
         end
         println("I'm not debugged")
@@ -665,15 +678,15 @@ function compute_residuals(structuralStates)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     elseif CONSTANTS.elemType == "COMP2"
-        completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType; solverOptions=globsolverOptions)
-        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType; STRUT=STRUT, solverOptions=globsolverOptions)
+        completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType; appendageOptions=globappendageOptions)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType; STRUT=STRUT, appendageOptions=globappendageOptions)
         F = -CONSTANTS.AICmat * foilTotalStates
-        if globsolverOptions["config"] == "t-foil"
+        if globappendageOptions["config"] == "t-foil"
             FOut = F[1:end-NDOF]
-        elseif globsolverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+        elseif globappendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
             FOut = F[NDOF+1:end]
         else
-            error("Unsupported config: ", globsolverOptions["config"])
+            error("Unsupported config: ", globappendageOptions["config"])
         end
     else
         error("Invalid element type")

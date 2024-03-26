@@ -22,8 +22,12 @@ using Plots
 # using SparseArrays
 include("../solvers/SolverRoutines.jl")
 using .SolverRoutines
+
 include("./Unsteady.jl")
 using .Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
+
+include("../adrules/CustomRules.jl")
+using .CustomRules
 
 # --- Globals ---
 include("../constants/SolutionConstants.jl")
@@ -145,7 +149,7 @@ end
 # ==============================================================================
 #                         Lift forces
 # ==============================================================================
-function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes; h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, solverOptions=Dict("config"=>"wing"))
+function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes::Int64; h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, solverOptions=Dict{String,Any}("config"=>"wing"))
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -184,7 +188,6 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes; h=nothing
 
     ỹ = π / 2 * ((1:1:nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
     y = -semispan * cos.(ỹ) # the physical coordinate (y) is only calculated to the root (-semispan, 0)
-
     # ---------------------------
     #   PLANFORM SHAPES: rectangular is outdated
     # ---------------------------
@@ -236,8 +239,8 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes; h=nothing
     clα = cl ./ (α₀ .+ 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
 
     # --- Interpolate lift slopes onto domain ---
-    # dl = semispan / (nNodes - 1)
-    # xq::Vector{Float64} = -semispan:dl:0
+    dl = semispan / (nNodes - 1)
+    # xq::Vector{Float64} = collect(-semispan:dl:0)
     xq = LinRange(-semispan, 0.0, nNodes)
 
     cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
@@ -651,7 +654,7 @@ function compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, e
     return AIC, planformArea
 end
 
-function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2"; solverOptions=Dict("config"=>"wing"), STRUT=nothing, strutchordVec=nothing, strutabVec=nothing, strutebVec=nothing)
+function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2"; appendageOptions=Dict{String,Any}("config"=>"wing"), STRUT=nothing, strutchordVec=nothing, strutabVec=nothing, strutebVec=nothing)
     """
     Compute the AIC matrix for a given aeroMesh using LHS convention
         (i.e., -ve force is disturbing, not restoring)
@@ -706,8 +709,15 @@ function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL,
     planformArea = 0.0
 
     jj = 1 # node index
-    nElemWing = solverOptions["nNodes"] - 1
-    nElemStrut = solverOptions["nNodeStrut"] - 1
+    # nElemWing = solverOptions["nNodes"] - 1
+    # nElemStrut = solverOptions["nNodeStrut"] - 1
+    nElemWing = length(chordVec) - 1
+    # Bit circular logic here
+    appendageOptions["nNodes"] = nElemWing+1
+    if STRUT != nothing
+        nElemStrut = length(strutchordVec) - 1
+        appendageOptions["nNodeStrut"] = nElemStrut+1
+    end
     # ---------------------------
     #   Loop over strips (nodes)
     # ---------------------------
@@ -828,7 +838,7 @@ function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL,
         end
     elseif ndims(aeroMesh) == 2
         # for yⁿ in aeroMesh[:, YDIM]
-        stripVecs = get_strip_vecs(aeroMesh, elemConn, solverOptions)
+        stripVecs = get_strip_vecs(aeroMesh, elemConn, appendageOptions)
         junctionNodeX = aeroMesh[1, :]
 
         for inode in 1:length(aeroMesh[:,1]) # loop aero strips (located at FEM nodes)
@@ -851,15 +861,15 @@ function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL,
             lᵉ::Float64 = sqrt(nVec[XDIM]^2 + nVec[YDIM]^2 + nVec[ZDIM]^2) # length of elem
             Δy = lᵉ
             # If we have end point nodes, we need to divide the length by 2
-            if solverOptions["config"] == "wing"
+            if appendageOptions["config"] == "wing"
                 if inode == 1 || inode == FOIL.nNodes
                     Δy = 0.5 * lᵉ
                 end
-            elseif solverOptions["config"] == "full-wing"
+            elseif appendageOptions["config"] == "full-wing"
                 if inode == 1 || inode == FOIL.nNodes || (inode == nElemWing * 2 + 1)
                     Δy = 0.5 * lᵉ
                 end
-            elseif solverOptions["config"] == "t-foil"
+            elseif appendageOptions["config"] == "t-foil"
                 if inode == 1 || inode == FOIL.nNodes || (inode == nElemWing * 2 + 1) || (inode == nElemWing * 2 + nElemStrut + 1)
                     Δy = 0.5 * lᵉ
                 end
@@ -881,7 +891,7 @@ function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL,
                 ab = SolverRoutines.do_linear_interp(xDom, abVec, yⁿ)
                 eb = SolverRoutines.do_linear_interp(xDom, ebVec, yⁿ)
             else
-                if solverOptions["config"] == "t-foil"
+                if appendageOptions["config"] == "t-foil"
                     if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
                         # Put negative sign on the linear interp routine bc there is a bug!
                         xDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM] )
@@ -904,7 +914,7 @@ function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL,
                         eb = SolverRoutines.do_linear_interp(xDom, strutebVec, zⁿ)
                         # println("I'm a strut strip")
                     end
-                elseif solverOptions["config"] == "full-wing"
+                elseif appendageOptions["config"] == "full-wing"
                     if inode <= nElemWing * 2 + 1
                         # Put negative sign on the linear interp routine bc there is a bug!
                         xDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM] )
@@ -1071,8 +1081,14 @@ function get_strip_vecs(aeroMesh, elemConn, solverOptions)
     nStrips = size(aeroMesh)[1]
 
     stripVecs = zeros(nStrips, 3)
+    stripVecs_z = Zygote.Buffer(stripVecs)
+    stripVecs_z[:,:] = stripVecs
     nElemWing = solverOptions["nNodes"] - 1
-    nElemStrut = solverOptions["nNodeStrut"] - 1
+    if haskey(solverOptions, "nNodeStrut")
+        nElemStrut = solverOptions["nNodeStrut"] - 1
+    else
+        nElemStrut = 0
+    end
     for istrip in 1:nStrips-1 # loop elements but these are filling aero strips (nodes)
         n1 = elemConn[istrip, 1]
         n2 = elemConn[istrip, 2]
@@ -1084,20 +1100,23 @@ function get_strip_vecs(aeroMesh, elemConn, solverOptions)
         end
 
         nvec = aeroMesh[n2, :] - aeroMesh[n1, :]
-        stripVecs[istrip, :] = nvec
+        stripVecs_z[istrip, :] = nvec
 
     end
 
     # Treat last strip separately
     if size(elemConn)[1] == 3 || size(elemConn)[1] == 2
-        stripVecs[end,:] = aeroMesh[end, :] - aeroMesh[1, :]
+        stripVecs_z[end,:] = aeroMesh[end, :] - aeroMesh[1, :]
     else
-        println("treating last strip (node) tangent vector as a continuation of previous node")
-        stripVecs[end,:] = aeroMesh[end, :] - aeroMesh[end-1, :]
+        # if solverOptions["debug"]
+        #     println("treating last strip (node) tangent vector as a continuation of previous node")
+        # end
+        stripVecs_z[end,:] = aeroMesh[end, :] - aeroMesh[end-1, :]
     end
 
-    return stripVecs
+    return copy(stripVecs_z)
 end
+
 # function ChainRulesCore.rrule(::typeof(compute_AICs), dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType="BT2"; config="wing", STRUT=nothing)
 
 #     y = compute_AICs(dim, aeroMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType, config, STRUT)
@@ -1242,7 +1261,7 @@ function compute_genHydroLoadsMatrices(kMax, nk::Int64, U∞, b_ref, dim::Int64,
     return copy(Mf_sweep_z[:,:,1]), copy(Cf_r_sweep_z), copy(Cf_i_sweep_z), copy(Kf_r_sweep_z), copy(Kf_i_sweep_z), kSweep
 end
 
-function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2", config="wing"; solverOptions=Dict())
+function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2", config="wing"; appendageOptions=Dict(), solverOptions=Dict())
     """
     Inputs
     ------
@@ -1257,7 +1276,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT
 
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
-    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType; solverOptions=solverOptions)
+    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType; appendageOptions=appendageOptions)
 
     # --- Strip theory ---
     # This is the hydro force traction vector
@@ -1326,5 +1345,6 @@ function apply_BCs(K, C, M, globalDOFBlankingList::UnitRange{Int64})
 
     return newK, newC, newM
 end
+
 
 end # end module

@@ -18,7 +18,7 @@ using .SolverRoutines: get_rotate3dMat
 include("../constants/SolutionConstants.jl")
 using .SolutionConstants: XDIM, YDIM, ZDIM
 
-function write_mesh(DVDict::Dict, FEMESH, solverOptions::Dict, outputDir::String, fname="mesh.dat")
+function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::String, fname="mesh.dat")
     """
     Top level routine to write the mesh file
     """
@@ -30,9 +30,18 @@ function write_mesh(DVDict::Dict, FEMESH, solverOptions::Dict, outputDir::String
     write(io, "TITLE = \"Mesh Data\"\n")
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
 
-    write_1Dfemmesh(io, FEMESH)
-    write_strips(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=solverOptions["nNodes"])
-    write_oml(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=solverOptions["nNodes"])
+    for icomp in 1:length(FEMESHLIST)
+        options = solverOptions["appendageList"][icomp]
+
+        FEMESH = FEMESHLIST[icomp]
+
+        # Offset by xmount just for the visualization purpose. 
+        # SOlution still happens in the local foil frame
+        FEMESH.mesh[:, XDIM] .+= options["xMount"]
+        write_1Dfemmesh(io, FEMESH)
+        # write_strips(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=options["nNodes"])
+        # write_oml(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=options["nNodes"])
+    end
 
     close(io)
 end
@@ -69,14 +78,14 @@ function transform_airfoil(foilCoords, localChord)
     return foilCoordsXform
 end
 
-function write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=Dict("config" => "wing"))
+function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
     """
     TODO generalize to take in a normal vector in spanwise direction
     """
 
     foilCoords = generate_naca4dig(DVDict["toc"][1])
-    if solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing" || solverOptions["config"] == "t-foil"
-        for ii in 1:solverOptions["nNodes"] # iterate over span
+    if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
+        for ii in 1:appendageOptions["nNodes"] # iterate over span
             spanLoc = mesh[ii, :]
             localChord = DVDict["c"][ii]
             foilCoordsXform = transform_airfoil(foilCoords, localChord)
@@ -95,17 +104,17 @@ function write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOption
             write(io, "DATAPACKING = POINT\n")
             # --- Values ---
             for jj in 1:nAirfoilPts
-                write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM], spanLoc[YDIM], foilCoordsXform[jj, YDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
+                write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM] + spanLoc[XDIM], spanLoc[YDIM], foilCoordsXform[jj, YDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
             end
             # --- Connectivities ---
             for jj in 1:nAirfoilPts-1
                 write(io, @sprintf("%d\t%d\n", jj, jj + 1))
             end
         end
-        if solverOptions["config"] == "full-wing" || solverOptions["config"] == "t-foil"
-            for ii in solverOptions["nNodes"]+1:2*solverOptions["nNodes"]-1 # iterate over span
+        if appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
+            for ii in appendageOptions["nNodes"]+1:2*appendageOptions["nNodes"]-1 # iterate over span
                 spanLoc = mesh[ii, :]
-                localChord = DVDict["c"][ii-solverOptions["nNodes"]]
+                localChord = DVDict["c"][ii-appendageOptions["nNodes"]]
                 foilCoordsXform = transform_airfoil(foilCoords, localChord)
 
                 # Get u, v, w based on rotations
@@ -122,7 +131,7 @@ function write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOption
                 write(io, "DATAPACKING = POINT\n")
                 # --- Values ---
                 for jj in 1:nAirfoilPts
-                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM], spanLoc[YDIM], foilCoordsXform[jj, YDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
+                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM] + spanLoc[XDIM], spanLoc[YDIM], foilCoordsXform[jj, YDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
                 end
                 # --- Connectivities ---
                 for jj in 1:nAirfoilPts-1
@@ -131,12 +140,12 @@ function write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOption
             end
         end
 
-        if solverOptions["config"] == "t-foil"
+        if appendageOptions["config"] == "t-foil"
 
             foilCoords = generate_naca4dig(DVDict["toc_strut"][1])
-            for ii in solverOptions["nNodes"]*2:(solverOptions["nNodes"]*2+solverOptions["nNodeStrut"]-2) # iterate over strut
+            for ii in appendageOptions["nNodes"]*2:(appendageOptions["nNodes"]*2+appendageOptions["nNodeStrut"]-2) # iterate over strut
                 spanLoc = mesh[ii, :]
-                localChord = DVDict["c_strut"][ii-(solverOptions["nNodes"]*2-1)]
+                localChord = DVDict["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]
                 foilCoordsXform = transform_airfoil(foilCoords, localChord)
 
                 # Get u, v, w based on rotations
@@ -153,7 +162,7 @@ function write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOption
                 # --- Values ---
                 for jj in 1:nAirfoilPts
                     # THIS PART CHANGED BECAUSE THE STRUT IS VERTICAL
-                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM], foilCoordsXform[jj, YDIM], spanLoc[ZDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
+                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM]+ spanLoc[XDIM], foilCoordsXform[jj, YDIM], spanLoc[ZDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
                 end
                 # --- Connectivities ---
                 for jj in 1:nAirfoilPts-1
@@ -162,13 +171,14 @@ function write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOption
             end
         end
     else
-        error("Unsupported config: ", solverOptions["config"])
+        error("Unsupported config: ", appendageOptions["config"])
     end
 end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
-function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static"; solverOptions=Dict("config" => "wing"))
+function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static"; 
+    appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1)
     """
     """
     fTractions = STATICSOL.fHydro
@@ -180,7 +190,7 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
 
     @printf("Writing deformed structure to %s_<>.dat\n", basename)
 
-    outfile = @sprintf("%s%s.dat", outputDir, basename)
+    outfile = @sprintf("%s%s_comp%03d.dat", outputDir, basename, iComp)
     io = open(outfile, "w")
 
     # ************************************************
@@ -222,7 +232,7 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     # ************************************************
     #     Airfoils
     # ************************************************
-    write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+    write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
 
     close(io)
 end
@@ -268,10 +278,9 @@ function write_1Dfemmesh(io, FEMESH)
 
 end # end write_mesh
 
-function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode")
+function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode"; solverOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
-    # TODO: should mode 3 be in-plane?? No it shouldn't. Why does it appear?
     Currently writes out a NACA 4-digit airfoil
     """
 
@@ -368,7 +377,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
                 # ************************************************
                 #     Airfoils
                 # ************************************************
-                write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi)
+                write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
 
                 close(io)
             end
@@ -376,7 +385,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
     end
 end # end write_hydroelastic_mode
 
-function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String)
+function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String; solverOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
     Currently writes out a NACA 4-digit airfoil
@@ -444,7 +453,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi)
+        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
 
         close(io)
     end
@@ -500,7 +509,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi)
+        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
 
         close(io)
     end

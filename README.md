@@ -123,7 +123,7 @@ pyspline
 pygeo
 ```
 
-The MACH2DCFoil wrapper requires TODO: GGGGGGGGGGGGGGGGGGGGGGGGGG
+The MACH2DCFoil wrapper requires TODO:
 ```
 pip install julia
 ```

@@ -378,7 +378,7 @@ function test_modal(DVDict, solverOptions)
     # --- Mesh ---
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
     nElem = nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
 
     # ************************************************

@@ -19,7 +19,7 @@ using .DataTypes: RealOrComplex
 # ==============================================================================
 #                         Constructors
 # ==============================================================================
-function ChainRulesCore.rrule(::Type{LinRange}, start::Real, stop::Real, N::Integer)
+function ChainRulesCore.rrule(::Type{LinRange}, start::RealOrComplex, stop::RealOrComplex, N::Integer)
     
     function LinRange_pullback(yb)
         """

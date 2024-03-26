@@ -7,8 +7,9 @@
 
 using Printf # for better file name
 using FileIO
-using ForwardDiff, FiniteDifferences, Zygote
-include("../../src/DCFoil.jl")
+# using ForwardDiff, FiniteDifferences
+using Zygote
+include("../src/DCFoil.jl")
 
 using .DCFoil
 
@@ -40,6 +41,7 @@ debug = false
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
 nNodes = 5 # spatial nodes
+nNodesStrut = 5 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
@@ -60,9 +62,17 @@ DVDict = Dict(
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12, # thickness-to-chord ratio
+    "toc" => 0.12*ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+     # --- Strut vars ---
+     "beta" => 0.0, # yaw angle wrt flow [deg]
+     "s_strut" => 0.4, # from Yingqian
+     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
+     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+     "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+     "θ_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -74,6 +84,7 @@ solverOptions = Dict(
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "nNodes" => nNodes,
+    "nNodesStrut" => nNodesStrut,
     "config" => "wing",
     "rotation" => 0.0, # deg
     "gravityVector" => [0.0, 0.0, -9.81],
@@ -117,21 +128,27 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-steps = [1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12] # step sizes
+steps = [1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9] # step sizes
 dvKey = "θ" # dv to test deriv
+dvKey = "Λ" # dv to test deriv
 evalFunc = "ksflutter"
 
 # # Right now, we require a complete solve to get the derivatives
-include("../../src/solvers/SolveFlutter.jl")
-include("../../src/InitModel.jl")
-include("../../src/struct/FEMMethods.jl")
-include("../../src/solvers/SolverRoutines.jl")
-include("../../src/hydro/HydroStrip.jl")
-include("../../src/constants/SolutionConstants.jl")
-using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .HydroStrip, .SolutionConstants
+include("../src/solvers/SolveFlutter.jl")
+using .SolveFlutter
+include("../src/InitModel.jl")
+using .InitModel
+include("../src/struct/FEMMethods.jl")
+using .FEMMethods
+include("../src/solvers/SolverRoutines.jl")
+using .SolverRoutines
+include("../src/hydro/HydroStrip.jl")
+using .HydroStrip
+include("../src/constants/SolutionConstants.jl")
+using .SolutionConstants
 # FOIL = InitModel.init_model_wrapper(DVDict, solverOptions; uRange=solverOptions["uRange"], fSweep=solverOptions["fSweep"])
 # nElem = FOIL.nNodes - 1
-# structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+# structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
 # abVec = DVDict["ab"]
 # x_αbVec = DVDict["x_αb"]
 # chordVec = DVDict["c"]
@@ -248,22 +265,17 @@ using .SolveFlutter, .InitModel, .FEMMethods, .SolverRoutines, .HydroStrip, .Sol
 #     Forward difference checks (dumb way)
 # ************************************************
 derivs = zeros(length(steps))
-funcVal = 0.0f0
+funcVal = 0.0
+
 for (ii, dh) in enumerate(steps)
-    costFuncs = DCFoil.run_model(
-        DVDict,
-        evalFuncs;
-        solverOptions=solverOptions
-    )
+    DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
+    SOL = DCFoil.run_model(DVDict,        evalFuncs;   solverOptions=solverOptions    )
+    costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
     flutt_i = costFuncs["ksflutter"]
-    funcVal = flutt_i
+    global funcVal = flutt_i
     DVDict[dvKey] += dh
-    costFuncs = DCFoil.run_model(
-        DVDict,
-        evalFuncs;
-        # --- Optional args ---
-        solverOptions=solverOptions
-    )
+    SOL = DCFoil.run_model(DVDict,        evalFuncs;        solverOptions=solverOptions    )
+    costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
     flutt_f = costFuncs["ksflutter"]
 
     derivs[ii] = (flutt_f - flutt_i) / dh
@@ -279,5 +291,5 @@ save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
 #     Does it all work?
 # ************************************************
 funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+# funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 save("./RAD.jld2", "derivs", funcsSensAD, "funcVal", funcVal)

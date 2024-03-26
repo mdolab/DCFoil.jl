@@ -129,11 +129,16 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     debug = solverOptions["debug"]
 
     # --- Init model structure ---
-    global FOIL, _ = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, zeta, θ, nothing, nothing, nothing, nothing, nothing, nothing, nothing, solverOptions; uRange=uRange, fSweep=fSweep)
+    if length(solverOptions["appendageList"]) == 1
+        foilOptions = solverOptions["appendageList"][1]
+        global FOIL, _ = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, zeta, θ, nothing, nothing, nothing, nothing, nothing, nothing, nothing, foilOptions, solverOptions; uRange=uRange, fSweep=fSweep)
+    else
+        error("Only one appendage is supported at the moment")
+    end
 
     # --- Create mesh ---
     nElem = FOIL.nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, span; config=solverOptions["config"])
+    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, span; config=solverOptions["config"])
 
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
@@ -364,19 +369,19 @@ function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeSh
 
 end
 
-function write_tecplot(DVDict, FLUTTERSOL, mesh, outputDir="./OUTPUT/")
+function write_tecplot(DVDict, FLUTTERSOL, mesh, outputDir="./OUTPUT/"; solverOptions=Dict())
     """
     General purpose tecplot writer wrapper for flutter solution
     """
-    TecplotIO.write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir, "mode")
+    TecplotIO.write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir, "mode"; solverOptions=solverOptions)
 
 end
 
-function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir="./OUTPUT/")
+function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir="./OUTPUT/"; solverOptions=Dict())
     """
     General purpose tecplot writer wrapper for modal solution
     """
-    TecplotIO.write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir)
+    TecplotIO.write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir; solverOptions=solverOptions)
 
 end
 # ==============================================================================
@@ -1968,7 +1973,7 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     if mode == "FiDi" # use finite differences the stupid way
 
-        @time sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
+        @time sensitivities, = FiniteDifferences.jacobian(forward_fdm(2, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
             DVDict)
 
         # --- Iterate over DVDict keys ---

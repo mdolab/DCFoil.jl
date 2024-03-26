@@ -60,4 +60,18 @@ struct dynamicFoil{T<:Float64}
     uRange::Vector{T} # forward speed sweep [m/s] (for flutter solution)
 end
 
+struct hull{T<:Float64}
+    """
+    Vessel object with key properties for the system solution
+    This is a mutable struct, so it can be modified during the solution process
+    DO NOT STORE DVS HERE
+    """
+    # --- Vessel properties ---
+    mass::T # mass of hull [kg]
+    Ib::Matrix{T} # BFS inertia matrix [kg-m²]
+    xcg::T # x-coordinate of center of gravity from the bow [m]
+    loa::T # length over all [m]
+    beam::T # beam [m]
+end
+
 end # end module

@@ -45,7 +45,7 @@ loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
+function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     """
     Solve
         (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
@@ -75,6 +75,8 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
     zeta = DVDict["zeta"]
+    structMesh = FEMESH.mesh
+    elemConn = FEMESH.elemConn
     globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
@@ -165,7 +167,7 @@ function solve(structMesh, elemConn, DVDict, solverOptions::Dict)
         #   Get hydroloads at freq
         # ---------------------------
         fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-        fDynamic, DynLift, DynMoment = HydroStrip.integrate_hydroLoads(uSol, fullAIC, α₀, CONSTANTS.elemType)#compute_hydroLoads(uSol, fullAIC)
+        fDynamic, DynLift, DynMoment = HydroStrip.integrate_hydroLoads(uSol, fullAIC, α₀, CONSTANTS.elemType; solverOptions=solverOptions)#compute_hydroLoads(uSol, fullAIC)
 
         # --- Store total force and tip deflection values ---
         LiftDyn[f_ctr] = (DynLift)

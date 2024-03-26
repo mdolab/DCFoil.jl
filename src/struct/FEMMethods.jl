@@ -40,7 +40,7 @@ struct FEMESH{T<:Float64}
     Struct to hold the mesh, element connectivity, and node properties
     """
     mesh::Matrix{T} # node xyz coords
-    elemConn::Matrix{Int64}
+    elemConn::Matrix{Int64} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
     chord::Vector{T}
     toc::Vector{T}
     ab::Vector{T}
@@ -49,8 +49,64 @@ struct FEMESH{T<:Float64}
     airfoilCoords::Matrix{T} # airfoil coordinates
 end
 
+function make_fullMesh(DVDictList::Vector, solverOptions::Dict)
+    """
+    Makes a full body mesh with element connectivity
+    """
 
-function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
+    # ************************************************
+    #     Loop over appendages in the problem
+    # ************************************************
+    StructMeshList = []
+    ElemConnList = []
+    for iComp in 1:length(solverOptions["appendageList"])
+        appendageDict = solverOptions["appendageList"][iComp]
+        DVDict = DVDictList[iComp]
+        println("Meshing ", appendageDict["compName"])
+        span = DVDict["s"]
+        spanStrut = DVDict["s_strut"]
+        nElem = appendageDict["nNodes"] - 1
+        nElStrut = appendageDict["nNodeStrut"] - 1
+        config = appendageDict["config"]
+        rotation = appendageDict["rotation"]
+        structMesh, elemConn = make_componentMesh(nElem, span; config=config, nElStrut=nElStrut, spanStrut=spanStrut,rotation=rotation)
+        
+        # This appends the structMesh and elemConn to the list that we can unpack later
+        push!(StructMeshList, structMesh)
+        push!(ElemConnList, elemConn)
+    end
+
+    return StructMeshList, ElemConnList
+
+    # DON'T USE THE STUFF BELOW
+    # # What's the total number of nodes?
+    # nNodes = 0
+    # nElem = 0
+    # for icomp in length(StructMeshList)
+    #     nNodes += size(StructMeshList[icomp])[1]
+    #     nElem += size(ElemConnList[icomp])[1]
+    # end
+    
+    # # --- Loop to populate fullStructMesh and fullElemConn ---
+    # fullStructMesh = zeros(nNodes, 3)
+    # fullElemConn = zeros(nElem, 2)
+    # iNodeStart = 1
+    # iElemStart = 1
+    # for icomp in length(StructMeshList)
+    #     localStructMesh = StructMeshList[icomp]
+    #     localElemConn = ElemConnList[icomp]
+
+    #     iNodeEnd = iNodeStart + size(localStructMesh)[1]
+    #     iElemEnd = iElemStart + size(localElemConn)[1]
+    #     # TODO: GGGGGGGGGGGGG GET THIS WORKING
+    #     fullStructMesh[iNodeStart:iNodeEnd,:] = localStructMesh
+    #     fullElemConn[iElemStart:iElemEnd,:] = localElemConn
+    # end
+
+    # return fullStructMesh, fullElemConn
+end
+
+function make_componentMesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
     """
     Makes a mesh and element connectivity
     First element is always origin (x,y,z) = (0,0,0)
@@ -481,15 +537,15 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     return globalK, globalM, globalF
 end
 
-function get_fixed_dofs(elemType::String, BCCond="clamped"; solverOptions=Dict("config" => "wing"))
+function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dict("config" => "wing"))
     """
     Depending on the elemType, return the indices of fixed nodes
     """
     if BCCond == "clamped"
-        if solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+        if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
             fixedDOFs = 1:BeamElement.NDOF
-        elseif solverOptions["config"] == "t-foil"
-            nElemTot = (solverOptions["nNodes"] - 1) * 2 + solverOptions["nNodeStrut"] - 1
+        elseif appendageOptions["config"] == "t-foil"
+            nElemTot = (appendageOptions["nNodes"] - 1) * 2 + appendageOptions["nNodeStrut"] - 1
             nNodeTot = nElemTot + 1
             fixedDOFs = nNodeTot*BeamElement.NDOF:-1:nElemTot*BeamElement.NDOF+1
 
@@ -646,7 +702,7 @@ function apply_BCs(K, M, F, globalDOFBlankingList)
     return newK, newM, newF
 end
 
-function put_BC_back(q, elemType::String, BCType="clamped"; solverOptions=Dict("config" => "wing"))
+function put_BC_back(q, elemType::String, BCType="clamped"; appendageOptions=Dict("config" => "wing"))
     """
     appends the BCs back into the solution
     """
@@ -655,9 +711,9 @@ function put_BC_back(q, elemType::String, BCType="clamped"; solverOptions=Dict("
         if elemType == "BT2"
             uSol = vcat([0, 0, 0, 0], q)
         elseif elemType == "COMP2"
-            if solverOptions["config"] == "wing" || solverOptions["config"] == "full-wing"
+            if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
                 uSol = vcat(zeros(9), q)
-            elseif solverOptions["config"] == "t-foil"
+            elseif appendageOptions["config"] == "t-foil"
                 uSol = vcat(q, zeros(9))
             else
                 error("Unsuppported config")

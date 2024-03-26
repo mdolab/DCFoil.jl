@@ -8,6 +8,7 @@
 \usepackage[bookmarks=true,bookmarksnumbered=true,hidelinks]{hyperref}
 \usepackage{cleveref}
 \usepackage{algorithm2e}
+\usepackage{svg}
 \usepackage[compact]{titlesec}
 \graphicspath{{../figures/}}
 
@@ -16,8 +17,8 @@
 \newcommand{\ppt}[2]{\frac{\partial^2 #1}{\partial #2^2}}
 \newcommand{\pptt}[2]{\frac{\partial^3 #1}{\partial #2^3}}
 \newcommand{\ppttt}[2]{\frac{\partial^4 #1}{\partial #2^4}}
-\newcommand{\DD}[2]{\frac{D #1}{D #2}}
-\newcommand{\dd}[2]{\frac{d #1}{d #2}}
+\newcommand{\DD}[2]{\frac{\textrm{D} #1}{\textrm{D} #2}}
+\newcommand{\dd}[2]{\frac{\textrm{d} #1}{\textrm{d} #2}}
 \newcommand{\ddt}[2]{\frac{d^2 #1}{d #2^2}}
 \newcommand{\ddtt}[2]{\frac{d^3 #1}{d #2^3}}
 \newcommand{\ddttt}[2]{\frac{d^4 #1}{d #2^4}}
@@ -207,7 +208,7 @@ Structural damping is typically small compared to hydrodynamic damping so its ma
 \subsubsection{Steady lifting line}
 % 
 The lifting line model derives from~\citet[Ch. XI]{Glauert1983a} and works for arbitrary chord.
-Specifically, we are after sectional lift slopes ($\textstyle c_{\ell_\alpha} = dc_\ell/d\alpha = a_0$).
+Specifically, we are after sectional lift slopes ($\textstyle c_{\ell_\alpha} = \tn{d}c_\ell/\tn{d}\alpha$).
 We assume
 \begin{itemize}
     \item the chord is small compared to the span,
@@ -223,7 +224,7 @@ The induced velocity of an element of the line ($ds$) at point $P$ from one vort
 \be
 dq = \frac{\Gamma}{4 \pi r^2} \sin(\theta) ds
 \ee
-but in practice, one would solve this is an integral over the entire vortex line, so we will build up to the full wing.
+but in practice, one would solve this as an integral over the entire vortex line, so we will build up to the full wing.
 
 % We know the forces to be
 % \begin{align}
@@ -423,6 +424,47 @@ where $\Delta y_i$ is the strip width at node $i$, which we assume to be equal t
 \end{eqnarray}
 % 
 The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady (damping and stiffness) aerodynamics and are lumped into their respective global matrices if they are in phase with velocity or displacements.
+
+\subsubsection{Free surface effect}
+
+We compute the nonlinear free surface effect using the method of de-singularization from \citet{Cao1991}.
+The \emph{indirect method} solves for the strengths of the singularities $\sigma$.
+The velocity potential (field function) is some integral of a source distribution $\sigma(\mbf{x}_s)$ over the surface $\Omega$ outside the problem domain
+\be
+\phi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\mbf{x} - \mbf{x}_s} d\Omega
+.
+\ee
+The boundary conditions give rise to the following boundary integral equations (these are also Fredholm integrals of the first kind)
+\be
+&\iint_{\Omega}\sigma(\mbf{x}_s)\frac{1}{\left| \mbf{x}_c - \mbf{x}_s \right| } \tn{d} \Omega & = \phi_0(\mbf{x}_c) \quad \tn{(Dirichlet)}
+\\
+& \iint_{\Omega} \sigma(\mbf{x}_s) \pp{}{n}\left(\frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|}\right)\tn{d} \Omega & = \chi(\mbf{x}_c) \quad \tn{(Neumann)}
+\ee
+
+The nonlinear dynamic and kinematic boundary conditions for the free surface (derived from the unsteady Bernoulli equation) are
+\be
+\label{eqn:FSBC}
+& \DD{\phi}{t} & = - {z}_f + \half \nabla \phi \cdot \nabla \phi \quad \tn{(dynamic)}
+\\
+& \DD{\mbf{x}_f}{t} & = \nabla \phi \quad \tn{(kinematic)}
+\ee
+
+
+\RestyleAlgo{ruled}
+\begin{algorithm}
+    \LinesNumbered
+    % \SetKwComment{Comment}{/* }{ */}
+    \caption{\label{alg:FSBC}
+        Computation of hydrodynamic loads with a free surface boundary condition
+    }
+    \KwData{Grid points (paneleing of geometry) and flow speed}
+    \KwResult{Source strengths $\sigma_i$}
+    Pass in (or generate) mesh and panel with node connectivity of control points $\mbf{x}_c$ and source points $\mbf{x}_s$\;
+    Form your Dirichlet and Neumann conditions\;
+    Impose the nonlinear dynamic and kinematic free surface boundary conditions at $z=0$ (Equation \eqref{eqn:FSBC}).
+    These need to be integrated in time to steady state.
+    \;
+\end{algorithm}
 %------------------------------------------------------------------------------
 \clearpage
 \section{Static solution}
@@ -432,6 +474,31 @@ The static hydrostructural equation is
 \\
 &\left(\mbf{K_s} - \mbf{K_f}\right)\mbf{u} & = \mbf{0}
 \ee
+\subsection{Elliptical lift}
+It is helpful to compare lift distributions ($L = \int_{-b/2}^{b/2}L'(y) dy$) to the elliptical lift distribution.
+An ellipse is
+\be
+\gamma(y)=\Gamma_0 \sqrt{1-\left(\frac{2 y}{b}\right)^2}
+\ee
+where the spanwise lift distribution from the Kutta-Joukowski theorem is $L'(y) = \rho \Uinf \gamma(y)$.
+Substituting the spanwise circulation into the Kutta-Joukowski theorem and the relation for total lift, we get
+\be
+L=\int_{-b / 2}^{b / 2} L^{\prime}(y) d y=\int_{-b / 2}^{b / 2} \rho \Uinf \Gamma_0 \sqrt{1-\left(\frac{2 y}{b}\right)^2} d y=\frac{\pi}{4} \rho \Uinf \Gamma_0 b
+\ee
+where the integral solution comes from integral tables or the geometric observation that the area of an ellipse is $\pi/4$ times the area of the bounding rectangle.
+
+\subsection{Total drag}
+
+\citet[Fig. 21.3]{carlton2007} and \citet[Fig. 4]{Chernyshev2023} provide references on total drag of ships.
+\citet[Fig. 12.2]{Raymer2012} is also a good reference on drag classification.
+The ideas from both give us an idea of the calm-water drag of a foiling ship.
+In waves, an added resistance component due to radiated waves from the body responding to incident waves must be considered in total drag.
+\begin{figure}[htb!]
+\centering
+      % reference: trim={<left> <lower> <right> <upper>}
+      \includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dragBuildUp.png}
+      \caption{\label{fig:HydroDrag}Hydrodynamic drag}
+\end{figure}
 %------------------------------------------------------------------------------
 \clearpage
 \section{Forced vibration solution}
@@ -632,14 +699,14 @@ We compute $\widebar{  \mbf{u} }_i$ and collect them in the matrix
 Now the reduced stiffness and mass matrices are
 %
 \be
-\mbf{M_s}_r = \mbf{Q}_r^T \mbf{M_s} \mbf{Q}_r = \mbf{I}_r \in \mathbb{R}^{N_r \times N_r} \\
-\mbf{K_s}_r = \mbf{Q}_r^T \mbf{K_s} \mbf{Q}_r = \tn{diag}\left[ \omega_i^2   \right]
+\mbf{M_s}_r = \mbf{Q}_r^{\top} \mbf{M_s} \mbf{Q}_r = \mbf{I}_r \in \mathbb{R}^{N_r \times N_r} \\
+\mbf{K_s}_r = \mbf{Q}_r^{\top} \mbf{K_s} \mbf{Q}_r = \tn{diag}\left[ \omega_i^2   \right]
 \ee
 %
 and the governing equation reduces to
 %
 \be
-\mbf{M_s}_r \ddot{\mbf{q}} + \mbf{C_s}_r \ddot{\mbf{q}} + \mbf{K_s}_r \mbf{q} - \mbf{Q}_r^T \mbf{f}_{\tn{hydro}} = \mbf{0}
+\mbf{M_s}_r \ddot{\mbf{q}} + \mbf{C_s}_r \ddot{\mbf{q}} + \mbf{K_s}_r \mbf{q} - \mbf{Q}_r^{\top} \mbf{f}_{\tn{hydro}} = \mbf{0}
 \ee
 %
 
@@ -653,9 +720,9 @@ To apply this to the hydrodynamic loads, we obtain from Equation~\eqref{eqn:GenF
 where the matrices are
 %
 \be
-\mbf{M_f}_r = \mbf{Q}_r^T \mbf{M_f} \mbf{Q}_r \\
-\mbf{C_f}_r = \mbf{Q}_r^T \mbf{C_f} \mbf{Q}_r \\
-\mbf{K_f}_r = \mbf{Q}_r^T \mbf{K_f} \mbf{Q}_r.
+\mbf{M_f}_r = \mbf{Q}_r^{\top} \mbf{M_f} \mbf{Q}_r \\
+\mbf{C_f}_r = \mbf{Q}_r^{\top} \mbf{C_f} \mbf{Q}_r \\
+\mbf{K_f}_r = \mbf{Q}_r^{\top} \mbf{K_f} \mbf{Q}_r.
 \ee
 Note, since cavitating flow leads to non-symmetric matrices, we cannot do all the simplifications \citet{Jonsson2017a} uses.
 TODO: OK, this is not actually true because we wouldn't be able to solve in the frequency domain...
@@ -699,8 +766,8 @@ DCFoil assumes an equilibrium state is provided (such as from a VPP).
 The BFS and EFS origin is at the center of mass of the craft.
 Forward is $x$, port is $y$, and up is $z$.
 These are different axes from the foil.
-There are six degrees of freedom in the BFS $\boldsymbol{\eta} = [\eta_1,\eta_2,\eta_3,\eta_4,\eta_5,\eta_6]^T$.
-The six velocities in BFS are $[v_x,v_y,v_z,\omega_x,\omega_y,\omega_z]^T$ where the first three are $\mbf{v}_B$ and the last three are $\boldsymbol{\omega}_B$.
+There are six degrees of freedom in the BFS denoted $\boldsymbol{\eta} = [\eta_1,\eta_2,\eta_3,\eta_4,\eta_5,\eta_6]^{\top}$.
+The six velocities in BFS are $[v_x,v_y,v_z,\omega_x,\omega_y,\omega_z]^{\top}$ where the first three are $\mbf{v}_B$ and the last three are $\boldsymbol{\omega}_B$.
 The orientation in EFS are \emph{Euler angles} $[\phi, \theta, \psi]$.
 See \Cref{fig:Coordinates}.
 \begin{figure}[htb!]
@@ -858,7 +925,7 @@ The craft instantaneous angle of attack is
 \ben
 \alpha(t)=\tan^{-1} \frac{v_z(t)-v_{g z}(t)}{v_x(t)-v_{g x}(t)} \quad \text { and } \quad-{\pi} \leq \alpha \leq {\pi}
 \een
-where $\mbf{w} = -[v_{gx}, v_{gy}, v_{gz}, \omega_{gx}, \omega_{gy}, \omega_{gz}]^T$ is the disturbance vector of gusts (assume constant).
+where $\mbf{w} = -[v_{gx}, v_{gy}, v_{gz}, \omega_{gx}, \omega_{gy}, \omega_{gz}]^{\top}$ is the disturbance vector of gusts (assume constant).
 Leeway angle is
 \ben
 \beta = \tan ^{-1} \frac{v_y-v_{g y}}{\sqrt{\left(v_x-v_{g x}\right)^2+\left(v_z-v_{g z}\right)^2}} \quad \text { and } \quad-\frac{\pi}{2} \leq \beta \leq \frac{\pi}{2}.
@@ -877,10 +944,20 @@ Finally, the velocity vector is
 \end{array}\right\}
 \een
 where $V_{TAS} = ||\mbf{v}_B-\mbf{v}_{g B} ||$ is the magnitude of the true foiling speed.
+The hydrodynamics loads in body axes are
 \ben
-& \mbf{f}_{a B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \mathbf{c}_{\mathbf{f}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),                                     \\
-& \mbf{m}_{a B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \boldsymbol{\Lambda}_{\mathrm{ref}} \mathbf{c}_{\mathbf{m}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),
+& \mbf{f}_{h B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \mathbf{c}_{\mathbf{f}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),                                     \\
+& \mbf{m}_{h B} & =\frac{1}{2} \rho V_{\mathrm{TAS}}^2 S \boldsymbol{\Lambda}_{\mathrm{ref}} \mathbf{c}_{\mathbf{m}_B}\left(\mathbf{v}_B-\mathbf{v}_{g B}, \boldsymbol{\omega}_B-\boldsymbol{\omega}_{g B}, \boldsymbol{\delta}_c ; \sigma, \mathrm{Re}\right),
 \een
+where $\mbf{c}_{\mbf{f}_B}$ and $\mbf{c}_{\mbf{m}_B}$ are the force and moment coefficients, respectively.
+The vector $\boldsymbol{\delta}_c$ is the vector of angles of the control surfaces.
+
+The hydrodynamic stability derivatives allow us to tune $\boldsymbol{\delta}_c$ to find incremental changes in the hydrodynamic loads.
+\be
+& \Delta \mbf{f}_{h B} & = q S \left( \Delta \mbf{c}_{\mbf{f}_B} + \right)
+\\
+& \Delta \mbf{m}_{h B} & = q S \left( \Delta \mbf{c}_{\mbf{m}_B} + \right)
+\ee
 % 
 \begin{figure*}[htb!]
     \centering
@@ -891,8 +968,27 @@ where $V_{TAS} = ||\mbf{v}_B-\mbf{v}_{g B} ||$ is the magnitude of the true foil
     }
 \end{figure*}
 
+\subsection{Steady-state flight solution}
+% 
+In steady-state flight, there is no acceleration so $\dot{\mbf{v}}_B=\dot{\boldsymbol{\omega}}_B=0$.
+Furthermore, $\dot{\phi}=\dot{\theta}=\dot{\psi} = 0, \phi=\theta=0$.
+\be
+\boxed{
+    \mbf{f}_{h B} + \mbf{f}_{p B} + \mbf{f}_{g B} - m \tilde{\boldsymbol{\omega}}_B \mbf{v}_B= \mbf{0}
+}
+\\
+\boxed{\mbf{m}_{h B} + \mbf{m}_{p B} - \tilde{\boldsymbol{\omega}}_B \mbf{I}_B \boldsymbol{\omega}_B = \mbf{0}
+}
+\ee
+The pitch of the vessel $\theta$ is treated differently from the trim of the boat $\tau$.
+The problem is now finding the $\boldsymbol{\delta}_c$ that satisfy the above equations where the control angles are vessel trim and rudder rake.
+\be
+\boldsymbol{\delta}_c = \left[
+    \tau \quad \delta_r
+    \right]^{\top}
+\ee
 \subsubsection{Elastified equations of motion}
-Defining the state vector as $\mbf{x}_r(t) = [v_x, v_y, v_z, \omega_x, \omega_y, \omega_z, \phi, \theta]^T$ and the control inputs as $\mbf{u} = [\delta_e, \delta_r]^T$ where $\delta_e$ and $\delta_r$ are elevator (main foil rake) and rudder command inputs, the dynamics of the system are
+Defining the state vector as $\mbf{x}_r(t) = [v_x, v_y, v_z, \omega_x, \omega_y, \omega_z, \phi, \theta]^{\top}$ and the control inputs as $\mbf{u} = [\tau, \delta_r]^{\top}$ where $\tau$ and $\delta_r$ are vessel trim and rudder rake command inputs, the dynamics of the system are
 \be
 \label{eqn:RigidBody}
 \dot{\mbf{x}}_r = f^{(r)}(\mbf{x}_r, \mbf{x}_s, \mbf{u}, \mbf{w})
@@ -945,6 +1041,18 @@ The structural effects are a constant feedback on the rigid equations.
 Now in the vibrating mode, if we assume small-amplitude vibrations, we must consider the shift of vehicle center of mass and its impact on the vehicle dynamics.
 If the elastic deformations are sufficiently small to not change global inertial characteristics, then modal coordinates can be used.
 We introduce a \emph{body-attached frame} (BAF) rigidly linked to a point on the vessel and a \emph{floating frame} (FF).
+
+\section{Data structure and problem setup}
+
+The overall data flow in the program is in \Cref{fig:DataFlow}.
+\begin{figure}[htb!]
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    %   \includesvg[width=\linewidth]{dataFlow.drawio}
+    \includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dataFlow.png}
+    \caption{\label{fig:DataFlow}Data flow in the program.}
+\end{figure}
+Appendage setup is through dictionaries.
 
 \section{Writing derivative routines}
 % 

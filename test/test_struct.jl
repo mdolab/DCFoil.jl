@@ -367,7 +367,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
 	# ************************************************
 	#     bend element
 	# ************************************************
@@ -441,7 +441,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
 
 
 	# ---------------------------
@@ -580,7 +580,7 @@ function test_FiniteElementIso3D()
 	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
 
 	# ************************************************
 	#     BT2
@@ -719,7 +719,7 @@ function test_FiniteElementBend()
 	FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
 	nElem = nNodes - 1
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
 
 	# ************************************************
 	#     BT2
@@ -814,7 +814,7 @@ function test_FEBT3()
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
 
 	# ---------------------------
 	#   Tip force only
@@ -926,7 +926,7 @@ function test_FECOMP2()
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=testAngle)
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"], rotation=testAngle)
 
 	# ---------------------------
 	#   Tip force only
@@ -1027,7 +1027,7 @@ function test_fullwing(DVDict, solverOptions)
 
 	nElem = nNodes - 1
 	constitutive = FOIL.constitutive
-	structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"], rotation=testAngle)
+	structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"], rotation=testAngle)
 
 	# ---------------------------
 	#   Tip force only

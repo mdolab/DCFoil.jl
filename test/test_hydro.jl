@@ -258,7 +258,6 @@ end
 #     clalpha, cl, gamma = HydroStrip.compute_spanwise_vortex(semispan, chordVec, alpha, Uinf, nNodes, "elliptical")
 #     clalpha, cl, gamma = HydroStrip.compute_spanwise_vortex(semispan, chordVec, alpha, Uinf, nNodes, "chord")
 
-#     # plotTODO: PICKUP HERE WITH PLOTTING AND DOING FS EFFECT
 # end
 
 # AIC, fHydro = test_AICs()

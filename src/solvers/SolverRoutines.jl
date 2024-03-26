@@ -59,7 +59,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=nothing, solverOptions=Dict())
+function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=nothing, appendageOptions=Dict())
     """
     Returns the deflected + rigid shape of the foil
     Inputs
@@ -115,7 +115,7 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
         ]
         staticOffset_wing = transMatL2G * staticOffset_wing
         staticOffset_junctionNode = staticOffset_wing
-        if solverOptions["config"] == "t-foil"
+        if appendageOptions["config"] == "t-foil"
             # TODO: MAKE IT SO ALL WING NODES ARE YAWED ALSO
             angleDefault = deg2rad(-90)
             axisDefault = "x"
@@ -129,7 +129,7 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
             staticOffset_strut = transMatL2G * staticOffset_strut
 
             staticOffset_junctionNode = staticOffset_strut + staticOffset_wing
-        elseif solverOptions["config"] == "full-wing" || solverOptions["config"] == "wing"
+        elseif appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "wing"
             staticOffset_junctionNode = staticOffset_wing
         end
     else
@@ -139,8 +139,8 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
     # In the following formulation, we assume junction node is always first!
     nStrutDOFs = 0
     staticOffsetGlobalRef_strut = []
-    if solverOptions["config"] == "t-foil"
-        nStrutDOFs = (solverOptions["nNodeStrut"]-1)*nDOF # subtract 1 because of the junction node
+    if appendageOptions["config"] == "t-foil"
+        nStrutDOFs = (appendageOptions["nNodeStrut"]-1)*nDOF # subtract 1 because of the junction node
         w_strut = foilStructuralStates[end-nStrutDOFs+1:nDOF:end]
         staticOffsetGlobalRef_strut = repeat(staticOffset_strut, outer=[length(w_strut)])
     end

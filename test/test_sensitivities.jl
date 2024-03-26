@@ -113,7 +113,7 @@ function test_hydroderiv(DVDict, solverOptions)
     """
 
     nElem = solverOptions["nNodes"] - 1
-    mesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+    mesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
         DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions
     )
