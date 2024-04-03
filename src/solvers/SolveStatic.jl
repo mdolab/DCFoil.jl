@@ -13,7 +13,7 @@ Static hydroelastic solver
 # --- Public functions ---
 export solve
 
-# --- Libraries ---
+# --- PACKAGES ---
 using FiniteDifferences, ChainRulesCore
 using LinearAlgebra, Statistics
 using JSON
@@ -21,32 +21,16 @@ using Zygote
 using Printf, DelimitedFiles
 
 # --- DCFoil modules ---
-include("../InitModel.jl")
-using .InitModel
-
-include("../struct/BeamProperties.jl")
-using .BeamProperties
-
-include("../struct/EBBeam.jl")
-using .EBBeam: NDOF
-
-include("../struct/FEMMethods.jl")
-using .FEMMethods
-
-include("../hydro/HydroStrip.jl")
-using .HydroStrip
-
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants
-
-include("./SolverRoutines.jl")
-using .SolverRoutines
-
-include("./DCFoilSolution.jl")
-using .DCFoilSolution
-
-include("../io/TecplotIO.jl")
-using .TecplotIO
+using ..InitModel
+using ..FEMMethods
+using ..BeamProperties
+using ..EBBeam: NDOF
+using ..HydroStrip
+using ..SolutionConstants
+using ..SolutionConstants: XDIM, YDIM, ZDIM
+using ..SolverRoutines
+using ..DCFoilSolution
+using ..TecplotIO
 
 # ==============================================================================
 #                         COMMON VARIABLES
@@ -57,9 +41,10 @@ loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOptions::Dict)
+function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOptions::Dict; iComp=1)
     """
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
+
     Inputs
     ------
     DVDict: Dict
@@ -68,6 +53,11 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
         The dictionary of functions to evaluate
     solverOptions: Dict
         The dictionary of solver options
+    appendageOptions: Dict
+        The dictionary of appendage options
+    iComp: int
+        The component index, used to compute downstream flow effects, default is 1
+
     Returns
     -------
     costFuncs: Dict
@@ -77,7 +67,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
     #     INITIALIZE
     # ************************************************
     outputDir = solverOptions["outputDir"]
-    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions) # seems to only be global in this module
+    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions) # seems to only be global in this module
     nNodes = FOIL.nNodes
     global globappendageOptions = appendageOptions
     # global globsolverOptions = solverOptions
@@ -108,6 +98,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
     end
     Λ = DVDict["Λ"]
     α₀ = DVDict["α₀"]
+    rake = DVDict["rake"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive; config=appendageOptions["config"], STRUT=STRUT, ab_strut=strutabVec, x_αb_strut=strutx_αbVec)
@@ -115,49 +106,17 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
     # --- Initialize states ---
     u = zeros(length(globalF))
 
-    # if solverOptions["debug"]
-    #     if elemType == "COMP2"
-    #         # Get transformation matrix for the tip load
-    #         angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
-    #     else
-    #         angleDefault = 0.0
-    #     end
-    #     axisDefault = "z"
-    #     T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    #     T = T1
-    #     Z = zeros(3, 3)
-    #     transMatL2G = [
-    #         T Z Z Z Z Z
-    #         Z T Z Z Z Z
-    #         Z Z T Z Z Z
-    #         Z Z Z T Z Z
-    #         Z Z Z Z T Z
-    #         Z Z Z Z Z T
-    #     ]
-    #     FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, loadType; solverOptions=solverOptions)
-    #     global globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
-    #     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
-
-    #     # # --- Debug printout of matrices in human readable form after BC application ---
-    #     # writedlm(outputDir * "K.csv", K,",")
-    #     # writedlm(outputDir * "M.csv", M,",")
-
-    #     # ---------------------------
-    #     #   Pre-solve system
-    #     # ---------------------------
-    #     q = FEMMethods.solve_structure(K, M, F)
-    #     # --- Populate displacement vector ---
-    #     u[globalDOFBlankingList] .= 0.0
-    #     idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
-    #     u[idxNotBlanked] .= q
-    # end
     # ---------------------------
     #   Get initial fluid tracts
     # ---------------------------
+    if iComp == 2
+        println("Computing downstream flow effects")
+
+    end
 
     # fTractions, AIC, planformArea = HydroStrip.compute_steady_hydroLoads(u, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
     _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; appendageOptions=appendageOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, appendageOptions["config"]; appendageOptions=appendageOptions, solverOptions=solverOptions)
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, rake, elemType, appendageOptions["config"]; appendageOptions=appendageOptions, solverOptions=solverOptions)
     globalF = fTractions
     global AICnoBC = AIC
 
@@ -206,7 +165,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
     global CONSTANTS = SolutionConstants.DCFoilConstants(K, zeros(2, 2), zeros(2, 2), elemType, structMesh, AIC, derivMode, planformArea)
 
     # Actual solve
-    qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q)
+    qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q; is_verbose=true)
     # qSol = q # just use pre-solve solution
     uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType; appendageOptions=appendageOptions)
 
@@ -214,7 +173,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, FOIL, elemType)
     # fHydro, AIC, _ = HydroStrip.compute_steady_hydroLoads(uSol, structMesh, α₀, chordVec, abVec, ebVec, Λ, FOIL, elemType)
     _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(globalM)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; appendageOptions=appendageOptions, STRUT=STRUT, strutchordVec=strutchordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, elemType, appendageOptions["config"]; appendageOptions=appendageOptions, solverOptions=solverOptions)
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(u, AIC, α₀, rake, elemType, appendageOptions["config"]; appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
 
     # ************************************************
@@ -234,12 +193,7 @@ function solve(FEMESH, DVDict::Dict, evalFuncs, solverOptions::Dict, appendageOp
 
     write_sol(uSol, fHydro, elemType, outputDir)
 
-    global STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro)
-
-    # ************************************************
-    #     Get obj funcs
-    # ************************************************
-    # compute_CostFuncs(STATSOL, evalFuncs, solverOptions)
+    global STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro, FEMESH)
 
     return STATSOL
 end
@@ -384,10 +338,17 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, chordVec=chordVec, DVDict=gDVDict)
+function evalFuncs(SOL, evalFuncs; constants=CONSTANTS, chordVec=chordVec, DVDict=gDVDict, foil=FOIL)
     """
     Given {u} and the forces, compute the cost functions
     """
+    states = SOL.structStates
+    forces = SOL.fHydro
+
+    # There should be no reason why the density or flow speed is diff 
+    # between 'foil' data structures in the multi-appendage case
+    # so this line is ok
+    qdyn = 0.5 * foil.ρ_f * foil.U∞^2
 
     if constants.elemType == "BT2"
         nDOF = 4
@@ -414,7 +375,7 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
     elseif globappendageOptions["config"] == "t-foil" || globappendageOptions["config"] == "full-wing"
         ADIM = 2 * constants.planformArea
     end
-    qdyn = 0.5 * foil.ρ_f * foil.U∞^2
+
     if "wtip" in evalFuncs
         w_tip = W[globappendageOptions["nNodes"]]
         costFuncs["wtip"] = w_tip
@@ -427,6 +388,7 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         TotalLift = sum(Lift)
         costFuncs["lift"] = TotalLift
     end
+    # Moment about mid-chord (where the finite element is)
     if "moment" in evalFuncs
         TotalMoment = sum(Moments)
         costFuncs["moment"] = TotalMoment
@@ -435,6 +397,7 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         CL = TotalLift / (qdyn * ADIM)
         costFuncs["cl"] = CL
     end
+    # Coefficient of moment about the mid-chord
     if "cmy" in evalFuncs
         CM = TotalMoment / (qdyn * ADIM * mean(chordVec))
         costFuncs["cmy"] = CM
@@ -483,7 +446,6 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         costFuncs["cds"] = CDs
         costFuncs["fxs"] = ds
     end
-    # TODO: PICKUP HERE GET COL AS AN OUTPUT!!
     # # TODO:
     # if "cdw" in evalFuncs || "fxw" in evalFuncs
     #     # rws = EQ 6.149 FALTINSEN thickness effect on wave resistance
@@ -513,6 +475,21 @@ function evalFuncs(states, forces, evalFuncs; constants=CONSTANTS, foil=FOIL, ch
         costFuncs["fxpr"] = Dpr
         costFuncs["cdpr"] = Dpr / (qdyn * ADIM)
     end
+    # --- Center of forces ---
+    # These calculations are in local appendage frame
+    if "cofz" in evalFuncs # center of forces in z direction
+        xcenter = sum(Lift .* SOL.FEMESH.mesh[:, XDIM]) / sum(Lift)
+        ycenter = sum(Lift .* SOL.FEMESH.mesh[:, YDIM]) / sum(Lift)
+        zcenter = sum(Lift .* SOL.FEMESH.mesh[:, ZDIM]) / sum(Lift)
+        costFuncs["cofz"] = [xcenter, ycenter, zcenter]
+    end
+    if "comy" in evalFuncs # center of moments about y axis
+        xcenter = sum(Moments .* SOL.FEMESH.mesh[:, XDIM]) / sum(Moments)
+        ycenter = sum(Moments .* SOL.FEMESH.mesh[:, YDIM]) / sum(Moments)
+        zcenter = sum(Moments .* SOL.FEMESH.mesh[:, ZDIM]) / sum(Moments)
+        costFuncs["comy"] = [xcenter, ycenter, zcenter]
+    end
+
 
     return costFuncs
 end
@@ -531,7 +508,9 @@ function get_sol(DVDict, solverOptions)
     return SOL
 end
 
-function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
+function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, # DVS
+    solverOptions, evalFuncs # 'parameters'
+)
     """
     Do primal solve with function signature compatible with Zygote
     """
@@ -540,12 +519,14 @@ function cost_funcs_with_derivs(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solve
         setup_solver(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions)
 
     # Solve
-    obj = solve(structMesh, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+    STATSOL = solve(FEMESH, DVDict, evalFuncs, solverOptions, appendageOptions; iComp=1)
 
-    return obj
+    costFuncs = evalFuncs(STATSOL, evalFuncs)
+
+    return costFuncs
 end
 
-function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
+function evalFuncsSens(evalFuncsSens::Vector{String}, DVDictList::Vector, solverOptions::Dict; mode="FiDi")
     """
     Wrapper to compute total sensitivities
     """
@@ -558,21 +539,24 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
 
     if mode == "FiDi" # use finite differences the stupid way
 
-        @time sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveStatic.compute_costFuncs(x, solverOptions),
-            DVDict)
+        for iComp in eachindex(DVDictList)
+            @time sensitivities, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolveStatic.cost_funcs_with_derivatives(α₀, Λ, span, c, toc, ab, x_αb, g, θ, solverOptions),
+                DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"]
+            )
 
-        # --- Iterate over DVDict keys ---
-        dv_ctr = 1 # counter for total DVs
-        for (key_ctr, pair) in enumerate(DVDict)
-            key = pair[1]
-            val = pair[2]
-            x_len = length(val)
-            if x_len == 1
-                funcsSens[key] = sensitivities[dv_ctr]
-                dv_ctr += 1
-            elseif x_len > 1
-                funcsSens[key] = sensitivities[dv_ctr:(dv_ctr+x_len-1)]
-                dv_ctr += x_len
+            # --- Iterate over DVDict keys ---
+            dv_ctr = 1 # counter for total DVs
+            for (key_ctr, pair) in enumerate(DVDict)
+                key = pair[1]
+                val = pair[2]
+                x_len = length(val)
+                if x_len == 1
+                    funcsSens[key] = sensitivities[dv_ctr]
+                    dv_ctr += 1
+                elseif x_len > 1
+                    funcsSens[key] = sensitivities[dv_ctr:(dv_ctr+x_len-1)]
+                    dv_ctr += x_len
+                end
             end
         end
 
@@ -592,8 +576,17 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
         funcsSens["zeta"] = sensitivities[8]
         funcsSens["θ"] = sensitivities[9]
 
-    elseif mode == "FAD"
-        error("FAD not implemented yet")
+    elseif mode == "Adjoint"
+        ∂r∂x = compute_∂r∂x()
+        ∂r∂u = compute_∂r∂u()
+
+        for key in keys(DVDict)
+            ∂f∂x = compute_∂f∂x(SOL, evalFuncs; mode="FiDi")
+            ∂f∂u = compute_∂f∂u(SOL)
+            psiMat = compute_adjoint(∂r∂u, ∂f∂u)
+            # --- Compute total sensitivities ---
+            funcsSens[key] = ∂f∂x - psiMat' * ∂r∂x
+        end
     end
 
     # ************************************************
@@ -609,15 +602,15 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
     return funcsSens
 end
 
-function compute_∂f∂x(foilPDESol)
+function compute_∂f∂x(SOL, evalFuncs::Vector{String}; mode="FiDi")
 
 end
 
-function compute_∂r∂x(foilPDESol)
+function compute_∂r∂x(SOL)
 
 end
 
-function compute_∂f∂u(foilPDESol)
+function compute_∂f∂u(SOL)
 
 end
 
@@ -625,6 +618,9 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
     """
     Jacobian of residuals with respect to structural states
     EXCLUDING BC NODES
+
+    u - structural states
+
     """
 
     if mode == "FiDi" # Finite difference
@@ -674,12 +670,12 @@ function compute_residuals(structuralStates)
         exit()
     elseif CONSTANTS.elemType == "BT2" # knock off root element
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
-        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, FOIL.rake, CONSTANTS.elemType)
         F = -CONSTANTS.AICmat * foilTotalStates
         FOut = F[5:end]
     elseif CONSTANTS.elemType == "COMP2"
         completeStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType; appendageOptions=globappendageOptions)
-        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, CONSTANTS.elemType; STRUT=STRUT, appendageOptions=globappendageOptions)
+        foilTotalStates, nDOF = SolverRoutines.return_totalStates(completeStates, FOIL.α₀, FOIL.rake, CONSTANTS.elemType; STRUT=STRUT, appendageOptions=globappendageOptions)
         F = -CONSTANTS.AICmat * foilTotalStates
         if globappendageOptions["config"] == "t-foil"
             FOut = F[1:end-NDOF]
@@ -704,28 +700,17 @@ function compute_direct()
     """
     Computes direct vector
     """
+
+    return phi
 end
 
-function compute_adjoint()
-
-end
-
-function compute_jacobian(stateVec)
+function compute_adjoint(∂r∂u::Matrix{Float64}, ∂f∂uT::Vector{Float64})
     """
-    Compute the jacobian df/dx
-
-    Inputs:
-        stateVec:
-
-    returns:
-
-
+    Computes adjoint vector
     """
-    # ************************************************
-    #     Compute cost func gradients
-    # ************************************************
+    psi = ∂r∂u' \ ∂f∂uT
 
-
+    return psi
 end
 
 

@@ -14,27 +14,18 @@ Frequency domain hydroelastic solver
 # --- Public functions ---
 export solve
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra, Statistics
 using JSON
 using Zygote, ChainRulesCore
 using FileIO
 
 # --- DCFoil modules ---
-# First include them
-include("../InitModel.jl")
-include("../struct/BeamProperties.jl")
-include("../struct/FEMMethods.jl")
-include("../hydro/HydroStrip.jl")
-include("SolveStatic.jl")
-include("../constants/SolutionConstants.jl")
-include("./SolverRoutines.jl")
-# then use them
-using .InitModel, .HydroStrip, .BeamProperties
-using .FEMMethods
-using .SolveStatic
-using .SolutionConstants
-using .SolverRoutines
+using ..InitModel, ..HydroStrip, ..BeamProperties
+using ..FEMMethods
+using ..SolveStatic
+using ..SolutionConstants
+using ..SolverRoutines
 
 # ==============================================================================
 #                         COMMON VARIABLES
@@ -57,7 +48,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fSweep = solverOptions["fSweep"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions; fSweep=fSweep)
+    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions; fSweep=fSweep)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -74,6 +65,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     Λ = DVDict["Λ"]
     U∞ = solverOptions["U∞"]
     α₀ = DVDict["α₀"]
+    rake = DVDict["rake"]
     zeta = DVDict["zeta"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
@@ -167,7 +159,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
         #   Get hydroloads at freq
         # ---------------------------
         fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-        fDynamic, DynLift, DynMoment = HydroStrip.integrate_hydroLoads(uSol, fullAIC, α₀, CONSTANTS.elemType; solverOptions=solverOptions)#compute_hydroLoads(uSol, fullAIC)
+        fDynamic, DynLift, DynMoment = HydroStrip.integrate_hydroLoads(uSol, fullAIC, α₀, rake, CONSTANTS.elemType; solverOptions=solverOptions)#compute_hydroLoads(uSol, fullAIC)
 
         # --- Store total force and tip deflection values ---
         LiftDyn[f_ctr] = (DynLift)

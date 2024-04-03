@@ -2,7 +2,7 @@
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "e8a5c2c74e91014557b9f50cc42f8b690234336e"
+project_hash = "5015a7a855092c953c8d94a0b5965cc818b16cda"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "41c37aa88889c171f1300ceac1313c06e891d245"
@@ -1694,6 +1694,11 @@ weakdeps = ["ChainRulesCore"]
 
     [deps.SpecialFunctions.extensions]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
+
+[[deps.Startup]]
+path = "Startup"
+uuid = "14e0d814-dc3c-45f7-9826-390c06f7d007"
+version = "0.1.0"
 
 [[deps.Static]]
 deps = ["IfElse"]

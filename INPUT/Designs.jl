@@ -222,7 +222,7 @@ DVDict = Dict(
     "θ" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "beta" => 0.0, # yaw angle wrt flow [deg]
-    "s_strut" => 0.4, # from Yingqian
+    "s_strut" => 1.0, # from Yingqian
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]

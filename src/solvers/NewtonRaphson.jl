@@ -5,7 +5,7 @@ module NewtonRaphson
 
 export do_newton_raphson
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra, Statistics
 using Printf
 

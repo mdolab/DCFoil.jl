@@ -1,6 +1,6 @@
 module EigenvalueProblem
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra
 
 function compute_eigsolve(K, M, nEig; issym=true)

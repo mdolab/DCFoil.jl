@@ -12,7 +12,7 @@ export compute_theodorsen, compute_glauert_circ
 export compute_node_mass, compute_node_damp, compute_node_stiff
 export compute_AICs, apply_BCs
 
-# --- Libraries ---
+# --- PACKAGES ---
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
@@ -20,18 +20,11 @@ using Zygote, ChainRulesCore
 using Printf, DelimitedFiles
 using Plots
 # using SparseArrays
-include("../solvers/SolverRoutines.jl")
-using .SolverRoutines
 
-include("./Unsteady.jl")
-using .Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
-
-include("../adrules/CustomRules.jl")
-using .CustomRules
-
-# --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+# --- DCFoil modules ---
+using ..SolverRoutines
+using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
 # ==============================================================================
 #                         Free surface effects
@@ -149,7 +142,7 @@ end
 # ==============================================================================
 #                         Lift forces
 # ==============================================================================
-function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes::Int64; h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, solverOptions=Dict{String,Any}("config"=>"wing"))
+function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes::Int64; h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, config="wing")
     """
     Glauert's solution for the lift slope on a 3D hydrofoil
 
@@ -180,6 +173,7 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes::Int64; h=
 
     NOTE:
     We use keyword arguments (denoted by the ';' to be more explicit)
+    THIS CODE DOES NOT WORK WITH ZERO ALPHA
 
     This follows the formulation in
     'Principles of Naval Architecture Series (PNA) - Propulsion 2010'
@@ -230,7 +224,7 @@ function compute_glauert_circ(semispan, chordVec, α₀, U∞, nNodes::Int64; h=
         γ = γ_FS
     end
 
-    if solverOptions["config"] == "t-foil"
+    if config == "t-foil"
         γ[end] = 0.0
         # println("Zeroing out the root vortex strength")
     end
@@ -543,7 +537,7 @@ function compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, e
         # println("=============================")
         # println("Using 3D mesh code")
         # println("=============================")
-        for jj in 1:length(aeroMesh[:,1])
+        for jj in eachindex(aeroMesh[:,1])
             # --- compute strip width ---
             XN = aeroMesh[jj, :]
             yⁿ = XN[YDIM]
@@ -841,7 +835,7 @@ function compute_AICs(dim, aeroMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL,
         stripVecs = get_strip_vecs(aeroMesh, elemConn, appendageOptions)
         junctionNodeX = aeroMesh[1, :]
 
-        for inode in 1:length(aeroMesh[:,1]) # loop aero strips (located at FEM nodes)
+        for inode in eachindex(aeroMesh[:,1]) # loop aero strips (located at FEM nodes)
             # @inbounds begin
             # --- compute strip quantities ---
             XN = aeroMesh[inode, :]
@@ -1261,11 +1255,13 @@ function compute_genHydroLoadsMatrices(kMax, nk::Int64, U∞, b_ref, dim::Int64,
     return copy(Mf_sweep_z[:,:,1]), copy(Cf_r_sweep_z), copy(Cf_i_sweep_z), copy(Kf_r_sweep_z), copy(Kf_i_sweep_z), kSweep
 end
 
-function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT2", config="wing"; appendageOptions=Dict(), solverOptions=Dict())
+function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, rake::Float64, elemType="BT2", config="wing"; appendageOptions=Dict(), solverOptions=Dict())
     """
     Inputs
     ------
         fullAIC: AIC matrix which in the DCFoil code base is Kf even though it's normally -Kf
+        α₀: base angle of attack
+        rake: rake angle
         FOIL: FOIL struct
         elemType: element type
     Returns
@@ -1276,7 +1272,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT
 
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
-    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, elemType; appendageOptions=appendageOptions)
+    foilTotalStates, nDOF = SolverRoutines.return_totalStates(foilStructuralStates, α₀, rake, elemType; appendageOptions=appendageOptions)
 
     # --- Strip theory ---
     # This is the hydro force traction vector
@@ -1303,6 +1299,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, elemType="BT
 
     ChainRulesCore.ignore_derivatives() do
         if solverOptions["debug"]
+            println("Plotting hydrodynamic loads")
             plot(1:length(Fz), Fz, label="Fz")
             plotTitle = @sprintf("alpha = %.2f, config = %s", α₀, config)
             title!(plotTitle)

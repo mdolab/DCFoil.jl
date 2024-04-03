@@ -2,13 +2,15 @@
 Test derivative routines with super basic tests
 """
 
-include("../src/solvers/SolverRoutines.jl")
-using .SolverRoutines
-include("../src/hydro/HydroStrip.jl")
-include("../src/InitModel.jl")
-include("../src/struct/FEMMethods.jl")
-include("../src/solvers/SolveFlutter.jl")
-using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
+include("../src/DCFoil.jl")
+using .DCFoil: SolverRoutines, HydroStrip, SolveFlutter, FEMMethods
+# include("../src/solvers/SolverRoutines.jl")
+# using .SolverRoutines
+# include("../src/hydro/HydroStrip.jl")
+# include("../src/InitModel.jl")
+# include("../src/struct/FEMMethods.jl")
+# include("../src/solvers/SolveFlutter.jl")
+# using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, Zygote, Enzyme
 using Plots
 using Printf
@@ -41,7 +43,7 @@ function test_hydromass()
     test1 = norm(test1, 2)
     test2 = norm(test2, 2)
     return min(test1, test2)
-end 
+end
 
 function test_hydrodamp()
     # Test values
@@ -82,7 +84,7 @@ function test_hydrodamp()
     test3 = derivs[3] - fdderivs3
 
     return max(norm(test1, 2), norm(test2, 2), norm(test3, 2))
-end 
+end
 
 function test_interp()
     """Test the my linear interpolation"""
@@ -406,6 +408,15 @@ DVDict = Dict(
     "θ" => deg2rad(15), # fiber angle global [rad]
 )
 
+appendageDict = Dict(
+    "nNodes" => nNodes,
+    "config" => "wing",
+    "rotation" => 0.0, # deg
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_tipMass" => false,
+    "material" => "cfrp", # preselect from material library
+    "config" => "wing",
+)
 solverOptions = Dict(
     # --- I/O ---
     "name" => "test",
@@ -414,15 +425,10 @@ solverOptions = Dict(
     # --- General solver options ---
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "material" => "cfrp", # preselect from material library
-    "nNodes" => nNodes,
-    "config" => "wing",
-    "rotation" => 0.0, # deg
-    "gravityVector" => [0.0, 0.0, -9.81],
-    "use_tipMass" => false,
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
+    "appendageList" => [appendageDict],
     # --- Static solve ---
     "run_static" => false,
     # --- Forced solve ---

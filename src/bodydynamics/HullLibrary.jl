@@ -36,7 +36,7 @@ function return_hullprop(hullName::String)
     Ib[2, 2] = Iyy
     Ib[3, 3] = Izz
 
-    return mass, length, beam, Ib
+    return mass, length, beam, xcg, Ib
 end
 
 function estimate_massmoments(mass::Float64, loa::Float64, beam::Float64)

@@ -1,4 +1,3 @@
-# --- Julia 1.7---
 """
 @File    :   DCFoilSolution.jl
 @Time    :   2023/03/11
@@ -10,8 +9,13 @@ because you'll need it for the costfunc and sensitivity calls
 module DCFoilSolution
 
 struct StaticSolution{T<:Float64}
-    structStates::Vector{T}
-    fHydro::Vector{T}
+    structStates::Vector{T} # state variables (u)
+    fHydro::Vector{T} # hydrodynamic forces
+    FEMESH # FEMESH struct type
+end
+
+struct BodyStaticSolution{T<:Float64}
+    deltaC::Vector{T} # control inputs
 end
 
 struct FlutterSolution{T<:Float64}

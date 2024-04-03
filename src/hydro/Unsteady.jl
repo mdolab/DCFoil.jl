@@ -11,7 +11,7 @@ module Unsteady
 # --- Public functions ---
 export compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
 
-# --- Libraries ---
+# --- PACKAGES ---
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
@@ -19,8 +19,7 @@ using Zygote, ChainRulesCore
 using Printf, DelimitedFiles
 
 # --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
 function compute_theodorsen(k)
     """
@@ -148,6 +147,7 @@ end
 function compute_node_stiff_faster(clα::Float64, b::Float64, eb::Float64, ab::Float64, U∞::Float64, clambda::Float64, slambda::Float64, rho_f::Float64, Ck)
     """
     Hydrodynamic stiffness force
+    THIS ASSUMES THE MOMENT ABOUT THE AERODYNAMIC CENTER IS ZERO
     """
     # --- Precomputes ---
     qf::Float64 = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure

@@ -56,6 +56,7 @@
 \newcommand{\Minf}{M_{\infty}}
 \newcommand{\bVinf}{\mbf{V}_{\infty}}
 \newcommand{\pinf}{p_{\infty}}
+\newcommand{\patm}{p_{\textrm{atm}}}
 \newcommand{\cpmin}{C_{p_{\tn{min}}}}
 % --- Other Shorthands ---
 \newcommand{\tn}[1]{\textnormal{#1}}
@@ -303,6 +304,44 @@ Here's the digestion of the Julia code which does the numerical solution of Equa
      & c_{\ell_{\alpha}} = \frac{c_\ell}{\alpha}
 \end{align*}
 
+\subsubsection{Flap effects}
+The effect of a flap comes from thin airfoil theory and is outlined in \citet{Glauert1924,Glauert1927}.
+A parameter $\varphi = \cos^{-1}\left(\frac{c_f}{2} -1\right)$ is a parametric variable for flap angle accounting for the length of flap chord $c_f$
+The lift slope ratio is
+\be
+\frac{c_{\ell_\delta}}
+{c_{\ell_\alpha}}
+=
+1 - \frac{\varphi - \sin(\varphi)}{\pi}
+\ee
+and the change in moment (positive nose up) is
+\be
+c_{mac_{\delta}} = -\frac{1}{4}\sin(\varphi) \left( 1 - \cos(\varphi)\right)
+\ee
+\begin{figure}[htbp!]
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    \includegraphics[width=0.5\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{FlapHydrofoil.pdf}
+    \caption{\label{fig:Flap}
+        Flap diagram
+    }
+\end{figure}
+% NOT DOING THIS, DOUBLE CHECK MATH THOUGH
+% Finally, the hinge moment is
+% \be
+% & H & = k_H (Ec)^2 \rho \Uinf^2
+% \\
+% & k_H & = \frac{c_{mH_\alpha}}{c_{\ell_\alpha}} c_\ell
+% +
+% c_{mH_\delta} \delta
+% \\
+% & c_{mH_{\delta}} & = - \frac{\sin(\varphi) \left(1 - \cos(\varphi) \right)}{4 E^2}
+% \left(
+% \frac{\pi - \varphi}{\phi}
+% -\frac{\sin(\varphi)}{\pi}
+% \right)
+% \ee
+
 \subsubsection{Extension to unsteady frequency domain}
 % 
 We are interested in the sectional lift and moments for a harmonically oscillating body.
@@ -425,55 +464,223 @@ where $\Delta y_i$ is the strip width at node $i$, which we assume to be equal t
 % 
 The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady (damping and stiffness) aerodynamics and are lumped into their respective global matrices if they are in phase with velocity or displacements.
 
-\subsubsection{Free surface effect}
+\subsubsection{Free surface effect via desingularized potentials}
 
-We compute the nonlinear free surface effect using the method of de-singularization from \citet{Cao1991}.
 The \emph{indirect method} solves for the strengths of the singularities $\sigma$.
-The velocity potential (field function) is some integral of a source distribution $\sigma(\mbf{x}_s)$ over the surface $\Omega$ outside the problem domain
+The total velocity potential with steady forward speed ($\Phi = \Uinf x + \phi $) is some integral of a source distribution $\sigma(\mbf{x}_s)$ over the surface $\Omega$ outside the problem domain
 \be
-\phi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\mbf{x} - \mbf{x}_s} d\Omega
+\label{eqn:Indirect}
+\Phi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) G(\mbf{x}) d\Omega
+\\
+\Phi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\mbf{x} - \mbf{x}_s} d\Omega
 .
 \ee
+We compute the free surface effect using the method of de-singularization first applied in \citet{Cao1991}.
 The boundary conditions give rise to the following boundary integral equations (these are also Fredholm integrals of the first kind)
 \be
-&\iint_{\Omega}\sigma(\mbf{x}_s)\frac{1}{\left| \mbf{x}_c - \mbf{x}_s \right| } \tn{d} \Omega & = \phi_0(\mbf{x}_c) \quad \tn{(Dirichlet)}
+\label{eqn:BCs}
+&\iint_{\Omega}\sigma(\mbf{x}_s)\frac{1}{\left| \mbf{x}_c - \mbf{x}_s \right| } \tn{d} \Omega & = \phi_0(\mbf{x}_c) \quad \tn{(Dirichlet) } \Gamma_d
 \\
-& \iint_{\Omega} \sigma(\mbf{x}_s) \pp{}{n}\left(\frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|}\right)\tn{d} \Omega & = \chi(\mbf{x}_c) \quad \tn{(Neumann)}
+& \iint_{\Omega} \sigma(\mbf{x}_s) \pp{}{n}\left(\frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|}\right)\tn{d} \Omega & = \chi(\mbf{x}_c) \quad \tn{(Neumann) } \Gamma_n
 \ee
 
-The nonlinear dynamic and kinematic boundary conditions for the free surface (derived from the unsteady Bernoulli equation) are
+The fully nonlinear dynamic and kinematic boundary conditions for the free surface (derived from the unsteady Bernoulli equation) are
 \be
 \label{eqn:FSBC}
-& \DD{\phi}{t} & = - {z}_f + \half \nabla \phi \cdot \nabla \phi \quad \tn{(dynamic)}
+& {\pp{\phi}{t}} + U\pp{\phi}{x} + gz_f
+&=
+-\frac{1}{\rho}\left(p - p_{\tn{atm}}\right)
+\quad \tn{(dynamic)}
 \\
-& \DD{\mbf{x}_f}{t} & = \nabla \phi \quad \tn{(kinematic)}
+& \DD{\mbf{x}_f}{t} & = \nabla \Phi \quad \tn{(kinematic)}
 \ee
+Fully nonlinear free-surface formulations have problems with breaking waves.
+As such, linearizing and using a body-exact method where the body boundary condition uses the updated wave elevation is better.
+The linearized dynamic boundary condition is
+\be
+\label{eqn:DFSBC}
+{\pp{\phi}{t}} + U\pp{\phi}{x} + g z
+=
+\underbrace{
+    -\frac{1}{\rho}\left(p - \patm\right)}_{=0 \tn{ for } z = \eta}
+\\
+\eta = -\frac{1}{g}
+\left(
+\pp{\phi}{t} + \Uinf \pp{\phi}{x}
+\right)
+\ee
+which you can use after you solve for $\phi$ to determine wave elevation.
+The linearized kinematic boundary condition is
+\be
+\label{eqn:KFSBC}
+\pp{\phi}{z} - \pp{\eta}{t} - U \pp{\eta}{x} = 0 \\
+\pp{\eta}{t} = \pp{\phi}{z} - U \pp{\eta}{x}
+\ee
+Combining them gives the unsteady linearized free surface boundary condition
+\be
+\label{eqn:LSFSBC}
+\Uinf^2 \ppt{\phi}{x} + \pp{\phi}{z} = - \frac{1}{g} \left( \ppt{\phi}{t}
++ 2 \Uinf \frac{\partial^2 \phi}{\partial x \partial t}
+\right)
+\ee
+which we then need to use to determine the $\phi$ on the $\Gamma_d$.
+It turns out $\phi = C_1x + C_2$ will satisfy this in steady-state.
 
+The linear system to solve comes from the mixed boundary conditions originally in Equation~\eqref{eqn:BCs}.
+The result from this are the unknown source strengths $\sigma_i$.
 
+On a quad panel, the idea is to use shape functions $N_i(\xi, \eta)$ in a reference element at the four nodes
+\ben
+\mbf{x} \approx \sum_{i=1}^{4} N_i(\xi, \eta) \mbf{x}_i
+\qquad
+\pp{\Phi}{n}    \approx \sum_{i=1}^{4} N_i(\xi, \eta) \pp{\Phi}{n}_i
+\een
+
+Now, extending this logic to a body of $N_B$ nodes and turning the double integral to a single integral, we have the coupled equations on the boundary points $\mbf{x}_i$
+\be
+&\sum_{j=1}^{N_F} \sigma_j \ln{
+    \left|
+    \mbf{x}_i - \mbf{x}_{sj}
+    \right|
+}
++
+\sum_{j=1}^{N_B} \sigma_j
+\int_{\Gamma_n} \ln{\left|
+    \mbf{x}_i - \mbf{x}_{sj}
+    \right|} \tn{d}\ell
+&=\phi(\mbf{x}_i)
+\quad
+\mbf{x}_i \in \Gamma_d
+\\
+&\underbrace{
+    -\pi \sigma_i +}_{\tn{Panel's self influence } (\mbf{x}_i=\mbf{x}_{sj})}
+\sum_{j=1}^{N_F} \sigma_j \frac{\left(\mbf{x}_i-\mbf{x}_{sj} \right) \cdot \mbf{N}_i }{
+    \left|
+    \mbf{x}_i - \mbf{x}_{sj}
+    \right|^2
+}
++
+\sum_{j=1, j \neq i}^{N_B} \sigma_j
+\int_{\Gamma_n}  \frac{ \left( \mbf{x}_i - \mbf{x}_{sj} \right) \cdot \mbf{N}_i}{\left|
+    \mbf{x}_i - \mbf{x}_{sj}
+    \right|^2} \tn{d}\ell
+& =\pp{\phi(\mbf{x}_i)}{N}
+\quad
+\mbf{x}_i \in \Gamma_n
+\ee
+Although, I think in 3D the second equation is not necessarily true?
+
+We can write the above in matrix form as
+\be
+\label{eqn:AIC}
+\begin{bmatrix}
+    A_{11} \cdots A_{1N} \\
+    \vdots \ddots \vdots \\
+    A_{N1} \cdots A_{NN}
+\end{bmatrix}
+\left\{
+\begin{matrix}
+    \sigma_1 \\
+    \vdots   \\
+    \sigma_N
+\end{matrix}
+\right\}
+=
+\left\{
+\begin{matrix}
+    b_1    \\
+    \vdots \\
+    b_N
+\end{matrix}
+\right\}
+\ee
+where $N=N_F + N_B$.
+From this, we are saying the Dirichlet and Neumann BCs are stacked vertically on the RHS.
+
+% \twocolumn
+
+Algorithm~\ref{alg:FSBC} is the overall procedure for computing the influence coefficients for a steady-state free surface.
+Going through a steady dipole problem with forward speed, we have a fairly small linear system to solve.
+% 
 \RestyleAlgo{ruled}
 \begin{algorithm}
     \LinesNumbered
     % \SetKwComment{Comment}{/* }{ */}
     \caption{\label{alg:FSBC}
-        Computation of hydrodynamic loads with a free surface boundary condition
+        Computation of hydrodynamic loads with a steady free surface boundary condition and constant forward speed
     }
-    \KwData{Grid points (paneleing of geometry) and flow speed}
+    \KwData{Grid points (paneling of geometry) and flow speed}
     \KwResult{Source strengths $\sigma_i$}
     Pass in (or generate) mesh and panel with node connectivity of control points $\mbf{x}_c$ and source points $\mbf{x}_s$\;
-    Form your Dirichlet and Neumann conditions\;
-    Impose the nonlinear dynamic and kinematic free surface boundary conditions at $z=0$ (Equation \eqref{eqn:FSBC}).
-    These need to be integrated in time to steady state.
-    \;
+    Form $\mbf{A}$ matrix from Equation~\eqref{eqn:AIC}\;
+    Form $\mbf{b}$ of the matrix equation~\eqref{eqn:AIC} (i.e., Dirichlet on free-surface Equation \eqref{eqn:LSFSBC} and Neumann on body)\;
+    Solve $\boldsymbol{\sigma} = \mbf{A}^{-1}\mbf{b}$\;
+    Solve for the velocity potential $\Phi$ in each panel using numerical integration on Equation~\eqref{eqn:Indirect}\;
+    Solve for wave elevations from the dynamic condition using $\Phi(\mbf{x})$ in Equation~\eqref{eqn:KFSBC}\;
+    Solve for hydrodynamic loads on the body using Bernoulli's equation and integration of pressures\;
+    % Update desingularization distance $L_d$ and move $\mbf{x}_s$ to new location\;
+    % March one time step (RK4?)\;
 \end{algorithm}
+% 
+
+Equation~\eqref{eqn:Indirect} then is a sum of the (1) disturbance potential of known strength, (2) the image disturbance above the free surface, and (3) the sum of $N_F$ sources of unknown strength a distance $L_d$ above the \emph{disturbed} free surface.
+The image disturbance is better for satisfying farfield conditions.
+At any point in the field $\mbf{x}_f$,
+\ben
+\sum_{j=1}^{N_F} \frac{\sigma_j}{\left|
+    \mbf{x}_f - \mbf{x}_{sj}
+    \right|}
+=
+\phi \left(\mbf{x}_f\right)
+\\
+\underbrace{
++ \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{source}} \right|}
+- \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{sink}} \right|}
+}_{\tn{submerged dipole}}
+\underbrace{
++ \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{i,source}} \right|}
+- \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{i,sink}} \right|}
+}_{\tn{dipole image}}
+\een
+
+In time domain, this is more difficult because time-marching is required.
+\onecolumn
 %------------------------------------------------------------------------------
 \clearpage
 \section{Static solution}
 The static hydrostructural equation is
 \be
-&\mbf{K_s} \mbf{u} & = \mbf{f}_{\tn{hydro}}
+\mbf{K_s} \mbf{u}_s   = \mbf{f}_{\tn{hydro}} = \mbf{K_f} \mbf{u}_s
 \\
-&\left(\mbf{K_s} - \mbf{K_f}\right)\mbf{u} & = \mbf{0}
+\mbf{r(u_s)} = \left(\mbf{K_s} - \mbf{K_f}\right)\mbf{u}_s  = \mbf{0}
 \ee
+and we solve it with Newton-Raphson.
+The residual Jacobian is
+\be
+\pp{\mbf{r(u)}}{\mbf{u}}
+=
+\mbf{K_s} - \mbf{K_f}
+\ee
+
+Now suppose that we want the derivative of several cost functions $\mbf{f}(\mbf{x,u}_s)$, like lift or drag force.
+The total derivative as a form of partials \cite[Sec. 6.7.2]{Martins2022} is
+\be
+\underbrace{
+    \dd{ \mbf{f}}{\mbf{x}}
+}_{n_f \times n_x}
+= \pp{\mbf{f}}{\mbf{x}}
+- 
+\underbrace{\pp{\mbf{f}}{\mbf{u}_s} \left[\pp{\mbf{r}}{\mbf{u}_s}\right]^{-1}
+}_{\boldsymbol{\psi^\top} (n_f \times n_u)}
+ \pp{\mbf{r}}{\mbf{x}}
+\ee
+so to compute the total gradient, we can solve the \emph{adjoint system}
+\be
+\pp{\mbf{r}}{\mbf{u}_s}^\top \boldsymbol{\psi}
+=
+\pp{\mbf{f}}{\mbf{u}_s}^\top
+\ee
+so there are $n_f$ right-hand sides in this equation.
 \subsection{Elliptical lift}
 It is helpful to compare lift distributions ($L = \int_{-b/2}^{b/2}L'(y) dy$) to the elliptical lift distribution.
 An ellipse is
@@ -494,10 +701,10 @@ where the integral solution comes from integral tables or the geometric observat
 The ideas from both give us an idea of the calm-water drag of a foiling ship.
 In waves, an added resistance component due to radiated waves from the body responding to incident waves must be considered in total drag.
 \begin{figure}[htb!]
-\centering
-      % reference: trim={<left> <lower> <right> <upper>}
-      \includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dragBuildUp.png}
-      \caption{\label{fig:HydroDrag}Hydrodynamic drag}
+    \centering
+    % reference: trim={<left> <lower> <right> <upper>}
+    \includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dragBuildUp.png}
+    \caption{\label{fig:HydroDrag}Hydrodynamic drag}
 \end{figure}
 %------------------------------------------------------------------------------
 \clearpage
@@ -973,6 +1180,7 @@ The hydrodynamic stability derivatives allow us to tune $\boldsymbol{\delta}_c$ 
 In steady-state flight, there is no acceleration so $\dot{\mbf{v}}_B=\dot{\boldsymbol{\omega}}_B=0$.
 Furthermore, $\dot{\phi}=\dot{\theta}=\dot{\psi} = 0, \phi=\theta=0$.
 \be
+\label{eqn:SteadyState}
 \boxed{
     \mbf{f}_{h B} + \mbf{f}_{p B} + \mbf{f}_{g B} - m \tilde{\boldsymbol{\omega}}_B \mbf{v}_B= \mbf{0}
 }
@@ -987,6 +1195,13 @@ The problem is now finding the $\boldsymbol{\delta}_c$ that satisfy the above eq
     \tau \quad \delta_r
     \right]^{\top}
 \ee
+The problem is then solving for the $\boldsymbol{\delta_c}$ that satisfies Equation~\eqref{eqn:SteadyState}.
+This can be done with a simple Newton-Raphson root-finding method.
+
+The residual Jacobian needed is
+\be
+\ee
+
 \subsubsection{Elastified equations of motion}
 Defining the state vector as $\mbf{x}_r(t) = [v_x, v_y, v_z, \omega_x, \omega_y, \omega_z, \phi, \theta]^{\top}$ and the control inputs as $\mbf{u} = [\tau, \delta_r]^{\top}$ where $\tau$ and $\delta_r$ are vessel trim and rudder rake command inputs, the dynamics of the system are
 \be

@@ -14,26 +14,16 @@ Module with generic FEM methods
 
 module FEMMethods
 
-# --- Libraries ---
+# --- PACKAGES ---
 using Zygote, ChainRulesCore
 using DelimitedFiles
 using LinearAlgebra, StaticArrays
 
-include("./EBBeam.jl")
-using .EBBeam: EBBeam as BeamElement, NDOF
-
-include("../solvers/SolverRoutines.jl")
-using .SolverRoutines
-
-include("../struct/BeamProperties.jl")
-using .BeamProperties
-
-include("../adrules/CustomRules.jl")
-using .CustomRules
-
-# --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+# --- DCFoil modules ---
+using ..EBBeam: EBBeam as BeamElement, NDOF
+using ..SolverRoutines
+using ..BeamProperties
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
 struct FEMESH{T<:Float64}
     """
@@ -59,7 +49,7 @@ function make_fullMesh(DVDictList::Vector, solverOptions::Dict)
     # ************************************************
     StructMeshList = []
     ElemConnList = []
-    for iComp in 1:length(solverOptions["appendageList"])
+    for iComp in eachindex(solverOptions["appendageList"])
         appendageDict = solverOptions["appendageList"][iComp]
         DVDict = DVDictList[iComp]
         println("Meshing ", appendageDict["compName"])
@@ -68,8 +58,8 @@ function make_fullMesh(DVDictList::Vector, solverOptions::Dict)
         nElem = appendageDict["nNodes"] - 1
         nElStrut = appendageDict["nNodeStrut"] - 1
         config = appendageDict["config"]
-        rotation = appendageDict["rotation"]
-        structMesh, elemConn = make_componentMesh(nElem, span; config=config, nElStrut=nElStrut, spanStrut=spanStrut,rotation=rotation)
+        rake = DVDict["rake"]
+        structMesh, elemConn = make_componentMesh(nElem, span; config=config, nElStrut=nElStrut, spanStrut=spanStrut, rake=rake)
         
         # This appends the structMesh and elemConn to the list that we can unpack later
         push!(StructMeshList, structMesh)
@@ -78,38 +68,12 @@ function make_fullMesh(DVDictList::Vector, solverOptions::Dict)
 
     return StructMeshList, ElemConnList
 
-    # DON'T USE THE STUFF BELOW
-    # # What's the total number of nodes?
-    # nNodes = 0
-    # nElem = 0
-    # for icomp in length(StructMeshList)
-    #     nNodes += size(StructMeshList[icomp])[1]
-    #     nElem += size(ElemConnList[icomp])[1]
-    # end
-    
-    # # --- Loop to populate fullStructMesh and fullElemConn ---
-    # fullStructMesh = zeros(nNodes, 3)
-    # fullElemConn = zeros(nElem, 2)
-    # iNodeStart = 1
-    # iElemStart = 1
-    # for icomp in length(StructMeshList)
-    #     localStructMesh = StructMeshList[icomp]
-    #     localElemConn = ElemConnList[icomp]
-
-    #     iNodeEnd = iNodeStart + size(localStructMesh)[1]
-    #     iElemEnd = iElemStart + size(localElemConn)[1]
-    #     # TODO: GGGGGGGGGGGGG GET THIS WORKING
-    #     fullStructMesh[iNodeStart:iNodeEnd,:] = localStructMesh
-    #     fullElemConn[iElemStart:iElemEnd,:] = localElemConn
-    # end
-
-    # return fullStructMesh, fullElemConn
 end
 
-function make_componentMesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
+function make_componentMesh(nElem::Int64, span::Float64; config="wing", rake=0.000, nElStrut=0, spanStrut=0.0)
     """
     Makes a mesh and element connectivity
-    First element is always origin (x,y,z) = (0,0,0)
+    First element is usually origin (x,y,z) = (0,0,0) except the t-foil where the first element is shifted down by spanStrut
     You do not necessarily have to make this mesh yourself every run
     The default is to mesh y as the span
 
@@ -119,8 +83,9 @@ function make_componentMesh(nElem::Int64, span::Float64; config="wing", rotation
         number of elements
     config:
         "wing" or "t-foil"
-    rotation:
+    rake:
         rotation of the foil in degrees where 0.0 is lifting up in 'z' and y is the spanwise direction
+        Positive rake is nose up
     Outputs
     -------
     mesh
@@ -132,14 +97,12 @@ function make_componentMesh(nElem::Int64, span::Float64; config="wing", rotation
     elemConn::Matrix{Int64} = zeros(nElem, 2)
     mesh_z = Zygote.Buffer(mesh)
     elemConn_z = Zygote.Buffer(elemConn)
-    rot = deg2rad(rotation)
+    rot = deg2rad(rake)
+    transMat = SolverRoutines.get_rotate3dMat(rot; axis="y")
     if config == "wing"
         # Set up a line mesh
         dl = span / (nElem) # dist btwn nodes
-        # println("span",span)
-        # println("dl",dl)
         mesh_z[:, YDIM] = collect((0.0:dl:span))
-        transMat = SolverRoutines.get_rotate3dMat(rot; axis="x")
         for nodeIdx in 1:nElem+1 # loop nodes and rotate
             mesh_z[nodeIdx, :] = transMat * mesh_z[nodeIdx, :]
         end
@@ -213,72 +176,77 @@ function make_componentMesh(nElem::Int64, span::Float64; config="wing", rotation
         # strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
         strutMesh = LinRange(dlStrut, spanStrut, nElStrut)
         # This is basically avoiding double counting the nodes
-        if abs(rot) < MEPSLARGE # no rotation, just a straight wing
-            elemCtr = 1 # elem counter
-            nodeCtr = 1 # node counter traversing nodes
 
-            # ************************************************
-            #     Wing mesh
-            # ************************************************
-            # Add foil wing first
-            for nodeIdx in 1:nElem
-                mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-                elemConn[nodeCtr, 1] = nodeIdx
-                elemConn[nodeCtr, 2] = nodeIdx + 1
-                elemCtr += 1
-                nodeCtr += 1
-            end
-
-            # Grab end of wing
-            mesh[nodeCtr, :] = [0.0, foilwingMesh[end], 0.0]
-            nodeCtr += 1
-
-            # Mirror wing nodes skipping first, but adding junction connectivity
-            elemConn[elemCtr, 1] = 1
-            elemConn[elemCtr, 2] = nodeCtr
-            for nodeIdx in 2:nElem
-                mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-                elemConn[nodeCtr, 1] = nodeCtr
-                elemConn[nodeCtr, 2] = nodeCtr + 1
-                elemCtr += 1
-                nodeCtr += 1
-            end
-
-            # Grab end of wing
-            mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-            elemConn[elemCtr, 1] = nodeCtr - 1
-            elemConn[elemCtr, 2] = nodeCtr
-            nodeCtr += 1
+        # ************************************************
+        #     Wing mesh
+        # ************************************************
+        elemCtr = 1 # elem counter
+        nodeCtr = 1 # node counter traversing nodes
+        # Add foil wing first
+        for nodeIdx in 1:nElem
+            mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
+            elemConn[nodeCtr, 1] = nodeIdx
+            elemConn[nodeCtr, 2] = nodeIdx + 1
             elemCtr += 1
+            nodeCtr += 1
+        end
 
-            # ************************************************
-            #     Strut mesh
-            # ************************************************
-            # Add strut going up in z
-            nodeIdx = 1
-            for istrut in 1:nElStrut # loop elem, not nodes
-                # if nodeIdx <= nElStrut 
-                mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
-                if nodeIdx == 1
-                    elemConn[elemCtr, 1] = 1
-                    elemConn[elemCtr, 2] = nodeCtr
-                else
-                    elemConn[elemCtr, 1] = nodeCtr - 1
-                    elemConn[elemCtr, 2] = nodeCtr
-                end
-                # end
-                nodeIdx += 1
-                elemCtr += 1
-                nodeCtr += 1
-            end
+        # Grab end of wing
+        mesh[nodeCtr, :] = [0.0, foilwingMesh[end], 0.0]
+        nodeCtr += 1
 
-            # in the extreme case of 3 elements, elem conn is wrong
-            if (2 * nElem + nElStrut == 3)
-                elemConn[2, 1] = 1
-                elemConn[2, 2] = 3
+        # Mirror wing nodes skipping first, but adding junction connectivity
+        elemConn[elemCtr, 1] = 1
+        elemConn[elemCtr, 2] = nodeCtr
+        for nodeIdx in 2:nElem
+            mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
+            elemConn[nodeCtr, 1] = nodeCtr
+            elemConn[nodeCtr, 2] = nodeCtr + 1
+            elemCtr += 1
+            nodeCtr += 1
+        end
+
+        # Grab end of wing
+        mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
+        elemConn[elemCtr, 1] = nodeCtr - 1
+        elemConn[elemCtr, 2] = nodeCtr
+        nodeCtr += 1
+        elemCtr += 1
+
+        # ************************************************
+        #     Strut mesh
+        # ************************************************
+        # Add strut going up in z
+        nodeIdx = 1
+        for istrut in 1:nElStrut # loop elem, not nodes
+            # if nodeIdx <= nElStrut 
+            mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
+            if nodeIdx == 1
+                elemConn[elemCtr, 1] = 1
+                elemConn[elemCtr, 2] = nodeCtr
+            else
+                elemConn[elemCtr, 1] = nodeCtr - 1
+                elemConn[elemCtr, 2] = nodeCtr
             end
-        else
-            println("Rotation of ", rot, " radians")
+            # end
+            nodeIdx += 1
+            elemCtr += 1
+            nodeCtr += 1
+        end
+
+        # in the extreme case of 3 elements, elem conn is wrong
+        if (2 * nElem + nElStrut == 3)
+            elemConn[2, 1] = 1
+            elemConn[2, 2] = 3
+        end
+
+        # ************************************************
+        #     Lastly, translate, and rotate the mesh
+        # ************************************************
+        meshCopy = copy(mesh)
+        meshCopy[:, ZDIM] .-= spanStrut # translate
+        for inode in 1:size(mesh,1)
+            mesh[inode, :] = transMat * meshCopy[inode, :]
         end
 
         return mesh, elemConn
@@ -356,14 +324,14 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
 
     # --- Debug printout for initialization ---
     ChainRulesCore.ignore_derivatives() do
-        println("+------------------------------+")
-        println("|   Assembling beam matrices   |")
-        println("+------------------------------+")
-        # println("Default 2 nodes per elem, nothing else will work")
-        println("Constitutive relations: ", constitutive)
-        println("Element: ", elemType)
-        println("No. of elems: ", nElem)
-        println("Beam nodes: ", nNodes, " (", nnd * nNodes, " DOFs)")
+        println("+----------------------------------------+")
+        println("|        Assembling beam matrices        |")
+        println("+----------------------------------------+")
+        println("Constitutive law: ", constitutive)
+        println("Beam element: ", elemType)
+        println("Elements: ", nElem)
+        println("Nodes: ", nNodes)
+        println("DOFs: ", nnd * nNodes)
     end
 
     # ************************************************

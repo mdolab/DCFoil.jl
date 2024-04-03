@@ -4,17 +4,15 @@
 @Time    :   2024/02/24
 @Author  :   Galen Ng
 @Desc    :   Contains custom chain rules for FUNDAMENTAL operations
+This is not a module on purpose so it's in the namespace when it's first included
 """
 
-module CustomRules
-
-# --- Libraries ---
+# --- PACKAGES ---
 using ChainRulesCore
 using LinearAlgebra
 
-include("../constants/DataTypes.jl")
-
-using .DataTypes: RealOrComplex
+# # --- DCFoil modules ---
+# using ..SolverRoutines: cmplxStdEigValProb2
 
 # ==============================================================================
 #                         Constructors
@@ -67,6 +65,4 @@ function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
     end
 
     return Ω, inv_pullback
-end
-
 end

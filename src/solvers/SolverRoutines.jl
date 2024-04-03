@@ -10,30 +10,23 @@ by the AD tool (e.g., anything related to file writing)
 In julia, the chainrules rrule is '_b'
 """
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra
 using Zygote, ChainRulesCore
 
-include("./NewtonRaphson.jl")
-using .NewtonRaphson
-
-include("./EigenvalueProblem.jl")
-using .EigenvalueProblem
-
-include("../adrules/CustomRules.jl")
-using .CustomRules
+# --- DCFoil modules ---
+using ..NewtonRaphson
+using ..EigenvalueProblem
 
 # --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: XDIM, YDIM, ZDIM
-include("../struct/EBBeam.jl")
-using .EBBeam: EBBeam as BeamElement
+using ..SolutionConstants: XDIM, YDIM, ZDIM
+using ..EBBeam: EBBeam as BeamElement
 
 
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, 
+function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=false, 
     mode="analytic", 
     # mode="RAD",
     is_cmplx=false
@@ -59,13 +52,15 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=nothing, appendageOptions=Dict())
+function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; STRUT=nothing, appendageOptions=Dict())
     """
     Returns the deflected + rigid shape of the foil
+    So like pre-twist
     Inputs
     ------
         foilStructuralStates - structural states of the foil in global ref frame!
-        α₀ - angle of attack
+        α₀ - angle of attack of base mounted wing
+        rake - rake of the foil
         elemType - element type
         beta - yaw angle
     Outputs
@@ -74,8 +69,8 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
         nDOF - number of DOF per node
     """
 
-    # alfaRad = α₀ * π / 180
     alfaRad = deg2rad(α₀)
+    rakeRad = deg2rad(rake)
     if STRUT != nothing
         beta = STRUT.α₀
     else
@@ -83,7 +78,7 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
     end
     betaRad = deg2rad(beta)
     nDOF = BeamElement.NDOF
-    # Get flow angles of attack in local beam coords first
+    # Get flow angles of attack in "local" beam coords first
     #TODO: pretwist will change this
     if elemType == "bend"
         error("Only bend-twist element type is supported for load computation")
@@ -95,8 +90,8 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
         nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
         staticOffset = [0, 0, alfaRad, 0] 
     elseif elemType == "COMP2"
-        staticOffset_wing = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
-        staticOffset_strut = [0, 0, 0, betaRad, 0, 0, 0, 0, 0]
+        staticOffset_wing = [0, 0, 0, alfaRad + rakeRad, 0, betaRad, 0, 0, 0]
+        staticOffset_strut = [0, 0, 0, betaRad, 0, rakeRad, 0, 0, 0]
     end
 
     # ---------------------------
@@ -116,7 +111,6 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
         staticOffset_wing = transMatL2G * staticOffset_wing
         staticOffset_junctionNode = staticOffset_wing
         if appendageOptions["config"] == "t-foil"
-            # TODO: MAKE IT SO ALL WING NODES ARE YAWED ALSO
             angleDefault = deg2rad(-90)
             axisDefault = "x"
             T2 = get_rotate3dMat(angleDefault, axis=axisDefault)
@@ -128,7 +122,7 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
             ]
             staticOffset_strut = transMatL2G * staticOffset_strut
 
-            staticOffset_junctionNode = staticOffset_strut + staticOffset_wing
+            staticOffset_junctionNode = staticOffset_wing
         elseif appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "wing"
             staticOffset_junctionNode = staticOffset_wing
         end
@@ -153,6 +147,7 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
     staticOffsetGlobalRef = vcat(staticOffsetGlobalRef_wing, staticOffsetGlobalRef_strut)
 
     # Add static angle of attack to deflected foil
+    # AKA jig shape
     foilTotalStates = copy(foilStructuralStates) + staticOffsetGlobalRef
 
 
@@ -260,9 +255,6 @@ function cmplxInverse_d(A_r, A_rd, A_i, A_id, n)
     return Ainv_r, Ainv_rd, Ainv_i, Ainv_id
 end # cmplxInverse_d
 
-function cmplxInverse_b()
-    # TODO:
-end
 
 function cmplxMatmult(A_r, A_i, B_r, B_i)
     """

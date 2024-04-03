@@ -1,6 +1,6 @@
 # --- Python 3.10 ---
 """
-@File    :   mach2dcfoil.py
+@File    :   pyDCFoil.py
 @Time    :   2024/01/22
 @Author  :   Galen Ng, Prof. Sicheng He
 @Desc    :   Python interface to DCFoil
@@ -18,7 +18,6 @@ from pathlib import Path
 # ==============================================================================
 import numpy as np
 from julia import Main, Pkg
-
 
 class DCFOILWarning(object):
     """
@@ -42,7 +41,7 @@ class DCFOILWarning(object):
 # ==============================================================================
 #                         Wrapper class
 # ==============================================================================
-class pyDCFOIL:
+class DCFOIL:
     def __init__(self, DVDict: dict, evalFuncs, options=None, debug=False):
         """
         Create the flutter solver class
@@ -70,9 +69,10 @@ class pyDCFOIL:
         # ************************************************
         try:
             if debug:
+                # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME
                 # Pull from local directory
-                Pkg.activate("../../")
-                Main.include("../DCFoil.jl")
+                Pkg.activate("../")
+                Main.include("../src/DCFoil.jl")
                 Main.using(".DCFoil")
                 DCFoil = Main.DCFoil
             else:
@@ -186,7 +186,9 @@ class pyDCFOIL:
         solverOptions = self.solverOptions
 
         self.DCFoil.init_model(DVDict, evalFuncs, solverOptions=solverOptions)
-        FLUTTERSOL = self.DCFoil.run_model(DVDict, evalFuncs, solverOptions=solverOptions)
+        FLUTTERSOL = self.DCFoil.run_model(
+            DVDict, evalFuncs, solverOptions=solverOptions
+        )
 
         self.FLUTTERSOL = FLUTTERSOL
 
@@ -270,7 +272,9 @@ class pyDCFOIL:
 
         solverOptions = self.solverOptions
 
-        costFuncsSens = self.DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions, mode="RAD")
+        costFuncsSens = self.DCFoil.evalFuncsSens(
+            DVDict, evalFuncs, solverOptions, mode="RAD"
+        )
 
         self.costFuncsSens = costFuncsSens
 

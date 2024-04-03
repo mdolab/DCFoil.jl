@@ -15,7 +15,7 @@ module SolveFlutter
 # --- Public functions ---
 export solve
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra
 using Statistics
 using JSON
@@ -28,25 +28,13 @@ using Zygote
 using ChainRulesCore
 
 # --- DCFoil modules ---
-include("../io/TecplotIO.jl")
-include("../InitModel.jl")
-using .InitModel
-include("../hydro/HydroStrip.jl")
-using .HydroStrip
-include("../struct/BeamProperties.jl")
-using .BeamProperties
-include("../struct/FEMMethods.jl")
-using .FEMMethods
-include("SolveStatic.jl")
-using .SolveStatic
-include("./SolverRoutines.jl")
-using .SolverRoutines
-include("./DCFoilSolution.jl")
-using .DCFoilSolution
-
-# --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
+using ..InitModel
+using ..HydroStrip
+using ..BeamProperties
+using ..FEMMethods
+using ..SolverRoutines
+using ..DCFoilSolution
+using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
 
 
 # ==============================================================================
@@ -125,20 +113,22 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     uRange = solverOptions["uRange"]
     fSweep = solverOptions["fSweep"]
     nModes = solverOptions["nModes"]
-    tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
-
+    
     # --- Init model structure ---
     if length(solverOptions["appendageList"]) == 1
         foilOptions = solverOptions["appendageList"][1]
-        global FOIL, _ = InitModel.init_dynamic(α₀, span, c, toc, ab, x_αb, zeta, θ, nothing, nothing, nothing, nothing, nothing, nothing, nothing, foilOptions, solverOptions; uRange=uRange, fSweep=fSweep)
+        tipMass = foilOptions["use_tipMass"]
+        global FOIL, _ = InitModel.init_dynamic(α₀, 0.0, span, c, toc, ab, x_αb, zeta, θ, 
+        nothing, nothing, nothing, nothing, nothing, nothing, nothing, 
+        foilOptions, solverOptions; uRange=uRange, fSweep=fSweep)
     else
         error("Only one appendage is supported at the moment")
     end
 
     # --- Create mesh ---
     nElem = FOIL.nNodes - 1
-    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, span; config=solverOptions["config"])
+    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, span; config=foilOptions["config"])
 
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
@@ -173,7 +163,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     # ---------------------------
     globalDOFBlankingList = 0
     ChainRulesCore.ignore_derivatives() do
-        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
+        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=foilOptions)
     end
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
     
@@ -206,7 +196,7 @@ function setup_solver(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOption
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug
 end
 
-function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
+function solve_frequencies(structMesh, elemConn, DVDict, solverOptions::Dict, appendageOptions::Dict)
     """
     System natural frequencies
     """
@@ -219,7 +209,7 @@ function solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
     tipMass = solverOptions["use_tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
-    global FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
