@@ -28,13 +28,24 @@ function return_hullprop(hullName::String)
         xcg = 1.405
 
         kxz = -0.274 #m
-        ixz = kxz^2 * mass
+        kxx = 1.76
+        kyy = 1.98
+        kzz = 1.04
+        Ixz = kxz^2 * mass
+        Ixx = kxx^2 * mass
+        Iyy = kyy^2 * mass
+        Izz = kzz^2 * mass
+    else
+        Ixx, Iyy, Izz = estimate_massmoments(mass, length, beam)
     end
-    Ixx, Iyy, Izz = estimate_massmoments(mass, length, beam)
-    Ib = zeros(Float64, 3, 3)
     Ib[1, 1] = Ixx
     Ib[2, 2] = Iyy
     Ib[3, 3] = Izz
+    Ib = [
+        Ixx 0.0 Ixz
+        0.0 Iyy 0.0
+        Ixz 0.0 Izz
+    ]
 
     return mass, length, beam, xcg, Ib
 end

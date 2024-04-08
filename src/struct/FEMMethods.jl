@@ -31,6 +31,7 @@ struct FEMESH{T<:Float64}
     """
     mesh::Matrix{T} # node xyz coords
     elemConn::Matrix{Int64} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
+    # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
     chord::Vector{T}
     toc::Vector{T}
     ab::Vector{T}

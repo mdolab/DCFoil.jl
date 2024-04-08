@@ -33,24 +33,24 @@ for headerName in [
     "hydro/HydroStrip",
     "adrules/CustomRules",
     # --- Used in this script ---
-    "InitModel", "struct/FEMMethods", 
+    "InitModel", "struct/FEMMethods",
     "io/TecplotIO",
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
     # include("./solvers/SolveBodyDynamics.jl")
     "CostFunctions",
-    ]
+]
 
-    include(headerName*".jl")
+    include(headerName * ".jl")
 
 end
 # end
-using .SolveStatic
-using .SolveForced
-using .SolveFlutter
+using .SolveStatic: SolveStatic
+using .SolveForced: SolveForced
+using .SolveFlutter: SolveFlutter
 # using .SolveBodyDynamics
-using .TecplotIO
-using .InitModel
-using .FEMMethods
+using .TecplotIO: TecplotIO
+using .InitModel: InitModel
+using .FEMMethods: FEMMethods
 using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs
 allCostFuncs = vcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
 
@@ -65,8 +65,6 @@ function init_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions
     """
     Things that need to be done before running the model.
     Global vars are used in run_model
-
-    TODOS: make it so it returns the init model struct (better memory handling)
     """
     # ---------------------------
     #   Default options
@@ -182,14 +180,16 @@ function run_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions=
         STATSOLLIST = []
         for iComp in eachindex(solverOptions["appendageList"])
             appendageOptions = solverOptions["appendageList"][iComp]
+            # Maybe look at mounting location here instead of using the 'iComp'
             println("+--------------------------------------------------------+")
             println("|  Running static solve for ", appendageOptions["compName"])
             println("+--------------------------------------------------------+")
-            
+
             FEMESH = FEMESHLIST[iComp]
             DVDict = DVDictList[iComp]
-            
-            STATSOL = SolveStatic.solve(FEMESH, DVDict, evalFuncs, solverOptions, appendageOptions)
+
+            # STATSOL = SolveStatic.solve(FEMESH, DVDict, solverOptions, appendageOptions)
+            STATSOL = SolveStatic.get_sol(DVDict, solverOptions, evalFuncs; iComp=iComp, FEMESH=FEMESH)
             if solverOptions["writeTecplotSolution"]
                 SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
             end
@@ -254,38 +254,36 @@ function evalFuncs(SOLDICT::Dict, DVDictList::Vector, evalFuncs::Vector{String},
     """
     x = 0.0 # dummy
     evalFuncsDict = Dict()
-    
 
-    # ************************************************
-    #     Loop over all evalFuncs
-    # ************************************************
-    for key in evalFuncs
 
-        if key in staticCostFuncs
-            STATSOLLIST = SOLDICT["STATIC"]
+    if solverOptions["run_static"]
+        # Get evalFuncs that are in the staticCostFuncs list
+        staticEvalFuncs = [key for key in evalFuncs if key in staticCostFuncs]        
+        STATSOLLIST = SOLDICT["STATIC"]
 
-            for iComp in eachindex(solverOptions["appendageList"])
-                appendageOptions = solverOptions["appendageList"][iComp]
-                STATSOL = STATSOLLIST[iComp]
-                DVDict = DVDictList[iComp]
-                compName = appendageOptions["compName"]
-                staticEvalFuncs = SolveStatic.evalFuncs(STATSOL, evalFuncs; DVDict=DVDict)
+        for iComp in eachindex(solverOptions["appendageList"])
+            appendageOptions = solverOptions["appendageList"][iComp]
+            STATSOL = STATSOLLIST[iComp]
+            DVDict = DVDictList[iComp]
+            compName = appendageOptions["compName"]
+            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions)
+            for key in keys(staticFuncs)
                 newKey = @sprintf("%s-%s", key, compName)
-                evalFuncsDict[newKey] = staticEvalFuncs[key]
+                evalFuncsDict[newKey] = staticFuncs[key]
             end
-
-        elseif key in forcedCostFuncs && solverOptions["run_forced"]
-            SolveForced.evalFuncs()
-
-        elseif key in flutterCostFuncs && solverOptions["run_flutter"]
-            obj, _ = SolveFlutter.postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, FLUTTERSOL.p_r, FLUTTERSOL.iblank, solverOptions["rhoKS"])
-            flutterCostFuncsDict = Dict(
-                "ksflutter" => obj,
-            )
-            evalFuncsDict = merge(evalFuncsDict, flutterCostFuncsDict)
-        else
-            println("Unsupported cost function: ", key, "or solver mode not on")
         end
+
+    elseif key in forcedCostFuncs && solverOptions["run_forced"]
+        SolveForced.evalFuncs()
+
+    elseif key in flutterCostFuncs && solverOptions["run_flutter"]
+        obj, _ = SolveFlutter.postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, FLUTTERSOL.p_r, FLUTTERSOL.iblank, solverOptions["rhoKS"])
+        flutterCostFuncsDict = Dict(
+            "ksflutter" => obj,
+        )
+        evalFuncsDict = merge(evalFuncsDict, flutterCostFuncsDict)
+    else
+        println("Unsupported cost function: ", key, "or solver mode not on")
     end
 
     # --- Write cost funcs to file ---
@@ -314,7 +312,10 @@ function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, evalFuncsSens::Vector{
     end
 
     if solverOptions["run_static"]
-        @time SolveStatic.evalFuncsSens(evalFuncsSens, DVDictList, solverOptions; mode=mode)
+        STATSOLLIST = SOLDICT["STATIC"]
+        evalFuncsSensStat = [key for key in evalFuncsSens if key in staticCostFuncs]
+        @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHLIST, solverOptions; mode=mode)
+        costFuncsSensDict = costFuncsSensList
     end
 
     return costFuncsSensDict
@@ -394,7 +395,7 @@ function set_defaultOptions!(solverOptions)
         false,
         80.0,
         100, # maxQIter
-        [0.1,10.0], # fSweep
+        [0.1, 10.0], # fSweep
         0.0, # tipForceMag
         10, # nModes
         [1.0, 2.0] # uRange

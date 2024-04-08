@@ -93,7 +93,7 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
   # ---------------------------
   clα = Vector{Float64}(undef, nNodes)
   clα, _, _ = HydroStrip.compute_glauert_circ(span, c, deg2rad(α₀ + rake), solverOptions["U∞"], nNodes;
-    h=span_strut,
+    h=span_strut, # TODO: DEPTH
     useFS=solverOptions["use_freeSurface"],
     rho=solverOptions["ρ_f"],
     config=foilOptions["config"],
@@ -102,7 +102,7 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
   # ---------------------------
   #   Build final model
   # ---------------------------
-  wingModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, α₀, rake, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodes"], constitutive)
+  wingModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodes"], constitutive)
 
   # ************************************************
   #     Strut properties
@@ -152,7 +152,7 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
     # ---------------------------
     #   Build final model
     # ---------------------------
-    strutModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, beta, rake, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodeStrut"], constitutive)
+    strutModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodeStrut"], constitutive)
 
   elseif foilOptions["config"] == "wing" || foilOptions["config"] == "full-wing"
     strutModel = nothing
@@ -175,13 +175,14 @@ function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, s_strut
 
   # model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
   WingModel = DesignConstants.dynamicFoil(
-    statWingModel.mₛ, statWingModel.Iₛ, statWingModel.EIₛ, statWingModel.EIIPₛ, statWingModel.GJₛ, statWingModel.Kₛ, statWingModel.Sₛ, statWingModel.EAₛ, statWingModel.α₀, statWingModel.rake, statWingModel.U∞, statWingModel.g, statWingModel.clα, statWingModel.ρ_f, statWingModel.nNodes, statWingModel.constitutive, fSweep, uRange
+    statWingModel.mₛ, statWingModel.Iₛ, statWingModel.EIₛ, statWingModel.EIIPₛ, statWingModel.GJₛ, statWingModel.Kₛ, statWingModel.Sₛ, statWingModel.EAₛ, statWingModel.U∞, statWingModel.g, statWingModel.clα, statWingModel.ρ_f, statWingModel.nNodes, statWingModel.constitutive,
+    fSweep, uRange
   )
   if statStrutModel == nothing
     StrutModel = nothing
   else
     StrutModel = DesignConstants.dynamicFoil(
-      statStrutModel.mₛ, statStrutModel.Iₛ, statStrutModel.EIₛ, statStrutModel.EIIPₛ, statStrutModel.GJₛ, statStrutModel.Kₛ, statStrutModel.Sₛ, statStrutModel.EAₛ, statStrutModel.α₀, statStrutModel.rake, statStrutModel.U∞, statStrutModel.g, statStrutModel.clα, statStrutModel.ρ_f, statStrutModel.nNodes, statStrutModel.constitutive, fSweep, uRange
+      statStrutModel.mₛ, statStrutModel.Iₛ, statStrutModel.EIₛ, statStrutModel.EIIPₛ, statStrutModel.GJₛ, statStrutModel.Kₛ, statStrutModel.Sₛ, statStrutModel.EAₛ, statStrutModel.U∞, statStrutModel.g, statStrutModel.clα, statStrutModel.ρ_f, statStrutModel.nNodes, statStrutModel.constitutive, fSweep, uRange
     )
   end
 

@@ -8,7 +8,7 @@
 
 module DesignConstants
 
-struct foil{T<:Float64}
+mutable struct foil{T<:Float64}
     """
     Foil object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
@@ -23,8 +23,8 @@ struct foil{T<:Float64}
     Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
     Sₛ::Vector{T} # warping resistance vector [N-m⁴]
     EAₛ::Vector{T} # axial stiffness vector [N-m²]
-    α₀::T # rigid initial angle of attack wrt flow (or yaw/sideslip angle) [deg] THE ONLY TIME THIS IS USED IS WHEN A DERIVATIVE WRT ALPHA IS NOT NEEDED
-    rake::T # rake angle [deg]
+    # α₀::T # rigid initial angle of attack wrt flow (or yaw/sideslip angle) [deg] THE ONLY TIME THIS IS USED IS WHEN A DERIVATIVE WRT ALPHA IS NOT NEEDED
+    # rake::T # rake angle [deg]
     U∞::T # flow speed [m/s]
     g::T # modal damping ratio at first 2 modes
     clα::Vector{T} # lift slopes [1/rad]
@@ -45,8 +45,8 @@ struct dynamicFoil{T<:Float64}
     Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
     Sₛ::Vector{T} # warping resistance vector [N-m⁴]
     EAₛ::Vector{T} # axial stiffness vector [N-m²]
-    α₀::T # rigid initial angle of attack [deg]
-    rake::T # rake angle about top of strut [deg]
+    # α₀::T # rigid initial angle of attack [deg]
+    # rake::T # rake angle about top of strut [deg]
     U∞::T # flow speed [m/s]
     g::T # modal damping ratio at first 2 modes
     clα::Vector{T} # lift slopes [1/rad]
