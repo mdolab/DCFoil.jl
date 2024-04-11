@@ -21,24 +21,22 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import sparse
+
 # from tabulate import tabulate
 
 # ==============================================================================
 # Extension modules
 # ==============================================================================
-#import niceplots
+# import niceplots
 from pprint import pprint as pp
 from pyoptsparse import Optimization, OPT, History
-# Add parent path to sys.path to import pyDCFoil
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-from src.wrappers.pyDCFoil import pyDCFOIL
+from dcfoil import DCFOIL  # make sure to pip install this code
 
 
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-
 
     # ************************************************
     #     Create dynamic beam solver
@@ -114,7 +112,7 @@ if __name__ == "__main__":
     }
     evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 
-    DynamicSolver = pyDCFOIL(DVDict, evalFuncs, debug=True, options=solverOptions)
+    DynamicSolver = DCFOIL(DVDict, evalFuncs, debug=True, options=solverOptions)
 
     # ************************************************
     #     Functions

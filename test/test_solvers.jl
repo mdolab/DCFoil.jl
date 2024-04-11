@@ -6,20 +6,8 @@ using Printf
 using LinearAlgebra
 using Dates
 
-include("../src/solvers/SolveStatic.jl")
-using .SolveStatic
-include("../src/solvers/SolveForced.jl")
-using .SolveForced
-include("../src/solvers/SolveFlutter.jl")
-using .SolveFlutter
-include("../src/InitModel.jl")
-using .InitModel
-include("../src/struct/FEMMethods.jl")
-using .FEMMethods
-include("../src/solvers/SolverRoutines.jl")
-using .SolverRoutines
 include("../src/DCFoil.jl")
-using .DCFoil
+using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, SolveFlutter, SolveForced, SolveStatic
 
 # ==============================================================================
 #                         Test Static Solver
@@ -112,8 +100,8 @@ function test_SolveStaticRigid()
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
-        println("cl:",costFuncs["cl"])
-        println("cmy:",costFuncs["cmy"])
+        println("cl:", costFuncs["cl"])
+        println("cmy:", costFuncs["cmy"])
         meshlvl += 1
     end
 
@@ -281,7 +269,9 @@ function test_SolveStaticComp(DVDict, solverOptions)
     DVDict["ab"] => 0 * ones(nNodes) # dist from midchord to EA [m]
     DVDict["x_αb"] => 0 * ones(nNodes) # static imbalance [m]
     DVDict["toc"] => 0.12 * ones(nNodes) # static imbalance [m]
-    solverOptions["nNodes"]= nNodes # number of nodes on foil half wing
+    appendageOptions = solverOptions["appendageList"][1]
+    appendageOptions["nNodes"] = nNodes # number of nodes on foil half wing
+    solverOptions["appendageList"] = [appendageOptions]
     mkpath(solverOptions["outputDir"])
 
     # ************************************************
@@ -298,18 +288,22 @@ function test_SolveStaticComp(DVDict, solverOptions)
     meshlvl = 1
     for nNodes in nNodess
         # --- Resize some stuff ---
-        solverOptions["nNodes"] = nNodes
+        appendageOptions["nNodes"] = nNodes
+        solverOptions["appendageList"] = [appendageOptions]
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
         DVDict["toc"] = 0.12 * ones(nNodes)
 
-        DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
-        SOL = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-        costFuncs = DCFoil.evalFuncs(nothing, evalFuncs, solverOptions)
+        DVDictList::Vector = [DVDict]
 
-        tipBendData[meshlvl] = costFuncs["wtip"]
-        tipTwistData[meshlvl] = costFuncs["psitip"]
+        # FIX THESE TESTS AND FIGURE OUT WHY THE FSI SOLVE NOW TAKES A BUNCH OF ITERATIONS...
+        DCFoil.init_model(DVDictList, evalFuncs; solverOptions=solverOptions)
+        SOLDICT = DCFoil.run_model(DVDictList, evalFuncs; solverOptions=solverOptions)
+        costFuncs = DCFoil.evalFuncs(SOLDICT, DVDictList, evalFuncs, solverOptions)
+
+        tipBendData[meshlvl] = costFuncs["wtip-"*appendageOptions["compName"]]
+        tipTwistData[meshlvl] = costFuncs["psitip-"*appendageOptions["compName"]]
         meshlvl += 1
     end
 
@@ -376,10 +370,12 @@ function test_modal(DVDict, solverOptions)
     nNodes = 40 # spatial nodes
 
     # --- Mesh ---
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    DCFoil.set_defaultOptions!(solverOptions)
+    appendageOptions = solverOptions["appendageList"][1]
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
-    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
+    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions, appendageOptions)
 
     # ************************************************
     #     Relative error

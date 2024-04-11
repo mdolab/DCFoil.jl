@@ -2,21 +2,14 @@
 Test derivative routines with super basic tests
 """
 
-include("../src/DCFoil.jl")
-using .DCFoil: SolverRoutines, HydroStrip, SolveFlutter, FEMMethods
-# include("../src/solvers/SolverRoutines.jl")
-# using .SolverRoutines
-# include("../src/hydro/HydroStrip.jl")
-# include("../src/InitModel.jl")
-# include("../src/struct/FEMMethods.jl")
-# include("../src/solvers/SolveFlutter.jl")
-# using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
 using FiniteDifferences, Zygote, Enzyme
 using Plots
 using Printf
 using LinearAlgebra
 using JLD2
 
+include("../src/DCFoil.jl")
+using .DCFoil: SolverRoutines, HydroStrip, SolveFlutter, FEMMethods
 # ==============================================================================
 #                         Aero-node tests
 # ==============================================================================
@@ -360,7 +353,7 @@ function test_pkflutterderiv(DVDict, solverOptions)
     Also some profiling
     """
 
-    @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
+    @time SolveFlutter.get_sol(DVDict, solverOptions)
     @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
     @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 

@@ -26,23 +26,23 @@ const ZDIM = 3
 # ==============================================================================
 #                         STRUCTS
 # ==============================================================================
-mutable struct DCFoilConstants{T}
+struct DCFoilSolverParams{T}
     """
-    This is a catch all mutable struct to store variables that we do not
+    This is a catch all immutable struct to store variables that we do not
     want in function calls like r(u) or f(u)
-
     """
-    Kmat::Matrix{T} # structural stiffness matrix (after BC blanking)
-    Mmat::Matrix{T} # structural mass matrix (after BC blanking)
-    Cmat::Matrix{T} # structural damping matrix (after BC blanking)
+    FEMESH
+    Kmat::Matrix{T} # structural stiffness matrix (no BC blanking)
+    Mmat::Matrix{T} # structural mass matrix (no BC blanking)
+    Cmat::Matrix{T} # structural damping matrix (no BC blanking)
     elemType::String
-    mesh::Matrix{T}
     AICmat::Matrix{T} # Aero influence coeff matrix (no BC blanking)
     mode::String # type of derivative for drdu
     planformArea::T
+    dofBlank::Vector{Int64} # DOF to blank out
 end
 
-mutable struct DCFoilDynamicConstants{T}
+struct DCFoilDynamicConstants{T}
     """
     For the dynamic hydroelastic solve, there are more constants to store
     """

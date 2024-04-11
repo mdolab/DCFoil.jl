@@ -22,24 +22,34 @@ nNodes = 40
 nNodesStrut = 2
 
 DVDict1 = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
-        # --- Strut vars ---
-        "beta" => 0.0, # yaw angle wrt flow [deg]
-        "s_strut" => 0.4, # from Yingqian
-        "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
-        "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
-        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-        "θ_strut" => deg2rad(15), # fiber angle global [rad]
-    )
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(15), # fiber angle global [rad]
+    # --- Strut vars ---
+    "rake" => 0.0, # rake angle wrt flow [deg]
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+)
+wingOptions1 = Dict(
+    "compName" => "test-comp",
+    "material" => "cfrp", # preselect from material library
+    "config" => "wing",
+    "nNodes" => nNodes, # number of nodes on foil half wing
+    "nNodeStrut" => nNodesStrut, # nodes on strut
+    "use_tipMass" => false,
+    "xMount" => 0.0,
+)
 solverOptions1 = Dict(
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "U∞" => 6.0, # free stream velocity [m/s]
@@ -47,13 +57,7 @@ solverOptions1 = Dict(
     "name" => "akcabay",
     "debug" => false,
     "outputDir" => "test_out/",
-    # --- General solver options ---
-    "config" => "wing",
-    "nNodes" => nNodes, # number of nodes on foil half wing
-    "nNodeStrut" => nNodesStrut, # nodes on strut
-    "use_tipMass" => false,
-    "material" => "cfrp", # preselect from material library
-    "rotation" => 0.0, # deg
+    "appendageList" => [wingOptions1],
     # --------------------------------
     #   Flow
     # --------------------------------
@@ -72,35 +76,41 @@ solverOptions1 = Dict(
     "uRange" => nothing,
 )
 DVDict2 = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "c" => 0.0925 * ones(nNodes), # chord length [m]
-        "s" => 0.2438, # semispan [m]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.03459 * ones(nNodes), # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(0), # fiber angle global [rad]
-        # --- Strut vars ---
-        "beta" => 0.0, # yaw angle wrt flow [deg]
-        "s_strut" => 0.4, # from Yingqian
-        "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
-        "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
-        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-        "θ_strut" => deg2rad(15), # fiber angle global [rad]
-    )
+    "α₀" => 6.0, # initial angle of attack [deg]
+    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "c" => 0.0925 * ones(nNodes), # chord length [m]
+    "s" => 0.2438, # semispan [m]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.03459 * ones(nNodes), # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(0), # fiber angle global [rad]
+    # --- Strut vars ---
+    "rake" => 0.0, # rake angle wrt flow [deg]
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+)
+wingOptions2 = Dict(
+    "compName" => "test-comp",
+    "material" => "cfrp", # preselect from material library
+    "config" => "wing",
+    "nNodes" => nNodes,
+    "use_tipMass" => false,
+    "xMount" => 0.0,
+)
 solverOptions2 = Dict(
     # --- I/O ---
     "debug" => false,
     "outputDir" => "",
-    "config" => "wing",
     # --- General solver options ---
-    "nNodes" => nNodes,
-    "use_tipMass" => false,
+    "appendageList" => [wingOptions2],
     "use_cavitation" => false,
     "use_freeSurface" => false,
-    "material" => "cfrp", # preselect from material library
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     # --- Static solve ---
@@ -171,8 +181,13 @@ DVDict = Dict(
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+    "rake" => 0.0, # rake angle wrt flow [deg]
 )
-
+wingOptions = Dict(
+    "material" => "cfrp", # preselect from material library
+    "nNodes" => nNodes,
+    "config" => "wing",
+)
 solverOptions = Dict(
     # --- I/O ---
     "name" => "test",
@@ -181,10 +196,7 @@ solverOptions = Dict(
     # --- General solver options ---
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "material" => "cfrp", # preselect from material library
-    "nNodes" => nNodes,
-    "config" => "wing",
-    "rotation" => 0.0, # deg
+    "appendageList" => [wingOptions],
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => false,
     "use_freeSurface" => false,

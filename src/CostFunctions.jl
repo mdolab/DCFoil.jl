@@ -9,7 +9,7 @@
 module CostFunctions
 
 # --- Solver cost funcs ---
-staticCostFuncs = [
+const staticCostFuncs::Vector{String} = [
     "psitip"
     "wtip"
     "lift"
@@ -32,16 +32,19 @@ staticCostFuncs = [
     "cdpr"
     "fxpr"
 ]
-forcedCostFuncs = [
+const forcedCostFuncs::Vector{String} = [
     "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
     "peakwtip"
     "vibareapsi" # integrated deformations under the spectral curve (see Ng et al. 2022)
     "vibareaw"
 ]
-flutterCostFuncs = [
+const flutterCostFuncs::Vector{String} = [
     "ksflutter" # flutter value (damping)
     "lockin" # lock-in value
     "gap" # mode gap width
 ]
+
+const allCostFuncs::Vector{String} = vcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
+
 
 end

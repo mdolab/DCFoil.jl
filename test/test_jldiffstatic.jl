@@ -40,31 +40,22 @@ debug = false
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 5 # spatial nodes
-nNodesStrut = 5 # spatial nodes
-nModes = 4 # number of modes to solve for;
-# NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
-# This is because poles bifurcate
-# nModes is really the starting number of structural modes you want to solve for
-fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
-# uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
-tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
-
+nNodes = 3 # spatial nodes
+nNodesStrut = 3 # spatial nodes
 
 # ************************************************
 #     Set solver options
 # ************************************************
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "α₀" => 2.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "θ" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0,
     "beta" => 0.0, # yaw angle wrt flow [deg]
@@ -77,7 +68,7 @@ DVDict = Dict(
 )
 
 wingOptions = Dict(
-    "compName" => "akcabay-swept",
+    "compName" => "akcabay-div",
     "material" => "cfrp", # preselect from material library
     "nNodes" => nNodes,
     "nNodeStrut" => nNodesStrut,
@@ -88,7 +79,7 @@ wingOptions = Dict(
 appendageOptions = [wingOptions]
 solverOptions = Dict(
     # --- I/O ---
-    "name" => "akcabay-swept",
+    "name" => "akcabay-div",
     "debug" => debug,
     # --- General solver options ---
     "U∞" => 5.0, # free stream velocity [m/s]
@@ -100,17 +91,7 @@ solverOptions = Dict(
     "use_ventilation" => false,
     # --- Static solve ---
     "run_static" => run_static,
-    # --- Forced solve ---
-    "run_forced" => run_forced,
-    "fSweep" => fSweep,
-    "tipForceMag" => tipForceMag,
-    # --- Eigen solve ---
-    "run_modal" => run_modal,
-    "run_flutter" => run_flutter,
-    "nModes" => nModes,
-    "uRange" => uRange,
-    "maxQIter" => 100,
-    "rhoKS" => 80.0,
+    "run_body" => false,
 )
 # ************************************************
 #     I/O
@@ -118,7 +99,7 @@ solverOptions = Dict(
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+outputDir = @sprintf("./test_out/%s_%s_f%.1f_w%.1f/",
     solverOptions["name"],
     wingOptions["material"],
     rad2deg(DVDict["θ"]),
@@ -128,38 +109,69 @@ mkpath(outputDir)
 #     Cost functions
 # ************************************************
 evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
-# evalFuncsSensList = ["lift"]
+evalFuncsSensList = ["lift"]
 
 solverOptions["outputDir"] = outputDir
 
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-steps = [1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9] # step sizes
+steps = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9] # step sizes
 dvKey = "θ" # dv to test deriv
 dvKey = "Λ" # dv to test deriv
-# dvKey = "rake" # dv to test deriv
-# dvKey = "α₀" # dv to test deriv
+dvKey = "rake" # dv to test deriv
+dvKey = "α₀" # dv to test deriv
 evalFunc = "ksflutter"
-# evalFunc = "lift"
+evalFunc = "lift"
 
 
-# ************************************************
-#     Forward difference checks (dumb way)
-# ************************************************
+
+# ==============================================================================
+#                         STATIC DERIV TESTS
+# ==============================================================================
 derivs = zeros(length(steps))
 funcVal = 0.0
+# ************************************************
+#     Setup test values
+# ************************************************
+_, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem(DVDict, wingOptions, solverOptions)
+DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+u_test = SOL["STATIC"][1].structStates
 
+# ************************************************
+#     Check ∂r∂x
+# ************************************************
+prpx_fidi = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+    mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+prpx_fad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+    mode="FAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+prpx_rad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+    mode="RAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+    
+# ************************************************
+#     Check ∂f∂u
+# ************************************************
+pfpu_fidi = DCFoil.SolveStatic.compute_∂f∂u(, u_test, DVDict;
+    mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+# TODO: PICKUP DEBUGGING HERE WHY DOES IT NOT WORK FOR THE SIMPLE WING?
+funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
+funcsSensAdjoint[1][dvKey]
 for (ii, dh) in enumerate(steps)
-    DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    SOL = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
-    flutt_i = costFuncs["ksflutter"]
+    DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+    SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+    flutt_i = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
     global funcVal = flutt_i
     DVDict[dvKey] += dh
-    SOL = DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
-    flutt_f = costFuncs["ksflutter"]
+    SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+    flutt_f = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
 
     derivs[ii] = (flutt_f - flutt_i) / dh
     @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
@@ -169,12 +181,4 @@ for (ii, dh) in enumerate(steps)
 end
 
 save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
-
-# ************************************************
-#     Does it all work?
-# ************************************************
-funcsSensAD = DCFoil.SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-# funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
-save("./RAD.jld2", "derivs", funcsSensAD, "funcVal", funcVal)
-
 

@@ -4,17 +4,10 @@ Run tests on hydro module file
 
 using LinearAlgebra
 using Printf
-include("../src/hydro/HydroStrip.jl")
-using .HydroStrip # Using the Hydro module
-include("../src/solvers/DCFoilSolution.jl")
-include("../src/struct/FEMMethods.jl")
-using .FEMMethods # Using the FEMMethods module just for some mesh gen methods
-include("../src/InitModel.jl")
-using .InitModel # Using the InitModel module
-include("../src/constants/SolutionConstants.jl")
-using .SolutionConstants
-include("../src/solvers/SolveStatic.jl")
-using .SolveStatic
+
+
+include("../src/DCFoil.jl")
+using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip
 
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -236,12 +229,12 @@ function test_AICs()
         nDOF = 4
         # nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
         staticOffset = [0, 0, alfaRad, 0] #TODO: pretwist will change this
-        # staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
+    # staticOffset = [0, 0, 0, 0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
     elseif elemType == "COMP2"
         nDOF = 9
         staticOffset = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
     end
-    AIC = zeros(nDOF*nNodes, nDOF*nNodes)
+    AIC = zeros(nDOF * nNodes, nDOF * nNodes)
 
     AIC, planformArea = HydroStrip.compute_steady_AICs!(AIC, aeroMesh, chordVec, abVec, ebVec, Λ, FOIL, elemType)
     dummy = AIC[:, 1]
