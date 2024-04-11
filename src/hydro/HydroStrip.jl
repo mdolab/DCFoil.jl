@@ -1299,6 +1299,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, rake::Float6
 
     ChainRulesCore.ignore_derivatives() do
         if solverOptions["debug"]
+            config = appendageOptions["config"]
             println("Plotting hydrodynamic loads")
             plot(1:length(Fz), Fz, label="Fz")
             plotTitle = @sprintf("alpha = %.2f, config = %s", α₀, config)
@@ -1308,7 +1309,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, rake::Float6
             fname = @sprintf("./DebugOutput/hydroloads_lift.png")
             savefig(fname)
 
-            plot(1:length(My),My, label="Moment")
+            plot(1:length(My), My, label="Moment")
             plotTitle = @sprintf("alpha = %.2f, config = %s", α₀, config)
             title!(plotTitle)
             xlabel!("Strip number")
@@ -1331,7 +1332,7 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, rake::Float6
     return ForceVector, AbsTotalLift, AbsTotalMoment
 end
 
-function apply_BCs(K, C, M, globalDOFBlankingList::UnitRange{Int64})
+function apply_BCs(K::Matrix{Float64}, C::Matrix{Float64}, M::Matrix{Float64}, globalDOFBlankingList::Vector{Int64})
     """
     Applies BCs for nodal displacements
     """

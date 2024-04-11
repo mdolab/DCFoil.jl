@@ -12,6 +12,9 @@ struct StaticSolution{T<:Float64}
     structStates::Vector{T} # state variables (u)
     fHydro::Vector{T} # hydrodynamic forces
     FEMESH # FEMESH struct type
+    SOLVERPARAMS
+    FOIL
+    STRUT
 end
 
 struct BodyStaticSolution{T<:Float64}
@@ -21,8 +24,8 @@ end
 struct FlutterSolution{T<:Float64}
     eigs_r::Matrix{T} # dimensional eigvals
     eigs_i::Matrix{T} # dimensional eigvals
-    R_eigs_r::Array{T, 3} # stacked eigenvectors
-    R_eigs_i::Array{T, 3} # stacked eigenvectors
+    R_eigs_r::Array{T,3} # stacked eigenvectors
+    R_eigs_i::Array{T,3} # stacked eigenvectors
     NTotalModesFound::Int64
     N_MAX_Q_ITER::Int64
     flowHistory::Matrix{T}

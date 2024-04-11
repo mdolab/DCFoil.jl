@@ -61,7 +61,7 @@ function make_fullMesh(DVDictList::Vector, solverOptions::Dict)
         config = appendageDict["config"]
         rake = DVDict["rake"]
         structMesh, elemConn = make_componentMesh(nElem, span; config=config, nElStrut=nElStrut, spanStrut=spanStrut, rake=rake)
-        
+
         # This appends the structMesh and elemConn to the list that we can unpack later
         push!(StructMeshList, structMesh)
         push!(ElemConnList, elemConn)
@@ -246,7 +246,7 @@ function make_componentMesh(nElem::Int64, span::Float64; config="wing", rake=0.0
         # ************************************************
         meshCopy = copy(mesh)
         meshCopy[:, ZDIM] .-= spanStrut # translate
-        for inode in 1:size(mesh,1)
+        for inode in 1:size(mesh, 1)
             mesh[inode, :] = transMat * meshCopy[inode, :]
         end
 
@@ -291,7 +291,8 @@ function rotate3d(dataVec, rot::Float64; axis="x")
     return transformedVec
 end
 
-function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic"; config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing)
+function assemble(coordMat::Matrix{Float64}, elemConn::Matrix{Int64}, abVec::Vector{Float64}, x_αbVec::Vector{Float64}, FOIL, elemType="bend-twist", constitutive="isotropic";
+    config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true)
     """
     Generic function to assemble the global mass and stiffness matrices
 
@@ -325,14 +326,16 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
 
     # --- Debug printout for initialization ---
     ChainRulesCore.ignore_derivatives() do
-        println("+----------------------------------------+")
-        println("|        Assembling beam matrices        |")
-        println("+----------------------------------------+")
-        println("Constitutive law: ", constitutive)
-        println("Beam element: ", elemType)
-        println("Elements: ", nElem)
-        println("Nodes: ", nNodes)
-        println("DOFs: ", nnd * nNodes)
+        if verbose
+            println("+----------------------------------------+")
+            println("|        Assembling beam matrices        |")
+            println("+----------------------------------------+")
+            println("Constitutive law: ", constitutive)
+            println("Beam element: ", elemType)
+            println("Elements: ", nElem)
+            println("Nodes: ", nNodes)
+            println("DOFs: ", nnd * nNodes)
+        end
     end
 
     # ************************************************
@@ -506,17 +509,17 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     return globalK, globalM, globalF
 end
 
-function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dict("config" => "wing"))
+function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dict("config" => "wing"), verbose=true)
     """
     Depending on the elemType, return the indices of fixed nodes
     """
     if BCCond == "clamped"
         if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
-            fixedDOFs = 1:BeamElement.NDOF
+            fixedDOFs = Vector(1:BeamElement.NDOF)
         elseif appendageOptions["config"] == "t-foil"
             nElemTot = (appendageOptions["nNodes"] - 1) * 2 + appendageOptions["nNodeStrut"] - 1
             nNodeTot = nElemTot + 1
-            fixedDOFs = nNodeTot*BeamElement.NDOF:-1:nElemTot*BeamElement.NDOF+1
+            fixedDOFs = Vector(nNodeTot*BeamElement.NDOF:-1:nElemTot*BeamElement.NDOF+1)
 
         else
             error("config not recognized")
@@ -527,7 +530,9 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
     end
 
     ChainRulesCore.ignore_derivatives() do
-        println("BCType: ", BCCond)
+        if verbose
+            println("BCType: ", BCCond)
+        end
     end
 
     return fixedDOFs
@@ -659,14 +664,27 @@ function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
     # TODO: add gravity vector
 end
 
-function apply_BCs(K, M, F, globalDOFBlankingList)
+function apply_BCs(
+    K::Matrix{Float64}, M::Matrix{Float64}, 
+    F::Vector{Float64},
+    globalDOFBlankingList::Vector{Int64}
+)
     """
-    Applies BCs for nodal displacements and blanks them
+    Applies BCs for nodal displacements and sets them to zero
     """
-
+    # Old method of deleting
     newK = K[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newM = M[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newF = F[1:end.∉[globalDOFBlankingList]]
+
+    # newK = copy(K)
+    # newK[globalDOFBlankingList, :] .= 0.0
+    # newK[:, globalDOFBlankingList] .= 0.0
+    # newM = copy(M)
+    # newM[globalDOFBlankingList, :] .= 0.0
+    # newM[:, globalDOFBlankingList] .= 0.0
+    # newF = copy(F)
+    # newF[globalDOFBlankingList] .= 0.0
 
     return newK, newM, newF
 end

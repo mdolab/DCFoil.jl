@@ -26,11 +26,15 @@ using ..EBBeam: EBBeam as BeamElement
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=false, 
-    mode="analytic", 
+function converge_r(compute_residuals, compute_∂r∂u, u0, x0::Dict;
+    maxIters=200, tol=1e-6, is_verbose=false,
+    solverParams=nothing,
+    appendageOptions=Dict(),
+    solverOptions=Dict(),
+    mode="Analytic",
     # mode="RAD",
     is_cmplx=false
-    )
+)
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
@@ -46,13 +50,17 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
     end
 
     # Somewhere here, you could do something besides Newton-Raphson if you want
-    converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(compute_residuals, compute_∂r∂u, u, maxIters, tol, is_verbose, mode, is_cmplx)
+    converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(
+        compute_residuals, compute_∂r∂u, u0, x0;
+        maxIters, tol, is_verbose, mode, is_cmplx,
+        solverParams=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     return converged_u, converged_r
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; STRUT=nothing, appendageOptions=Dict())
+# function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; STRUT=nothing, appendageOptions=Dict())
+function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; appendageOptions=Dict())
     """
     Returns the deflected + rigid shape of the foil
     So like pre-twist
@@ -69,26 +77,15 @@ function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; S
         nDOF - number of DOF per node
     """
 
-    alfaRad = deg2rad(α₀)
-    rakeRad = deg2rad(rake)
-    if STRUT != nothing
-        beta = STRUT.α₀
-    else
-        beta = 0.0
-    end
-    betaRad = deg2rad(beta)
+    alfaRad = deg2rad(DVDict["α₀"])
+    rakeRad = deg2rad(DVDict["rake"])
+    betaRad = deg2rad(DVDict["beta"])
     nDOF = BeamElement.NDOF
     # Get flow angles of attack in "local" beam coords first
     #TODO: pretwist will change this
-    if elemType == "bend"
-        error("Only bend-twist element type is supported for load computation")
-    elseif elemType == "bend-twist"
-        nDOF = 3
-        staticOffset = [0, 0, alfaRad]
-    elseif elemType == "BT2"
-        nDOF = 4
+    if elemType == "BT2"
         nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
-        staticOffset = [0, 0, alfaRad, 0] 
+        staticOffset = [0, 0, alfaRad, 0]
     elseif elemType == "COMP2"
         staticOffset_wing = [0, 0, 0, alfaRad + rakeRad, 0, betaRad, 0, 0, 0]
         staticOffset_strut = [0, 0, 0, betaRad, 0, rakeRad, 0, 0, 0]
@@ -114,7 +111,7 @@ function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; S
             angleDefault = deg2rad(-90)
             axisDefault = "x"
             T2 = get_rotate3dMat(angleDefault, axis=axisDefault)
-            T = T2*T1
+            T = T2 * T1
             transMatL2G = [
                 T Z Z
                 Z T Z
@@ -134,14 +131,14 @@ function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; S
     nStrutDOFs = 0
     staticOffsetGlobalRef_strut = []
     if appendageOptions["config"] == "t-foil"
-        nStrutDOFs = (appendageOptions["nNodeStrut"]-1)*nDOF # subtract 1 because of the junction node
+        nStrutDOFs = (appendageOptions["nNodeStrut"] - 1) * nDOF # subtract 1 because of the junction node
         w_strut = foilStructuralStates[end-nStrutDOFs+1:nDOF:end]
         staticOffsetGlobalRef_strut = repeat(staticOffset_strut, outer=[length(w_strut)])
     end
     w_wing = foilStructuralStates[1:nDOF:end-nStrutDOFs] # These wing DOFS include the junction node
-    
+
     # # Correct the root "junction" node
-    staticOffsetGlobalRef_wing = vcat(staticOffset_junctionNode, repeat(staticOffset_wing, outer=[length(w_wing)-1]))
+    staticOffsetGlobalRef_wing = vcat(staticOffset_junctionNode, repeat(staticOffset_wing, outer=[length(w_wing) - 1]))
     # staticOffsetGlobalRef_wing[1:nDOF] = staticOffset_junctionNode
 
     staticOffsetGlobalRef = vcat(staticOffsetGlobalRef_wing, staticOffsetGlobalRef_strut)
@@ -151,7 +148,7 @@ function return_totalStates(foilStructuralStates, α₀, rake, elemType="BT2"; S
     foilTotalStates = copy(foilStructuralStates) + staticOffsetGlobalRef
 
 
-    return foilTotalStates, nDOF
+    return foilTotalStates
 end # return_totalStates
 
 # ==============================================================================
@@ -522,7 +519,7 @@ function cmplxStdEigValProb2(A_r, A_i, n; nEigs=10)
     # eigen() is a spectral decomposition
     @fastmath begin
         A = A_r + 1im * A_i
-        
+
         w, Vr = eigen(A)
         # TODO: swap this out with a more efficient eigen method
         # w, Vr = lanczos(A, nEigs)
@@ -551,7 +548,7 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
     """
     Reverse rule for the eigenvalue problem
     """
-    
+
     # Primal function
     y = cmplxStdEigValProb2(A_r, A_i, n)
 
@@ -561,12 +558,12 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
             with eigenvalues d_k
             Ā = U^-H * (D̄ + F ∘ (U^H * Ū)) * U^H
             where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-    
+
             overbar terms are the reverse seeds
-    
+
         See:
             Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
-    
+
         Inputs
         ------
         A_r - nxn real part matrix
@@ -827,7 +824,7 @@ function find_signChange(x::Vector{Float64})
     for ii in 1:n-1
         @fastmath @inbounds begin
             if sgn[ii+1] != sgn[ii]
-                return ii, ii+1
+                return ii, ii + 1
             else
                 continue
             end
@@ -915,8 +912,8 @@ function get_transMat(dR1::Float64, dR2::Float64, dR3::Float64, l::Float64, elem
         cc = dR3 * rxyz_div
         T1 = get_rotate3dMat(-deg2rad(90); axis="x")
         T2 = get_rotate3dMat(-deg2rad(90); axis="z")
-        T = T2*T1
-    else    
+        T = T2 * T1
+    else
         # beta is the angle above the xy plane
         rxy_div::Float64 = 1 / sqrt(dR1^2 + dR2^2) # length of projection onto xy plane
         calpha::Float64 = dR1 * rxy_div
@@ -924,7 +921,7 @@ function get_transMat(dR1::Float64, dR2::Float64, dR3::Float64, l::Float64, elem
         cbeta::Float64 = 1 / rxy_div / l
         sbeta::Float64 = dR3 / l
         # Direction cosine matrix to get from 3d space to having x-axis be the long dimension
-        T =  [
+        T = [
             calpha*cbeta salpha calpha*sbeta
             -salpha*cbeta calpha -salpha*sbeta
             -sbeta 0.0 cbeta
