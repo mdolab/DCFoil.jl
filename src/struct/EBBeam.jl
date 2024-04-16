@@ -39,9 +39,19 @@ module EBBeam
 """
 
 # --- Constants ---
-NDOF = 9 # number of DOF per node
+const NDOF = 9 # number of DOF per node
+const NNODES = 2 # number of nodes
+# --- DOF Indices ---
+const UIND = 1
+const VIND = 2
+const WIND = 3
+const ΦIND = 4
+const ΘIND = 5
+const ΨIND = 6
 
-function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
+
+function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ,
+    elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
     """
     Output
     ------
@@ -49,19 +59,19 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
 
     Inputs
     ------
-    EIᵉ : Float64
+    EIᵉ : 
         out-of-plane (OOP) bending stiffness of the element [N m²]
-    EIIPᵉ : Float64
+    EIIPᵉ : 
         in-plane (IP) bending stiffness of the element [N m²]
-    GJᵉ : Float64
+    GJᵉ : 
         torsional stiffness of the element [N-m²]
-    BTᵉ : Float64
+    BTᵉ : 
         this is Kₛ from the paper (material bend-twist coupling, +ve for nose-down BTC) [N-m²]
-    Sᵉ : Float64
+    Sᵉ : 
         structural warping (cross-sections do not retain shape) [N-m⁴]
-    lᵉ : Float64
+    lᵉ : 
         length of the element [m]
-    abᵉ : Float64
+    abᵉ : 
         distance from midchord to EA (+ve if EA aft of midchord) [m]
     elemType : String
         which element stiffness matrix to use
@@ -200,14 +210,14 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         println("Axial elements not implemented")
     elseif elemType == "BT2" # Higher order beam element
         # row 1
-        k11_11::Float64 = 12 * EIᵉ
-        k11_12::Float64 = 6 * EIᵉ * lᵉ
-        k11_13::Float64 = -12 * abᵉ * EIᵉ
-        k11_14::Float64 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
+        k11_11 = 12 * EIᵉ
+        k11_12 = 6 * EIᵉ * lᵉ
+        k11_13 = -12 * abᵉ * EIᵉ
+        k11_14 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
         # row 2
-        k11_22::Float64 = 4 * EIᵉ * lᵉ^2
-        k11_23::Float64 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
-        k11_24::Float64 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
+        k11_22 = 4 * EIᵉ * lᵉ^2
+        k11_23 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
+        k11_24 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
         # row 3
         k11_33::Float64 = 6 * GJᵉ * lᵉ^2 / 5 + 12 * Sᵉ
         k11_34::Float64 = GJᵉ * lᵉ^3 * 0.1 + 6 * Sᵉ * lᵉ

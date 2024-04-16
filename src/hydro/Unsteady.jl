@@ -144,36 +144,38 @@ function compute_fraccalc_d(k)
     return ans
 end
 
-function compute_node_stiff_faster(clα::Float64, b::Float64, eb::Float64, ab::Float64, U∞::Float64, clambda::Float64, slambda::Float64, rho_f::Float64, Ck)
+function compute_node_stiff_faster(
+    clα, b, eb, ab, U∞, clambda, slambda, rho_f, Ck
+)
     """
     Hydrodynamic stiffness force
     THIS ASSUMES THE MOMENT ABOUT THE AERODYNAMIC CENTER IS ZERO
     """
     # --- Precomputes ---
-    qf::Float64 = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
-    a::Float64 = ab / b
-    Uclambda::Float64 = U∞ * clambda
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    Uclambda = U∞ * clambda
     clalphabCk = clα * b * Ck
     # K_f = @SMatrix zeros(ComplexF64, 2, 2)
     # K̂_f = @SMatrix zeros(ComplexF64, 2, 2)
     # Aerodynamic quasi-steady stiffness
     # (1st row is lift, 2nd row is pitching moment)
 
-    
+
     k_hα = -2 * clalphabCk # lift due to angle of attack
     k_αα = k_hα * eb # moment due to angle of attack (disturbing)
     K_f = qf * clambda * clambda *
-        [
-            0.0 k_hα
-            0.0 k_αα
-        ]
-        
+          [
+              0.0 k_hα
+              0.0 k_αα
+          ]
+
     # Sweep correction to aerodynamic quasi-steady stiffness
     e_hh = Uclambda * 2 * clα * Ck
     e_hα = Uclambda * (1 - a) * (-clalphabCk)
     e_αh = Uclambda * (1 + a) * clalphabCk
     e_αα = Uclambda *
-    (π * b * b - clalphabCk * eb * (1 - 2 * (a)))
+           (π * b * b - clalphabCk * eb * (1 - 2 * (a)))
     K̂_f = qf / U∞ * slambda * b *
            [
                e_hh e_hα
@@ -188,9 +190,9 @@ function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f
     Fluid-added damping matrix
     """
     # --- Precomputes ---
-    qf::Float64 = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
-    a::Float64 = ab / b
-    coeff::Float64 = qf / U∞ * b
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    coeff = qf / U∞ * b
     # C_f = @SMatrix zeros(ComplexF64, 2, 2)
     # Ĉ_f = @SMatrix zeros(ComplexF64, 2, 2)
 
@@ -201,16 +203,16 @@ function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f
     c_αh = 2 * eb * clα * Ck
     c_αα = 0.5 * b * (1 - 2 * a) * (2π * b - 2 * clα * eb * Ck)
     C_f = coeff * clambda *
-    [
-        c_hh c_hα
-        c_αh c_αα
-    ]
-    
+          [
+              c_hh c_hα
+              c_αh c_αα
+          ]
+
     # Sweep correction to aerodynamic quasi-steady damping
-    e_hh::Float64 = 2π * b
-    e_hα::Float64 = 2π * ab * b
-    e_αh::Float64 = e_hα
-    e_αα::Float64 = 2π * b^3 * (0.125 + a * a)
+    e_hh = 2π * b
+    e_hα = 2π * ab * b
+    e_αh = e_hα
+    e_αα = 2π * b^3 * (0.125 + a * a)
     Ĉ_f = coeff * slambda *
            [
                e_hh e_hα
@@ -220,19 +222,18 @@ function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f
     return C_f, Ĉ_f
 end
 
-function compute_node_mass(b::Float64, ab::Float64, rho_f::Float64)
+function compute_node_mass(b, ab, rho_f)
     """
     Fluid-added mass matrix
     """
     # --- Precomputes ---
-    bSquared::Float64 = b * b # precompute square of b
-    a::Float64 = ab / b # precompute division by b to get a
-    # M_f = @SMatrix zeros(Float64, 2, 2) # I think I'm just doing this wrong
+    bSquared = b * b # precompute square of b
+    a = ab / b # precompute division by b to get a
 
-    m_hh::Float64 = 1.0
-    m_hα::Float64 = ab
-    m_αh::Float64 = m_hα
-    m_αα::Float64 = bSquared * (0.125 + a * a)
+    m_hh = 1.0
+    m_hα = ab
+    m_αh = m_hα
+    m_αα = bSquared * (0.125 + a * a)
     M_f = π * rho_f * bSquared *
           [
               m_hh m_hα
@@ -241,5 +242,11 @@ function compute_node_mass(b::Float64, ab::Float64, rho_f::Float64)
 
     return M_f
 end
+
+# let
+#     using .Unsteady
+#     precompile(Unsteady.compute_node_mass, (Float64, Float64, Float64))
+#     precompile(Unsteady.compute_node_damp_faster, (Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64))
+# end
 
 end # module

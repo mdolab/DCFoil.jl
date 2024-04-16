@@ -8,68 +8,91 @@
 
 module DesignConstants
 
-mutable struct foil{T<:Float64}
+struct Foil{TF,TI,TS,TA<:AbstractVector{TF}}
     """
+    DO NOT STORE DVS HERE
     Foil object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
-    DO NOT STORE DVS HERE
     Half-wing data
     """
-    mₛ::Vector{T} # structural mass vector [kg/m]
-    Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
-    EIₛ::Vector{T} # OOP bending stiffness vector [N-m²]
-    EIIPₛ::Vector{T} # IP bending stiffness vector [N-m²]
-    GJₛ::Vector{T} # torsion stiffness vector [N-m²]
-    Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
-    Sₛ::Vector{T} # warping resistance vector [N-m⁴]
-    EAₛ::Vector{T} # axial stiffness vector [N-m²]
-    # α₀::T # rigid initial angle of attack wrt flow (or yaw/sideslip angle) [deg] THE ONLY TIME THIS IS USED IS WHEN A DERIVATIVE WRT ALPHA IS NOT NEEDED
-    # rake::T # rake angle [deg]
-    U∞::T # flow speed [m/s]
-    g::T # modal damping ratio at first 2 modes
-    clα::Vector{T} # lift slopes [1/rad]
-    ρ_f::T # fluid density [kg/m³]
-    nNodes::Int64 # number of evaluation points on span
-    constitutive::String # constitutive model
+    mₛ::TA # structural mass vector [kg/m]
+    Iₛ::TA # structural moment of inertia vector [kg-m]
+    EIₛ::TA # OOP bending stiffness vector [N-m²]
+    EIIPₛ::TA # IP bending stiffness vector [N-m²]
+    GJₛ::TA # torsion stiffness vector [N-m²]
+    Kₛ::TA # bend-twist coupling vector [N-m²]
+    Sₛ::TA # warping resistance vector [N-m⁴]
+    EAₛ::TA # axial stiffness vector [N-m²]
+    U∞::TF # flow speed [m/s]
+    ζ::TF # modal damping ratio at first 2 modes
+    clα::TA # lift slopes [1/rad]
+    eb::TA # distance from center of pressure ahead of elastic axis [m]
+    ab::TA # distance from midchord to EA, +ve for EA aft [m]
+    chord::TA # chord vector [m]
+    ρ_f::TF # fluid density [kg/m³]
+    nNodes::TI # number of evaluation points on span
+    constitutive::TS # constitutive model
 end
 
-struct dynamicFoil{T<:Float64}
+struct DynamicFoil{TF,TI,TS,TA<:AbstractVector{TF}}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
-    mₛ::Vector{T} # structural mass vector [kg/m]
-    Iₛ::Vector{T} # structural moment of inertia vector [kg-m]
-    EIₛ::Vector{T} # OOP bending stiffness vector [N-m²]
-    EIIPₛ::Vector{T} # IP bending stiffness vector [N-m²]
-    GJₛ::Vector{T} # torsion stiffness vector [N-m²]
-    Kₛ::Vector{T} # bend-twist coupling vector [N-m²]
-    Sₛ::Vector{T} # warping resistance vector [N-m⁴]
-    EAₛ::Vector{T} # axial stiffness vector [N-m²]
-    # α₀::T # rigid initial angle of attack [deg]
-    # rake::T # rake angle about top of strut [deg]
-    U∞::T # flow speed [m/s]
-    g::T # modal damping ratio at first 2 modes
-    clα::Vector{T} # lift slopes [1/rad]
-    ρ_f::T # fluid density [kg/m³]
-    nNodes::Int64 # number of evaluation points on span
-    constitutive::String # constitutive model
+    mₛ::TA # structural mass vector [kg/m]
+    Iₛ::TA # structural moment of inertia vector [kg-m]
+    EIₛ::TA # OOP bending stiffness vector [N-m²]
+    EIIPₛ::TA # IP bending stiffness vector [N-m²]
+    GJₛ::TA # torsion stiffness vector [N-m²]
+    Kₛ::TA # bend-twist coupling vector [N-m²]
+    Sₛ::TA # warping resistance vector [N-m⁴]
+    EAₛ::TA # axial stiffness vector [N-m²]
+    U∞::TF # flow speed [m/s]
+    ζ::TF # modal damping ratio at first 2 modes
+    clα::TA # lift slopes [1/rad]
+    eb::TA
+    ab::TA
+    chord::TA
+    ρ_f::TF # fluid density [kg/m³]
+    nNodes::TI # number of evaluation points on span
+    constitutive::TS # constitutive model
     # --- Only things different for the dynamic foil ---
-    fSweep # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
-    uRange::Vector{T} # forward speed sweep [m/s] (for flutter solution)
+    fRange::TA # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    uRange::TA # forward speed sweep [m/s] (for flutter solution)
 end
 
-struct hull{T<:Float64}
+struct Hull{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     """
     Vessel object with key properties for the system solution
     This is a mutable struct, so it can be modified during the solution process
     DO NOT STORE DVS HERE
     """
     # --- Vessel properties ---
-    mass::T # mass of hull [kg]
-    Ib::Matrix{T} # BFS inertia matrix [kg-m²]
-    xcg::T # x-coordinate of center of gravity from the bow [m]
-    loa::T # length over all [m]
-    beam::T # beam [m]
+    mass::TF # mass of hull [kg]
+    Ib::TM # BFS inertia matrix [kg-m²]
+    xcg::TF # x-coordinate of center of gravity from the bow [m]
+    loa::TF # length over all [m]
+    beam::TF # beam [m]
 end
+
+# Store all possible DVs in a vector of strings (needed for wrestling into AD package formats)
+const SORTEDDVS::Vector{String} = [
+    "ab"
+    "ab_strut"
+    "beta"
+    "c"
+    "c_strut"
+    "rake"
+    "s"
+    "s_strut"
+    "toc"
+    "toc_strut"
+    "x_αb"
+    "x_αb_strut"
+    "zeta"
+    "Λ"
+    "α₀"
+    "θ"
+    "θ_strut"
+]
 
 end # end module

@@ -44,7 +44,7 @@ nModes = 4 # number of modes to solve for;
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 df = 1
-fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+fRange = [0.0, 1000.0]  # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [165.0, 175.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -55,12 +55,13 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # Anything in DVDict is what we calculate derivatives wrt
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
+    "rake"=> 0.0,
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12*ones(nNodes), # thickness-to-chord ratio
+    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
     # --- Strut vars ---
@@ -72,30 +73,34 @@ DVDict = Dict(
     "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "θ_strut" => deg2rad(0), # fiber angle global [rad]
 )
-
+wingOptions = Dict(
+    "compName" => "akcabay-swept",
+    "config" => "wing",
+    "nNodes" => nNodes,
+    "nNodeStrut" => 10,
+    "material" => "cfrp", # preselect from material library
+    "use_tipMass" => tipMass,
+    "xMount" => 0.0,
+)
+appendageOptions = [wingOptions]
 solverOptions = Dict(
     # --- I/O ---
     "name" => "akcabay-swept",
     "debug" => debug,
     "writeTecplotSolution" => false,
     # --- General solver options ---
-    "config" => "wing",
-    "nNodes" => nNodes,
-    "nNodeStrut" => 10,
+    "appendageList" => appendageOptions,
+    "use_freeSurface" => false,
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "rotation" => 0.0, # deg rotation about x-axis
-    "material" => "cfrp", # preselect from material library
     "gravityVector" => [0.0, 0.0, -9.81],
-    "use_tipMass" => tipMass,
-    "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
     # --- Static solve ---
     "run_static" => run_static,
     # --- Forced solve ---
     "run_forced" => run_forced,
-    "fSweep" => fSweep,
+    "fRange" => fRange,
     "tipForceMag" => tipForceMag,
     # --- Eigen solve ---
     "run_modal" => run_modal,
@@ -110,12 +115,12 @@ solverOptions = Dict(
 #     Cost functions
 # ************************************************
 evalFuncs = [
-    "wtip", 
-    "psitip", 
-    "cl", 
-    "cmy", 
-    "lift", 
-    "moment", 
+    "wtip",
+    "psitip",
+    "cl",
+    "cmy",
+    "lift",
+    "moment",
     "ksflutter",
 ]
 
@@ -128,7 +133,7 @@ evalFuncs = [
 outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
     solverOptions["name"],
-    solverOptions["material"],
+    wingOptions["material"],
     rad2deg(DVDict["θ"]),
     rad2deg(DVDict["Λ"]))
 mkpath(outputDir)
@@ -138,9 +143,9 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.init_model(DVDict,evalFuncs; solverOptions=solverOptions)
+DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
 SOL = DCFoil.run_model(
-    DVDict,
+    [DVDict],
     evalFuncs;
     # --- Optional args ---
     solverOptions=solverOptions
@@ -156,7 +161,7 @@ dh = 8e-3
 # dvKey = "s" # not working for this case :/
 
 DVDict[dvKey] += dh
-DCFoil.run_model(
+SOLDICT = DCFoil.run_model(
     DVDict,
     evalFuncs;
     # --- Optional args ---

@@ -204,7 +204,7 @@ function test_AICs()
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 1:2,
+        "fRange" => [1,2],
         "tipForceMag" => 1,
         # --- p-k (Eigen) solve ---
         "run_modal" => false,

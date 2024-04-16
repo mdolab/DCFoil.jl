@@ -4,6 +4,7 @@ authors = ["Galen Ng <nggw@umich.edu>"]
 version = "1.0.0-DEV"
 
 [deps]
+AbstractDifferentiation = "c29ec348-61ec-40c8-8164-b8c60e9d9f3d"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
@@ -11,6 +12,7 @@ Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"

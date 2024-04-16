@@ -46,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
-fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
+fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -102,7 +102,7 @@ solverOptions = Dict(
     "run_static" => run_static,
     # --- Forced solve ---
     "run_forced" => run_forced,
-    "fSweep" => fSweep,
+    "fRange" => fRange,
     "tipForceMag" => tipForceMag,
     # --- Eigen solve ---
     "run_modal" => run_modal,
@@ -173,7 +173,7 @@ save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
 # ************************************************
 #     Does it all work?
 # ************************************************
-funcsSensAD = DCFoil.SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
+funcsSensAD = DCFoil.SolveFlutter.evalFuncsSens([evalFunc],DVDict, solverOptions; mode="RAD")
 # funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 save("./RAD.jld2", "derivs", funcsSensAD, "funcVal", funcVal)
 

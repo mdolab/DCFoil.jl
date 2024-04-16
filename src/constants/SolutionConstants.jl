@@ -26,31 +26,30 @@ const ZDIM = 3
 # ==============================================================================
 #                         STRUCTS
 # ==============================================================================
-struct DCFoilSolverParams{T}
+struct DCFoilSolverParams{TF,TI,TS}
     """
     This is a catch all immutable struct to store variables that we do not
     want in function calls like r(u) or f(u)
     """
-    FEMESH
-    Kmat::Matrix{T} # structural stiffness matrix (no BC blanking)
-    Mmat::Matrix{T} # structural mass matrix (no BC blanking)
-    Cmat::Matrix{T} # structural damping matrix (no BC blanking)
-    elemType::String
-    AICmat::Matrix{T} # Aero influence coeff matrix (no BC blanking)
-    mode::String # type of derivative for drdu
-    planformArea::T
-    dofBlank::Vector{Int64} # DOF to blank out
+    Kmat::Matrix{TF} # structural stiffness matrix (no BC blanking)
+    Mmat::Matrix{TF} # structural mass matrix (no BC blanking)
+    Cmat::Matrix{TF} # structural damping matrix (no BC blanking)
+    elemType::TS
+    AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
+    mode::TS # type of derivative for drdu
+    planformArea::TF
+    dofBlank::Vector{TI} # DOF to blank out
 end
 
-struct DCFoilDynamicConstants{T}
+struct DCFoilDynamicConstants{TF,TC<:ComplexF64,TI,TS,TA<:AbstractVector{TF}}
     """
     For the dynamic hydroelastic solve, there are more constants to store
     """
-    elemType::String
-    mesh::Array{T,2}
-    Dmat::Matrix{ComplexF64} # dynamic matrix 
-    AICmat::Matrix{ComplexF64} # just the aero part of Dmat 
-    extForceVec::Vector{T} # external force vector excluding BC nodes
+    elemType::TS
+    mesh::Matrix{TF}
+    Dmat::Matrix{TC} # dynamic matrix 
+    AICmat::Matrix{TC} # just the aero part of Dmat 
+    extForceVec::TA # external force vector excluding BC nodes
 end
 
 end # end module

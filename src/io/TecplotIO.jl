@@ -94,19 +94,19 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
     TODO generalize to take in a normal vector in spanwise direction
     """
 
-    function write_slice(io, unode, iairfoilpt, foilCoords, nodeLoc::Vector{Float64}, dus, dvs, dws)
+    function write_slice(io, unode, iairfoilpt, foilCoords, nodeLoc::Vector, dus, dvs, dws)
         write(io, @sprintf(
-            "%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", 
-            foilCoords[iairfoilpt, XDIM] + nodeLoc[XDIM], 
-            nodeLoc[YDIM], 
-            foilCoords[iairfoilpt, YDIM] + nodeLoc[ZDIM], 
-            unode[1] + dus[iairfoilpt], 
-            unode[2] + dvs[iairfoilpt], 
-            unode[3] + dws[iairfoilpt], 
-            unode[4], 
-            unode[5], 
+            "%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+            foilCoords[iairfoilpt, XDIM] + nodeLoc[XDIM],
+            nodeLoc[YDIM],
+            foilCoords[iairfoilpt, YDIM] + nodeLoc[ZDIM],
+            unode[1] + dus[iairfoilpt],
+            unode[2] + dvs[iairfoilpt],
+            unode[3] + dws[iairfoilpt],
+            unode[4],
+            unode[5],
             unode[6])
-            )
+        )
     end
 
     foilCoords = generate_naca4dig(DVDict["toc"][1])
@@ -116,7 +116,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
         for ii in 1:appendageOptions["nNodes"] # iterate over span
             nodeLoc = mesh[ii, :]
             localChord = DVDict["c"][ii]
-            foilCoordsXform = transform_airfoil(foilCoords, localChord, rake+baserake)
+            foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
             # Get u, v, w based on rotations
             nAirfoilPts = size(foilCoordsXform)[1]
@@ -144,7 +144,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
             for ii in appendageOptions["nNodes"]+1:2*appendageOptions["nNodes"]-1 # iterate over span
                 nodeLoc = mesh[ii, :]
                 localChord = DVDict["c"][ii-appendageOptions["nNodes"]]
-                foilCoordsXform = transform_airfoil(foilCoords, localChord, rake+baserake)
+                foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
                 # Get u, v, w based on rotations
                 nAirfoilPts = size(foilCoordsXform)[1]
@@ -192,16 +192,16 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
                 for jj in 1:nAirfoilPts
                     # THIS PART CHANGED BECAUSE THE STRUT IS VERTICAL
                     # Strut rake doesn't really show up in the airfoil drawing
-                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", 
-                    foilCoordsXform[jj, XDIM]+ spanLoc[XDIM], 
-                    foilCoordsXform[jj, YDIM], 
-                    spanLoc[ZDIM], 
-                    u[ii] + dus[jj], 
-                    v[ii] + dvs[jj], 
-                    w[ii] + dws[jj], 
-                    phi[ii], 
-                    theta[ii], 
-                    psi[ii]))
+                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+                        foilCoordsXform[jj, XDIM] + spanLoc[XDIM],
+                        foilCoordsXform[jj, YDIM],
+                        spanLoc[ZDIM],
+                        u[ii] + dus[jj],
+                        v[ii] + dvs[jj],
+                        w[ii] + dws[jj],
+                        phi[ii],
+                        theta[ii],
+                        psi[ii]))
                 end
                 # --- Connectivities ---
                 for jj in 1:nAirfoilPts-1
@@ -216,9 +216,9 @@ end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
-function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static"; 
+function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static";
     appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1
-    )
+)
     """
     """
     fTractions = STATICSOL.fHydro

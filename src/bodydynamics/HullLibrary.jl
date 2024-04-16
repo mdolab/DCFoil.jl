@@ -16,9 +16,9 @@ function return_hullprop(hullName::String)
     """
     SI units
     """
-    mass::Float64 = 0.0
-    length::Float64 = 0.0
-    beam::Float64 = 0.0
+    mass = 0.0
+    length = 0.0
+    beam = 0.0
     if (hullName == "moth")
         # https://sail1design.com/moth/#:~:text=Key%20Facts%3A,Unrestricted%20(~%2035%2D40%20Kg)
         mass = 40.0

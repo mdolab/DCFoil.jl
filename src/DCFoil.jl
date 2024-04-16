@@ -15,18 +15,21 @@ using JSON
 using Printf
 # using PrecompileTools: @setup_workload, @compile_workload, @recompile_invalidations
 
+# Set the default data type
+include("constants/DataTypes.jl")
+const DTYPE = DblPrec # Cmplx
+
 # ==============================================================================
 #                         HEADER FILES
 # ==============================================================================
-# @recompile_invalidations begin # This should precompile all the solvers
 for headerName in [
-    # NOTE: THE ORDER MATTERS
+    # THE ORDER MATTERS
     # --- Not used in this script but needed for submodules ---
-    "constants/SolutionConstants", "constants/DesignConstants", "constants/DataTypes",
+    "constants/SolutionConstants", "constants/DesignConstants",
+    "utils/Utilities", "utils/Interpolation",
     "struct/MaterialLibrary", "bodydynamics/HullLibrary",
     "hydro/Unsteady",
     "struct/BeamProperties", "struct/EBBeam",
-    "solvers/DCFoilSolution",
     "solvers/NewtonRaphson",
     "solvers/EigenvalueProblem",
     "solvers/SolverRoutines",
@@ -34,16 +37,15 @@ for headerName in [
     "adrules/CustomRules",
     # --- Used in this script ---
     "InitModel", "struct/FEMMethods",
+    "solvers/DCFoilSolution",
     "io/TecplotIO",
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
     # include("./solvers/SolveBodyDynamics.jl")
     "CostFunctions",
 ]
-
     include(headerName * ".jl")
-
 end
-# end
+
 using .SolveStatic: SolveStatic
 using .SolveForced: SolveForced
 using .SolveFlutter: SolveFlutter
@@ -51,17 +53,16 @@ using .SolveFlutter: SolveFlutter
 using .TecplotIO: TecplotIO
 using .InitModel: InitModel
 using .FEMMethods: FEMMethods
-using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs
-allCostFuncs = vcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
+using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs, allCostFuncs
+
 
 # ==============================================================================
 #                         API functions
 # ==============================================================================
 # --- Public functions ---
-# Don't need 'DCFoil.' prefix when importing
 export init_model, run_model, evalFuncs, evalFuncsSens
 
-function init_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions)
+function init_model(DVDictList, evalFuncsList; solverOptions)
     """
     Things that need to be done before running the model.
     Global vars are used in run_model
@@ -112,7 +113,7 @@ function init_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions
         DVDict = DVDictList[iComp]
         structMesh = structMeshList[iComp]
         elemConn = elemConnList[iComp]
-        FEMESH = FEMMethods.FEMESH(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["θ"], zeros(10, 2))
+        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["θ"], zeros(10, 2))
 
         push!(FEMESHLIST, FEMESH)
     end
@@ -141,7 +142,7 @@ function init_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions
     println("+-----------------------------------------------------------+")
 end
 
-function run_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions=Dict())
+function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
     """
     This call runs DCFoil in three possible solver modes.
     Output is then a dictionary with possibly three keys at most.
@@ -189,7 +190,7 @@ function run_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions=
             DVDict = DVDictList[iComp]
 
             # STATSOL = SolveStatic.solve(FEMESH, DVDict, solverOptions, appendageOptions)
-            STATSOL = SolveStatic.get_sol(DVDict, solverOptions, evalFuncs; iComp=iComp, FEMESH=FEMESH)
+            STATSOL = SolveStatic.get_sol(DVDict, solverOptions, evalFuncsList; iComp=iComp, FEMESH=FEMESH)
             if solverOptions["writeTecplotSolution"]
                 SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
             end
@@ -221,12 +222,13 @@ function run_model(DVDictList::Vector, evalFuncs::Vector{String}; solverOptions=
         end
 
         if solverOptions["run_flutter"]
+            DVDict = DVDictList[1]
             @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
             if solverOptions["writeTecplotSolution"]
                 SolveFlutter.write_tecplot(DVDict, FLUTTERSOL, structMesh, outputDir; solverOptions=solverOptions)
             end
+            SOLDICT["FLUTTER"] = FLUTTERSOL
         end
-        SOLDICT["FLUTTER"] = FLUTTERSOL
     end
 
     # # ==============================================================================
@@ -243,7 +245,7 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(SOLDICT::Dict, DVDictList::Vector, evalFuncs::Vector{String}, solverOptions=Dict())
+function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
     """
     Common interface to compute cost functions
 
@@ -258,7 +260,7 @@ function evalFuncs(SOLDICT::Dict, DVDictList::Vector, evalFuncs::Vector{String},
 
     if solverOptions["run_static"]
         # Get evalFuncs that are in the staticCostFuncs list
-        staticEvalFuncs = [key for key in evalFuncs if key in staticCostFuncs]        
+        staticEvalFuncs = [key for key in evalFuncsList if key in staticCostFuncs]
         STATSOLLIST = SOLDICT["STATIC"]
 
         for iComp in eachindex(solverOptions["appendageList"])
@@ -266,7 +268,8 @@ function evalFuncs(SOLDICT::Dict, DVDictList::Vector, evalFuncs::Vector{String},
             STATSOL = STATSOLLIST[iComp]
             DVDict = DVDictList[iComp]
             compName = appendageOptions["compName"]
-            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions)
+            DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions)
             for key in keys(staticFuncs)
                 newKey = @sprintf("%s-%s", key, compName)
                 evalFuncsDict[newKey] = staticFuncs[key]
@@ -296,7 +299,7 @@ function evalFuncs(SOLDICT::Dict, DVDictList::Vector, evalFuncs::Vector{String},
     return evalFuncsDict
 end # evalFuncs
 
-function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, evalFuncsSens::Vector{String}, solverOptions=Dict(); mode="FiDi")
+function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, evalFuncsSensList::Vector{String}, solverOptions=Dict(); mode="FiDi")
     """
     Think of this as the gluing call for getting all derivatives
 
@@ -313,7 +316,7 @@ function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, evalFuncsSens::Vector{
 
     if solverOptions["run_static"]
         STATSOLLIST = SOLDICT["STATIC"]
-        evalFuncsSensStat = [key for key in evalFuncsSens if key in staticCostFuncs]
+        evalFuncsSensStat = [key for key in evalFuncsSensList if key in staticCostFuncs]
         @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHLIST, solverOptions; mode=mode)
         costFuncsSensDict = costFuncsSensList
     end
@@ -359,9 +362,10 @@ function set_defaultOptions!(solverOptions)
         "run_forced",
         "run_modal",
         "run_flutter",
+        "run_body",
         "rhoKS",
         "maxQIter",
-        "fSweep",
+        "fRange",
         "tipForceMag",
         "nModes",
         "uRange",
@@ -393,9 +397,10 @@ function set_defaultOptions!(solverOptions)
         false,
         false,
         false,
+        false, # run_body
         80.0,
         100, # maxQIter
-        [0.1, 10.0], # fSweep
+        [0.1, 10.0], # fRange
         0.0, # tipForceMag
         10, # nModes
         [1.0, 2.0] # uRange
@@ -405,13 +410,19 @@ function set_defaultOptions!(solverOptions)
     end
 end
 
-# let
-#     DVDictList = Vector
-#     evalFuncs = Vector{String}
-#     # precompile(init_model, (Dict, Vector{String},))
-#     precompile(run_model, (DVDictList, evalFuncs))
-#     # precompile(evalFuncs, (Vector{String}, Dict,))
-#     # precompile(evalFuncsSens, (Dict, Vector{String}, Dict,))
-# end
+# ==============================================================================
+#                         Precompile helpers
+# ==============================================================================
+# This workflow just allows the functions in the module to be precompiled for this type of argument
+let # local binding scope
+    SOLDICT = Dict
+    DVDictList = Vector
+    evalFuncs = Vector{String}
+    solverOptions = Dict
+    precompile(init_model, (DVDictList, evalFuncs))
+    precompile(run_model, (DVDictList, evalFuncs))
+    precompile(evalFuncs, (SOLDICT, DVDictList, evalFuncs, solverOptions))
+    precompile(evalFuncsSens, (SOLDICT, DVDictList, evalFuncs, solverOptions))
+end
 
 end # module

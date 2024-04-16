@@ -366,12 +366,12 @@ function test_FiniteElementIso(DVDict, solverOptions)
     # ************************************************
     elemType = "bend"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
-
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, θ, zeros(2, 2))
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
     u = copy(globalF)
 
@@ -389,7 +389,8 @@ function test_FiniteElementIso(DVDict, solverOptions)
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_αb"]
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -405,7 +406,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -560,7 +561,7 @@ function test_FiniteElementIso3D()
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 1:2,
+        "fRange" => [0.0, 10.0],
         "tipForceMag" => 1,
         # --- p-k (Eigen) solve ---
         "run_modal" => false,
@@ -699,7 +700,7 @@ function test_FiniteElementBend()
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 1:2,
+        "fRange" => [0.0, 10.0],
         "tipForceMag" => 1,
         # --- p-k (Eigen) solve ---
         "run_modal" => false,
@@ -889,7 +890,7 @@ function test_FECOMP2()
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
-        "toc" => 1, # thickness-to-chord ratio
+        "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
         "x_αb" => zeros(nNodes), # static imbalance [m]
         "θ" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
@@ -936,7 +937,8 @@ function test_FECOMP2()
     x_αbVec = DVDict["x_αb"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["θ"], zeros(2, 2))
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
     # T = T1
     T = I(3)
@@ -977,7 +979,7 @@ function test_FECOMP2()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
     FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, "torque")
     u = copy(globalF)
 

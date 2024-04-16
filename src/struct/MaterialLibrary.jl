@@ -16,11 +16,11 @@ function return_constitutive(materialName::String)
     Based on material string name, return the material properties
     SI units
     """
-    ρₛ::Float64 = 0.0
-    E₁::Float64 = 0.0
-    E₂::Float64 = 0.0
-    G₁₂::Float64 = 0.0
-    ν₁₂::Float64 = 0.0
+    ρₛ = 0.0
+    E₁ = 0.0
+    E₂ = 0.0
+    G₁₂ = 0.0
+    ν₁₂ = 0.0
     if (materialName == "cfrp") # carbon-fiber reinforced plastic UD
         ρₛ = 1590.0
         E₁ = 117.8e9
@@ -31,9 +31,9 @@ function return_constitutive(materialName::String)
     elseif (materialName == "test-comp")
         # TODO: will need to retrain these tests
         ρₛ = 1590.0
-        E₁ = 100
-        E₂ = 50
-        G₁₂ = 10
+        E₁ = 100.0
+        E₂ = 50.0
+        G₁₂ = 10.0
         ν₁₂ = 0.25
         constitutive = "orthotropic"
     elseif (materialName == "ss") # stainless-steel

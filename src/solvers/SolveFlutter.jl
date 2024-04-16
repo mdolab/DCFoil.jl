@@ -20,27 +20,31 @@ using Plots
 using Printf
 using FileIO
 # Differentiation
+using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
 using Zygote
 using ChainRulesCore
 
 # --- DCFoil modules ---
+using ..DCFoil: DTYPE
 using ..InitModel
 using ..HydroStrip
 using ..BeamProperties
 using ..FEMMethods
 using ..SolverRoutines
+using ..Interpolation
 using ..DCFoilSolution
+using ..DesignConstants: SORTEDDVS
 using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
-
+using ..Utilities: Utilities
 
 # ==============================================================================
 #                         MODULE CONSTANTS
 # ==============================================================================
-elemType = "COMP2"
-# elemType = "BT2"
-loadType = "force"
-derivMode = "RAD"
+const elemType = "COMP2"
+#const elemType = "BT2"
+const loadType = "force"
+const derivMode = "RAD"
 
 # ==============================================================================
 #                         Top level API routines
@@ -108,7 +112,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
     # ************************************************
     outputDir = solverOptions["outputDir"]
     uRange = solverOptions["uRange"]
-    fSweep = solverOptions["fSweep"]
+    fRange = solverOptions["fRange"]
     nModes = solverOptions["nModes"]
     debug = solverOptions["debug"]
 
@@ -118,7 +122,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
         tipMass = foilOptions["use_tipMass"]
         global FOIL, _ = InitModel.init_dynamic(α₀, 0.0, span, c, toc, ab, x_αb, zeta, θ,
             nothing, nothing, nothing, nothing, nothing, nothing, nothing,
-            foilOptions, solverOptions; uRange=uRange, fSweep=fSweep)
+            foilOptions, solverOptions; uRange=uRange, fRange=fRange)
     else
         error("Only one appendage is supported at the moment")
     end
@@ -126,7 +130,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
     # --- Create mesh ---
     nElem = FOIL.nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, span; config=foilOptions["config"])
-    FEMESH = FEMMethods.FEMESH(structMesh, elemConn, c, c, c, c, 0.0, zeros(2, 2))
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, c, c, c, c, 0.0, zeros(2, 2))
 
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
@@ -154,7 +158,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
     # ************************************************
     #     FEM assembly
     # ************************************************
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
     #   Apply BC blanking
@@ -190,12 +194,12 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
     # ---------------------------
     u = copy(globalF)
     dim = size(Ks)[1] + length(globalDOFBlankingList)
-    global SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(FEMESH, globalKs, globalMs, globalCs, elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList)
+    global SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList)
 
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Dict, appendageOptions::Dict)
+function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageOptions::Dict)
     """
     System natural frequencies
     """
@@ -228,7 +232,7 @@ function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Di
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["Λ"]
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     if tipMass
         bulbMass = 2200 #[kg]
@@ -255,8 +259,8 @@ function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Di
     u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
-    FEMESH = FEMMethods.FEMESH(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    global CONSTANTS = SolutionConstants.DCFoilSolverParams(FEMESH, globalKs, globalMs, copy(globalKs), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList)
+    # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
+    global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, copy(globalKs), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList)
 
     # ---------------------------
     #   Test eigensolver
@@ -275,7 +279,7 @@ function solve_frequencies(structMesh, elemConn, DVDict::Dict, solverOptions::Di
     println("+-------------------------------------+")
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    FEMESH = FEMMethods.FEMESH(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
+    # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
     globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, size(globalMs)[1], Λ, 0.1, 0.1, elemType; appendageOptions=appendageOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
@@ -683,17 +687,17 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     end
     # dimwithBC = Nr
 
-    AEROMESH = FEMMethods.FEMESH(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, zeros(2, 2))
+    AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, zeros(2, 2))
 
     # --- Outputs ---
-    p_r::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
-    p_i::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_r::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_i::Matrix{Float64} = zeros(3 * nModes, N_MAX_Q_ITER)
-    R_eigs_r::Array{Float64,3} = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i::Array{Float64,3} = zeros(2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
-    iblank::Matrix{Int64} = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
-    flowHistory::Matrix{Float64} = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
+    p_r = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
+    p_i = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
+    true_eigs_r = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
+    true_eigs_i = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r = zeros(DTYPE, 2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i = zeros(DTYPE, 2 * (dim - length(globalDOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    iblank = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
+    flowHistory = zeros(DTYPE, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
 
 
     # ---------------------------
@@ -703,16 +707,16 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     # The m matrix stores which mode is correlated with what.
     # The first column stores indices of old m[:,1] and
     # the second column stores indices of the newly found modes m[:,2]
-    m::Matrix{Int64} = zeros(Int64, nModes * 3, 2)
+    m = zeros(Int64, nModes * 3, 2)
 
     # --- Retained eigenvector matrices in the speed sweep ---
-    R_eigs_r_tmp = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i_tmp = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r_tmp = zeros(DTYPE, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i_tmp = zeros(DTYPE, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
 
     # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
     dynP = 0.5 * FOIL.ρ_f * vel .^ 2 # vector of dynamic pressures
-    # ωSweep = 2π * FOIL.fSweep # sweep of circular frequencies
+    # ωSweep = 2π * FOIL.fRange # sweep of circular frequencies
     p_diff_max = 0.1 # max allowed change in roots between steps
 
     if debug
@@ -775,7 +779,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         # div_tmp = 1 / tmpFactor
         # kSweep = ωSweep * div_tmp
         # --- Compute generalized hydrodynamic loads ---
-        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, chordVec, abVec, ebVec, FOIL, elemType)
+        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, elemType)
         # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Cr, Qr, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
 
@@ -1126,7 +1130,11 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
     N_MAX_K_ITER = 5000 # max k iterations before code breaks
 
     # --- Loop over reduced frequency search range to construct lines ---
-    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik = sweep_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER)
+    p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_history, ik =
+        sweep_kCrossings(
+            Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep,
+            b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER
+        )
 
     if (debug)
         ChainRulesCore.ignore_derivatives() do
@@ -1264,11 +1272,11 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     #   Outputs
     # ---------------------------
     # Eigenvalue and vector matrices
-    p_eigs_r::Matrix{Float64} = zeros(2 * Nr, N_MAX_K_ITER)
-    p_eigs_i::Matrix{Float64} = zeros(2 * Nr, N_MAX_K_ITER)
-    R_eigs_r::Array{Float64,3} = zeros(2 * Nr, 2 * Nr, N_MAX_K_ITER)
-    R_eigs_i::Array{Float64,3} = zeros(2 * Nr, 2 * Nr, N_MAX_K_ITER)
-    k_history::Vector{Float64} = zeros(N_MAX_K_ITER)
+    p_eigs_r = zeros(DTYPE, 2 * Nr, N_MAX_K_ITER)
+    p_eigs_i = zeros(DTYPE, 2 * Nr, N_MAX_K_ITER)
+    R_eigs_r = zeros(DTYPE, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
+    R_eigs_i = zeros(DTYPE, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
+    k_history = zeros(DTYPE, N_MAX_K_ITER)
     p_eigs_r_z = Zygote.Buffer(p_eigs_r)
     p_eigs_i_z = Zygote.Buffer(p_eigs_i)
     R_eigs_r_z = Zygote.Buffer(R_eigs_r)
@@ -1276,11 +1284,11 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     k_history_z = Zygote.Buffer(k_history)
 
 
-    p_diff_max::Float64 = 0.2 # maximum allowed change in poles btwn two steps
+    p_diff_max = 0.2 # maximum allowed change in poles btwn two steps
 
     # --- Determine delta k (Δk) to step ---
     # based on minimum wetted natural frequency
-    _, _, Mff = HydroStrip.apply_BCs(zeros(dim, dim), zeros(dim, dim), globalMf, globalDOFBlankingList)
+    _, _, Mff = HydroStrip.apply_BCs(globalMf, globalMf, globalMf, globalDOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf handled in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
@@ -1296,10 +1304,10 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     # k = 1e-12 # don't use this
     k::Float64 = 2e-13 # this is a good value that catches static div modes
     ik::Int64 = 1 # k counter
-    Nk::Int64 = length(kSweep)
+    Nk = length(kSweep)
     # pkEqnType = "rodden"
     pkEqnType = "ng"
-    failed::Bool = false # fail flag on k jump must be reset to false on every k iteration
+    failed = false # fail flag on k jump must be reset to false on every k iteration
     while keepLooping
         failed = false
 
@@ -1427,10 +1435,10 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
         ctr - Number of found matched points
     """
     # --- Initialize outputs ---
-    p_cross_r::Vector{Float64} = zeros(2 * dim * 5)
-    p_cross_i::Vector{Float64} = zeros(2 * dim * 5)
-    R_cross_r::Matrix{Float64} = zeros(2 * dim, 2 * dim * 5)
-    R_cross_i::Matrix{Float64} = zeros(2 * dim, 2 * dim * 5)
+    p_cross_r = zeros(DTYPE, 2 * dim * 5)
+    p_cross_i = zeros(DTYPE, 2 * dim * 5)
+    R_cross_r = zeros(DTYPE, 2 * dim, 2 * dim * 5)
+    R_cross_i = zeros(DTYPE, 2 * dim, 2 * dim * 5)
     # --- Good practice Zygote initializations ---
     p_cross_r_z = Zygote.Buffer(p_cross_r)
     p_cross_i_z = Zygote.Buffer(p_cross_i)
@@ -1482,10 +1490,10 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
                             p_cross_i_z[ctr] = factor * (p_eigs_i[ii, jj] - p_eigs_i[ii, jj+1]) + p_eigs_i[ii, jj+1]
 
                             # --- Eigenvectors ---
-                            evec_r_jj::Vector{Float64} = R_eigs_r[:, ii, jj]
-                            evec_r_jj1::Vector{Float64} = R_eigs_r[:, ii, jj+1]
-                            evec_i_jj::Vector{Float64} = R_eigs_i[:, ii, jj]
-                            evec_i_jj1::Vector{Float64} = R_eigs_i[:, ii, jj+1]
+                            evec_r_jj = R_eigs_r[:, ii, jj]
+                            evec_r_jj1 = R_eigs_r[:, ii, jj+1]
+                            evec_i_jj = R_eigs_i[:, ii, jj]
+                            evec_i_jj1 = R_eigs_i[:, ii, jj+1]
                             # Look at real part of inner product of two eigenvectors m and m+1
                             tmpSum_r = 0.0
                             for ll in 1:2*dim
@@ -1524,7 +1532,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
 end # end extract_kCrossings
 
-function interpolate_influenceCoeffs(k::Float64, k_sweep::Vector{Float64}, Nk, Ar_sweep_r, Ar_sweep_i, Nmr, pkEqnType)
+function interpolate_influenceCoeffs(k, k_sweep, Nk, Ar_sweep_r, Ar_sweep_i, Nmr, pkEqnType)
     """
     This function interpolates the influence coefficient matrix for specific reduced frequency
     Here a linear interpolation is applied
@@ -1554,7 +1562,7 @@ function interpolate_influenceCoeffs(k::Float64, k_sweep::Vector{Float64}, Nk, A
     # y0L::Array{Float64,3} = zeros(Nmr, Nmr, 2)
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L::Vector{Float64} = [k_sweep[b1], k_sweep[b2]] # somehow this line is adding a lot to the time
+        x0L = [k_sweep[b1], k_sweep[b2]] # somehow this line is adding a lot to the time
         # # This unravels to keep computations in the stack, not the heap
         # x0L1::Float64 = k_sweep[b1]
         # x0L2::Float64 = k_sweep[b2]
@@ -1562,14 +1570,12 @@ function interpolate_influenceCoeffs(k::Float64, k_sweep::Vector{Float64}, Nk, A
         y0L = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
         # y0L[:, :, 1] = Ar_sweep_r[:, :, b1]
         # y0L[:, :, 2] = Ar_sweep_r[:, :, b2]
-        Ar_r = SolverRoutines.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
-        # Ar_r = SolverRoutines.lagrangeArrInterp_d2(x0L1, x0L2, y0L, Nmr, Nmr, k)
+        Ar_r = Interpolation.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
         # y0L[:, :, 1] = Ar_sweep_i[:, :, b1]
         # y0L[:, :, 2] = Ar_sweep_i[:, :, b2]
-        Ar_i = SolverRoutines.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
-        # Ar_i = SolverRoutines.lagrangeArrInterp_d2(x0L1, x0L2, y0L, Nmr, Nmr, k)
+        Ar_i = Interpolation.lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k)
 
 
     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
@@ -1659,7 +1665,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # """
 
     # --- Initialize ---
-    iMat = Matrix{Float64}(I, dim, dim)
+    iMat = Matrix{DTYPE}(I, dim, dim)
     zeroMat = zeros(dim, dim)
     A_r = zeros(2 * dim, 2 * dim)
     A_i = zeros(2 * dim, 2 * dim) # this will always be zero!
@@ -1796,7 +1802,7 @@ function compute_modalSpace(Ms, Ks, Cs; reducedSize=20)
     return Ms_r, Ks_r, Cs_r, Qr
 end
 
-function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound, nFlow, p_r, iblank, ρKS)
+function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow, p_r, iblank, ρKS)
     """
     Function to compute damping on all modes and aggregate into the flutter constraint
 
@@ -1824,7 +1830,7 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
 
     # This variable stores the aggregated damping for every mode
     # It mutates in the for loop below so we need to use 'Buffer' and work with that variable instead
-    ksTmp = zeros(Float64, NTotalModesFound)
+    ksTmp = zeros(DTYPE, NTotalModesFound)
     ksTmp_z = Zygote.Buffer(ksTmp)
 
     # TODO: safety window
@@ -1833,10 +1839,10 @@ function postprocess_damping(N_MAX_Q_ITER::Int64, flowHistory, NTotalModesFound,
     #     G[1:nFound] = compute_safetyWindow(flowHistory[1:nFlow,1], nFlow)
     # end
 
-    pmG = zeros(Float64, NTotalModesFound, nFlow)
+    pmG = zeros(DTYPE, NTotalModesFound, nFlow)
     pmG_z = Zygote.Buffer(pmG)
     pmG_z[1:NTotalModesFound, 1:nFlow] = p_r[1:NTotalModesFound, 1:nFlow]
-    pmGTmp = zeros(Float64, nFlow) # working pmG for the mode
+    pmGTmp = zeros(DTYPE, nFlow) # working pmG for the mode
 
     # ************************************************
     #     Aggregate damping
@@ -1903,17 +1909,6 @@ end # compute_KS
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-# All of these routines have to take the exact same inputs
-function compute_costFuncs(DVDict::Dict, solverOptions::Dict)
-    """
-    Wrapper to solve and compute the cost func
-    This is the primal solver
-    """
-
-    obj = cost_funcsFromDVs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
-
-    return obj
-end
 
 function get_sol(DVDict::Dict, solverOptions::Dict)
     """
@@ -1929,34 +1924,33 @@ function get_sol(DVDict::Dict, solverOptions::Dict)
 
     # # Solve
     # obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
-
-    SOL = cost_funcsFromDVs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions; returnSol=true)
+    DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+    SOL = cost_funcsFromDVs(DVVec, DVLengths, solverOptions)
 
     return SOL
 end
 
-function cost_funcsFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOptions;
-    returnSol=false
+function cost_funcsFromDVs(
+    # α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, 
+    DVVec, DVLengths,
+    solverOptions
 )
     """
     This does the primal solve but with a function signature compatible with Zygote
     """
 
+    DVDict = Utilities.repack_dvdict(DVVec, DVLengths)
     # Setup
     structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-        setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOptions)
+        setup_solverFromDVs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
 
     # Solve
     obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
 
-    if returnSol
-        return SOL
-    else
-        return obj
-    end
+    return obj
 end
 
-function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
+function evalFuncsSens(evalFuncsSensList, DVDict::Dict, solverOptions::Dict; mode="FiDi")
     """
     Wrapper to compute the total sensitivities for this evalFunc
 
@@ -1972,44 +1966,31 @@ function evalFuncsSens(DVDict::Dict, solverOptions::Dict; mode="FiDi")
     # Initialize output dictionary
     funcsSens = Dict()
 
+    DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
     if mode == "FiDi" # use finite differences the stupid way
-
-        @time sensitivities, = FiniteDifferences.jacobian(forward_fdm(2, 1), (x) -> SolveFlutter.compute_costFuncs(x, solverOptions),
-            DVDict)
-
-        # --- Iterate over DVDict keys ---
-        dv_ctr = 1 # counter for total DVs
-        for (key_ctr, pair) in enumerate(DVDict)
-            key = pair[1]
-            val = pair[2]
-            x_len = length(val)
-            if x_len == 1
-                funcsSens[key] = sensitivities[dv_ctr]
-                dv_ctr += 1
-            elseif x_len > 1
-                funcsSens[key] = sensitivities[dv_ctr:(dv_ctr+x_len-1)]
-                dv_ctr += x_len
-            end
-        end
+        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
 
     elseif mode == "RAD" # use automatic differentiation via Zygote
-
-        @time sensitivities = Zygote.gradient((x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
-                cost_funcsFromDVs(x1, x2, x3, x4, x5, x6, x7, x8, x9, solverOptions),
-            DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"])
-        # --- Order the sensitivities properly ---
-        funcsSens["α₀"] = sensitivities[1]
-        funcsSens["Λ"] = sensitivities[2]
-        funcsSens["s"] = sensitivities[3]
-        funcsSens["c"] = sensitivities[4]
-        funcsSens["toc"] = sensitivities[5]
-        funcsSens["ab"] = sensitivities[6]
-        funcsSens["x_αb"] = sensitivities[7]
-        funcsSens["zeta"] = sensitivities[8]
-        funcsSens["θ"] = sensitivities[9]
+        backend = AD.ZygoteBackend()
 
     elseif mode == "FAD"
         error("FAD not implemented yet")
+    end
+
+    sensitivities, = AD.gradient(
+        backend,
+        (x) ->
+            cost_funcsFromDVs(x, DVLengths, solverOptions),
+        DVVec
+    )
+    for (iDV, dvkey) in enumerate(SORTEDDVS)
+        funcsSens[dvkey] = zeros(DTYPE, length(evalFuncsSensList), DVLengths[iDV])
+    end
+    giDV = 1
+    for (iiDV, dvkey) in enumerate(SORTEDDVS)
+        ndv = DVLengths[iiDV]
+        funcsSens[dvkey][1, :] = sensitivities[giDV:giDV+ndv-1]
+        giDV += ndv # starting value for next set
     end
 
     # ************************************************

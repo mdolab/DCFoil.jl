@@ -43,7 +43,7 @@ nNodesStrut = 10 # spatial nodes
 nModes = 5 # number of flutter and system modes to solve for
 df = 1
 dU = 1
-fSweep = 0.1:df:100.0 # forcing frequency [Hz] sweep
+fRange = [0.0,1000.0], # forcing frequency [Hz] sweep
 fSearch = 0.01:df:1000.0 # frequency search range [Hz] for flutter modes
 uSweep = 5:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -109,7 +109,7 @@ solverOptions = Dict(
     "run_static" => run_static,
     # --- Forced solve ---
     "run_forced" => run_forced,
-    "fSweep" => fSweep,
+    "fRange" => fRange,
     "tipForceMag" => tipForceMag,
     # --- p-k (Eigen) solve ---
     "run_modal" => run_modal,

@@ -112,7 +112,8 @@ function test_hydroderiv(DVDict, solverOptions)
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
         DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions
     )
-    globalKs, _, _ = FEMMethods.assemble(mesh, elemConn, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, θ, zeros(2, 2))
+    globalKs, _, _ = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
 
     dim = size(globalKs, 1) # big problem
     ω = 0.1
@@ -354,8 +355,8 @@ function test_pkflutterderiv(DVDict, solverOptions)
     """
 
     @time SolveFlutter.get_sol(DVDict, solverOptions)
-    @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-    @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+    @time funcsSensAD = SolveFlutter.evalFuncsSens(["ksflutter"], DVDict, solverOptions; mode="RAD")
+    @time funcsSensFD = SolveFlutter.evalFuncsSens(["ksflutter"], DVDict, solverOptions; mode="FiDi")
 
 
     # Print it out
@@ -399,6 +400,15 @@ DVDict = Dict(
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+    # --- Strut vars ---
+    "rake" => 0.0,
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.14 * ones(nNodes), # chord length [m]
+    "toc_strut" => 0.095, # thickness-to-chord ratio (mean)
+    "ab_strut" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodes), # static imbalance [m]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 appendageDict = Dict(
@@ -426,7 +436,7 @@ solverOptions = Dict(
     "run_static" => false,
     # --- Forced solve ---
     "run_forced" => false,
-    "fSweep" => range(0.1, 1000.0, 1000),
+    "fRange" => [0.0, 1.0],
     "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
     # --- Eigen solve ---
     "run_modal" => false,

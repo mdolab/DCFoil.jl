@@ -13,13 +13,18 @@ module InitModel
 using Zygote
 
 # --- DCFoil modules ---
-using ..HydroStrip
-using ..BeamProperties
-using ..DesignConstants
-using ..MaterialLibrary
-using ..HullLibrary
+using ..DCFoil: RealOrComplex
+using ..HydroStrip: HydroStrip
+using ..BeamProperties: BeamProperties
+using ..DesignConstants: DesignConstants, SORTEDDVS
+using ..MaterialLibrary: MaterialLibrary
+using ..HullLibrary: HullLibrary
 
-function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions::Dict, solverOptions::Dict)
+function init_static(
+  α₀, rake, span, chord, toc, ab, x_αb, zeta, θ,
+  beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut,
+  foilOptions::Dict, solverOptions::Dict
+)
   """
   Initialize a static hydrofoil model
 
@@ -30,69 +35,24 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
     foil: struct
   """
 
-  # # --- First print to screen in a box ---
-  # println("+", "-"^50, "+")
-  # println("|            Design variable dictionary:           |")
-  # println("+", "-"^50, "+")
-  # for kv in DVDict
-  #   println(kv)
-  # end
-
   # ---------------------------
   #   Geometry
   # ---------------------------
-  # c::Vector{Float64} = DVDict["c"]
-  # t::Vector{Float64} = DVDict["toc"] * c
-  # ab::Vector{Float64} = DVDict["ab"]
-  # x_αb::Vector{Float64} = DVDict["x_αb"]
-  eb::Vector{Float64} = 0.25 * c .+ ab
-  t::Vector{Float64} = toc .* c
+  eb = 0.25 * chord .+ ab
+  t = toc .* chord
 
   # ---------------------------
   #   Structure
   # ---------------------------
   ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(foilOptions["material"])
-  # g::Float64 = DVDict["zeta"]
-  # θ::Float64 = DVDict["θ"]
 
   # --- Compute the structural properties for the foil ---
   nNodes = foilOptions["nNodes"]
-  EIₛ = zeros(Float64, nNodes)
-  Kₛ = zeros(Float64, nNodes)
-  GJₛ = zeros(Float64, nNodes)
-  Sₛ = zeros(Float64, nNodes)
-  Iₛ = zeros(Float64, nNodes)
-  mₛ = zeros(Float64, nNodes)
-  # --- Loop over the span ---
-  EI_z = Zygote.Buffer(EIₛ)
-  EIIP_z = Zygote.Buffer(EIₛ)
-  EA_z = Zygote.Buffer(EIₛ)
-  K_z = Zygote.Buffer(Kₛ)
-  GJ_z = Zygote.Buffer(GJₛ)
-  S_z = Zygote.Buffer(Sₛ)
-  I_z = Zygote.Buffer(Iₛ)
-  m_z = Zygote.Buffer(mₛ)
-
-  for ii in 1:nNodes
-    section = BeamProperties.SectionProperty(c[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ, zeros(20, 2))
-
-    # TODO: should probably redo this to be element-based, not node-based
-    EI_z[ii], EIIP_z[ii], K_z[ii], GJ_z[ii], S_z[ii], EA_z[ii], I_z[ii], m_z[ii] = BeamProperties.compute_section_property(section, constitutive)
-  end
-
-  EIₛ = copy(EI_z)
-  EIIPₛ = copy(EIIP_z)
-  EAₛ = copy(EA_z)
-  Kₛ = copy(K_z)
-  GJₛ = copy(GJ_z)
-  Sₛ = copy(S_z)
-  Iₛ = copy(I_z)
-  mₛ = copy(m_z)
+  EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ, constitutive)
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα = Vector{Float64}(undef, nNodes)
-  clα, _, _ = HydroStrip.compute_glauert_circ(span, c, deg2rad(α₀ + rake), solverOptions["U∞"], nNodes;
+  clα, _, _ = HydroStrip.compute_glauert_circ(span, chord, deg2rad(α₀ + rake), solverOptions["U∞"], nNodes;
     h=span_strut, # TODO: DEPTH
     useFS=solverOptions["use_freeSurface"],
     rho=solverOptions["ρ_f"],
@@ -102,7 +62,8 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
   # ---------------------------
   #   Build final model
   # ---------------------------
-  wingModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodes"], constitutive)
+  wingModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], zeta,
+    clα, eb, ab, chord, solverOptions["ρ_f"], foilOptions["nNodes"], constitutive)
 
   # ************************************************
   #     Strut properties
@@ -111,38 +72,10 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
     # Do it again using the strut properties
     nNodesStrut = foilOptions["nNodeStrut"]
     ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(foilOptions["strut_material"])
-    t_strut::Vector{Float64} = toc_strut .* c_strut
-    eb_strut::Vector{Float64} = 0.25 * c_strut .+ ab_strut
+    t_strut = toc_strut .* c_strut
+    eb_strut = 0.25 * c_strut .+ ab_strut
 
-    EIₛ = zeros(Float64, nNodesStrut)
-    Kₛ = zeros(Float64, nNodesStrut)
-    GJₛ = zeros(Float64, nNodesStrut)
-    Sₛ = zeros(Float64, nNodesStrut)
-    Iₛ = zeros(Float64, nNodesStrut)
-    mₛ = zeros(Float64, nNodesStrut)
-    # --- Loop over the span ---
-    EI_z = Zygote.Buffer(EIₛ)
-    EIIP_z = Zygote.Buffer(EIₛ)
-    EA_z = Zygote.Buffer(EIₛ)
-    K_z = Zygote.Buffer(Kₛ)
-    GJ_z = Zygote.Buffer(GJₛ)
-    S_z = Zygote.Buffer(Sₛ)
-    I_z = Zygote.Buffer(Iₛ)
-    m_z = Zygote.Buffer(mₛ)
-
-    for ii in 1:nNodesStrut
-      section = BeamProperties.SectionProperty(c_strut[ii], t_strut[ii], ab_strut[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ_strut, zeros(20, 2))
-      # TODO: should probably redo this to be element-based, not node-based
-      EI_z[ii], EIIP_z[ii], K_z[ii], GJ_z[ii], S_z[ii], EA_z[ii], I_z[ii], m_z[ii] = BeamProperties.compute_section_property(section, constitutive)
-    end
-    EIₛ = copy(EI_z)
-    EIIPₛ = copy(EIIP_z)
-    EAₛ = copy(EA_z)
-    Kₛ = copy(K_z)
-    GJₛ = copy(GJ_z)
-    Sₛ = copy(S_z)
-    Iₛ = copy(I_z)
-    mₛ = copy(m_z)
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = compute_beam(nNodesStrut, c_strut, t_strut, ab_strut, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ_strut, constitutive)
 
     # ---------------------------
     #   Hydrodynamics
@@ -152,7 +85,8 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
     # ---------------------------
     #   Build final model
     # ---------------------------
-    strutModel = DesignConstants.foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], g, clα, solverOptions["ρ_f"], foilOptions["nNodeStrut"], constitutive)
+    strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], zeta,
+      clα, eb_strut, ab_strut, c_strut, solverOptions["ρ_f"], foilOptions["nNodeStrut"], constitutive)
 
   elseif foilOptions["config"] == "wing" || foilOptions["config"] == "full-wing"
     strutModel = nothing
@@ -164,25 +98,27 @@ function init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, span_str
 
 end
 
-function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut,
-  foilOptions::Dict, solverOptions::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0]
+function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut,
+  foilOptions::Dict, solverOptions::Dict; fRange=[0.1, 1], uRange=[0.0, 1.0]
 )
   """
   Perform much of the same initializations as init_static() except with other features
   """
   # statModel = init_static(DVDict, solverOptions)
-  statWingModel, statStrutModel = init_static(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions, solverOptions)
+  statWingModel, statStrutModel = init_static(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions, solverOptions)
 
-  # model = DesignConstants.dynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fSweep, uRange)
-  WingModel = DesignConstants.dynamicFoil(
-    statWingModel.mₛ, statWingModel.Iₛ, statWingModel.EIₛ, statWingModel.EIIPₛ, statWingModel.GJₛ, statWingModel.Kₛ, statWingModel.Sₛ, statWingModel.EAₛ, statWingModel.U∞, statWingModel.g, statWingModel.clα, statWingModel.ρ_f, statWingModel.nNodes, statWingModel.constitutive,
-    fSweep, uRange
+  # model = DesignConstants.DynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fRange, uRange)
+  WingModel = DesignConstants.DynamicFoil(
+    statWingModel.mₛ, statWingModel.Iₛ, statWingModel.EIₛ, statWingModel.EIIPₛ, statWingModel.GJₛ, statWingModel.Kₛ, statWingModel.Sₛ, statWingModel.EAₛ, statWingModel.U∞, statWingModel.ζ,
+    statWingModel.clα, statWingModel.eb, statWingModel.ab, statWingModel.chord, statWingModel.ρ_f, statWingModel.nNodes, statWingModel.constitutive,
+    fRange, uRange
   )
   if statStrutModel == nothing
     StrutModel = nothing
   else
-    StrutModel = DesignConstants.dynamicFoil(
-      statStrutModel.mₛ, statStrutModel.Iₛ, statStrutModel.EIₛ, statStrutModel.EIIPₛ, statStrutModel.GJₛ, statStrutModel.Kₛ, statStrutModel.Sₛ, statStrutModel.EAₛ, statStrutModel.U∞, statStrutModel.g, statStrutModel.clα, statStrutModel.ρ_f, statStrutModel.nNodes, statStrutModel.constitutive, fSweep, uRange
+    StrutModel = DesignConstants.DynamicFoil(
+      statStrutModel.mₛ, statStrutModel.Iₛ, statStrutModel.EIₛ, statStrutModel.EIIPₛ, statStrutModel.GJₛ, statStrutModel.Kₛ, statStrutModel.Sₛ, statStrutModel.EAₛ, statStrutModel.U∞, statStrutModel.g,
+      statStrutModel.clα, statStrutModel.eb, statStrutModel.ab, statStrutModel.chord, statStrutModel.ρ_f, statStrutModel.nNodes, statStrutModel.constitutive, fRange, uRange
     )
   end
 
@@ -194,11 +130,11 @@ function init_hull(solverOptions::Dict)
   Initialize the hull model
   """
   mass, length, beam, xcg, Ib = HullLibrary.return_hullprop(solverOptions["hull"])
-  HullModel = DesignConstants.hull(mass, Ib, xcg, length, beam)
+  HullModel = DesignConstants.Hull(mass, Ib, xcg, length, beam)
   return HullModel
 end
 
-function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fSweep=0.1:0.1:1, uRange=[0.0, 1.0])
+function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
   """
   This is a wrapper for init_dynamic() that unpacks a DV dictionary
   """
@@ -214,7 +150,7 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
   toc = DVDict["toc"]
   ab = DVDict["ab"]
   x_αb = DVDict["x_αb"]
-  g = DVDict["zeta"]
+  zeta = DVDict["zeta"]
   θ = DVDict["θ"]
   beta = DVDict["beta"]
   s_strut = DVDict["s_strut"]
@@ -225,7 +161,7 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
   θ_strut = DVDict["θ_strut"]
 
   # if length(solverOptions["appendageList"]) == 1
-  WingModel, StrutModel = init_dynamic(α₀, rake, span, c, toc, ab, x_αb, g, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, appendageOptions, solverOptions; fSweep, uRange)
+  WingModel, StrutModel = init_dynamic(α₀, rake, span, c, toc, ab, x_αb, zeta, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
   # else
   # error("Only one appendage is supported at the moment")
   # end

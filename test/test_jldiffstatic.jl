@@ -7,7 +7,6 @@
 
 using Printf # for better file name
 using FileIO
-# using ForwardDiff, FiniteDifferences
 using Zygote
 include("../src/DCFoil.jl")
 
@@ -116,13 +115,14 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-steps = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9] # step sizes
+steps = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16] # step sizes
 dvKey = "θ" # dv to test deriv
 dvKey = "Λ" # dv to test deriv
 dvKey = "rake" # dv to test deriv
-dvKey = "α₀" # dv to test deriv
+# dvKey = "α₀" # dv to test deriv
 evalFunc = "ksflutter"
 evalFunc = "lift"
+evalFunc = "moment"
 
 
 
@@ -131,35 +131,51 @@ evalFunc = "lift"
 # ==============================================================================
 derivs = zeros(length(steps))
 funcVal = 0.0
+# # ************************************************
+# #     Setup test values
+# # ************************************************
+# DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+# _, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem(DVDict, wingOptions, solverOptions)
+# SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+# u_test = SOL["STATIC"][1].structStates
+
+# # ************************************************
+# #     Check ∂r∂x
+# # ************************************************
+# prpx_fidi = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+#     mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+# prpx_cs = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+#     mode="CS", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+# prpx_rad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+#     mode="RAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+
+# # ************************************************
+# #     Check ∂f∂u
+# # ************************************************
+# pfpu_fidi = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
+#     mode="FiDi", appendageOptions=wingOptions, solverOptions=solverOptions)
+
+# pfpu_rad = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
+#     mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions)
+
+# # ************************************************
+# #     Check ∂f∂x
+# # ************************************************
+# pfpx_fidi = DCFoil.SolveStatic.compute_∂f∂x("lift", SOL["STATIC"][1], DVDict;
+#     mode="FiDi", appendageOptions=wingOptions, solverOptions=solverOptions)
+
+# pfpx_rad = DCFoil.SolveStatic.compute_∂f∂x("lift", SOL["STATIC"][1], DVDict;
+#     mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions)
+
 # ************************************************
-#     Setup test values
+#     FULL TEST
 # ************************************************
-_, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem(DVDict, wingOptions, solverOptions)
 DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
 SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-u_test = SOL["STATIC"][1].structStates
-
-# ************************************************
-#     Check ∂r∂x
-# ************************************************
-prpx_fidi = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
-    mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
-
-prpx_fad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
-    mode="FAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
-
-prpx_rad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
-    mode="RAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
-
-    
-# ************************************************
-#     Check ∂f∂u
-# ************************************************
-pfpu_fidi = DCFoil.SolveStatic.compute_∂f∂u(, u_test, DVDict;
-    mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions)
-
 costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-# TODO: PICKUP DEBUGGING HERE WHY DOES IT NOT WORK FOR THE SIMPLE WING?
 funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
 funcsSensAdjoint[1][dvKey]
 for (ii, dh) in enumerate(steps)

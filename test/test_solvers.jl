@@ -65,7 +65,7 @@ function test_SolveStaticRigid()
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 0:0.1:10,
+        "fRange" => [0.0, 10.0],
         "tipForceMag" => 0.0,
         # --- Eigen solve ---
         "run_modal" => false,
@@ -182,7 +182,7 @@ function test_SolveStaticIso()
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 0:0.1:10,
+        "fRange" => [0.0, 10.0],
         "tipForceMag" => 0.0,
         # --- Eigen solve ---
         "run_modal" => false,
@@ -375,7 +375,8 @@ function test_modal(DVDict, solverOptions)
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
-    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions, appendageOptions)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 1.0, zeros(2, 2))
+    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
 
     # ************************************************
     #     Relative error
@@ -414,7 +415,7 @@ function test_pk_staticDiv()
 
     nNodes = 10
     df = 1
-    fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+    fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
     uRange = [20.0, 40.0] # flow speed [m/s] sweep for flutter
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -452,7 +453,7 @@ function test_pk_staticDiv()
         "run_static" => false,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => fSweep,
+        "fRange" => fRange,
         "tipForceMag" => tipForceMag,
         # --- Eigen solve ---
         "run_modal" => true,
@@ -490,7 +491,7 @@ function test_pk_flutter()
     ref_val = 0.05347
     nNodes = 10
     df = 1
-    fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+    fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
     uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -528,7 +529,7 @@ function test_pk_flutter()
         "run_static" => false,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => fSweep,
+        "fRange" => fRange,
         "tipForceMag" => tipForceMag,
         # --- Eigen solve ---
         "run_modal" => true,

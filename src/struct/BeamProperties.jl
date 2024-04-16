@@ -7,24 +7,27 @@
 """
 module BeamProperties
 
+using Zygote
+
+using ..DCFoil: RealOrComplex, DTYPE
+
 # --- Public functions ---
 export compute_section_property
 
-struct SectionProperty{T<:Float64}
-    c::T # chord length
-    t::T # thickness (only needed if not using an airfoil section)
-    ab::T # dist from midchord to EA, +ve for EA aft
-    ρₛ::T # density
-    E₁::T # Young's modulus in-plane fiber longitudinal direction (x)
-    E₂::T # Young's modulus in-plane fiber normal direction (y)
-    G₁₂::T # In-plane Shear modulus
-    ν₁₂::T # Poisson ratio
-    θ::T # global fiber frame orientation
-	airfoilCoords::Array{T, 2} # airfoil coordinates
+struct SectionProperty{TF}
+    c::TF # chord length
+    t::TF # thickness (only needed if not using an airfoil section)
+    ab::TF # dist from midchord to EA, +ve for EA aft
+    ρₛ::TF # density
+    E₁::TF # Young's modulus in-plane fiber longitudinal direction (x)
+    E₂::TF # Young's modulus in-plane fiber normal direction (y)
+    G₁₂::TF # In-plane Shear modulus
+    ν₁₂::TF # Poisson ratio
+    θ::TF # global fiber frame orientation
+    airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 
-
-function compute_section_property(section::SectionProperty, constitutive)
+function compute_section_property(section::SectionProperty, constitutive::String)
     """
     Orthotropic material uses classic laminate theory (CLT) for 
     composite cross section property computation.
@@ -148,7 +151,62 @@ function compute_section_property(section::SectionProperty, constitutive)
 
 end
 
-function compute_airfoil_shape_corrections(airfoilCoords; method="xfoil", nChord=20)
+function compute_beam(nNodes::Int64,
+    chord::Vector, t::Vector, ab::Vector, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ,
+    constitutive::String
+)
+    EIₛ = zeros(DTYPE, nNodes)
+    Kₛ = zeros(DTYPE, nNodes)
+    GJₛ = zeros(DTYPE, nNodes)
+    Sₛ = zeros(DTYPE, nNodes)
+    Iₛ = zeros(DTYPE, nNodes)
+    mₛ = zeros(DTYPE, nNodes)
+    # --- Loop over the span ---
+    EI_z = Zygote.Buffer(EIₛ)
+    EIIP_z = Zygote.Buffer(EIₛ)
+    EA_z = Zygote.Buffer(EIₛ)
+    K_z = Zygote.Buffer(Kₛ)
+    GJ_z = Zygote.Buffer(GJₛ)
+    S_z = Zygote.Buffer(Sₛ)
+    I_z = Zygote.Buffer(Iₛ)
+    m_z = Zygote.Buffer(mₛ)
+    EI_z[:] = EIₛ
+    EIIP_z[:] = EIₛ
+    EA_z[:] = EIₛ
+    K_z[:] = Kₛ
+    GJ_z[:] = GJₛ
+    S_z[:] = Sₛ
+    I_z[:] = Iₛ
+    m_z[:] = mₛ
+
+    for ii in 1:nNodes
+        section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ, zeros(20, 2))
+
+        # TODO: should probably redo this to be element-based, not node-based
+        EI, EIIP, K, GJ, S, EA, I, m = compute_section_property(section, constitutive)
+        EI_z[ii] = EI
+        EIIP_z[ii] = EIIP
+        K_z[ii] = K
+        GJ_z[ii] = GJ
+        S_z[ii] = S
+        EA_z[ii] = EA
+        I_z[ii] = I
+        m_z[ii] = m
+    end
+
+    EIₛ = copy(EI_z)
+    EIIPₛ = copy(EIIP_z)
+    EAₛ = copy(EA_z)
+    Kₛ = copy(K_z)
+    GJₛ = copy(GJ_z)
+    Sₛ = copy(S_z)
+    Iₛ = copy(I_z)
+    mₛ = copy(m_z)
+
+    return EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
+end
+
+function compute_airfoil_shape_corrections(airfoilCoords::Matrix; method="xfoil", nChord=20)
     """
     In the case where one has an idea of the airfoil shape but not the 
     FE model, we can correct based on some airfoil structural theory (or see XFOIL BEND command)

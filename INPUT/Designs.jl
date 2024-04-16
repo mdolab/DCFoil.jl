@@ -158,7 +158,7 @@ solverOptions = Dict(
     "run_static" => run_static,
     # --- Forced solve ---
     "run_forced" => run_forced,
-    "fSweep" => fSweep,
+    "fRange" => fRange,
     "tipForceMag" => tipForceMag,
     # --- Eigen solve ---
     "run_modal" => run_modal,

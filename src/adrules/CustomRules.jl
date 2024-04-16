@@ -18,7 +18,7 @@ using LinearAlgebra
 #                         Constructors
 # ==============================================================================
 function ChainRulesCore.rrule(::Type{LinRange}, start::RealOrComplex, stop::RealOrComplex, N::Integer)
-    
+
     function LinRange_pullback(yb)
         """
         The input to the pullback is
@@ -32,7 +32,7 @@ function ChainRulesCore.rrule(::Type{LinRange}, start::RealOrComplex, stop::Real
         return NoTangent(), startb, stopb, NoTangent()
     end
 
-    
+
     return LinRange(start, stop, N), LinRange_pullback
 end
 
@@ -50,6 +50,17 @@ function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix
     end
     return A * B, times_pullback
 end
+
+function ChainRulesCore.frule((_, ΔA, ΔB), ::typeof(*),
+    A::Matrix{<:RealOrComplex},
+    B::Matrix{<:RealOrComplex},
+)
+    Ω = A * B
+    ∂Ω = ΔA * B + A * ΔB
+    return (Ω, ∂Ω)
+end
+
+# @ForwardDiff_frule Base.:*(A::AbstractMatrix{<:ForwardDiff.Dual}, B::AbstractMatrix{<:ForwardDiff.Dual})
 
 function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
     """

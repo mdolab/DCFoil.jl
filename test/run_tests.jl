@@ -67,7 +67,7 @@ solverOptions1 = Dict(
     "run_static" => true,
     # --- Forced solve ---
     "run_forced" => false,
-    "fSweep" => 0:0.1:10,
+    "fRange" => [0, 10],
     "tipForceMag" => 0.0,
     # --- Eigen solve ---
     "run_modal" => false,
@@ -117,7 +117,7 @@ solverOptions2 = Dict(
     "run_static" => false,
     # --- Forced solve ---
     "run_forced" => false,
-    "fSweep" => 0:0.1:10,
+    "fRange" => [0, 10],
     "tipForceMag" => 0.0,
     # --- Eigen solve ---
     "run_modal" => true,
@@ -206,7 +206,7 @@ solverOptions = Dict(
     "run_static" => false,
     # --- Forced solve ---
     "run_forced" => false,
-    "fSweep" => range(0.1, 1000.0, 1000),
+    "fRange" => [0.0, 1000.0],
     "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
     # --- Eigen solve ---
     "run_modal" => false,

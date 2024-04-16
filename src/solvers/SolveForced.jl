@@ -30,8 +30,8 @@ using ..SolverRoutines
 # ==============================================================================
 #                         COMMON VARIABLES
 # ==============================================================================
-elemType = "COMP2"
-loadType = "force"
+const elemType = "COMP2"
+const loadType = "force"
 
 # ==============================================================================
 #                         Top level API routines
@@ -46,9 +46,9 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     #   Initialize
     # ---------------------------
     outputDir = solverOptions["outputDir"]
-    fSweep = solverOptions["fSweep"]
+    fRange = solverOptions["fRange"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions; fSweep=fSweep)
+    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions; fRange=fRange)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -69,7 +69,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     zeta = DVDict["zeta"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
-    globalKs, globalMs, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
     #   Apply BC blanking
@@ -129,7 +129,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
         # ---------------------------
         # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
         # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(size(globalMs)[1], structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(FEMESH, size(globalMs)[1], Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
         Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
 
