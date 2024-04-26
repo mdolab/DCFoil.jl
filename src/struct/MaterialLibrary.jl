@@ -37,21 +37,21 @@ function return_constitutive(materialName::String)
         ν₁₂ = 0.25
         constitutive = "orthotropic"
     elseif (materialName == "ss") # stainless-steel
-        ρₛ = 7900
+        ρₛ = 7900.0
         E₁ = 193e9
         E₂ = 193e9
         G₁₂ = 77.2e9
         ν₁₂ = 0.3
         constitutive = "isotropic"
     elseif (materialName == "rigid") # unrealistic rigid material
-        ρₛ = 7900
+        ρₛ = 7900.0
         E₁ = 193e12
         E₂ = 193e12
         G₁₂ = 77.2e12
         ν₁₂ = 0.3
         constitutive = "isotropic"
     elseif (materialName == "eirikurPl") # unrealistic rigid material
-        ρₛ = 2800
+        ρₛ = 2800.0
         E₁ = 70e9
         E₂ = 70e9
         ν₁₂ = 0.3

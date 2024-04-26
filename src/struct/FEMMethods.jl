@@ -18,9 +18,11 @@ Module with generic FEM methods
 module FEMMethods
 
 # --- PACKAGES ---
-using Zygote, ChainRulesCore
+using Zygote
+using ChainRulesCore
 using DelimitedFiles
-using LinearAlgebra, StaticArrays
+using LinearAlgebra
+using StaticArrays
 
 # --- DCFoil modules ---
 using ..DCFoil: RealOrComplex, DTYPE
@@ -79,7 +81,10 @@ function make_fullMesh(DVDictList, solverOptions)
 
 end
 
-function make_componentMesh(nElem, span; config="wing", rake=0.000, nElStrut=0, spanStrut=0.0)
+function make_componentMesh(
+    nElem::Int64, span::DTYPE;
+    config="wing", rake=0.000, nElStrut=0, spanStrut=0.0
+)
     """
     Makes a mesh and element connectivity
     First element is usually origin (x,y,z) = (0,0,0) except the t-foil where the first element is shifted down by spanStrut
@@ -119,13 +124,20 @@ function make_componentMesh(nElem, span; config="wing", rake=0.000, nElStrut=0, 
 
     mesh_z = Zygote.Buffer(mesh)
     # mesh_z[:, :] .= mesh
-    elemConn_z = Zygote.Buffer(elemConn)
     # elemConn_z[:, :] .= elemConn
     # The transformation matrix is good
     # println("transMat initial")
     # show(stdout, "text/plain", transMat)
     # println("")
-    mesh, elemConn = fill_mesh(mesh_z, elemConn_z, transMat, span, nElem; config=config, nElStrut=nElStrut, spanStrut=spanStrut)
+    mesh, elemConn = fill_mesh(mesh_z, elemConn, transMat, span, nElem; config=config, nElStrut=nElStrut, spanStrut=spanStrut)
+
+    mesh_z = Zygote.Buffer(mesh)
+    if config == "t-foil"
+        mesh_z[:, ZDIM] = mesh_z[:, ZDIM] .- spanStrut # translate
+        for inode in 1:nNodeTot
+            mesh_z[inode, :] = transMat * mesh_z[inode, :]
+        end
+    end
     # mesh = copy(mesh_z)
     # elemConn = copy(elemConn_z)
     # println("mesh")
@@ -143,13 +155,16 @@ function fill_mesh(
     if config == "wing"
         # Set up a line mesh
         dl = span / (nElem) # dist btwn nodes
-        # These two lines broke it
-        # mesh[:, :] .= 0.0
-        # mesh[:, YDIM] = Vector(LinRange(0.0, span, nElem + 1))
-        mesh[:, :] = hcat(zeros(nElem + 1), LinRange(0.0, span, nElem + 1), zeros(nElem + 1))
-        for ee in 1:nElem
-            elemConn[ee, 1] = ee
-            elemConn[ee, 2] = ee + 1
+        mesh[:, :] = hcat(
+            zeros(nElem + 1), #X
+            LinRange(0.0, span, nElem + 1), #Y
+            zeros(nElem + 1) #Z
+        )
+        ChainRulesCore.ignore_derivatives() do
+            for ee in 1:nElem
+                elemConn[ee, 1] = ee
+                elemConn[ee, 2] = ee + 1
+            end
         end
     elseif config == "full-wing"
         # Simple meshes starting from junction at zero
@@ -166,8 +181,10 @@ function fill_mesh(
             # Add foil wing first
             for nodeIdx in 1:nElem
                 mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-                elemConn[nodeCtr, 1] = nodeIdx
-                elemConn[nodeCtr, 2] = nodeIdx + 1
+                ChainRulesCore.ignore_derivatives() do
+                    elemConn[nodeCtr, 1] = nodeIdx
+                    elemConn[nodeCtr, 2] = nodeIdx + 1
+                end
                 elemCtr += 1
                 nodeCtr += 1
             end
@@ -177,27 +194,35 @@ function fill_mesh(
             nodeCtr += 1
 
             # Mirror wing nodes skipping first, but adding junction connectivity
-            elemConn[elemCtr, 1] = 1
-            elemConn[elemCtr, 2] = nodeCtr
+            ChainRulesCore.ignore_derivatives() do
+                elemConn[elemCtr, 1] = 1
+                elemConn[elemCtr, 2] = nodeCtr
+            end
             for nodeIdx in 2:nElem
                 mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-                elemConn[nodeCtr, 1] = nodeCtr
-                elemConn[nodeCtr, 2] = nodeCtr + 1
+                ChainRulesCore.ignore_derivatives() do
+                    elemConn[nodeCtr, 1] = nodeCtr
+                    elemConn[nodeCtr, 2] = nodeCtr + 1
+                end
                 elemCtr += 1
                 nodeCtr += 1
             end
 
             # Grab end of wing
             mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-            elemConn[elemCtr, 1] = nodeCtr - 1
-            elemConn[elemCtr, 2] = nodeCtr
+            ChainRulesCore.ignore_derivatives() do
+                elemConn[elemCtr, 1] = nodeCtr - 1
+                elemConn[elemCtr, 2] = nodeCtr
+            end
             nodeCtr += 1
             elemCtr += 1
 
             # in the extreme case of 3 elements, elem conn is wrong
-            if (2 * nElem == 2)
-                elemConn[2, 1] = 1
-                elemConn[2, 2] = 3
+            ChainRulesCore.ignore_derivatives() do
+                if (2 * nElem == 2)
+                    elemConn[2, 1] = 1
+                    elemConn[2, 2] = 3
+                end
             end
         end
 
@@ -219,36 +244,47 @@ function fill_mesh(
         # ************************************************
         elemCtr = 1 # elem counter
         nodeCtr = 1 # node counter traversing nodes
+
         # Add foil wing first
-        for nodeIdx in 1:nElem
-            mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-            elemConn[nodeCtr, 1] = nodeIdx
-            elemConn[nodeCtr, 2] = nodeIdx + 1
-            elemCtr += 1
-            nodeCtr += 1
+        ChainRulesCore.ignore_derivatives() do
+            for nodeIdx in 1:nElem
+                # mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeIdx
+                elemConn[nodeCtr, 2] = nodeIdx + 1
+                elemCtr += 1
+                nodeCtr += 1
+            end
         end
 
         # Grab end of wing
-        foilMesh = hcat(zeros(nElem + 1), foilwingMesh, zeros(nElem + 1))
-        mesh[nodeCtr, :] = [0.0, foilwingMesh[end], 0.0]
+        foilMesh = hcat(
+            zeros(nElem + 1),
+            foilwingMesh,
+            zeros(nElem + 1)
+        )
+        # mesh[nodeCtr, :] = [0.0, foilwingMesh[end], 0.0]
         nodeCtr += 1
 
         # Mirror wing nodes skipping first, but adding junction connectivity
-        elemConn[elemCtr, 1] = 1
-        elemConn[elemCtr, 2] = nodeCtr
-        for nodeIdx in 2:nElem
-            mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-            elemConn[nodeCtr, 1] = nodeCtr
-            elemConn[nodeCtr, 2] = nodeCtr + 1
-            elemCtr += 1
-            nodeCtr += 1
+        ChainRulesCore.ignore_derivatives() do
+            elemConn[elemCtr, 1] = 1
+            elemConn[elemCtr, 2] = nodeCtr
+            for nodeIdx in 2:nElem
+                # mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeCtr
+                elemConn[nodeCtr, 2] = nodeCtr + 1
+                elemCtr += 1
+                nodeCtr += 1
+            end
         end
 
         foilMeshPort = hcat(zeros(nElem), -foilwingMesh[2:end], zeros(nElem))
         # Grab end of wing
-        mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-        elemConn[elemCtr, 1] = nodeCtr - 1
-        elemConn[elemCtr, 2] = nodeCtr
+        # mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
+        ChainRulesCore.ignore_derivatives() do
+            elemConn[elemCtr, 1] = nodeCtr - 1
+            elemConn[elemCtr, 2] = nodeCtr
+        end
         nodeCtr += 1
         elemCtr += 1
 
@@ -257,30 +293,37 @@ function fill_mesh(
         # ************************************************
         # Add strut going up in z
         nodeIdx = 1
-        for istrut in 1:nElStrut # loop elem, not nodes
-            # if nodeIdx <= nElStrut 
-            mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
-            if nodeIdx == 1
-                elemConn[elemCtr, 1] = 1
-                elemConn[elemCtr, 2] = nodeCtr
-            else
-                elemConn[elemCtr, 1] = nodeCtr - 1
-                elemConn[elemCtr, 2] = nodeCtr
+        ChainRulesCore.ignore_derivatives() do
+            for istrut in 1:nElStrut # loop elem, not nodes
+                # if nodeIdx <= nElStrut 
+                # mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
+                if nodeIdx == 1
+                    elemConn[elemCtr, 1] = 1
+                    elemConn[elemCtr, 2] = nodeCtr
+                else
+                    elemConn[elemCtr, 1] = nodeCtr - 1
+                    elemConn[elemCtr, 2] = nodeCtr
+                end
+                # end
+                nodeIdx += 1
+                elemCtr += 1
+                nodeCtr += 1
             end
-            # end
-            nodeIdx += 1
-            elemCtr += 1
-            nodeCtr += 1
         end
 
-        strutMesh = hcat(zeros(nElStrut), zeros(nElStrut), strutMesh)
-        mesh = vcat(foilMesh, foilMeshPort, strutMesh)
-        println("test")
+        strutMesh = hcat(
+            zeros(nElStrut), # XDIM
+            zeros(nElStrut), # YDIM
+            strutMesh # ZDIM
+        )
+        mesh[:, :] = vcat(foilMesh, foilMeshPort, strutMesh)
 
         # in the extreme case of 3 elements, elem conn is wrong
-        if (2 * nElem + nElStrut == 3)
-            elemConn[2, 1] = 1
-            elemConn[2, 2] = 3
+        ChainRulesCore.ignore_derivatives() do
+            if (2 * nElem + nElStrut == 3)
+                elemConn[2, 1] = 1
+                elemConn[2, 2] = 3
+            end
         end
 
 
@@ -289,23 +332,20 @@ function fill_mesh(
     # ************************************************
     #     Lastly, translate, and rotate the mesh
     # ************************************************
-    meshCopy = copy(mesh)
-    elemConnCopy = copy(elemConn)
     if config == "t-foil"
-        meshCopy[:, ZDIM] .-= spanStrut # translate
+        mesh[:, ZDIM] = mesh[:, ZDIM] .- spanStrut # translate
     end
 
     if transMat != Matrix(I, 3, 3)
-        mesh_z = Zygote.Buffer(meshCopy)
         for inode in eachindex(mesh[:, 1])
             # println("pre-transformed pt", meshCopy[inode, :])
-            mesh_z[inode, :] = transMat * meshCopy[inode, :]
+            mesh[inode, :] = transMat * mesh[inode, :]
             # println("translated point", transMat * meshCopy[inode, :])
         end
-        meshCopy = copy(mesh_z)
     end
+    meshCopy = copy(mesh)
 
-    return meshCopy, elemConnCopy
+    return meshCopy, elemConn
 
 end
 
@@ -345,7 +385,7 @@ end
 
 function assemble(
     StructMesh,
-    abVec, x_αbVec,
+    abVec::Vector{DTYPE}, x_αbVec::Vector{DTYPE},
     FOIL, elemType="bend-twist", constitutive="isotropic";
     config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
 )
@@ -364,7 +404,7 @@ function assemble(
     # --- Local nodal DOF vector ---
     # Determine the number of dofs per node
     qLocal = zeros(DTYPE, NDOF * 2)
-    
+
     abVec = FOIL.ab
     # x_αbVec = StructMesh.x_αb
     # --- Initialize matrices ---
@@ -405,7 +445,6 @@ function populate_matrices!(
     nNodes::Int64 = nElem + 1
     elemConn = StructMesh.elemConn
     coordMat = StructMesh.mesh
-    # TODO: PICKUP check this routine for leaks
     # --- Debug printout for initialization ---
     ChainRulesCore.ignore_derivatives() do
         if verbose
@@ -534,22 +573,24 @@ function populate_matrices!(
         #   Assemble into global matrices
         # ---------------------------
         # The following procedure generally follows:
-        for nodeIdx ∈ 1:2 # loop over nodes in element
-            for dofIdx ∈ 1:NDOF # loop over DOFs in node
-                idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * NDOF + dofIdx) # idx of global dof (row of global matrix)
-                idxRowₑ = (nodeIdx - 1) * NDOF + dofIdx # idx of dof within this element
+        @inbounds @fastmath begin
+            for nodeIdx ∈ 1:2 # loop over nodes in element
+                for dofIdx ∈ 1:NDOF # loop over DOFs in node
+                    idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * NDOF + dofIdx) # idx of global dof (row of global matrix)
+                    idxRowₑ = (nodeIdx - 1) * NDOF + dofIdx # idx of dof within this element
 
-                # --- Assemble RHS ---
-                globalF[idxRow] = fElem[idxRowₑ]
+                    # --- Assemble RHS ---
+                    globalF[idxRow] = fElem[idxRowₑ]
 
-                # --- Assemble LHS ---
-                for nodeColIdx ∈ 1:2 # loop over nodes in element
-                    for dofColIdx ∈ 1:NDOF # loop over DOFs in node
-                        idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * NDOF + dofColIdx # idx of global dof (col of global matrix)
-                        idxColₑ = (nodeColIdx - 1) * NDOF + dofColIdx # idx of dof within this element (column)
+                    # --- Assemble LHS ---
+                    for nodeColIdx ∈ 1:2 # loop over nodes in element
+                        for dofColIdx ∈ 1:NDOF # loop over DOFs in node
+                            idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * NDOF + dofColIdx # idx of global dof (col of global matrix)
+                            idxColₑ = (nodeColIdx - 1) * NDOF + dofColIdx # idx of dof within this element (column)
 
-                        globalK[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
-                        globalM[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
+                            globalK[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
+                            globalM[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
+                        end
                     end
                 end
             end

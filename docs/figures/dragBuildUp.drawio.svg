@@ -1,99 +1,107 @@
-<svg host="65bd71144e" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="987px" height="422px" viewBox="-0.5 -0.5 987 422" content="&lt;mxfile&gt;&lt;diagram id=&quot;gt2F13Q0Y_zQGGtK1okQ&quot; name=&quot;Page-1&quot;&gt;7VpbU9s8EP01mYGHML4nfiShtJ1pO0zplGfFlhMV2fIny7n0138rW75FwYTiwMDAQxKvrZV0zpF2V2Zkz+PtZ47S1XcWYjqyjHA7sq9GlmVNbRO+pGVXWqaGMiw5CUtTy3BL/mJlNJQ1JyHOOg8KxqggadcYsCTBgejYEOds030sYrTba4qWWDPcBojq1jsSipWahTVp7F8wWa6qnk3PL+/EqHpYzSRboZBtWib708iec8ZE+SvezjGV4FW4lO2uH7hbD4zjRBzTwC4brBHN1dxGlkeh6Sxi4AEGKHZq1t5/OatujLOCk0t4wPRS4HXW3IdfS/n9iwkkuwLY4vEGCczhYrULOQt3CYpJIAXA0RK+zjjOSCZQEuDzqn8YczmE0puCqx6NlW1ITFECV7NgRWj4De1YLucMfoL76momPf/FNxUg5p7pO5KiNMAKzbhQUrOkYSViqlrIgVzDkKnU6y8Sg/Ys4wfewOdPFqNEPaJam1493jYRips15gJvWyZFzGfMYiz4Dh5Rd6de2UItEnOiNLNpSa6yrVpycypxISXzZe267u0nLAuULAHMujvLNi6M1p/jPtq9d6B3e69zRIH5BOifsTwJs7Ya4Udr3o2p0OhhvTqaXm9XGPFiEfMAZ30yOTnD9tEMK0wtHdJ6j+swavQw2kGzBzpXg+4H43GxRM9SWBNZzuXqe1tAbvdQexhY75BYBwHWtDRkrymTM84wzAoJwhL5uPxYyEWAiqFTtJNb4lvf1tyjuXqYG9s9tJFMh+BG3zDmhAc5VaxcrxkXJCBi96qCPx7E7R5iPaAe2kkGAbXa4lug3qE1HsfoniRFPN/AZTFFITf/8zrS70EMkxVdNBElS4DsKgBoYHXYMwkJgRTiUt2ISRjK5qXc0aJwJSlJGUlEMSl3NnKvpK9csEzBXpDI2T2eM8rA71XCCmYjQum+6XFCKVpgOoP1uORyPVcOQhyhvE6eHskGnKdSPoY0shOgfbMrAcvSo4lzRIT+FwnU2UwjgW8kEmOShHmAQ6mB30zOrM7nFvxZ2eS70s8p5DHxLhy/+TP8rjiqCqQlDvNQRHSH2HSnmjggLKGMCJn0f8jhBWoHq8u+62rsT09Fvq+Rf1VWeWEuY4JgMveBvWIgJVRuyLO8RK2yk1TGMznM8w+Z9cQkq7vNOLYuNNM6kdJsvaLRuMJJeCkPfBqgTlTW47BzZKQj1kLkULZb2TiWqem6e9DUU8jfSAE1hEz3+DD3cM5YDtWdatQ+F9rz47tevyPIiJdYaI7+oaS39Gzyq1xGEQaQA/w2csdu6vcK+73tXLSiv+92D29sQ88NTftEuaGt11w3nAFaH1wex6Vj93FpuROdS+NUXE40Lu/K2m7BsSr3mjBehs0s5Qg68VCcwlWyyNL3lrANUf89fYVbvSvcsV8u8jr6iddtnmK+xpSVZykGjiL55kWOYJA0rzhCixiP38Ye8qpZme0bbalMPacbyydTXSp9OcmzpKK/YbpusziUPs7WJAtYLvGN9g9fP1L4PrF4fp9YLN/TxeKfKqPXa8f9OPKbcJGr94rxoninWG81EWdSWHEu3wSvUIaVGADHeZFajwEmjoo89w8WhQYh1U4aMSoPAVoTQQr8A0YpSrMi0M2rW9WRfrZiwb066yw9dAf7bnT3pIBnDyNMczLpDXi+ownTO/Q6dIg0yNGPO18k4GX3xVujiJOglNw70dMJ9jHT8HqD3lR/Q3KyoGfqWfPtB5NHM2n5vfWPf+Aoe6D6By6b/70pzzKa/2CyP/0P&lt;/diagram&gt;&lt;/mxfile&gt;">
+<svg host="65bd71144e" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="1015px" height="423px" viewBox="-0.5 -0.5 1015 423" content="&lt;mxfile&gt;&lt;diagram id=&quot;gt2F13Q0Y_zQGGtK1okQ&quot; name=&quot;Page-1&quot;&gt;7ZpZc6M4EIB/jasyD06Z0+YxdiazWzWZmppMTZ5lEEYbgbxC+Jhfvy0QN3HsxMpussmDAw066P7U6m4YWYt494WjdXTLAkxH5iTYjazrkWl6Mxd+pWBfCEzDKwQrToJCZNSCO/IbK+FESTMS4LR1o2CMCrJuC32WJNgXLRninG3bt4WMtkddoxXuCe58RPvSexKIqJDOzGkt/wOTVVSObLjq+WJU3qyeJI1QwLYNkfV5ZC04Y6I4incLTKXuSr0U7W4euVpNjONEHNPAKhpsEM3Us41Ml0LTecigB5ig2Kundv/OWHlhnOY2uYIbYDQw67y+Dkcr+f8nE0gOBWqLx1skMIeTaB9wFuwTFBNfAsDRCv5dcJySVKDEx5/K8WHOxRSK3pS6qtmY6ZbEFCVwNvcjQoOvaM8y+czQj/9Qns1lz7/x91IhRkd0iySTE5BCMy4UaqYURCKmqoWcyA1MmUpef5IY2DMn3/AWfn+wGCXqFtXacKv5Ng2hbLPBXOBdQ6QM8wWzGAu+h1vU1XKVqEViTBUz2wZypSxq4GaXcCGF+arquhrtBywLlKxAmdVwpjW5nDT+bOfJ4d2B0a3O4IiC5RMw/5xlSZA2aYSDxnPXopzRYV5tfbzeRRjx3BtwXxr4ZAy1E2QdTVDpV/smq3xoi5jJAWJa1jpgGkefab4xHue+5GINizfNuHQT78JQu45VHjecO7TYzmI4w9RnuRvKpOpSDOpBgrBEjit/ltIboFwHFO3l3vBO3b5zNAuP295yhhzt7By21+hQF4T7GVVWv9kwLohPxP6/uGCPN9KuY5EDRhvytGcxWrnF6jDaPdrgcYweSJIHZls4zXUl5C7+qQrZjjMhKFO0rYUoWYFJrn1QPSx6ay5VTiBEvFIXYhIEsnmxXNEy70qafM1IInKlOfORcy37ygRLlVlzSDh7wAtGGfR7nbCcnJBQ2hU9DQxFS0zn4E9WXLqpsoMAhyir1PxEtGefitTYsN1WAOa1CTOmfcQmg3vCywmrglUNhH0loRiTJMh8HEjEfjGpoSruX/LB3vv9/B9A1MGZa1zaXv3Xxcy1e5gZ3gBm7jl2n5k+zGCjRykRMs38AOs10tWx1QbJ6W+J2jjy9HF0XZQogkzug4LJeBUc2MlQlQ3IkfeHcIDiNRwly3Td6AB0QcqbLuRUjq6YfLBas+pMW7DaVh9WYyjoPget1lCm3LEVToIrWaisFaWpHIWDVqmzr7GGRoYUUso4lpH+pl0gPVCA+i4Bqg0ya+9CttHRc8oySPZVo2Y9s9OP57iHO4JMYoVFr6NnlKJMjVH4n3I9hhis5eM3HXO3Q+bXX+iwNVw2gh3PaRc1zZnZX/fDhZYzrHuNufZ3zkDtH6y8iBXLOsiK1U/ADFMXK1N9rNwXOf2SY5Xm16FMcUO65mjfjT/eLlevm/efTJ1pHqLOsow+dbamyMTWWAm+y9aYbzBlRQ1wgsNQvpqVC+jEUDovIoeMx2/a2/2r8a81dZrQzcqkv4yaplYfupku6DS+g75pUnI6aRcbkvoskyYJuy8yPtKuZ2DnzA5hZ3p9X1cVu8+ehb28ZmDYj2DX3TtvM/ltSoRSrEhKiw42hItMfSQRL/MPJEq3uMhzqjHomqN8Nn9hkZMMOVZSIx1yFufNN0SQ3Ig+oxSt03xjX5SXyldvacT8B1XTV67zsSLDu2T6pA3eOg/0hjs9uMF7bg96d6hQ1v2w4lm+VmNd/8wbfPqQvycOOfELeN83mRq8rXfQ2dpT5/X2eENjOnP3AcpLPdTkcJHEG3gldKbEF07rjx2LIlz9xaj1+R8=&lt;/diagram&gt;&lt;/mxfile&gt;">
     <defs/>
     <g>
-        <path d="M 115 20 L 115 0 L 985 0 L 985 20" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="all"/>
-        <path d="M 115 20 L 115 420 L 985 420 L 985 20" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 115 20 L 985 20" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 143 22 L 143 2 L 1013 2 L 1013 22" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="all"/>
+        <path d="M 143 22 L 143 422 L 1013 422 L 1013 22" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 143 22 L 1013 22" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 10px; margin-left: 550px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 12px; margin-left: 578px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; font-weight: bold; white-space: nowrap;">
-                                <font style="font-size: 16px;">
+                                <font style="font-size: 20px;">
                                     Total calm-water hydrodynamic drag (resistance)
                                 </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="550" y="15" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
+                <text x="578" y="17" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
                     Total calm-water hydrodynamic drag (resistance)
                 </text>
             </switch>
         </g>
-        <path d="M 115 40 L 115 20 L 325 20 L 325 40" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 115 40 L 115 420 L 325 420 L 325 40" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 115 40 L 325 40" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 143 42 L 143 22 L 353 22 L 353 42" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 143 42 L 143 422 L 353 422 L 353 42" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 143 42 L 353 42" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 30px; margin-left: 220px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 32px; margin-left: 248px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; font-weight: bold; white-space: nowrap;">
-                                Shear forces
+                                <font style="font-size: 20px;">
+                                    Shear forces
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="220" y="35" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
+                <text x="248" y="37" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
                     Shear forces
                 </text>
             </switch>
         </g>
-        <path d="M 325 40 L 325 20 L 985 20 L 985 40" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 325 40 L 325 420 L 985 420 L 985 40" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 325 40 L 985 40" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 353 42 L 353 22 L 1013 22 L 1013 42" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 353 42 L 353 422 L 1013 422 L 1013 42" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 353 42 L 1013 42" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 30px; margin-left: 655px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 32px; margin-left: 683px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; font-weight: bold; white-space: nowrap;">
-                                Normal (pressure) forces
+                                <font style="font-size: 20px;">
+                                    Normal (pressure) forces
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="655" y="35" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
+                <text x="683" y="37" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
                     Normal (pressure) forces
                 </text>
             </switch>
         </g>
-        <path d="M 325 60 L 325 40 L 675 40 L 675 60" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 325 60 L 325 420 L 675 420 L 675 60" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 325 60 L 675 60" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 353 62 L 353 42 L 703 42 L 703 62" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 353 62 L 353 422 L 703 422 L 703 62" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 353 62 L 703 62" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 50px; margin-left: 500px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 52px; margin-left: 528px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; font-weight: bold; white-space: nowrap;">
-                                Flow separation in boundary layer
+                                <font style="font-size: 20px;">
+                                    Flow separation in boundary layer
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="500" y="55" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
+                <text x="528" y="57" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
                     Flow separation in boundary layer
                 </text>
             </switch>
         </g>
-        <path d="M 675 60 L 675 40 L 985 40 L 985 60" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 675 60 L 675 420 L 985 420 L 985 60" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <path d="M 675 60 L 985 60" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 703 62 L 703 42 L 1013 42 L 1013 62" fill="rgb(255, 255, 255)" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 703 62 L 703 422 L 1013 422 L 1013 62" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <path d="M 703 62 L 1013 62" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 50px; margin-left: 830px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 52px; margin-left: 858px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; font-weight: bold; white-space: nowrap;">
-                                Circulation/vorticity
+                                <font style="font-size: 20px;">
+                                    Circulation/vorticity
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="830" y="55" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
+                <text x="858" y="57" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle" font-weight="bold">
                     Circulation/vorticity
                 </text>
             </switch>
@@ -101,15 +109,17 @@
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 277px; margin-left: 679px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 279px; margin-left: 707px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); background-color: rgb(255, 255, 255); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; background-color: rgb(255, 255, 255); white-space: nowrap;">
-                                Wave-making (wave pattern) drag
+                                <font style="font-size: 20px;">
+                                    Wave-making (wave pattern) drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="679" y="282" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="707" y="284" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Wave-making (wave pattern) drag
                 </text>
             </switch>
@@ -117,35 +127,39 @@
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 334px; margin-left: 831px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 336px; margin-left: 859px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Lift-induced (Vortex)
-                                <br style="font-size: 16px;"/>
-                                drag
+                                <font style="font-size: 20px;">
+                                    Lift-induced (Vortex)
+                                    <br style=""/>
+                                    drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="831" y="339" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
-                    Lift-induced (Vortex...
+                <text x="859" y="341" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                    Lift-induced (Vortex)...
                 </text>
             </switch>
         </g>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 110px; margin-left: 71px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 112px; margin-left: 99px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Parasitic
-                                <br style="font-size: 16px;"/>
-                                drag
+                                <font style="font-size: 20px;">
+                                    Parasitic
+                                    <br style=""/>
+                                    drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="71" y="115" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="99" y="117" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Parasitic...
                 </text>
             </switch>
@@ -153,55 +167,61 @@
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 290px; margin-left: 60px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 292px; margin-left: 75px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Drag due to lift
-                                <br style="font-size: 16px;"/>
-                                <i style="font-size: 16px;">
-                                    f
-                                </i>
-                                (lift)
+                                <font style="font-size: 20px;">
+                                    Drag due to lift
+                                    <br style=""/>
+                                    <i style="">
+                                        f
+                                    </i>
+                                    (lift)
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="60" y="295" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
-                    Drag due to lif...
+                <text x="75" y="297" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                    Drag due to lift...
                 </text>
             </switch>
         </g>
-        <path d="M 118 240 L 985 240" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
-        <rect x="264" y="132" width="130" height="30" fill="rgb(255, 255, 255)" stroke="none" pointer-events="none"/>
+        <path d="M 146 242 L 1013 242" fill="none" stroke="rgb(0, 0, 0)" stroke-miterlimit="10" pointer-events="none"/>
+        <rect x="277" y="114" width="160" height="40" fill="rgb(255, 255, 255)" stroke="none" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 147px; margin-left: 329px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 134px; margin-left: 357px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Interference drag
+                                <font style="font-size: 20px;">
+                                    Interference drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="329" y="152" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="357" y="139" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Interference drag
                 </text>
             </switch>
         </g>
-        <rect x="273" y="87" width="100" height="30" fill="rgb(255, 255, 255)" stroke="none" pointer-events="none"/>
+        <rect x="291" y="69" width="120" height="40" fill="rgb(255, 255, 255)" stroke="none" pointer-events="none"/>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 102px; margin-left: 323px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 89px; margin-left: 351px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Profile drag
+                                <font style="font-size: 20px;">
+                                    Profile drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="323" y="107" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="351" y="94" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Profile drag
                 </text>
             </switch>
@@ -209,17 +229,19 @@
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 198px; margin-left: 322px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 193px; margin-left: 350px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); background-color: rgb(255, 255, 255); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; background-color: rgb(255, 255, 255); white-space: nowrap;">
-                                Wave breaking
-                                <br/>
-                                spray drag
+                                <font style="font-size: 20px;">
+                                    Wave breaking
+                                    <br/>
+                                    spray drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="322" y="203" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="350" y="198" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Wave breaking...
                 </text>
             </switch>
@@ -227,35 +249,39 @@
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 333px; margin-left: 495px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 335px; margin-left: 523px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Supervelocity effect
-                                <br style="font-size: 16px;"/>
-                                on form drag
+                                <font style="font-size: 20px;">
+                                    Supervelocity effect
+                                    <br style=""/>
+                                    on form drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="495" y="338" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
-                    Supervelocity effec...
+                <text x="523" y="340" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                    Supervelocity effect...
                 </text>
             </switch>
         </g>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 151px; margin-left: 494px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 153px; margin-left: 531px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Form drag
-                                <br style="font-size: 16px;"/>
-                                (viscous flow separation)
+                                <font style="font-size: 20px;">
+                                    Form drag
+                                    <br style=""/>
+                                    (viscous flow separation)
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="494" y="156" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="531" y="158" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Form drag...
                 </text>
             </switch>
@@ -263,49 +289,55 @@
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 239px; margin-left: 542px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 243px; margin-left: 570px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); background-color: rgb(255, 255, 255); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 13px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; background-color: rgb(255, 255, 255); white-space: nowrap;">
-                                Virtual camber effect from multiphase flows, re-entrant jet driven drag from cavities collapsing, cavitation shockwave drag
+                                <font style="font-size: 14px;">
+                                    Multiphase flows: virtual camber effect, re-entrant jet driven drag from cavities collapsing, cavitation shockwave drag
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="542" y="243" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="13px" text-anchor="middle">
-                    Virtual camber effect from multiphase flows, re-entrant jet driven drag from cavities collapsing, cavi...
+                <text x="570" y="247" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="13px" text-anchor="middle">
+                    Multiphase flows: virtual camber effect, re-entrant jet driven drag from cavities collapsing, cavitation...
                 </text>
             </switch>
         </g>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 335px; margin-left: 211px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 337px; margin-left: 246px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Supervelocity effect
-                                <br style="font-size: 16px;"/>
-                                on skin friction
+                                <font style="font-size: 20px;">
+                                    Supervelocity effect
+                                    <br style=""/>
+                                    on skin friction
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="211" y="340" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
-                    Supervelocity effec...
+                <text x="246" y="342" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                    Supervelocity effect...
                 </text>
             </switch>
         </g>
         <g transform="translate(-0.5 -0.5)">
             <switch>
                 <foreignObject pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility" style="overflow: visible; text-align: left;">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 144px; margin-left: 209px;">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 146px; margin-left: 227px;">
                         <div data-drawio-colors="color: rgb(0, 0, 0); " style="box-sizing: border-box; font-size: 0px; text-align: center;">
                             <div style="display: inline-block; font-size: 16px; font-family: &quot;Times New Roman&quot;; color: rgb(0, 0, 0); line-height: 1.2; pointer-events: none; white-space: nowrap;">
-                                Skin friction
+                                <font style="font-size: 20px;">
+                                    Skin friction
+                                </font>
                             </div>
                         </div>
                     </div>
                 </foreignObject>
-                <text x="209" y="149" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
+                <text x="227" y="151" fill="rgb(0, 0, 0)" font-family="Times New Roman" font-size="16px" text-anchor="middle">
                     Skin friction
                 </text>
             </switch>

@@ -49,9 +49,13 @@ const ΦIND = 4
 const ΘIND = 5
 const ΨIND = 6
 
+using ..DCFoil: DTYPE
 
-function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ,
-    elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
+
+function compute_elem_stiff(
+    EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ,
+    elemType="bend-twist", constitutive="isotropic", useTimoshenko=false
+)
     """
     Output
     ------
@@ -419,7 +423,7 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
     cy = 5 * mᵉ * lᵉ / 42
     dy = 25 * mᵉ * lᵉ / 231
     ey = 29 * mᵉ * lᵉ^2 / 840
-    fy = 11 * mᵉ * lᵉ^2 / 168
+    # fy = 11 * mᵉ * lᵉ^2 / 168
     gy = 5 * mᵉ * lᵉ^2 / 168
     hy = 3 * mᵉ * lᵉ^2 / 56
     iy = 311 * mᵉ * lᵉ^2 / 4620

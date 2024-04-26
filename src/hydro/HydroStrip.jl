@@ -25,7 +25,7 @@ using FLOWMath: norm_cs_safe
 # --- DCFoil modules ---
 using ..SolverRoutines
 using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..DCFoil: RealOrComplex, DTYPE
 
@@ -146,7 +146,7 @@ end
 #                         Lift forces
 # ==============================================================================
 function compute_glauert_circ(
-    semispan, chordVec, α₀, U∞, nNodes;
+    semispan::DTYPE, chordVec, α₀, U∞, nNodes;
     h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, config="wing"
 )
     """
@@ -186,7 +186,9 @@ function compute_glauert_circ(
     by Justin Kerwin & Jacques Hadler
     """
 
-    ỹ = π / 2 * ((1:1:nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
+    nNodes = length(chordVec)
+
+    ỹ = π / 2 * (LinRange(1, nNodes, nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
     y = -semispan * cos.(ỹ) # the physical coordinate (y) is only calculated to the root (-semispan, 0)
     # ---------------------------
     #   PLANFORM SHAPES: rectangular is outdated
@@ -212,6 +214,7 @@ function compute_glauert_circ(
     mu = π / 4 * (chordₚ / semispan)
     b = mu .* α₀ .* sin.(ỹ) # RHS vector
 
+    # Matrix
     ỹn = ỹ .* n' # outer product of ỹ and n, matrix of [0, π/2]*node multipliers
 
     sinỹ_mat = repeat(sin.(ỹ), outer=[1, nNodes]) # parametrized square matrix where the columns go from 0 to 1
@@ -220,28 +223,31 @@ function compute_glauert_circ(
     chord11 = sin.(ỹn) .* (chord_ratio_mat + sinỹ_mat) # matrix-matrix multiplication to get the [A] matrix
 
     # --- Solve for the Fourier coefficients in Glauert's Fourier series ---
-    ã = chord11 \ b
+    ã = chord11 \ b # a_n
 
     γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise distribution of free vortex strength (Γ(y) in textbook)
+    if config == "t-foil"
+        γ = vcat(copy(γ[1:end-1]), 0.0)
+        # println("Zeroing out the root vortex strength")
+    end
 
     if useFS
-        println("Using free surface")
+        # ChainRulesCore.ignore_derivatives() do
+        #     println("Using free surface")
+        # end
         γ_FS = use_free_surface(γ, α₀, U∞, chordVec, h)
         γ = γ_FS
     end
 
-    if config == "t-foil"
-        γ[end] = 0.0
-        # println("Zeroing out the root vortex strength")
-    end
 
     cl = (2 * γ) ./ (U∞ * chordVec) # sectional lift coefficient cl(y) = cl_α*α
     clα = cl ./ (α₀ .+ 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
 
     # --- Interpolate lift slopes onto domain ---
-    dl = semispan / (nNodes - 1)
+    # dl = semispan / (nNodes - 1)
     xq = LinRange(-semispan, 0.0, nNodes)
 
+    cℓ = SolverRoutines.do_linear_interp(y, cl, xq)
     cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
     # If this is fully ventilated, can divide the slope by 4
 
@@ -253,7 +259,7 @@ function compute_glauert_circ(
     # ************************************************
     #     Lift-induced drag computation
     # ************************************************
-    downwashDistribution = -U∞ * n .* (sin.(ỹn) * ã) ./ sin.(ỹ)
+    downwashDistribution = -U∞ * (sin.(ỹn) * (n .* ã)) ./ sin.(ỹ)
     wy = SolverRoutines.do_linear_interp(y, downwashDistribution, xq)
 
     Fx_ind = 0.0
@@ -271,13 +277,109 @@ function compute_glauert_circ(
         println("Plotting debug hydro")
         layout = @layout [a b c]
         p1 = plot(y, γ ./ (4 * U∞ * semispan), label="γ(y)/2Us", xlabel="y", ylabel="γ(y)", title="Spanwise distribution")
-        p2 = plot(y, wy ./ U∞, label="w(y)/Uinf", ylabel="w(y)", linecolor=:red)
+        p2 = plot(y, wy ./ U∞, label="w(y)/Uinf", ylabel="w(y)/Uinf", linecolor=:red)
         p3 = plot(y, cl, label="cl(y)", ylabel="cl(y)", linecolor=:green, ylim=(-1.0, 1.0))
         plot(p1, p2, p3, layout=layout)
         savefig("spanwise_distribution.png")
     end
 
     return reverse(cl_α), Fx_ind, CDi
+end
+
+function correct_downwash(
+    iComp::Int64, CLMain::DTYPE, DVDictList, solverOptions
+)
+    """
+    """
+    DVDict = DVDictList[iComp]
+    Uinf = solverOptions["U∞"]
+    depth = DVDict["depth0"]
+    xM = solverOptions["appendageList"][1]["xMount"]
+    xR = solverOptions["appendageList"][iComp]["xMount"]
+    ℓᵣ = xR - xM # distance from main wing AC to downstream wing AC, +ve downstream
+    sWing = DVDictList[1]["s"]
+    cRefWing = sum(DVDictList[1]["c"]) / length(DVDictList[1]["c"])
+    chordMMean = cRefWing
+    ChainRulesCore.ignore_derivatives() do
+        if solverOptions["debug"]
+            println(@sprintf("=========================================================================="))
+            println(@sprintf("Computing downstream flow effects with ℓᵣ = %.2f m, C_L_M = %.1f ", ℓᵣ, CLMain))
+        end
+    end
+
+    # --- Compute the wake effect ---
+    αiWake = compute_wakeDWAng(sWing, cRefWing, CLMain, ℓᵣ)
+
+    # --- Compute the wave pattern effect ---
+    Fnc = Uinf / (sqrt(GRAV * chordMMean))
+    Fnh = Uinf / (sqrt(GRAV * depth))
+    αiWave = compute_wavePatternDWAng(CLMain, chordMMean, Fnc, Fnh, ℓᵣ)
+
+    # --- Correct the downwash ---
+    alphaCorrection = αiWake .+ αiWave
+
+    return alphaCorrection
+end
+
+function compute_wakeDWAng(sWing, cRefWing, CLWing, ℓᵣ)
+    """
+    Assume the downstream lifting surface is behind an elliptically loaded wing
+    ℓᵣ = xM + xR downstream
+
+    Inputs
+    ------
+    sWing: float
+        span of the upstream wing
+    cRefWing: float
+        ref chord of the upstream wing
+    CLWing: float
+        Lift coefficient of the upstream wing
+    ℓᵣ: float
+        Distance from main wing AC to downstream wing AC, +ve downstream
+    """
+
+    ARwing = sWing / cRefWing
+
+    l_div_s = ℓᵣ / sWing
+    # THIS IS WRONG
+    kappa = 1 + 1 / (sqrt(1 + (l_div_s)^2)) * (1 / (π * l_div_s) + 1)
+    kappa = 2.0
+    # println("k is", k)
+    k = 1 / sqrt(1 + (l_div_s)^2)
+
+    Ek = SpecialFunctions.ellipe(k^2)
+
+    kappa = 1 + 2 / π * Ek / sqrt(1 - k^2)
+
+    ε = kappa * CLWing / (π * ARwing)
+
+    return -ε
+end
+
+function compute_wavePatternDWAng(clM, chordM, Fnc, Fnh, ξ)
+    """
+    Compute 2D wave pattern effect (transverse grav waves only)
+
+    Inputs
+    ------
+    clM: vector
+        Spanwise lift coefficient of the main wing
+    chordM: vector
+        Ref chord of the main wing
+    Fnc: float
+        Chord-based Froude number of the main wing
+    Fnh: float
+        Depth-based Froude number of the main wing
+    ξ - Distance from the main wing to the downstream wing
+    """
+
+    divFncsq = 1 / (Fnc * Fnc)
+    premult = divFncsq * exp(-2 / (Fnh * Fnh))
+
+    # Vectorized computation
+    αiwave = -clM .* cos.(divFncsq .* ξ ./ chordM) .* premult
+
+    return αiwave
 end
 
 function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
@@ -335,9 +437,6 @@ end
 # ==============================================================================
 #                         Static drag
 # ==============================================================================
-
-
-
 function compute_AICs(
     AEROMESH, FOIL, dim, Λ, U∞, ω, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing
@@ -720,7 +819,10 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
     return copy(Mf_sweep_z[:, :, 1]), copy(Cf_r_sweep_z), copy(Cf_i_sweep_z), copy(Kf_r_sweep_z), copy(Kf_i_sweep_z), kSweep
 end
 
-function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, rake, dofBlank::Vector{Int64}, elemType="BT2"; appendageOptions=Dict(), solverOptions=Dict())
+function integrate_hydroLoads(
+    foilStructuralStates, fullAIC, α₀, rake, dofBlank::Vector{Int64}, downwashAngles::DTYPE, elemType="BT2";
+    appendageOptions=Dict(), solverOptions=Dict()
+)
     """
     Inputs
     ------
@@ -742,7 +844,8 @@ function integrate_hydroLoads(foilStructuralStates, fullAIC, α₀, rake, dofBla
         "rake" => rake,
         "beta" => 0.0,
     )
-    foilTotalStates = SolverRoutines.return_totalStates(foilStructuralStates, DVDict, elemType; appendageOptions=appendageOptions)
+    foilTotalStates = SolverRoutines.return_totalStates(foilStructuralStates, DVDict, elemType;
+        appendageOptions=appendageOptions, alphaCorrection=downwashAngles)
 
     # --- Strip theory ---
     # This is the hydro force traction vector

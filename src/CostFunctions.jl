@@ -14,7 +14,7 @@ const staticCostFuncs::Vector{String} = [
     "wtip"
     "lift"
     "moment"
-    "cl"
+    "cl" # total lift coefficient
     "cmy"
     # Centers
     "cofz"

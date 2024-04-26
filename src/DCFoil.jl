@@ -179,6 +179,7 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
     # ==============================================================================
     if solverOptions["run_static"] && !(solverOptions["run_body"])
         STATSOLLIST = []
+        CLMain::DTYPE = 0.0
         for iComp in eachindex(solverOptions["appendageList"])
             appendageOptions = solverOptions["appendageList"][iComp]
             # Maybe look at mounting location here instead of using the 'iComp'
@@ -190,11 +191,17 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
             DVDict = DVDictList[iComp]
 
             # STATSOL = SolveStatic.solve(FEMESH, DVDict, solverOptions, appendageOptions)
-            STATSOL = SolveStatic.get_sol(DVDict, solverOptions, evalFuncsList; iComp=iComp, FEMESH=FEMESH)
+            @time STATSOL = SolveStatic.get_sol(DVDictList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
             if solverOptions["writeTecplotSolution"]
                 SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
             end
             push!(STATSOLLIST, STATSOL)
+
+            # --- Need to compute main hydrofoil CL ---
+            if iComp == 1 && solverOptions["use_dwCorrection"]
+                DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+                CLMain = SolveStatic.evalFuncs("cl", STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=0.0)
+            end
         end
         SOLDICT["STATIC"] = STATSOLLIST
     end
@@ -262,17 +269,21 @@ function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
         # Get evalFuncs that are in the staticCostFuncs list
         staticEvalFuncs = [key for key in evalFuncsList if key in staticCostFuncs]
         STATSOLLIST = SOLDICT["STATIC"]
-
+        CLMain::DTYPE = 0.0
         for iComp in eachindex(solverOptions["appendageList"])
             appendageOptions = solverOptions["appendageList"][iComp]
             STATSOL = STATSOLLIST[iComp]
             DVDict = DVDictList[iComp]
             compName = appendageOptions["compName"]
             DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions)
+            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
             for key in keys(staticFuncs)
                 newKey = @sprintf("%s-%s", key, compName)
                 evalFuncsDict[newKey] = staticFuncs[key]
+            end
+            # --- Need to compute main hydrofoil CL ---
+            if iComp == 1 && solverOptions["use_dwCorrection"]
+                CLMain = staticFuncs["cl"]
             end
         end
 
@@ -351,6 +362,7 @@ function set_defaultOptions!(solverOptions)
         "use_freeSurface",
         "use_cavitation",
         "use_ventilation",
+        "use_dwCorrection",
         # ************************************************
         #     Hull properties
         # ************************************************
@@ -383,6 +395,7 @@ function set_defaultOptions!(solverOptions)
         # ************************************************
         1.0,
         1000.0,
+        false,
         false,
         false,
         false,

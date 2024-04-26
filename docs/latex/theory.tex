@@ -10,6 +10,7 @@
 \usepackage{algorithm2e}
 \usepackage{svg}
 \usepackage[compact]{titlesec}
+\usepackage[]{acronym} % provides \acronym 
 \graphicspath{{../figures/}}
 
 % --- Math ---
@@ -103,6 +104,45 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
 
 \clearpage
 \tableofcontents
+\clearpage
+% ==============================================================================
+%                                 ACRONYMS
+% ==============================================================================
+\section*{Acronyms}
+\begin{acronym}
+    \acro{AD}{algorithmic differentiation}
+    \acro{CFD}{computational fluid dynamics}
+    \acro{CSD}{computational structural dynamics}
+    \acro{FSI}{fluid-structure interaction}
+    \acro{IMO}{International Maritime Organization}
+    \acro{ITTC}{International Towing Tank Conference}
+    \acro{EEDI}{Energy Efficiency Design Index}
+    \acro{SEEMP}{Ship Energy Efficiency Management Plan}
+    \acro{PDE}{partial differential equations}
+    \acro{ODE}{ordinary differential equations}
+    \acro{DIC}{Digital Image Correlation}
+    \acro{RK}{Runge--Kutta}
+    \acro{EA}{elastic axis}
+    \acro{CP}{center of pressure}
+    \acro{CG}{center of gravity}
+    \acro{KS}{Kreisselmeier--Steinhauser}
+    \acro{DOF}{degrees of freedom}
+    \acro{AR}{aspect ratios}
+    \acro{BFF}{body-freedom flutter}
+    \acro{LLT}{lifting line theory}
+    \acro{WMO}{World Meteorological Organization}
+    \acro{CFRP}{carbon fiber-reinforced plastic}
+    \acro{UD}{uni-directional}
+    \acro{PMC}{polymer matrix composite}
+    \acro{RPM}{revolutions per minute}
+    \acro{TE}{trailing edge}
+    \acro{LE}{leading edge}
+    \acro{MDO}{multidisciplinary design optimization}
+    \acro{FFD}{free-form deformation}
+    \acro{RAO}{response amplitude operator}
+    \acro{FRF}{frequency response function}
+    \acro{FEM}{finite element method}
+\end{acronym}
 \clearpage
 %------------------------------------------------------------------------------
 \section{Coordinate system}
@@ -791,7 +831,7 @@ so to compute the total gradient, we can solve the \emph{adjoint system}
 \end{bmatrix}
 \ee
 so there are $n_f$ right-hand sides in this equation.
-The partial derivative matrices in Equation~\eqref{eqn:Adjoint} are computed through finite differences.
+The partial derivative matrices in Equation~\eqref{eqn:Adjoint} are computed through \ac{AD}.
 \subsection{Elliptical lift}
 It is helpful to compare lift distributions ($L = \int_{-b/2}^{b/2}L'(y) dy$) to the elliptical lift distribution.
 An ellipse is
@@ -804,6 +844,41 @@ Substituting the spanwise circulation into the Kutta-Joukowski theorem and the r
 L=\int_{-b / 2}^{b / 2} L^{\prime}(y) d y=\int_{-b / 2}^{b / 2} \rho \Uinf \Gamma_0 \sqrt{1-\left(\frac{2 y}{b}\right)^2} d y=\frac{\pi}{4} \rho \Uinf \Gamma_0 b
 \ee
 where the integral solution comes from integral tables or the geometric observation that the area of an ellipse is $\pi/4$ times the area of the bounding rectangle.
+
+\subsection{Downwash in wake}
+The wave elevation in the farfield some distance $x$ is
+\be
+\zeta(x) = \frac{2\Gamma}{\Uinf}e^{-\nu h} \sin(\nu x)
+\tn{ where }
+\nu = \frac{g}{\Uinf^2}
+\ee
+If we use $c_\ell = (\rho \Uinf \gamma) /\left(q c\right)$, the equation becomes
+\be
+\zeta(x) = c_\ell c e^{\frac{-gh}{\Uinf^2}} \sin\left(\frac{g x}{\Uinf^2}\right)
+\ee
+
+The linearized kinematic free-surface condition states
+\be
+\label{eqn:KFSBC}
+\pp{\varphi}{z} =
+\Uinf \pp{\zeta}{x}
+\ee
+and the exponential decay states
+\be
+\left. \pp{\varphi}{z} \right|_{z=-h} =
+\left. \pp{\varphi}{z} \right|_{z=0} e^{-gh/\Uinf^2}
+\ee
+so the downwash angle due to transverse gravity waves is
+\be
+\alpha_{i,\tn{wave}} = \frac{ \left. \pp{\varphi}{z} \right|_{z=-h} }{\Uinf}
+=
+\frac{
+-C_{L_M}
+}{Fn_c^2} e^{{-2}/{Fn_h^2}}
+\cos\left(
+\frac{1}{Fn_c^2}\frac{\xi}{c}
+\right).
+\ee
 
 \subsection{Total drag}
 

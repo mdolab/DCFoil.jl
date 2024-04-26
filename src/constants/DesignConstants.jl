@@ -81,6 +81,7 @@ const SORTEDDVS::Vector{String} = [
     "beta"
     "c"
     "c_strut"
+    "depth0"
     "rake"
     "s"
     "s_strut"

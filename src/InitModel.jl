@@ -23,6 +23,7 @@ using ..HullLibrary: HullLibrary
 function init_static(
   α₀, rake, span, chord, toc, ab, x_αb, zeta, θ,
   beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut,
+  depth0,
   foilOptions::Dict, solverOptions::Dict
 )
   """
@@ -53,7 +54,7 @@ function init_static(
   #   Hydrodynamics
   # ---------------------------
   clα, _, _ = HydroStrip.compute_glauert_circ(span, chord, deg2rad(α₀ + rake), solverOptions["U∞"], nNodes;
-    h=span_strut, # TODO: DEPTH
+    h=depth0,
     useFS=solverOptions["use_freeSurface"],
     rho=solverOptions["ρ_f"],
     config=foilOptions["config"],
@@ -75,7 +76,7 @@ function init_static(
     t_strut = toc_strut .* c_strut
     eb_strut = 0.25 * c_strut .+ ab_strut
 
-    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = compute_beam(nNodesStrut, c_strut, t_strut, ab_strut, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ_strut, constitutive)
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodesStrut, c_strut, t_strut, ab_strut, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ_strut, constitutive)
 
     # ---------------------------
     #   Hydrodynamics
@@ -98,14 +99,14 @@ function init_static(
 
 end
 
-function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut,
+function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, depth0,
   foilOptions::Dict, solverOptions::Dict; fRange=[0.1, 1], uRange=[0.0, 1.0]
 )
   """
   Perform much of the same initializations as init_static() except with other features
   """
   # statModel = init_static(DVDict, solverOptions)
-  statWingModel, statStrutModel = init_static(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, foilOptions, solverOptions)
+  statWingModel, statStrutModel = init_static(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, depth0, foilOptions, solverOptions)
 
   # model = DesignConstants.DynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fRange, uRange)
   WingModel = DesignConstants.DynamicFoil(
@@ -117,7 +118,7 @@ function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_stru
     StrutModel = nothing
   else
     StrutModel = DesignConstants.DynamicFoil(
-      statStrutModel.mₛ, statStrutModel.Iₛ, statStrutModel.EIₛ, statStrutModel.EIIPₛ, statStrutModel.GJₛ, statStrutModel.Kₛ, statStrutModel.Sₛ, statStrutModel.EAₛ, statStrutModel.U∞, statStrutModel.g,
+      statStrutModel.mₛ, statStrutModel.Iₛ, statStrutModel.EIₛ, statStrutModel.EIIPₛ, statStrutModel.GJₛ, statStrutModel.Kₛ, statStrutModel.Sₛ, statStrutModel.EAₛ, statStrutModel.U∞, statStrutModel.ζ,
       statStrutModel.clα, statStrutModel.eb, statStrutModel.ab, statStrutModel.chord, statStrutModel.ρ_f, statStrutModel.nNodes, statStrutModel.constitutive, fRange, uRange
     )
   end
@@ -159,9 +160,10 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
   ab_strut = DVDict["ab_strut"]
   x_αb_strut = DVDict["x_αb_strut"]
   θ_strut = DVDict["θ_strut"]
+  depth0 = DVDict["depth0"]
 
   # if length(solverOptions["appendageList"]) == 1
-  WingModel, StrutModel = init_dynamic(α₀, rake, span, c, toc, ab, x_αb, zeta, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
+  WingModel, StrutModel = init_dynamic(α₀, rake, span, c, toc, ab, x_αb, zeta, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
   # else
   # error("Only one appendage is supported at the moment")
   # end

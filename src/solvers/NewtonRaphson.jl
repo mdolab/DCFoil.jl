@@ -23,11 +23,13 @@ function print_solver_history(iterNum, resNorm, stepNorm)
 end
 
 function do_newton_raphson(
-    compute_residuals, compute_∂r∂u, u0, DVDict;
+    compute_residuals, compute_∂r∂u, u0, DVDictList;
     maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false,
     appendageOptions=Dict(),
     solverOptions=Dict(),
-    solverParams=nothing
+    solverParams=nothing,
+    iComp=1,
+    CLMain=0.0
 )
     """
     Simple Newton-Raphson solver
@@ -57,9 +59,16 @@ function do_newton_raphson(
     """
 
     # --- Initialize output ---
+    DVDict = DVDictList[iComp]
     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
-    res = compute_residuals(u0, x0, DVLengths;
-        appendageOptions=appendageOptions, solverOptions=solverOptions)
+    res = compute_residuals(
+        u0, x0, DVLengths;
+        appendageOptions=appendageOptions,
+        solverOptions=solverOptions,
+        iComp=iComp,
+        CLMain=CLMain,
+        DVDictList=DVDictList,
+    )
 
     converged_u = copy(u0)
     converged_r = copy(res)
@@ -71,17 +80,19 @@ function do_newton_raphson(
             x0, DVLengths = Utilities.unpack_dvdict(DVDict)
 
             res = compute_residuals(u, x0, DVLengths;
-                appendageOptions=appendageOptions, solverOptions=solverOptions)
+                appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
 
             ∂r∂u = compute_∂r∂u(u, mode;
-                solverParams=solverParams)
+                DVDictList=DVDictList,
+                solverParams=solverParams,
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                iComp=iComp,
+                CLMain=CLMain,
+            )
 
             jac = zeros(typeof(u[1]), length(u), length(u))
-            if mode == "RAD"
-                jac = ∂r∂u[1]
-            elseif mode == "Analytic"
-                jac = ∂r∂u
-            end
+            jac = ∂r∂u
 
             # ************************************************
             #     Compute Newton step

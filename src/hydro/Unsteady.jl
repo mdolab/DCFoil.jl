@@ -20,8 +20,9 @@ using Printf, DelimitedFiles
 
 # --- Globals ---
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using ..DCFoil: DTYPE
 
-function compute_theodorsen(k)
+function compute_theodorsen(k::DTYPE)
     """
     Theodorsen's transfer function for unsteady aero/hydrodynamics of a sinusoidally oscillating foil.
     w/ separate real and imaginary parts. 
@@ -71,7 +72,7 @@ function compute_theodorsen(k)
     return ans
 end
 
-function compute_sears(k)
+function compute_sears(k::DTYPE)
     """
     Sears transfer function for an airfoil subject to sinusoidal gusts.
     This is potential flow theory.
@@ -185,6 +186,65 @@ function compute_node_stiff_faster(
     return K_f, K̂_f
 end
 
+function compute_node_stiff_faster(
+    clα::DTYPE, b::DTYPE, eb::DTYPE, ab::DTYPE, U∞::DTYPE, clambda::DTYPE, slambda::DTYPE, rho_f::DTYPE, Ck_r::DTYPE, Ck_i::DTYPE
+)
+    """
+    Hydrodynamic stiffness force
+    THIS ASSUMES THE MOMENT ABOUT THE AERODYNAMIC CENTER IS ZERO
+    """
+    # --- Precomputes ---
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    Uclambda = U∞ * clambda
+    clalphabCk_r = clα * b * Ck_r
+    clalphabCk_i = clα * b * Ck_i
+    # K_f = @SMatrix zeros(ComplexF64, 2, 2)
+    # K̂_f = @SMatrix zeros(ComplexF64, 2, 2)
+    # Aerodynamic quasi-steady stiffness
+    # (1st row is lift, 2nd row is pitching moment)
+
+
+    k_hα_i = -2 * clalphabCk_r # lift due to angle of attack
+    k_hα_r = -2 * clalphabCk_i # lift due to angle of attack
+    k_αα_r = k_hα_r * eb # moment due to angle of attack (disturbing)
+    k_αα_i = k_hα_i * eb # moment due to angle of attack (disturbing)
+    K_f_r = qf * clambda * clambda *
+            [
+                0.0 k_hα_r
+                0.0 k_αα_r
+            ]
+    K_f_i = qf * clambda * clambda *
+            [
+                0.0 k_hα_i
+                0.0 k_αα_i
+            ]
+
+
+    # Sweep correction to aerodynamic quasi-steady stiffness
+    e_hh_r = Uclambda * 2 * clα * Ck_r
+    e_hh_i = Uclambda * 2 * clα * Ck_i
+    e_hα_r = Uclambda * (1 - a) * (-clalphabCk_r)
+    e_hα_i = Uclambda * (1 - a) * (-clalphabCk_i)
+    e_αh_r = Uclambda * (1 + a) * clalphabCk_r
+    e_αh_i = Uclambda * (1 + a) * clalphabCk_i
+    # I MIGHT BE WRONG HERE
+    e_αα_r = Uclambda * (π * b * b - clalphabCk_r * eb * (1 - 2 * (a)))
+    e_αα_i = Uclambda * (-clalphabCk_i * eb * (1 - 2 * (a)))
+    K̂_f_r = qf / U∞ * slambda * b *
+             [
+                 e_hh_r e_hα_r
+                 e_αh_r e_αα_r
+             ]
+    K̂_f_i = qf / U∞ * slambda * b *
+             [
+                 e_hh_i e_hα_i
+                 e_αh_i e_αα_i
+             ]
+
+    return K_f_r, K_f_i, K̂_f_r, K̂_f_i
+end
+
 function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f, Ck)
     """
     Fluid-added damping matrix
@@ -193,8 +253,6 @@ function compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, rho_f
     qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
     a = ab / b
     coeff = qf / U∞ * b
-    # C_f = @SMatrix zeros(ComplexF64, 2, 2)
-    # Ĉ_f = @SMatrix zeros(ComplexF64, 2, 2)
 
     # Aerodynamic quasi-steady damping
     # (1st row is lift, 2nd row is pitching moment)

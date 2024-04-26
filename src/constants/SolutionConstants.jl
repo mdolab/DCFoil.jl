@@ -19,6 +19,7 @@ const P_IM_TOL = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on sta
 # Bigger values catch the real roots and too small cause them to disappear
 # You just don't want them too big that they pick up wrong roots
 
+const GRAV = 9.80665 # gravity [m/s^2]
 const XDIM = 1
 const YDIM = 2
 const ZDIM = 3
@@ -39,6 +40,7 @@ struct DCFoilSolverParams{TF,TI,TS}
     mode::TS # type of derivative for drdu
     planformArea::TF
     dofBlank::Vector{TI} # DOF to blank out
+    downwashAngles::TF # downwash angles [rad]
 end
 
 struct DCFoilDynamicConstants{TF,TC<:ComplexF64,TI,TS,TA<:AbstractVector{TF}}

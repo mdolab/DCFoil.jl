@@ -194,7 +194,8 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
     # ---------------------------
     u = copy(globalF)
     dim = size(Ks)[1] + length(globalDOFBlankingList)
-    global SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList)
+    alphaCorrection = zeros(DTYPE, nNodes)
+    global SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
 
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
@@ -260,7 +261,8 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, copy(globalKs), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList)
+    alphaCorrection = zeros(DTYPE, nNodes)
+    global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, copy(globalKs), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
 
     # ---------------------------
     #   Test eigensolver
