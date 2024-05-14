@@ -518,9 +518,11 @@ The total velocity potential with steady forward speed ($\Phi = \Uinf x + \varph
 \be
 \label{eqn:Indirect}
 \boxed{
-    \varphi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) G(\mbf{x}) \tn{d}\Omega
-}\\
-\varphi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x} - \mbf{x}_s \right|} \tn{d}\Omega
+    \varphi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) G(\mbf{x};\mbf{x}_s) \tn{d}\Omega
+    + \tn{other perturbation terms}
+}
+% \\
+% \varphi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x} - \mbf{x}_s \right|} \tn{d}\Omega
 .
 \ee
 We compute the free surface effect using the method of de-singularization first applied in \citet{Cao1991}.

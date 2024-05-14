@@ -231,6 +231,7 @@ solverOptions = Dict(
     @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
     @test test_interp() <= 1e-1
     # @test test_hydroderiv(DVDict, solverOptions) <= 1e-4
+    @test test_staticDeriv(DVDict, solverOptions) >= 4
 end
 
 # @testset "Larger scale local test" begin

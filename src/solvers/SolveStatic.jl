@@ -883,26 +883,22 @@ function compute_∂r∂u(
 
     elseif uppercase(mode) == "CS" # TODO:
 
-        dh = 1e-4
-        ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
+        dh = 1e-8
         println("step size:", dh)
-        for ii in eachindex(SOL.structStates)
-            r_i = SolveStatic.evalFuncs(
-                [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
-            )
-            SOL.structStates[ii] += dh
-            r_f = SolveStatic.evalFuncs(
-                [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
-            )
-            SOL.structStates[ii] -= dh
 
-            ∂f∂u[1, ii] = (r_f[costFunc] - r_i[costFunc]) / dh
+        ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
+        for ii in eachindex(SOL.structStates)
+
+            r_i = compute_residuals(
+                structuralStates, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
+            )
+            structuralStates[ii] += dh * 1im
+            r_f = compute_residuals(
+                structuralStates, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
+            )
+            structuralStates[ii] -= dh * 1im
+
+            ∂r∂u[:, ii] = imag(r_f[:, ii]) / dh
         end
 
     elseif uppercase(mode) == "ANALYTIC"

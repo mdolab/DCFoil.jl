@@ -385,7 +385,7 @@ function rotate3d(dataVec, rot; axis="x")
 end
 
 function assemble(StructMesh, abVec, x_αbVec,
-    FOIL::DynamicFoil, elemType="bend-twist", constitutive="isotropic";
+    FOIL, elemType="bend-twist", constitutive="isotropic";
     config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
 )
     """
