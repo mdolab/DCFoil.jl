@@ -15,6 +15,7 @@ using LinearAlgebra
 using Zygote
 using ChainRulesCore
 using FLOWMath: abs_cs_safe
+using Printf
 
 # --- DCFoil modules ---
 using ..NewtonRaphson
@@ -54,6 +55,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
         println("+", "-"^50, "+")
         println("|              Beginning NL solve                  |")
         println("+", "-"^50, "+")
+        println(@sprintf("Derivatives computed via the %s mode", uppercase(mode)))
     end
 
     # Somewhere here, you could do something besides Newton-Raphson if you want

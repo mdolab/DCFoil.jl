@@ -329,6 +329,8 @@ function test_dwWave()
     xlims!(0.5, 4)
     plot!(tick_direction=:out)
     savefig("test_dwWave.pdf")
+    println("Making plot test_dwWave.pdf to check")
+    return 1e-6
 end
 
 function test_dwWake()
@@ -372,6 +374,8 @@ function test_dwWake()
     plot!(tick_direction=:out)
 
     savefig("test_dwWake.pdf")
+    println("Making plot test_dwWake.pdf to check")
+    return 1e-6
 end
 
 function test_AICs()

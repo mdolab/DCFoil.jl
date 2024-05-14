@@ -384,8 +384,7 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function assemble(
-    StructMesh::StructMesh, abVec::Vector{DTYPE}, x_αbVec::Vector{DTYPE},
+function assemble(StructMesh, abVec, x_αbVec,
     FOIL::DynamicFoil, elemType="bend-twist", constitutive="isotropic";
     config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
 )
@@ -439,7 +438,7 @@ end
 
 function populate_matrices!(
     globalK, globalM, globalF,
-    nElem::Int64, StructMesh, FOIL::DynamicFoil, STRUT::DynamicFoil, abVec::Vector, x_αbVec::Vector;
+    nElem::Int64, StructMesh, FOIL::DynamicFoil, STRUT, abVec, x_αbVec;
     config="wing", constitutive="isotropic", verbose=true, elemType="bend-twist", ab_strut=nothing, x_αb_strut=nothing
 )
     nNodes::Int64 = nElem + 1

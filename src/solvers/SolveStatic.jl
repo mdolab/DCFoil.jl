@@ -536,6 +536,7 @@ function evalFuncsSens(
 
             @time ∂r∂x = compute_∂r∂x(STATSOL.structStates, DVDict;
                 mode="FiDi", SOLVERPARAMS=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp)
+
             println("Computing ∂r∂u...")
             @time ∂r∂u = compute_∂r∂u(
                 u,
@@ -663,9 +664,9 @@ function compute_∂f∂x(
         ∂f∂x = reshape(∂f∂x, 1, length(∂f∂x))
     elseif uppercase(mode) == "FIDI"
         dh = 1e-3
+        println("step size:", dh)
         DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
         ∂f∂x = zeros(DTYPE, length(DVVec))
-        println("step size:", dh)
         for ii in eachindex(DVVec)
             f_i = evalFuncs(costFunc, SOL.structStates, SOL, DVVec, DVLengths;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
@@ -712,8 +713,8 @@ function compute_∂f∂u(
         ∂f∂u = reshape(∂f∂u, 1, length(∂f∂u))
     elseif uppercase(mode) == "FIDI" # Finite difference
         dh = 1e-4
-        ∂f∂u = zeros(DTYPE, 1, length(SOL.structStates))
         println("step size:", dh)
+        ∂f∂u = zeros(DTYPE, 1, length(SOL.structStates))
         for ii in eachindex(SOL.structStates)
             r_i = SolveStatic.evalFuncs(
                 [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
@@ -881,6 +882,28 @@ function compute_∂r∂u(
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
     elseif uppercase(mode) == "CS" # TODO:
+
+        dh = 1e-4
+        ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
+        println("step size:", dh)
+        for ii in eachindex(SOL.structStates)
+            r_i = SolveStatic.evalFuncs(
+                [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
+            )
+            SOL.structStates[ii] += dh
+            r_f = SolveStatic.evalFuncs(
+                [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
+            )
+            SOL.structStates[ii] -= dh
+
+            ∂f∂u[1, ii] = (r_f[costFunc] - r_i[costFunc]) / dh
+        end
 
     elseif uppercase(mode) == "ANALYTIC"
         # TODO: there is now a bug when using T-FOIL GEOMETRY THAT IT DOES NOT CONVERGE for basic solution
