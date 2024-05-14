@@ -56,6 +56,7 @@ DVDict = Dict(
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
+    "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0,
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
@@ -120,6 +121,7 @@ dvKey = "θ" # dv to test deriv
 dvKey = "Λ" # dv to test deriv
 dvKey = "rake" # dv to test deriv
 # dvKey = "α₀" # dv to test deriv
+dvKey = "toc" # dv to test deriv
 evalFunc = "ksflutter"
 evalFunc = "lift"
 evalFunc = "moment"
@@ -184,7 +186,7 @@ for (ii, dh) in enumerate(steps)
     costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
     flutt_i = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
     global funcVal = flutt_i
-    DVDict[dvKey] += dh
+    DVDict[dvKey][1] += dh
     SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
     costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
     flutt_f = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
@@ -193,7 +195,7 @@ for (ii, dh) in enumerate(steps)
     @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
 
     # --- Reset DV ---
-    DVDict[dvKey] -= dh
+    DVDict[dvKey][1] -= dh
 end
 
 save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)

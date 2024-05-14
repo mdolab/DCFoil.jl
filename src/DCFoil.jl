@@ -177,7 +177,7 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
     # ==============================================================================
     #                         Static hydroelastic solution
     # ==============================================================================
-    if solverOptions["run_static"] && !(solverOptions["run_body"])
+    if solverOptions["run_static"]
         STATSOLLIST = []
         CLMain::DTYPE = 0.0
         for iComp in eachindex(solverOptions["appendageList"])
@@ -200,7 +200,8 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
             # --- Need to compute main hydrofoil CL ---
             if iComp == 1 && solverOptions["use_dwCorrection"]
                 DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-                CLMain = SolveStatic.evalFuncs("cl", STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=0.0)
+                CLMain = SolveStatic.evalFuncs("cl", STATSOL.structStates, STATSOL, DVVec, DVLengths;
+                    appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=0.0)
             end
         end
         SOLDICT["STATIC"] = STATSOLLIST
@@ -283,7 +284,14 @@ function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
             end
             # --- Need to compute main hydrofoil CL ---
             if iComp == 1 && solverOptions["use_dwCorrection"]
-                CLMain = staticFuncs["cl"]
+                try
+                    CLMain = staticFuncs["cl"]
+                catch
+                    # warning
+                    println("+" * "-"^80 * "+")
+                    println("CL not found in staticFuncs! Cannot compute dw correction")
+                    println("+" * "-"^80 * "+")
+                end
             end
         end
 
@@ -310,7 +318,10 @@ function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
     return evalFuncsDict
 end # evalFuncs
 
-function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, evalFuncsSensList::Vector{String}, solverOptions=Dict(); mode="FiDi")
+function evalFuncsSens(
+    SOLDICT::Dict, DVDictList::Vector, evalFuncsSensList::Vector{String}, solverOptions=Dict();
+    mode="FiDi", CLMain=0.0
+)
     """
     Think of this as the gluing call for getting all derivatives
 
@@ -328,7 +339,8 @@ function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, evalFuncsSensList::Vec
     if solverOptions["run_static"]
         STATSOLLIST = SOLDICT["STATIC"]
         evalFuncsSensStat = [key for key in evalFuncsSensList if key in staticCostFuncs]
-        @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHLIST, solverOptions; mode=mode)
+        @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHLIST, solverOptions;
+            mode=mode, CLMain=CLMain)
         costFuncsSensDict = costFuncsSensList
     end
 

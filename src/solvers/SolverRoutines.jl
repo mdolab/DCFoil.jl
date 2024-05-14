@@ -29,19 +29,23 @@ using ..DCFoil: RealOrComplex, DTYPE
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u0, x0::Dict;
+function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
     maxIters=200, tol=1e-6, is_verbose=false,
     solverParams=nothing,
     appendageOptions=Dict(),
     solverOptions=Dict(),
     mode="Analytic",
     # mode="RAD",
-    is_cmplx=false
+    # mode="FiDi",
+    is_cmplx=false,
+    iComp=1, CLMain=0.0
 )
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
     """
+
+    x0 = x0List[iComp]
 
     # ************************************************
     #     Main solver loop
@@ -54,32 +58,30 @@ function converge_r(compute_residuals, compute_∂r∂u, u0, x0::Dict;
 
     # Somewhere here, you could do something besides Newton-Raphson if you want
     converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(
-        compute_residuals, compute_∂r∂u, u0, x0;
+        compute_residuals, compute_∂r∂u, u0, x0List;
         maxIters, tol, is_verbose, mode, is_cmplx,
-        solverParams=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
+        solverParams=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, CLMain=CLMain)
 
     return converged_u, converged_r
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; appendageOptions=Dict())
+function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; appendageOptions=Dict(), alphaCorrection=0.0)
     """
     Returns the deflected + rigid shape of the foil
     So like pre-twist
     Inputs
     ------
         foilStructuralStates - structural states of the foil in global ref frame!
-        α₀ - angle of attack of base mounted wing
-        rake - rake of the foil
+        alphaCorrection - correction to alpha in deg
         elemType - element type
-        beta - yaw angle
     Outputs
     -------
         foilTotalStates - total states of the foil in global reference frame
         nDOF - number of DOF per node
     """
 
-    alfaRad = deg2rad(DVDict["α₀"])
+    alfaRad = deg2rad(DVDict["α₀"]) + alphaCorrection
     rakeRad = deg2rad(DVDict["rake"])
     betaRad = deg2rad(DVDict["beta"])
     nDOF = BeamElement.NDOF

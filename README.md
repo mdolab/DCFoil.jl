@@ -65,9 +65,13 @@ Please use this coding convention:
 * `SCREAMING_SNAKE_CASE` - constants
 
 ### Data types
-Only use **parametric** types for structs, not for function arguments.
-Types in function arguments do not make the code faster; they only restrict usage (unless it is on purpose for multiple dispatch)
-`RealOrComplex`
+
+Only use **parametric** types for structs.
+Concrete types in function arguments do not usually make the code faster; 
+they only restrict usage (unless it is on purpose for multiple dispatch).
+However, you should declare the struct type argument in function signatures
+The DTYPE constant in the code `RealOrComplex` should be used when structs are not used in the function
+https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
 
 ### Derivatives
 

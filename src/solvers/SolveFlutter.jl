@@ -252,7 +252,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     ChainRulesCore.ignore_derivatives() do
         globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
     end
-    Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    Ks, Ms, _ = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------
     #   Initialize stuff
@@ -261,7 +261,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    alphaCorrection = zeros(DTYPE, nNodes)
+    alphaCorrection::DTYPE = 0.0 #zeros(DTYPE, appendageOptions["nNodes"])
     global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, copy(globalKs), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
 
     # ---------------------------

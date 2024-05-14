@@ -36,6 +36,12 @@
 \newcommand{\ee}{\end{eqnarray}}
 \newcommand{\ben}{\begin{eqnarray*}}
 \newcommand{\een}{\end{eqnarray*}}
+\newcommand{\beq}{\begin{equation}
+    \begin{aligned}
+        }
+\newcommand{\eeq}{\end{aligned}
+\end{equation}
+}
 % --- Numerical methods ---
 \newcommand{\dx}{d\mbf{x}}
 \newcommand{\Dt}{\Delta t}
@@ -512,27 +518,30 @@ The total velocity potential with steady forward speed ($\Phi = \Uinf x + \varph
 \be
 \label{eqn:Indirect}
 \boxed{
-    \Phi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) G(\mbf{x}) d\Omega
+    \varphi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) G(\mbf{x}) \tn{d}\Omega
 }\\
-\Phi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\mbf{x} - \mbf{x}_s} d\Omega
+\varphi(\mbf{x}) = \iint_\Omega \sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x} - \mbf{x}_s \right|} \tn{d}\Omega
 .
 \ee
 We compute the free surface effect using the method of de-singularization first applied in \citet{Cao1991}.
 The boundary conditions give rise to the following boundary integral equations (these are also Fredholm integrals of the first kind)
-\be
+\beq
 \label{eqn:BCs}
 &
-\iint_{\Omega}\sigma(\mbf{x}_s)\frac{1}{\left| \mbf{x}_c - \mbf{x}_s \right| } \tn{d} \Omega & = \phi_0(\mbf{x}_c) \quad \tn{(Dirichlet) } \Gamma_d
+\iint_{\Omega}\sigma(\mbf{x}_s)\frac{1}{\left| \mbf{x}_c - \mbf{x}_s \right| } \tn{d} \Omega & = \varphi_0(\mbf{x}_c) \quad \tn{(Dirichlet) } \Gamma_d
 \\
 & \iint_{\Omega} \sigma(\mbf{x}_s) \pp{}{n}\left(\frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|}\right)\tn{d} \Omega & = \chi(\mbf{x}_c) \quad \tn{(Neumann) } \Gamma_n
-\ee
+\eeq
+In the indirect method, \citet{Cao1991} says the integrals in Equation~\eqref{eqn:BCs} can be replaced by a summation of singularities without loss of accuracy when desingularization distance is appropriate.
+\emph{There is no integration nor mapping.}
 
 The fully nonlinear dynamic and kinematic boundary conditions for the free surface (derived from the unsteady Bernoulli equation) are
 \be
 \label{eqn:FSBC}
-& {\pp{\phi}{t}}
-\underbrace{+ \half \left| \nabla \Phi \right|^2}
-_{\approx U\pp{\phi}{x}}
+& {\pp{\Phi}{t}}
+% \underbrace{
++ \half \left| \nabla \Phi \right|^2
+% }_{\approx U\pp{\Phi}{x}}
 + gz_f
 &=
 -\frac{1}{\rho}\left(p - p_{\tn{atm}}\right)
@@ -545,29 +554,29 @@ As such, linearizing and using a body-exact method where the body boundary condi
 The linearized dynamic boundary condition is
 \be
 \label{eqn:DFSBC}
-{\pp{\phi}{t}} + \Uinf\pp{\phi}{x} + g z
+{\pp{\varphi}{t}} + \Uinf\pp{\varphi}{x} + g z
 =
 \underbrace{
     -\frac{1}{\rho}\left(p - \patm\right)}_{=0 \tn{ for } z = \eta}
 \\
 \eta = -\frac{1}{g}
 \left(
-\pp{\phi}{t} + \Uinf \pp{\phi}{x}
+\pp{\varphi}{t} + \Uinf \pp{\varphi}{x}
 \right)
 \ee
-which you can use after you solve for $\phi$ to determine wave elevation~\cite{Hess1967a}.
+which you can use after you solve for the perturbation potential $\varphi$ to determine wave elevation~\cite{Hess1967a}.
 The linearized kinematic boundary condition is
 \be
 \label{eqn:KFSBC}
-\pp{\phi}{z} - \pp{\eta}{t} - U \pp{\eta}{x} = 0 \\
-\pp{\eta}{t} = \pp{\phi}{z} - U \pp{\eta}{x}
+\pp{\varphi}{z} - \pp{\eta}{t} - \Uinf \pp{\eta}{x} = 0 \\
+\pp{\eta}{t} = \pp{\varphi}{z} - \Uinf \pp{\eta}{x}
 \ee
-Combining them gives the unsteady linearized free surface boundary condition
+Combining them gives the unsteady linearized free surface boundary condition for the perturbation potential
 \be
 \label{eqn:LSFSBC}
-\boxed{\Uinf^2 \ppt{\phi}{x} + g\pp{\phi}{z}}
-= - \left( \ppt{\phi}{t}
-+ 2 \Uinf \frac{\partial^2 \phi}{\partial x \partial t}
+\boxed{\Uinf^2 \ppt{\varphi}{x} + g\pp{\varphi}{z}}
+= - \left( \ppt{\varphi}{t}
++ 2 \Uinf \frac{\partial^2 \varphi}{\partial x \partial t}
 \right)
 \ee
 which we then need to use to set up the LHS and RHS on $\Gamma_d$.
@@ -578,27 +587,40 @@ For the linearized free surface boundary condition, we plug Equation~\eqref{eqn:
 \be
 \Uinf^2  \iint_{\Omega}\ppt{   }{x}
 \left(
-\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|} \tn{d}\Omega
+\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|}
 \right)
+\tn{d}\Omega
 + g
 \iint_{\Omega} \pp{}{z} \left(
-\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s  \right| \tn{d}\Omega}
+\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s  \right| }
 \right)
+\tn{d}\Omega
 = 0
-\quad \tn{(Free surface Dirichlet BC)}
+\quad \tn{on } z=0 \tn{ (Free surface Dirichlet BC)}
 \ee
 Looks pretty nasty, right?
 We need to evaluate the above equation in each free surface panel.
 But you will also have one more equation for the Neumann BC which will represent the body in the flow, that way it's not just solving a null space problem.
 
-On a quad panel, the idea is to use shape functions $N_i(\xi, \eta)$ in a reference element at the four nodes
-\ben
-\mbf{x} \approx \sum_{i=1}^{4} N_i(\xi, \eta) \mbf{x}_i
-\qquad
-\pp{\Phi}{n}    \approx \sum_{i=1}^{4} N_i(\xi, \eta) \pp{\Phi}{n}_i
-\een
-so we can actually evaluate stuff like Equation~\eqref{eqn:BCs}.
-TODO: I think
+% On a quad panel, the idea is to use shape functions $N_i(\xi, \eta)$ in a reference element at the four nodes
+% \ben
+% \mbf{x} \approx \sum_{i=1}^{4} N_i(\xi, \eta) \mbf{x}_i
+% \qquad
+% {\sigma}  \approx \sum_{i=1}^{4} N_i(\xi, \eta) {\sigma}_i
+% \een
+% so we can actually evaluate stuff like Equation~\eqref{eqn:BCs} per panel.
+% Hence, in the numerical solution, we find nodal values.
+% Equation~\eqref{eqn:BCs} for an element (panel) might look like
+% \be
+% \Phi_e =
+% \iint_{\Omega_e}
+% \frac{\sigma(\mbf{x}_s)}{\left|\mbf{x}_f - \mbf{x}_s \right|}
+% \tn{d}x \tn{d}y
+% =
+% \int_{-1}^1\int_{-1}^{1}   \frac{N_i(\xi , \eta)\sigma_i}{\left|\mbf{x}_f - \mbf{x}_i \right|}
+% \det(J)\tn{d}\xi \tn{d}\eta
+% \ee
+% TODO: I think the above is wrong
 
 % Now, extending this logic to a body of $N_B$ nodes and turning the double integral to a single integral, we have the coupled equations on the boundary points $\mbf{x}_i$
 % \be
@@ -663,119 +685,315 @@ From this, we are saying the Dirichlet and Neumann BCs are stacked vertically on
 
 % \twocolumn
 
-Algorithm~\ref{alg:FSBC} is the overall procedure for computing the influence coefficients for a steady-state free surface.
+% Algorithm~\ref{alg:FSBC} is the overall procedure for computing the influence coefficients for a steady-state free surface.
+% % 
+% \RestyleAlgo{ruled}
+% \begin{algorithm}
+%     \LinesNumbered
+%     % \SetKwComment{Comment}{/* }{ */}
+%     \caption{\label{alg:FSBC}
+%         Computation of hydrodynamic loads with a steady free surface boundary condition and constant forward speed
+%     }
+%     \KwData{Grid points (paneling of geometry) and flow speed}
+%     \KwResult{Source strengths $\sigma_i$}
+%     Pass in (or generate) mesh and panel with node connectivity of control points $\mbf{x}_c$ and source points $\mbf{x}_s$\;
+%     Form $\mbf{A}$ matrix from Equation~\eqref{eqn:AIC}\;
+%     Form $\mbf{b}$ of the matrix equation~\eqref{eqn:AIC} (i.e., Dirichlet on free-surface Equation \eqref{eqn:LSFSBC} and Neumann on body)\;
+%     Solve $\boldsymbol{\sigma} = \mbf{A}^{-1}\mbf{b}$\;
+%     Solve for the velocity potential $\Phi$ in each panel using numerical integration on Equation~\eqref{eqn:Indirect}\;
+%     Solve for wave elevations from the dynamic condition using $\Phi(\mbf{x})$ in Equation~\eqref{eqn:KFSBC}\;
+%     Solve for hydrodynamic loads on the body using Bernoulli's equation and integration of pressures\;
+%     % Update desingularization distance $L_d$ and move $\mbf{x}_s$ to new location\;
+%     % March one time step (RK4?)\;
+% \end{algorithm}
 % 
+
+\subsubsection{2D dipole test problem}
+Let us consider on $x$ and $z$ dimensions.
+If we do a dipole located at $\mbf{x}_0=(0,-1)$ blowing in the negative $x$ direction, the total potential is
+\be
+\label{eqn:MovingDipole}
+\Phi(x,y) = \Uinf x
++
+\underbrace{
+    \mu G_{\tn{dipole}}(\mbf{x}; \mbf{x}_0)
+    +
+    \sum_{j=1}^{N_F} {\sigma_j} G_{\tn{source}}(\mbf{x}; \mbf{x}_{sj})
+}_{\varphi}
+\ee
+where $r=\sqrt{(x-x_0)^2 + (z- z_0)^2}$ is the distance from the singularity to the field point.
+The linear system from the BC Equation~\eqref{eqn:LSFSBC} is
+\beq
+\sum_{j=1}^{N_{\tn{panels}}}
+\sigma_j
+\left(
+\Uinf^2
+\ppt{G_{\tn{source}}\left(\mbf{x}; \mbf{x}_{sj}\right)}{x}
++ g\pp{G_{\tn{source}}\left(\mbf{x}; \mbf{x}_{sj}\right)}{z}
+\right)
+=
+-\Uinf^2 \mu
+\ppt{G_{\tn{dipole}}\left(\mbf{x}; \mbf{x}_0\right)}{x}
+- g \mu
+\pp{G_{\tn{doublet}}(\mbf{x}; \mbf{x}_0)}{z}
+\quad \tn{for } z = 0
+\eeq
+where $G\left(\mbf{x}; \mbf{x}_s\right)$ is the Green's function for a source at point $\mbf{x}_s$.
+Derivatives are solved in the marine dynamics course pack appendix.
+This equation must be solved for the unknown source strengths $\sigma_j$ in each panel.
+
+The wave elevation is
+\be
+\eta(\mbf{x}) = -\frac{\Uinf}{g}\pp{\varphi}{x}
+=
+-\frac{\Uinf}{g}
+\left(
+\sum_{j=1}^{N_{\tn{panels}}}\sigma_j \pp{G_{\tn{source}}\left(\mbf{x}; \mbf{x}_s\right)}{x}
++
+\mu
+\pp{G_{\tn{dipole}}\left(\mbf{x}; \mbf{x}_0\right)}{x}
+\right)
+\ee
+
+\subsubsection{2D moving dipole test problem}
+
+The previous formulation appeared to have reflecting waves.
+In this formulation, we use the unsteady free-surface boundary condition with time marching.
+The dipole moves with speed $U(t) = 1-e^{-4t}$ in the positive $x$ direction and has strength $\mu = 1$.
+The potential is
+\be
+\label{eqn:Potential}
+\Phi(x,y) = -U(t)x +
+\underbrace{
+    \mu G_{\tn{dipole}}(\mbf{x}; \mbf{x}_0) + \sum_{j=1}^{N_F} \sigma_j G_{\tn{source}}(\mbf{x}; \mbf{x}_{sj})
+}_{\varphi}
+\ee
+
+The initial conditions are
+\beq
+\varphi(\mbf{x},t=0) = 0 \\
+\eta(\mbf{x},t=0) = 0
+\eeq
+
+The (linearized) free surface boundary conditions are
+\beq
+\label{eqn:FSBCTime}
+\pp{\eta}{t} & = \pp{\varphi}{z} + U(t) \pp{\eta}{x} \\
+\pp{\varphi}{t} & = -g \eta +U(t) \pp{\varphi}{x}
+\eeq
+
+The boundary value problem is
+\beq
+\label{eqn:BVP}
+\mu G_{\tn{dipole}}(\mbf{x}; \mbf{x}_0) + \sum_{j=1}^{N_F} \sigma_j G_{\tn{source}}(\mbf{x}; \mbf{x}_{sj})
+=\varphi_0
+\quad \tn{on } z=0
+\eeq
+
+Wave elevation comes from the dynamic boundary condition
+\be
+\eta(\mbf{x},t) = -\frac{1}{g}\left(\pp{\varphi}{t}+ U(t)\pp{\varphi}{x}\right)
+\ee
+
+The Euler-Lagrange time-stepping has two steps.
+The first step solves the boundary value problem (Equation~\eqref{eqn:BVP} for Dirichlet BCs) at a fixed time $t$.
+The second step marches the free surface boundary conditions in time via Equation~\eqref{eqn:FSBCTime}.
+
+The pseudo-code is
 \RestyleAlgo{ruled}
 \begin{algorithm}
     \LinesNumbered
     % \SetKwComment{Comment}{/* }{ */}
-    \caption{\label{alg:FSBC}
-        Computation of hydrodynamic loads with a steady free surface boundary condition and constant forward speed
+    \caption{\label{alg:FreeSurfaceMarching}
+        Solution of the free surface boundary value problem and time marching
     }
-    \KwData{Grid points (paneling of geometry) and flow speed}
-    \KwResult{Source strengths $\sigma_i$}
-    Pass in (or generate) mesh and panel with node connectivity of control points $\mbf{x}_c$ and source points $\mbf{x}_s$\;
-    Form $\mbf{A}$ matrix from Equation~\eqref{eqn:AIC}\;
-    Form $\mbf{b}$ of the matrix equation~\eqref{eqn:AIC} (i.e., Dirichlet on free-surface Equation \eqref{eqn:LSFSBC} and Neumann on body)\;
-    Solve $\boldsymbol{\sigma} = \mbf{A}^{-1}\mbf{b}$\;
-    Solve for the velocity potential $\Phi$ in each panel using numerical integration on Equation~\eqref{eqn:Indirect}\;
-    Solve for wave elevations from the dynamic condition using $\Phi(\mbf{x})$ in Equation~\eqref{eqn:KFSBC}\;
-    Solve for hydrodynamic loads on the body using Bernoulli's equation and integration of pressures\;
-    % Update desingularization distance $L_d$ and move $\mbf{x}_s$ to new location\;
-    % March one time step (RK4?)\;
+    \KwData{Initial boundary conditions $\phi_0$ and wave elevations $\eta=0$}
+    \KwResult{Perturbation potentials $\varphi$ and wave elevations $\eta(t)$}
+    % \Comment{=== Populate correlation matrix ===}
+    \For{$tt=0:dt:t_f$}{
+        Setup linear system for $\sigma_j$ from Equation~\eqref{eqn:BVP}\;
+        Solve for $\sigma_j = \mbf{A}^{-1}\mbf{b}$\;
+        Compute $\varphi = \mu G_{\tn{dipole}} + \sum_{j=1}^{N_F}\sigma_j G_{\tn{source}}$ \;
+        March $\varphi,\eta$ in time one step using Equation~\eqref{eqn:FSBCTime} and RK4 integrator\;
+    }
 \end{algorithm}
-% 
-\subsubsection{Test problems}
-The first test problem is a dipole beneath a flat plane with $\varphi=0$ and strength of $\mu=1$.
-This corresponds to infinite Froude number (impulsive start) for the dipole.
-The dipole is at $\mbf{x}_0 = [0,0,-1]$.
-We find $\pp{\varphi}{n}$ on $z=0$.
 
-The first step is to convert the potential Equation~\eqref{eqn:Indirect} to a summation with one dipole term
-\be
-\varphi(\mbf{x}_f)
-=
-\underbrace{
-\frac{- \mu}{4\pi}\frac{x}{\left| \mbf{x}_f - \mbf{x}_0\right|^{3/2}}
-}_{\tn{dipole}}+
-\sum_{j=1}^{N_F} \frac{\sigma_j}{\left|
-    \mbf{x}_f - \mbf{x}_{sj}
-    \right|}
-\ee
-where $\mbf{x}_{sj}$ are the source points outside the domain.
+\subsubsection{3D dipole test problem}
+% The first test problem is a dipole beneath a flat plane with $\varphi=0$ and strength of $\mu=1$.
+% This corresponds to infinite Froude number (impulsive start) for the dipole.
+% The dipole is at $\mbf{x}_0 = [0,0,-1]$.
+% We find $\pp{\varphi}{n}$ on $z=0$.
 
-If one plugs in the boundary condition $\varphi=0$ on $z=0$, we get the exact solution
-\be
-\varphi(x,y,z)=
-\frac{-\mu}{4\pi}\frac{x}{\left[x^2 + y^2 + \left( z +1\right)^2\right]^{3/2}}
-+ \frac{\mu}{4\pi}
-\frac{x}{\left[x^2 + y^2 + \left(z-1\right)^2 \right]^{3/2}}
-\ee
-which gives the exact normal velocity on the plane $z=0$ as
-\be
-\left. \pp{\varphi}{n}\right|_{\tn{exact}} =
-\frac{3}{2\pi}\frac{x}{\left(x^2 + y^2 + 1\right)^{5/2}}
-\ee
-The wave elevation is zero (math checks out).
-
-Now, in the \emph{numerical solution}, we solve a linear system for the unknown $\sigma_j$, and set up integrals to numerically evaluate $\varphi$ and derived quantities from $\varphi$ like $\pp{\varphi}{n}$.
-First, the linear system is
-\be
-\sum_{j=1}^{N_F} \frac{\sigma_j}{\left|
-    \mbf{x}_i - \mbf{x}_{sj}
-    \right|}
-=\frac{x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3/2}}
-\ee
-The normal velocity is
-\be
-\left.
-\pp{\varphi}{n}\right|_{\tn{numerical}}
-=
-\iint_\Omega \pp{}{n}\left(
-\frac{\sigma(\mbf{x}_s)}{\left| \mbf{x}_c - \mbf{x}_s\right|}
-+ \frac{x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3/2}}
-\right)
-\tn{d}\Omega
-\ee
-determined from numerical integration. TODO: GGGGGGGGGGGGGGGGGGGGGGGGG code this up
-Check \citet{Bandyk2009} thesis Appendix B for how to do normal velocity...
-
-Now if we do a dipole moving in steady forward speed, the linear system is
-\be
-\Uinf^2  \iint_{\Omega}\ppt{   }{x}
-\left(
-\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|} \tn{d}\Omega
-+\frac{x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3/2}}
-\right)
-+ g
-\iint_{\Omega} \pp{}{z} \left(
-\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s  \right| \tn{d}\Omega}
-+\frac{x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3/2}}
-\right)
-=\mbf{0}
-\ee
-
-
-% We will go through a steady dipole problem with forward speed, we have a fairly small linear system to solve.
-% Equation~\eqref{eqn:Indirect} then is a sum of the (1) disturbance potential of known strength, (2) the image disturbance above the free surface, and (3) the sum of $N_F$ sources of unknown strength a distance $L_d$ above the \emph{disturbed} free surface.
-% The image disturbance is better for satisfying farfield conditions.
-% At any point in the field $\mbf{x}_f$,
-% \ben
+% The first step is to convert the potential Equation~\eqref{eqn:Indirect} to a summation with one dipole term
+% \be
+% \varphi(\mbf{x}_f)
+% =
+% \underbrace{
+% \frac{- \mu}{4\pi}\frac{x}{\left| \mbf{x}_f - \mbf{x}_0\right|^{3/2}}
+% }_{\tn{dipole}}+
 % \sum_{j=1}^{N_F} \frac{\sigma_j}{\left|
 %     \mbf{x}_f - \mbf{x}_{sj}
 %     \right|}
+% \ee
+% where $\mbf{x}_{sj}$ are the source points outside the domain.
+
+% If one plugs in the boundary condition $\varphi=0$ on $z=0$, we get the exact solution
+% \be
+% \varphi(x,y,z)=
+% \frac{-\mu}{4\pi}\frac{x}{\left[x^2 + y^2 + \left( z +1\right)^2\right]^{3/2}}
+% +
+% \underbrace{\frac{\mu}{4\pi}
+%     \frac{x}{\left[x^2 + y^2 + \left(z-1\right)^2 \right]^{3/2}}}_{\tn{unknown sources evaluate to the negative image}}
+% \ee
+% which gives the exact normal velocity on the plane $z=0$ as
+% \be
+% \left. \pp{\varphi}{n}\right|_{\tn{exact}} =
+% \frac{3}{2\pi}\frac{x}{\left(x^2 + y^2 + 1\right)^{5/2}}
+% \ee
+% The wave elevation is zero (math checks out).
+
+% Now, in the \emph{numerical solution}, we solve a linear system for the unknown $\sigma_j$, and set up integrals to numerically evaluate $\varphi$ and derived quantities from $\varphi$ like $\pp{\varphi}{n}$.
+% First, the linear system is
+% \be
+% \sum_{j=1}^{N_F} \frac{\sigma_j}{\left|
+%     \mbf{x}_i - \mbf{x}_{sj}
+%     \right|}
+% =\frac{x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3/2}}
+% \ee
+% The normal velocity is
+% \be
+% \left.
+% \pp{\varphi}{n}\right|_{\tn{numerical}}
 % =
-% \phi \left(\mbf{x}_f\right)
-% \\
-% \underbrace{
-% + \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{source}} \right|}
-% - \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{sink}} \right|}
-% }_{\tn{submerged dipole}}
-% \underbrace{
-% + \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{i,source}} \right|}
-% - \frac{\sigma_b}{\left| \mbf{x}_f - \mbf{x}_{\tn{i,sink}} \right|}
-% }_{\tn{dipole image}}
-% \een
+% \iint_\Omega \pp{}{n}\left(
+% \frac{\sigma(\mbf{x}_s)}{\left| \mbf{x}_f - \mbf{x}_s\right|}
+% + \frac{x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3/2}}
+% \right)
+% \tn{d}\Omega
+% \ee
+% determined from numerical integration.
+% The procedure for numerical integration of this quantity is
+% \be
+% \left. \pp{\Phi}{n}\right|_{\tn{panel}} = \int_{-1}^{1} \int_{-1}^{1}
+% \pp{}{n}\left(
+% \frac{N_i\sigma_i}{\mbf{x}_f - \mbf{x}_i}
+% + \frac{x}{4\pi \left|\mbf{x}_f - \mbf{x}_0 \right|^{3/2}}
+% \right)
+% \det(J) \tn{d}\xi \tn{d}\eta
+% \ee
+% So I think we just need the derivative of the inner expression with $\mbf{x}_f$ as the variable to take the derivative of!
+% TODO: Do it and then code it up to compare
+% Check \citet{Bandyk2009} thesis Appendix B for how to do normal velocity. 
+% There is some handy identity...
+
+If we do a dipole located at $\mbf{x}_0=(0,0,-1)$ moving in steady forward speed, the potential is
+\be
+\label{eqn:MovingDipole}
+\Phi = \Uinf x
+\underbrace{
+-\frac{\mu}{4\pi}\frac{x}{ \left|\mbf{x}_f - \mbf{x}_0\right|^{3}} + \sum_{j=1}^{N_F} \frac{\sigma_j}{\left| \mbf{x}_f - \mbf{x}_{sj}\right|}
+}_{\varphi}
+\ee
+and the linear system is
+\beq
+\Uinf^2  \iint_{\Omega}\ppt{   }{x}
+\left(
+\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s\right|} \tn{d}\Omega
+-\frac{\mu x }{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3}}
+\right)
++ g
+\iint_{\Omega} \pp{}{z}
+\left(
+\sigma(\mbf{x}_s) \frac{1}{\left| \mbf{x}_c - \mbf{x}_s  \right| \tn{d}\Omega}
+-\frac{\mu x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3}}
+% + \Uinf x
+\right)
+=\mbf{0}
+\tn{ on } z= 0
+\eeq
+where the LHS came from plugging $\Phi$ into the linearized free surface boundary condition Equation~\eqref{eqn:LSFSBC}.
+Turning this into a summation and rearranging to put unknowns on the LHS and knowns on the RHS, we get
+\ben
+\sum_{j=1}^{N_F}
+\left(
+\Uinf^2
+\ppt{   }{x}
+\left(
+    \frac{\sigma_j}{\left| \mbf{x}_c - \mbf{x}_s\right|}
+    \right)
++ g
+\pp{}{z}
+\left(
+    \frac{\sigma_j}{\left| \mbf{x}_c - \mbf{x}_s  \right| }
+    \right)
+\right)
+=
+\Uinf^2 \ppt{ }{x}
+\left(
+\frac{\mu x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3}}
+\right)
++
+g\pp{}{z}
+\left(
+\frac{\mu x}{4\pi \left| \mbf{x} - \mbf{x}_0\right|^{3}}
+\right)
+\quad \tn{on } z=0
+\een
+which when we expand the derivative, gives
+\beq
+\sum_{j=1}^{N_{\tn{panels}}}
+\sigma_j
+\left(
+\Uinf^2
+\ppt{G\left(\mbf{x}; \mbf{x}_s\right)}{x}
++ g\pp{G\left(\mbf{x}; \mbf{x}_s\right)}{z}
+\right)
+\\=
+\Uinf^2 \mu\left(
+\frac{15x^3}{4\pi \left(x^2 + y^2 + (z+1)^2\right)^{7/2}}
+-\frac{9x}{4\pi \left(x^2 + y^2 + (z+1)^2\right)^{5/2}}
+\right)
++ g
+\left(
+\frac{-\mu 3x(z+1)}{4\pi \left(x^2 + y^2 + (z+1)^2\right)^{5/2}}
+\right) \quad \tn{for } z = 0
+\eeq
+where $G\left(\mbf{x}; \mbf{x}_s\right)$ is the Green's function for a source at point $\mbf{x}_s$.
+This equation must be solved for the unknown source strengths $\sigma_j$ in each panel.
+For completeness the LHS of the above is
+\be
+\sum_{j=1}^{N_{\tn{panels}}}
+\sigma_j
+\left(
+\Uinf^2 \left( \frac{3 (x-x_s)^2}{\left((x-x_s)^2 + (y-y_s)^2 + (z-z_s)^2\right)^{5/2}}
+    - \frac{1}{\left((x-x_s)^2 + (y-y_s)^2 + (z-z_s)^2\right)^{3/2}}
+    \right)
+-
+g
+\frac{z-z_s}{\left((x-x_s)^2 + (y-y_s)^2 + (z-z_s)^2\right)^{3/2}}
+\right)
+\ee
+
+One the source strengths are known, we can evaluate the velocity potential and the normal velocity on the free surface from Equation~\eqref{eqn:MovingDipole}.
+In steady state, the wave elevation is
+\beq
+\eta(\mbf{x}) = -\frac{1}{g}
+\left(
+% \pp{\Phi}{t} +
+\Uinf \pp{\varphi}{x}
+\right)
+=
+\frac{\Uinf}{g}\left(
+-\frac
+    {\mu}{4\pi \left(x^2 + y^2 + (z+1)^2\right)^{3/2}}
++
+\frac
+    {3\mu x^2}
+    {4\pi \left(x^2 + y^2 + (z+1)^2\right)^{5/2}}
++ \sum_{j=1}^{N_F}\sigma_j
+\frac{x - x_{sj}}{\left( \left(x - x_{sj}\right)^2 + \left(y - y_{sj}\right)^2 + \left(z - z_{sj}\right)^2 \right)^{3/2} }
+\right)
+\eeq
 
 % In time domain, this is more difficult because time-marching is required.
 \onecolumn
@@ -1389,11 +1607,13 @@ The residual Jacobian needed is
 \ee
 
 \subsubsection{Elastified equations of motion}
+See \citet[Sec. 5.3.2]{Palacios2023a}.
 Defining the state vector as $\mbf{x}_r(t) = [v_x, v_y, v_z, \omega_x, \omega_y, \omega_z, \phi, \theta]^{\top}$ and the control inputs as $\mbf{u} = [\tau, \delta_r]^{\top}$ where $\tau$ and $\delta_r$ are vessel trim and rudder rake command inputs, the dynamics of the system are
 \be
 \label{eqn:RigidBody}
 \dot{\mbf{x}}_r = f^{(r)}(\mbf{x}_r, \mbf{x}_s, \mbf{u}, \mbf{w})
-= \\f_{\tn{gyr}}^{(r)}\left(\mbf{x}_r\right) + f_{\tn{grav}} \left(\mbf{x}_r\right)
+=
+f_{\tn{gyr}}^{(r)}\left(\mbf{x}_r\right) + f_{\tn{grav}} \left(\mbf{x}_r\right)
 + f_{\tn{hydro}}^{(r)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
 + f_{\tn{prop}}^{(r)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
 \ee
@@ -1401,7 +1621,8 @@ and (under the small amplitude structural deformation assumption) the deformatio
 \be
 \label{eqn:Struct}
 \mbf{K}_{ss} \mbf{x}_s = f^{(s)}\left(\mbf{x}_r, \mbf{x_s}, \mbf{u}\right)
-=\\f_{\tn{gyr}}^{(s)}\left(\mbf{x}_r\right) + f_{\tn{grav}}\left(\mbf{x}_r\right)
+=
+f_{\tn{gyr}}^{(s)}\left(\mbf{x}_r\right) + f_{\tn{grav}}\left(\mbf{x}_r\right)
 + f_{\tn{hydro}}^{(s)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
 + f_{\tn{prop}}^{(s)}\left(\mbf{x}_r, \mbf{x}_s, \mbf{u}\right)
 \ee
@@ -1410,17 +1631,18 @@ where $\mbf{x}_s(t)$ is the structural state vector.
 Equations~\eqref{eqn:RigidBody} and~\eqref{eqn:Struct} are coupled and must be solved simultaneously.
 Static trim is $\mbf{x}_{s0}$ and $\mbf{x}_{r0}$.
 We solve the coupled system
-\be
+\beq
 & f^{(r)}\left( \mbf{x}_{s0}, \mbf{x}_{r0}, \mbf{u}_{0} \right) & = \mbf{0}
 \\
 & f^{(s)}\left( \mbf{x}_{s0}, \mbf{x}_{r0}, \mbf{u}_{0} \right)
 &=
 \mbf{K}_{ss} \mbf{x}_{s0}
-\ee
+\eeq
 
 Assuming small perturbations around the trimmed flight condition, the force Equations~\eqref{eqn:RigidBody} and \eqref{eqn:Struct} can be linearized to
 % 
-\ben
+\beq
+\label{eqn:CoupledPerturbation}
 \Delta \dot{\mbf{x}}_r = \mbf{A}_{rr} \Delta \mbf{x}_r
 + \mbf{A}_{rs} \Delta \mbf{x}_s
 + \mbf{B}_{r} \Delta \mbf{u}
@@ -1429,16 +1651,36 @@ Assuming small perturbations around the trimmed flight condition, the force Equa
 \mbf{A}_{sr} \Delta \mbf{x}_r
 + \mbf{A}_{ss} \Delta \mbf{x}_s
 + \mbf{B}_{s} \Delta \mbf{u}
-\een
+\eeq
 % 
 where the state ($\mbf{A}$) and input ($\mbf{B}$) matrices are partitions of the Jacobian of nonlinear forcing terms.
 This coupled system is linear so we can first solve for
-\ben
+\be
+\label{eqn:StructuralPerturbation}
 \Delta \mbf{x}_s = \left(\mbf{K}_{ss} - \mbf{A}_{ss}\right)^{-1} \left(\mbf{A}_{sr} \Delta \mbf{x}_r + \mbf{B}_s \Delta \mbf{u} \right)
-\een
-and this is substituted back into the linearized coupled equations.
+\ee
+and this is substituted back into the first linearized equation in \eqref{eqn:CoupledPerturbation}.
 The structural effects are a constant feedback on the rigid equations.
+Putting Equation~\eqref{eqn:StructuralPerturbation} into \eqref{eqn:CoupledPerturbation} is called \emph{residualization}.
+The implementation in OpenMDAO handles the residualization.
 
+For completeness, the partitions of the Jacobian are
+\beq
+\mbf{A}_{rr} = \left. \pp{f^{(r)}}{\mbf{x}_r} \right|_{(\mbf{x}_{r0}, \mbf{x}_{s0}, \mbf{u}_0)}
+\qquad
+\mbf{A}_{ss} = \left. \pp{f^{(s)}}{\mbf{x}_s} \right|_{(\mbf{x}_{r0}, \mbf{x}_{s0}, \mbf{u}_0)}
+\\
+\mbf{A}_{rs} = \left. \pp{f^{(r)}}{\mbf{x}_s} \right|_{(\mbf{x}_{r0}, \mbf{x}_{s0}, \mbf{u}_0)}
+\qquad
+\mbf{A}_{sr} = \left. \pp{f^{(s)}}{\mbf{x}_r} \right|_{(\mbf{x}_{r0}, \mbf{x}_{s0}, \mbf{u}_0)}
+\\
+\mbf{B}_{r} = \left. \pp{f^{(r)}}{\mbf{u}} \right|_{(\mbf{x}_{r0}, \mbf{x}_{s0}, \mbf{u}_0)}
+\qquad
+\mbf{B}_{s} = \left. \pp{f^{(s)}}{\mbf{u}} \right|_{(\mbf{x}_{r0}, \mbf{x}_{s0}, \mbf{u}_0)}.
+\eeq
+These must be coded up analytically.
+
+\subsection{Dynamics}
 Now in the vibrating mode, if we assume small-amplitude vibrations, we must consider the shift of vehicle center of mass and its impact on the vehicle dynamics.
 If the elastic deformations are sufficiently small to not change global inertial characteristics, then modal coordinates can be used.
 We introduce a \emph{body-attached frame} (BAF) rigidly linked to a point on the vessel and a \emph{floating frame} (FF).

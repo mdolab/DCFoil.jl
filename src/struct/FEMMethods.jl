@@ -29,6 +29,7 @@ using ..DCFoil: RealOrComplex, DTYPE
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..SolverRoutines
 using ..BeamProperties
+using ..DesignConstants: DynamicFoil
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
 struct StructMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
@@ -384,9 +385,8 @@ function rotate3d(dataVec, rot; axis="x")
 end
 
 function assemble(
-    StructMesh,
-    abVec::Vector{DTYPE}, x_αbVec::Vector{DTYPE},
-    FOIL, elemType="bend-twist", constitutive="isotropic";
+    StructMesh::StructMesh, abVec::Vector{DTYPE}, x_αbVec::Vector{DTYPE},
+    FOIL::DynamicFoil, elemType="bend-twist", constitutive="isotropic";
     config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
 )
     """
@@ -439,7 +439,7 @@ end
 
 function populate_matrices!(
     globalK, globalM, globalF,
-    nElem::Int64, StructMesh, FOIL, STRUT, abVec::Vector, x_αbVec::Vector;
+    nElem::Int64, StructMesh, FOIL::DynamicFoil, STRUT::DynamicFoil, abVec::Vector, x_αbVec::Vector;
     config="wing", constitutive="isotropic", verbose=true, elemType="bend-twist", ab_strut=nothing, x_αb_strut=nothing
 )
     nNodes::Int64 = nElem + 1
@@ -468,13 +468,6 @@ function populate_matrices!(
         n1 = elemConn[elemIdx, 1]
         n2 = elemConn[elemIdx, 2]
         dR1 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
-        # if abs(dR1) > 30.0
-        #     println("dR1 is too large")
-        #     println("n1: ", n1)
-        #     println("n2: ", n2)
-        #     println("coordMat[n2, XDIM]: ", coordMat[n2, XDIM])
-        #     println("coordMat[n1, XDIM]: ", coordMat[n1, XDIM])
-        # end
         dR2 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
         dR3 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
         lᵉ = sqrt(dR1^2 + dR2^2 + dR3^2) # length of elem

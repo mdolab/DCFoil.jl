@@ -300,12 +300,12 @@ function correct_downwash(
     sWing = DVDictList[1]["s"]
     cRefWing = sum(DVDictList[1]["c"]) / length(DVDictList[1]["c"])
     chordMMean = cRefWing
-    ChainRulesCore.ignore_derivatives() do
-        if solverOptions["debug"]
-            println(@sprintf("=========================================================================="))
-            println(@sprintf("Computing downstream flow effects with ℓᵣ = %.2f m, C_L_M = %.1f ", ℓᵣ, CLMain))
-        end
-    end
+    # ChainRulesCore.ignore_derivatives() do
+    #     if solverOptions["debug"]
+    #         println(@sprintf("=========================================================================="))
+    #         println(@sprintf("Computing downstream flow effects with ℓᵣ = %.2f m, C_L_M = %.1f ", ℓᵣ, CLMain))
+    #     end
+    # end
 
     # --- Compute the wake effect ---
     αiWake = compute_wakeDWAng(sWing, cRefWing, CLMain, ℓᵣ)

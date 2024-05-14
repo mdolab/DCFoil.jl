@@ -33,6 +33,7 @@ DVDict1 = Dict(
     "θ" => deg2rad(15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle wrt flow [deg]
+    "depth0" => 0.1,
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
@@ -87,6 +88,7 @@ DVDict2 = Dict(
     "θ" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle wrt flow [deg]
+    "depth0" => 0.1,
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
@@ -149,6 +151,8 @@ solverOptions2 = Dict(
     @test test_damping() <= 1e-10
     @test test_mass() <= 1e-10
     # @test test_FSeffect() <= 1e-5 # not ready yet
+    @test test_dwWake()
+    @test test_dwWave()
 
     # ************************************************
     #     Solver tests

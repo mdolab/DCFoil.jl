@@ -21,8 +21,8 @@ struct StaticSolution{TF}
     STRUT::DynamicFoil#{TF,TI,TA}
 end
 
-struct BodyStaticSolution{TF}
-    deltaC::Vector{TF} # control inputs
+struct BodyStaticSolution{TF,TA<:AbstractVector{TF}}
+    deltaC::TA # control inputs
 end
 
 struct FlutterSolution{TF,TI}

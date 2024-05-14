@@ -43,7 +43,7 @@ struct DCFoilSolverParams{TF,TI,TS}
     downwashAngles::TF # downwash angles [rad]
 end
 
-struct DCFoilDynamicConstants{TF,TC<:ComplexF64,TI,TS,TA<:AbstractVector{TF}}
+struct DCFoilDynamicConstants{TF,TC,TI,TS,TA<:AbstractVector{TF}}
     """
     For the dynamic hydroelastic solve, there are more constants to store
     """

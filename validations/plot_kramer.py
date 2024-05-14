@@ -86,11 +86,10 @@ if __name__ == "__main__":
         structNatFreqs[ii, :] = np.asarray(structJLData["structNatFreqs"])
         wetNatFreqs[ii, :] = np.asarray(wetJLData["wetNatFreqs"])
 
-    breakpoint()
     dosave = not not fname
 
     # Create figure object
-    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(11, 8))
+    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(10, 7))
 
     # ---------------------------
     #   Wet modal validation
@@ -107,7 +106,7 @@ if __name__ == "__main__":
             alpha=0.3,
         )
     ax.set_xlabel(r"$\theta_f$ [$^{\circ}$]")
-    ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, ha="right")
+    ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, ha="right", va="center")
     ax.legend(fontsize=25, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_title("Modal validation")
 
@@ -117,8 +116,8 @@ if __name__ == "__main__":
     for ii in range(len(dryFreqHz)):
         ax.plot(dryThetaDeg[ii], dryFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.3)
 
-    ax.annotate("Dry modes", xy=(0.25, 0.45), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.3)
-    ax.annotate("Wet modes", xy=(0.75, 0.45), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.3)
+    ax.annotate("Dry modes", xy=(0.25, 0.45), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.8)
+    ax.annotate("Wet modes", xy=(0.75, 0.45), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.8)
 
     ax.set_ylim(bottom=0.0)
     ax.set_xticks(np.arange(-90, 90 + 45, 45))

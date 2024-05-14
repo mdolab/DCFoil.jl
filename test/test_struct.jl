@@ -895,6 +895,7 @@ function test_FECOMP2()
         "θ" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
         "rake" => 0.0,
+        "depth0" => 0.1,
         "beta" => 0.0, # yaw angle wrt flow [deg]
         "s_strut" => 0.4, # from Yingqian
         "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]

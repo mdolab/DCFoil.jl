@@ -12,7 +12,7 @@ using Printf
 
 using ..Utilities
 
-function print_solver_history(iterNum, resNorm, stepNorm)
+function print_solver_history(iterNum::Int64, resNorm, stepNorm)
     if iterNum == 1
         println("+-------+------------------------+----------+")
         println("|  Iter |         resNorm        | stepNorm |")
@@ -23,7 +23,7 @@ function print_solver_history(iterNum, resNorm, stepNorm)
 end
 
 function do_newton_raphson(
-    compute_residuals, compute_∂r∂u, u0, DVDictList;
+    compute_residuals, compute_∂r∂u, u0::Vector, DVDictList::Vector;
     maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false,
     appendageOptions=Dict(),
     solverOptions=Dict(),
