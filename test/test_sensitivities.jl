@@ -346,7 +346,7 @@ function test_theodorsenDeriv()
     savefig("theodorsen.png")
 end
 
-function test_staticDeriv(DVDict, solverOptions)
+function test_staticDeriv(DVDict, solverOptions, wingOptions)
     """
     Unit test for derivative components
     """
@@ -367,63 +367,8 @@ function test_staticDeriv(DVDict, solverOptions)
     run_static = true
     debug = false
 
-    # ************************************************
-    #     DV Dictionaries (see INPUT directory)
-    # ************************************************
-    nNodes = 3 # spatial nodes
-    nNodesStrut = 3 # spatial nodes
+    
 
-    # ************************************************
-    #     Set solver options
-    # ************************************************
-    DVDict = Dict(
-        "α₀" => 2.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(0.0), # sweep angle [rad]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(-15), # fiber angle global [rad]
-        # --- Strut vars ---
-        "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
-        "rake" => 0.0,
-        "beta" => 0.0, # yaw angle wrt flow [deg]
-        "s_strut" => 0.4, # from Yingqian
-        "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
-        "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
-        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-        "θ_strut" => deg2rad(0), # fiber angle global [rad]
-    )
-
-    wingOptions = Dict(
-        "compName" => "akcabay-div",
-        "material" => "cfrp", # preselect from material library
-        "nNodes" => nNodes,
-        "nNodeStrut" => nNodesStrut,
-        "config" => "wing",
-        "use_tipMass" => tipMass,
-        "xMount" => 0.0,
-    )
-    appendageOptions = [wingOptions]
-    solverOptions = Dict(
-        # --- I/O ---
-        "name" => "akcabay-div",
-        "debug" => debug,
-        # --- General solver options ---
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "appendageList" => appendageOptions,
-        "gravityVector" => [0.0, 0.0, -9.81],
-        "use_freeSurface" => false,
-        "use_cavitation" => false,
-        "use_ventilation" => false,
-        # --- Static solve ---
-        "run_static" => run_static,
-        "run_body" => false,
-    )
     # ************************************************
     #     I/O
     # ************************************************
@@ -500,6 +445,30 @@ function test_staticDeriv(DVDict, solverOptions)
     numBelowTol = sum(abs.(diff) .< tol)
 
     return numBelowTol
+end
+
+function test_staticdrdu(DVDict, solverOptions, wingOptions)
+    # ==============================================================================
+    #                         Also test dr du
+    # ==============================================================================
+    # this should actually be a separate test function but I'm lazy
+    # ************************************************
+    #     Complex step derivative
+    # ************************************************
+    DVDictList = [DVDict, DVDict]
+    _, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+    mode = "CS"
+    structStates = zeros(size(solverParams.Kmat, 1) - length(solverParams.dofBlank))
+    @time jacobianCS = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=wingOptions, solverOptions=solverOptions)
+
+    mode = "RAD"
+    @time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=wingOptions, solverOptions=solverOptions))
+
+    # --- Compare ---
+    difference = jacobianCS .- jacobianAD
+
+    return maximum(abs.(difference))
 end
 
 function test_pkflutterderiv(DVDict, solverOptions)

@@ -92,7 +92,7 @@ function solve(
 end
 
 function setup_problem(
-    DVDictList::Vector, appendageOptions::Dict, solverOptions::Dict;
+    DVDictList, appendageOptions::Dict, solverOptions::Dict;
     iComp=1, CLMain=0.0, verbose=false
 )
     """
@@ -845,7 +845,7 @@ function compute_∂r∂x(
 end
 
 function compute_∂r∂u(
-    structuralStates::Vector, mode="FiDi";
+    structuralStates, mode="CS";
     DVDictList=[], solverParams=nothing, appendageOptions=Dict(), solverOptions=Dict(), iComp=1, CLMain=0.0
 )
     """
@@ -869,6 +869,7 @@ function compute_∂r∂u(
         # ∂r∂u = FiniteDifferences.jacobian(forward_fdm(2, 1), compute_residuals, structuralStates)
 
     elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
+        # NOTE: a little slow but it is accurate
         # This is a tuple
         backend = AD.ZygoteBackend()
         ∂r∂u, = AD.jacobian(
@@ -881,27 +882,31 @@ function compute_∂r∂u(
         # elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
         #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
-    elseif uppercase(mode) == "CS" # TODO:
+    elseif uppercase(mode) == "CS" # Complex step
 
-        dh = 1e-8
+        dh = 1e-100
         println("step size:", dh)
 
         ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
-        for ii in eachindex(SOL.structStates)
+
+        # create a complex copy of the structural states
+        structuralStatesCS = complex(copy(structuralStates)) 
+        for ii in eachindex(structuralStates)
 
             r_i = compute_residuals(
-                structuralStates, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
+                structuralStatesCS, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
             )
-            structuralStates[ii] += dh * 1im
+            structuralStatesCS[ii] += dh * 1im
             r_f = compute_residuals(
-                structuralStates, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
+                structuralStatesCS, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
             )
-            structuralStates[ii] -= dh * 1im
+            structuralStatesCS[ii] -= dh * 1im
 
-            ∂r∂u[:, ii] = imag(r_f[:, ii]) / dh
+            ∂r∂u[:, ii] = imag(r_f) / dh
         end
 
     elseif uppercase(mode) == "ANALYTIC"
+        # NOTES:
         # TODO: there is now a bug when using T-FOIL GEOMETRY THAT IT DOES NOT CONVERGE for basic solution
         # TODO: longer term, the AIC is influenced by the structural states b/c of the twist distribution
         # In the case of a linear elastic beam under static fluid loading, 
@@ -921,7 +926,7 @@ function compute_∂r∂u(
 end
 
 function compute_residuals(
-    structStates::Vector, DVs::Vector, DVLengths::Vector{Int64};
+    structStates, DVs::Vector, DVLengths::Vector{Int64};
     appendageOptions=Dict(), solverOptions=Dict(), iComp=1, CLMain=0.0, DVDictList=[]
 )
     """

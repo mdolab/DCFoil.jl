@@ -221,6 +221,61 @@ solverOptions = Dict(
     "rhoKS" => 80.0,
 )
 
+# ************************************************
+#     DV Dictionaries (see INPUT directory)
+# ************************************************
+nNodes = 3 # spatial nodes
+nNodesStrut = 3 # spatial nodes
+
+DVDict2 = Dict(
+    "α₀" => 2.0, # initial angle of attack [deg]
+    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
+    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "θ" => deg2rad(-15), # fiber angle global [rad]
+    # --- Strut vars ---
+    "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
+    "rake" => 0.0,
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+)
+
+wingOptions2 = Dict(
+    "compName" => "akcabay-div",
+    "material" => "cfrp", # preselect from material library
+    "nNodes" => nNodes,
+    "nNodeStrut" => nNodesStrut,
+    "config" => "wing",
+    "use_tipMass" => false,
+    "xMount" => 0.0,
+)
+appendageOptions2 = [wingOptions2]
+solverOptions2 = Dict(
+    # --- I/O ---
+    "name" => "akcabay-div",
+    "debug" => true,
+    # --- General solver options ---
+    "U∞" => 5.0, # free stream velocity [m/s]
+    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "appendageList" => appendageOptions2,
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # --- Static solve ---
+    "run_static" => true,
+    "run_body" => false,
+)
+
 @testset "Test sensitivities" begin
     # Write your tests here.
     # ************************************************
@@ -231,7 +286,8 @@ solverOptions = Dict(
     @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
     @test test_interp() <= 1e-1
     # @test test_hydroderiv(DVDict, solverOptions) <= 1e-4
-    @test test_staticDeriv(DVDict, solverOptions) >= 4
+    @test test_staticDeriv(DVDict2, solverOptions2, wingOptions2) >= 4
+    @test test_staticdrdu(DVDict2, solverOptions2, wingOptions2) <= 1e-4
 end
 
 # @testset "Larger scale local test" begin
