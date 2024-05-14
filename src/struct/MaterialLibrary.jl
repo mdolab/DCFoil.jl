@@ -1,4 +1,4 @@
-# --- Julia 1.7---
+# --- Julia 1.9---
 """
 @File    :   MaterialLibrary.jl
 @Time    :   2023/03/04
@@ -14,7 +14,13 @@ export return_constitutive
 function return_constitutive(materialName::String)
     """
     Based on material string name, return the material properties
+    SI units
     """
+    ρₛ = 0.0
+    E₁ = 0.0
+    E₂ = 0.0
+    G₁₂ = 0.0
+    ν₁₂ = 0.0
     if (materialName == "cfrp") # carbon-fiber reinforced plastic UD
         ρₛ = 1590.0
         E₁ = 117.8e9
@@ -25,27 +31,27 @@ function return_constitutive(materialName::String)
     elseif (materialName == "test-comp")
         # TODO: will need to retrain these tests
         ρₛ = 1590.0
-        E₁ = 100
-        E₂ = 50
-        G₁₂ = 10
+        E₁ = 100.0
+        E₂ = 50.0
+        G₁₂ = 10.0
         ν₁₂ = 0.25
         constitutive = "orthotropic"
     elseif (materialName == "ss") # stainless-steel
-        ρₛ = 7900
+        ρₛ = 7900.0
         E₁ = 193e9
         E₂ = 193e9
         G₁₂ = 77.2e9
         ν₁₂ = 0.3
         constitutive = "isotropic"
     elseif (materialName == "rigid") # unrealistic rigid material
-        ρₛ = 7900
+        ρₛ = 7900.0
         E₁ = 193e12
         E₂ = 193e12
         G₁₂ = 77.2e12
         ν₁₂ = 0.3
         constitutive = "isotropic"
     elseif (materialName == "eirikurPl") # unrealistic rigid material
-        ρₛ = 2800
+        ρₛ = 2800.0
         E₁ = 70e9
         E₂ = 70e9
         ν₁₂ = 0.3
@@ -53,9 +59,9 @@ function return_constitutive(materialName::String)
         constitutive = "isotropic"
     elseif (materialName == "test-iso")
         ρₛ = 1590.0
-        E₁ = 1
-        E₂ = 1
-        G₁₂ = 1
+        E₁ = 1.0
+        E₂ = 1.0
+        G₁₂ = 1.0
         ν₁₂ = 0.25
         # constitutive = "isotropic"
         constitutive = "orthotropic" # NOTE: Need to use this because the isotropic case uses an ellipse for GJ

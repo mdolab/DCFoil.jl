@@ -5,11 +5,14 @@ module NewtonRaphson
 
 export do_newton_raphson
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra, Statistics
+using FLOWMath: norm_cs_safe
 using Printf
 
-function print_solver_history(iterNum, resNorm, stepNorm)
+using ..Utilities
+
+function print_solver_history(iterNum::Int64, resNorm, stepNorm)
     if iterNum == 1
         println("+-------+------------------------+----------+")
         println("|  Iter |         resNorm        | stepNorm |")
@@ -19,7 +22,15 @@ function print_solver_history(iterNum, resNorm, stepNorm)
     println()
 end
 
-function do_newton_raphson(compute_residuals, compute_∂r∂u, u0, maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false)
+function do_newton_raphson(
+    compute_residuals, compute_∂r∂u, u0::Vector, DVDictList::Vector;
+    maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false,
+    appendageOptions=Dict(),
+    solverOptions=Dict(),
+    solverParams=nothing,
+    iComp=1,
+    CLMain=0.0
+)
     """
     Simple Newton-Raphson solver
 
@@ -27,10 +38,14 @@ function do_newton_raphson(compute_residuals, compute_∂r∂u, u0, maxIters=200
     ------
     compute_residuals : function handle
         Function that computes the residuals
+        must have signature f(u; solverParams)
     compute_∂r∂u : function handle
         Function that computes the Jacobian
-    u : array
+        must have signature f(u, mode; solverParams)
+    u0 : array
         Initial guess
+    x0 : dict
+        Dictionary of design variables (these do not change during the solve)
     maxIters : int
         Maximum number of iterations
     tol : float
@@ -43,19 +58,41 @@ function do_newton_raphson(compute_residuals, compute_∂r∂u, u0, maxIters=200
         Solve for complex roots
     """
 
+    # --- Initialize output ---
+    DVDict = DVDictList[iComp]
+    x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+    res = compute_residuals(
+        u0, x0, DVLengths;
+        appendageOptions=appendageOptions,
+        solverOptions=solverOptions,
+        iComp=iComp,
+        CLMain=CLMain,
+        DVDictList=DVDictList,
+    )
+
+    converged_u = copy(u0)
+    converged_r = copy(res)
+    iters = 1
 
     if !is_cmplx
         u = u0
         for ii in 1:maxIters
-            # println(u)
-            res = compute_residuals(u)
-            ∂r∂u = compute_∂r∂u(u, mode)
-            jac::Matrix{Float64} = zeros(length(u), length(u))
-            if mode == "RAD"
-                jac = ∂r∂u[1]
-            elseif mode == "analytic"
-                jac = ∂r∂u
-            end
+            x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+
+            res = compute_residuals(u, x0, DVLengths;
+                appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
+
+            ∂r∂u = compute_∂r∂u(u, mode;
+                DVDictList=DVDictList,
+                solverParams=solverParams,
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                iComp=iComp,
+                CLMain=CLMain,
+            )
+
+            jac = zeros(typeof(u[1]), length(u), length(u))
+            jac = ∂r∂u
 
             # ************************************************
             #     Compute Newton step
@@ -66,35 +103,33 @@ function do_newton_raphson(compute_residuals, compute_∂r∂u, u0, maxIters=200
             # --- Update ---
             u = u + Δu
 
-            resNorm = norm(res, 2)
+            resNorm = norm_cs_safe(res, 2)
 
             # --- Printout ---
             if is_verbose
-                print_solver_history(ii, resNorm, norm(Δu, 2))
+                print_solver_history(ii, resNorm, norm_cs_safe(Δu, 2))
             end
 
             # ************************************************
             #     Check norm
             # ************************************************
             # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
+            converged_u = copy(u)
+            converged_r = copy(res)
+            iters = copy(ii)
+            if isnan(resNorm)
+                println("+--------------------------------------------")
+                println("Failed to converge. res norm is NaN")
+                break
+            end
             if resNorm < tol
                 println("+--------------------------------------------")
                 println("Converged in ", ii, " iterations")
-                global converged_u = copy(u)
-                global converged_r = copy(res)
-                global iters = copy(ii)
                 break
             elseif ii == maxIters
                 println("+--------------------------------------------")
                 println("Failed to converge. res norm is", resNorm)
                 println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
-                global converged_u = copy(u)
-                global converged_r = copy(res)
-                global iters = copy(ii)
-            else
-                global converged_u = copy(u)
-                global converged_r = copy(res)
-                global iters = copy(ii)
             end
         end
 
@@ -113,11 +148,11 @@ function do_newton_raphson(compute_residuals, compute_∂r∂u, u0, maxIters=200
             # --- Update ---
             uUnfolded = uUnfolded + Δu
 
-            resNorm = norm(res, 2)
+            resNorm = norm_cs_safe(res, 2)
 
             # --- Printout ---
             if is_verbose
-                print_solver_history(ii, resNorm, norm(Δu, 2))
+                print_solver_history(ii, resNorm, norm_cs_safe(Δu, 2))
             end
 
             # --- Check norm ---

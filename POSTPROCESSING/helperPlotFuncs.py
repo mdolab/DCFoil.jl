@@ -122,6 +122,10 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
 
     # --- Text annotations ---
     geomText = f"$\\alpha_0$\n$\\Lambda$\n$\\theta_f$\n$t/c$\nnNode\nnDOF"
+    try:
+        toc = DVDict['toc'][0]*100
+    except:
+        toc = DVDict['toc']*100
     valText = (
         f"{DVDict['α₀']}"
         + "$^{{\\circ}}$\n"
@@ -129,7 +133,7 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
         + "$^{{\\circ}}$\n"
         + f"{DVDict['θ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
-        + f"{DVDict['toc'][0]*100:0.1f}%\n"
+        + f"{toc:0.1f}%\n"
         + f"{nNodes}\n"
         + f"{nNodes*3}"
     )
@@ -248,46 +252,144 @@ def plot_static2d(
     spanLift,
     spanMoment,
     funcs,
-    label,
+    label: str,
     lc,
     fs_lgd: float,
     iic: int,
+    solverOptions=None,
+    do_annotate=False,
+    ls="-",
 ):
     lpad = 40
+    set_my_plot_settings(True)
 
+    if solverOptions is not None:
+        nnodewing = solverOptions["nNodes"]
+        bending = bending[:nnodewing]
+        twisting = twisting[:nnodewing]
+        spanLift = spanLift[:nnodewing]
+        spanMoment = spanMoment[:nnodewing]
+    else:
+        nodes
     cl = funcs["cl"]
     lift = funcs["lift"]
     mom = funcs["moment"]
     cmy = funcs["cmy"]
 
     ax = axes[0, 0]
-    ax.plot(nodes, bending, color=lc, label=label)
-    ax.set_ylabel("$w$ [m]", rotation=0, labelpad=lpad)
+    ax.plot(nodes, bending, ls=ls, color=lc, label=label)
+    ax.yaxis.tick_right()
+    # ax.yaxis.set_label_position("right")
+    ax.set_ylabel(
+        "$w$ [m]",
+        rotation="horizontal",
+        ha="left",
+        labelpad=lpad,
+    )
 
     ax = axes[0, 1]
-    ax.plot(nodes, twisting, color=lc, label=label)
-    ax.set_ylabel("$\psi$ [$^{\\circ}$]", rotation=0, labelpad=lpad)
+    ax.plot(nodes, twisting, ls=ls, color=lc, label=label)
+    ax.yaxis.tick_right()
+    # ax.yaxis.set_label_position("right")
+    ax.set_ylabel(
+        "$\\theta$ [$^{\\circ}$]",
+        rotation="horizontal",
+        ha="left",
+        labelpad=lpad,
+    )
 
     liftTitle = f"Lift ({lift:0.1e}N, $C_L$={cl:.2f})"
     momTitle = f"Mom. ({mom:0.1e}N-m," + " $C_{My}$=" + f"{cmy:.2f})"
 
     ax = axes[1, 0]
-    ax.plot(nodes, spanLift, color=lc, label=label)
-    ax.set_ylabel("$L$ [N]", rotation=0, labelpad=lpad)
-    ax.set_xlabel("$y$ [m]")
-    ax.annotate(
-        liftTitle,
-        xy=(0, 0.1 * iic),
-        color=lc,
-        xycoords="axes fraction",
-        fontsize=fs_lgd,
+    xloc = 0.05
+    ax.plot(nodes, spanLift, ls=ls, color=lc, label=label)
+    ax.set_ylabel(
+        "$L$ [N/m]",
+        rotation="horizontal",
+        ha="left",
+        labelpad=lpad,
     )
+    ax.set_xlabel("$y$ [m]")
+    if do_annotate:
+        ax.annotate(
+            liftTitle,
+            xy=(xloc, 0.1 * iic),
+            ls=ls,
+            color=lc,
+            xycoords="axes fraction",
+            fontsize=fs_lgd,
+        )
 
     ax = axes[1, 1]
-    ax.plot(nodes, spanMoment, color=lc, label=label)
-    ax.set_ylabel("$M_y$\n[N-m/m]", rotation=0, labelpad=lpad)
+    ax.plot(nodes, spanMoment, ls=ls, color=lc, label=label)
+    ax.set_ylabel(
+        "$M_y$\n[N-m/m]",
+        rotation="horizontal",
+        ha="left",
+        labelpad=lpad,
+    )
     ax.set_xlabel("$y$ [m]")
-    ax.annotate(momTitle, xy=(0, 0.1 * iic), color=lc, xycoords="axes fraction", fontsize=fs_lgd)
+    if do_annotate:
+        ax.annotate(
+            momTitle,
+            xy=(xloc, 0.1 * iic),
+            color=lc,
+            xycoords="axes fraction",
+            fontsize=fs_lgd,
+        )
+
+    return fig, axes
+
+
+def plot_dragbuildup(
+    fig,
+    axes,
+    funcs,
+    label: str,
+    cm,
+    fs_lgd: float,
+    iic: int,
+    solverOptions=None,
+):
+
+    costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
+    labels = ["$C_{D,{pr}}$", "$C_{D,{i}}$", "$C_{D,{s}}$", "$C_{D,{j}}$"]
+
+    def absolute_value(val):
+        """Callback to return labels"""
+        a = np.round(val / 100.0 * np.array(costData).sum(), 0)
+        a = f"{a}\n{val:.2f}\%"  # output text
+        a = f"{val:.2f}\%"  # output text
+        return a
+
+    ax = axes.flatten()[iic]
+    # _, _, autotexts = ax.pie(
+    #     costData,
+    #     labels=labels,
+    #     colors=cm,
+    #     autopct=absolute_value,
+    # )
+    # for autotext in autotexts:
+    #     autotext.set_color("white")
+
+    # Bar plot with drag components
+    ax.bar(labels, costData, color=cm[0])
+    ax.set_ylabel("$C_D$", rotation="horizontal", ha="right")
+    # TODO: Niceplots horizontal bar plot?
+    # Put percentages on top of bars
+    for ii, cost in enumerate(costData):
+        ax.text(
+            ii,
+            cost,
+            f"{cost/np.array(costData).sum()*100:.2f}\%",
+            ha="center",
+            va="bottom",
+            fontsize=fs_lgd,
+        )
+
+    # Set title with vertical label pad
+    ax.set_title(f"$\\theta_f=${label}", pad=40)
 
     return fig, axes
 
@@ -900,6 +1002,10 @@ def plot_vg_vf_rl(
                     va = "top"
                 ha = "right"
                 bifCtr += 1
+            # elif fSweep[0] < 80:
+            #     va="top"
+            #     xytext = (-5, -3)
+            #     ha="left"
             else:
                 ha = "left"
                 va = "bottom"
@@ -918,6 +1024,19 @@ def plot_vg_vf_rl(
                 )
         except Exception:
             continue
+    
+    # --- Instability points ---
+    # Also plot point at frequency of instability 
+    if instabPts is not None:
+        for pt in instabPts:
+            iic = (int(pt[2]) - 1) % len(cm)
+            if units == "kts":
+                critSpeed = 1.94384 * pt[0]
+            elif units == "m/s":
+                critSpeed = pt[0]
+            else:
+                print(f"Unsupported units: {units}")
+            ax.scatter(critSpeed, pt[-1], color=cm[iic], marker="x", s=100)
 
     ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
     ax.set_title("$V$-$f$", pad=labelpad)

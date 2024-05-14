@@ -39,9 +39,23 @@ module EBBeam
 """
 
 # --- Constants ---
-NDOF = 9 # number of DOF per node
+const NDOF = 9 # number of DOF per node
+const NNODES = 2 # number of nodes
+# --- DOF Indices ---
+const UIND = 1
+const VIND = 2
+const WIND = 3
+const ΦIND = 4
+const ΘIND = 5
+const ΨIND = 6
 
-function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ, elemType="bend-twist", constitutive="isotropic", useTimoshenko=false)
+using ..DCFoil: DTYPE
+
+
+function compute_elem_stiff(
+    EIᵉ::DTYPE, EIIPᵉ::DTYPE, GJᵉ::DTYPE, BTᵉ::DTYPE, Sᵉ::DTYPE, EAᵉ::DTYPE, lᵉ::DTYPE, abᵉ::DTYPE,
+    elemType="bend-twist", constitutive="isotropic", useTimoshenko=false
+)
     """
     Output
     ------
@@ -49,19 +63,19 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
 
     Inputs
     ------
-    EIᵉ : Float64
+    EIᵉ : 
         out-of-plane (OOP) bending stiffness of the element [N m²]
-    EIIPᵉ : Float64
+    EIIPᵉ : 
         in-plane (IP) bending stiffness of the element [N m²]
-    GJᵉ : Float64
+    GJᵉ : 
         torsional stiffness of the element [N-m²]
-    BTᵉ : Float64
+    BTᵉ : 
         this is Kₛ from the paper (material bend-twist coupling, +ve for nose-down BTC) [N-m²]
-    Sᵉ : Float64
+    Sᵉ : 
         structural warping (cross-sections do not retain shape) [N-m⁴]
-    lᵉ : Float64
+    lᵉ : 
         length of the element [m]
-    abᵉ : Float64
+    abᵉ : 
         distance from midchord to EA (+ve if EA aft of midchord) [m]
     elemType : String
         which element stiffness matrix to use
@@ -200,14 +214,14 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
         println("Axial elements not implemented")
     elseif elemType == "BT2" # Higher order beam element
         # row 1
-        k11_11::Float64 = 12 * EIᵉ
-        k11_12::Float64 = 6 * EIᵉ * lᵉ
-        k11_13::Float64 = -12 * abᵉ * EIᵉ
-        k11_14::Float64 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
+        k11_11 = 12 * EIᵉ
+        k11_12 = 6 * EIᵉ * lᵉ
+        k11_13 = -12 * abᵉ * EIᵉ
+        k11_14 = -(6 * abᵉ * EIᵉ + BTᵉ * lᵉ) * lᵉ
         # row 2
-        k11_22::Float64 = 4 * EIᵉ * lᵉ^2
-        k11_23::Float64 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
-        k11_24::Float64 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
+        k11_22 = 4 * EIᵉ * lᵉ^2
+        k11_23 = -(6 * abᵉ * EIᵉ - BTᵉ * lᵉ) * lᵉ
+        k11_24 = -0.5 * BTᵉ * lᵉ^3 - 4 * abᵉ * EIᵉ * lᵉ^2
         # row 3
         k11_33::Float64 = 6 * GJᵉ * lᵉ^2 / 5 + 12 * Sᵉ
         k11_34::Float64 = GJᵉ * lᵉ^3 * 0.1 + 6 * Sᵉ * lᵉ
@@ -347,7 +361,9 @@ function compute_elem_stiff(EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, ab�
     return Kᵉ
 end
 
-function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
+function compute_elem_mass(
+    mᵉ::DTYPE, iᵉ::DTYPE, lᵉ::DTYPE, x_αbᵉ::DTYPE, elemType="bend-twist"
+)
     """
     Outputs
     -------
@@ -409,7 +425,7 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
     cy = 5 * mᵉ * lᵉ / 42
     dy = 25 * mᵉ * lᵉ / 231
     ey = 29 * mᵉ * lᵉ^2 / 840
-    fy = 11 * mᵉ * lᵉ^2 / 168
+    # fy = 11 * mᵉ * lᵉ^2 / 168
     gy = 5 * mᵉ * lᵉ^2 / 168
     hy = 3 * mᵉ * lᵉ^2 / 56
     iy = 311 * mᵉ * lᵉ^2 / 4620
@@ -435,195 +451,195 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
     eτ = 4 * iᵉ * lᵉ^3 / 420
     fτ = 3 * iᵉ * lᵉ^3 / 420
 
-    if elemType == "bend"
-        m11 = mb * 156
-        m12 = mb * 22 * lᵉ
-        m13 = mb * 54
-        m14 = mb * -13 * lᵉ
-        m22 = mb * 4 * lᵉ^2
-        m23 = mb * 13 * lᵉ
-        m24 = mb * -3 * lᵉ^2
-        m33 = mb * 156
-        m34 = mb * -22 * lᵉ
-        m44 = mb * 4 * lᵉ^2
-        Mᵉ = [
-            m11 m12 m13 m14
-            m12 m22 m23 m24
-            m13 m23 m33 m34
-            m14 m24 m34 m44
-        ]
-    elseif elemType == "bend-twist"
-        m11 = mb * 156
-        m12 = mb * 22 * lᵉ
-        m14 = mb * 54
-        m15 = mb * -13 * lᵉ
-        m22 = mb * 4 * lᵉ^2
-        m24 = mb * 13 * lᵉ
-        m25 = mb * -3 * lᵉ^2
-        m44 = mb * 156
-        m45 = mb * -22 * lᵉ
-        m55 = mb * 4 * lᵉ^2
-        m33 = mt * 2
-        m36 = mt
-        m66 = mt * 2
-        Mᵉ = [
-            m11 m12 0.0 m14 m15 0.0
-            m12 m22 0.0 m24 m25 0.0
-            0.0 0.0 m33 0.0 0.0 m36
-            m14 m24 0.0 m44 m45 0.0
-            m15 m25 0.0 m45 m55 0.0
-            0.0 0.0 m36 0.0 0.0 m66
-        ]
-    elseif elemType == "BEAM3D"
-        m11_11 = 140 * mᵉ * lᵉ / 420
-        m11_22 = 156 * mᵉ * lᵉ / 420
-        m11_26 = 22 * mᵉ * lᵉ^2 / 420
-        m11_33 = m11_22
-        m11_35 = m11_26
-        m11_44 = 2 * iᵉ * lᵉ / 6
-        m11_55 = 4 * mᵉ * lᵉ^3 / 420
-        m11_66 = m11_55
-        M11 = [
-            m11_11 000000 000000 000000 000000 000000
-            000000 m11_22 000000 000000 000000 m11_26
-            000000 000000 m11_33 000000 m11_35 000000
-            000000 000000 000000 m11_44 000000 000000
-            000000 000000 m11_35 000000 m11_55 000000
-            000000 m11_26 000000 000000 000000 m11_66
-        ]
-        m12_11 = 0.5 * m11_11
-        m12_22 = 54 * mᵉ * lᵉ / 420
-        m12_26 = -13 * mᵉ * lᵉ^2 / 420
-        m12_33 = m12_22
-        m12_35 = m12_26
-        m12_44 = 0.5 * m11_44
-        m12_55 = -3 * mᵉ * lᵉ^2 / 420
-        m12_66 = m12_55
-        M12 = [
-            m12_11 000000 000000 000000 000000 000000
-            000000 m12_22 000000 000000 000000 m12_26
-            000000 000000 m12_33 000000 m12_35 000000
-            000000 000000 000000 m12_44 000000 000000
-            000000 000000 -m12_35 000000 m12_55 000000
-            000000 -m12_26 000000 000000 000000 m12_66
-        ]
-        M22 = [
-            m11_11 000000 000000 000000 000000 000000
-            000000 m11_22 000000 000000 000000 -m11_26
-            000000 000000 m11_33 000000 -m11_35 000000
-            000000 000000 000000 m11_44 000000 000000
-            000000 000000 -m11_35 000000 m11_55 000000
-            000000 -m11_26 000000 000000 000000 m11_66
-        ]
-        Mtop = hcat(M11, M12)
-        Mbot = hcat(M12', M22)
-        Mᵉ = vcat(Mtop, Mbot)
-    elseif elemType == "BT2"
-        # row 1
-        m11_11 = 13 * mᵉ * lᵉ / 35
-        m11_12 = 11 * mᵉ * lᵉ^2 / 210
-        m11_13 = 13 * mᵉ * x_αbᵉ * lᵉ / 35
-        m11_14 = 11 * mᵉ * x_αbᵉ * lᵉ^2 / 210
-        # row 2
-        m11_22 = mᵉ * lᵉ^3 / 105
-        m11_24 = mᵉ * x_αbᵉ * lᵉ^3 / 105
-        # row 3
-        m11_33 = 13 * lᵉ * iᵉ / 35
-        m11_34 = 11 * lᵉ^2 * iᵉ / 210
-        # row 4
-        m11_44 = iᵉ * lᵉ^3 / 105
-        # --- Block matrices ---
-        M11 = [
-            m11_11 m11_12 m11_13 m11_14
-            m11_12 m11_22 m11_14 m11_24
-            m11_13 m11_14 m11_33 m11_34
-            m11_14 m11_24 m11_34 m11_44
-        ]
-        # row 1
-        m12_11 = 9 * mᵉ * lᵉ / 70
-        m12_12 = -13 * mᵉ * lᵉ^2 / 420
-        m12_13 = 9 * mᵉ * x_αbᵉ * lᵉ / 70
-        m12_14 = -13 * mᵉ * x_αbᵉ * lᵉ^2 / 420
-        # row 2
-        m12_22 = -mᵉ * lᵉ^3 / 140
-        m12_23 = 13 * mᵉ * x_αbᵉ * lᵉ^2 / 420
-        m12_24 = -mᵉ * x_αbᵉ * lᵉ^3 / 140
-        # row 3
-        m12_33 = 9 * lᵉ * iᵉ / 70
-        m12_34 = -13 * lᵉ^2 * iᵉ / 420
-        # row 4
-        m12_44 = -iᵉ * lᵉ^3 / 140
-        M12 = [
-            m12_11 m12_12 m12_13 m12_14
-            -m12_12 m12_22 m12_23 m12_24
-            m12_13 -m12_23 m12_33 m12_34
-            -m12_14 m12_24 -m12_34 m12_44
-        ]
-        M22 = [
-            m11_11 -m11_12 m11_13 -m11_14
-            -m11_12 m11_22 -m11_14 m11_24
-            m11_13 -m11_14 m11_33 -m11_34
-            -m11_14 m11_24 -m11_34 m11_44
-        ]
-        Mtop = hcat(M11, M12)
-        Mbot = hcat(M12', M22)
-        Mᵉ = vcat(Mtop, Mbot)
-    elseif elemType == "BT3" # higher order composite beam 10 DOF
-        az = 181 * mᵉ * lᵉ / 462
-        bz = 8 * mᵉ * lᵉ / 21
-        cz = 5 * mᵉ * lᵉ / 42
-        dz = 25 * mᵉ * lᵉ / 231
-        ez = 29 * mᵉ * lᵉ^2 / 840
-        fz = 11 * mᵉ * lᵉ^2 / 168
-        gz = 5 * mᵉ * lᵉ^2 / 168
-        hz = 3 * mᵉ * lᵉ^2 / 56
-        iz = 311 * mᵉ * lᵉ^2 / 4620
-        jz = 151 * mᵉ * lᵉ^2 / 4620
-        kz = 19 * mᵉ * lᵉ^3 / 1980
-        lz = 52 * mᵉ * lᵉ^3 / 3465
-        mz = 23 * mᵉ * lᵉ^4 / 18480
-        nz = 13 * mᵉ * lᵉ^4 / 13860
-        oz = 17 * mᵉ * lᵉ^3 / 5040
-        pz = 5 * mᵉ * lᵉ^3 / 1008
-        qz = 281 * mᵉ * lᵉ^3 / 55440
-        rz = 181 * mᵉ * lᵉ^3 / 55440
-        sz = mᵉ * lᵉ^3 / 84
-        tz = mᵉ * lᵉ^5 / 9240
-        uz = mᵉ * lᵉ^4 / 1008
-        vz = mᵉ * lᵉ^3 / 120
-        wz = mᵉ * lᵉ^4 / 1260
-        xz = mᵉ * lᵉ^5 / 11088
-        aτ = 156 * iᵉ * lᵉ / 420
-        bτ = 54 * iᵉ * lᵉ / 420
-        cτ = 22 * iᵉ * lᵉ^2 / 420
-        dτ = 13 * iᵉ * lᵉ^2 / 420
-        eτ = 4 * iᵉ * lᵉ^3 / 420
-        fτ = 3 * iᵉ * lᵉ^3 / 420
-        M11 = [
-            az iz qz x_αbᵉ*bz x_αbᵉ*hz
-            iz lz mz x_αbᵉ*fz x_αbᵉ*sz
-            qz mz tz x_αbᵉ*pz x_αbᵉ*uz
-            x_αbᵉ*bz x_αbᵉ*fz x_αbᵉ*pz aτ cτ
-            x_αbᵉ*hz x_αbᵉ*sz x_αbᵉ*uz cτ eτ
-        ]
-        M12 = [
-            dz -jz rz x_αbᵉ*cz -x_αbᵉ*gz
-            jz -kz nz x_αbᵉ*ez -x_αbᵉ*vz
-            rz -nz xz x_αbᵉ*oz -x_αbᵉ*wz
-            x_αbᵉ*cz -x_αbᵉ*ez x_αbᵉ*oz bτ -dτ
-            x_αbᵉ*gz -x_αbᵉ*vz x_αbᵉ*wz dτ -fτ
-        ]
-        M22 = [
-            az -iz qz x_αbᵉ*bz -x_αbᵉ*hz
-            -iz lz -mz -x_αbᵉ*fz x_αbᵉ*sz
-            qz -mz tz x_αbᵉ*pz -x_αbᵉ*uz
-            x_αbᵉ*bz -x_αbᵉ*fz x_αbᵉ*pz aτ -cτ
-            -x_αbᵉ*hz x_αbᵉ*sz -x_αbᵉ*uz -cτ eτ
-        ]
-        Mtop = hcat(M11, M12)
-        Mbot = hcat(M12', M22)
-        Mᵉ = vcat(Mtop, Mbot)
-    elseif elemType == "COMP2"
+    # if elemType == "bend"
+    #     m11 = mb * 156
+    #     m12 = mb * 22 * lᵉ
+    #     m13 = mb * 54
+    #     m14 = mb * -13 * lᵉ
+    #     m22 = mb * 4 * lᵉ^2
+    #     m23 = mb * 13 * lᵉ
+    #     m24 = mb * -3 * lᵉ^2
+    #     m33 = mb * 156
+    #     m34 = mb * -22 * lᵉ
+    #     m44 = mb * 4 * lᵉ^2
+    #     Mᵉ = [
+    #         m11 m12 m13 m14
+    #         m12 m22 m23 m24
+    #         m13 m23 m33 m34
+    #         m14 m24 m34 m44
+    #     ]
+    # elseif elemType == "bend-twist"
+    #     m11 = mb * 156
+    #     m12 = mb * 22 * lᵉ
+    #     m14 = mb * 54
+    #     m15 = mb * -13 * lᵉ
+    #     m22 = mb * 4 * lᵉ^2
+    #     m24 = mb * 13 * lᵉ
+    #     m25 = mb * -3 * lᵉ^2
+    #     m44 = mb * 156
+    #     m45 = mb * -22 * lᵉ
+    #     m55 = mb * 4 * lᵉ^2
+    #     m33 = mt * 2
+    #     m36 = mt
+    #     m66 = mt * 2
+    #     Mᵉ = [
+    #         m11 m12 0.0 m14 m15 0.0
+    #         m12 m22 0.0 m24 m25 0.0
+    #         0.0 0.0 m33 0.0 0.0 m36
+    #         m14 m24 0.0 m44 m45 0.0
+    #         m15 m25 0.0 m45 m55 0.0
+    #         0.0 0.0 m36 0.0 0.0 m66
+    #     ]
+    # elseif elemType == "BEAM3D"
+    #     m11_11 = 140 * mᵉ * lᵉ / 420
+    #     m11_22 = 156 * mᵉ * lᵉ / 420
+    #     m11_26 = 22 * mᵉ * lᵉ^2 / 420
+    #     m11_33 = m11_22
+    #     m11_35 = m11_26
+    #     m11_44 = 2 * iᵉ * lᵉ / 6
+    #     m11_55 = 4 * mᵉ * lᵉ^3 / 420
+    #     m11_66 = m11_55
+    #     M11 = [
+    #         m11_11 000000 000000 000000 000000 000000
+    #         000000 m11_22 000000 000000 000000 m11_26
+    #         000000 000000 m11_33 000000 m11_35 000000
+    #         000000 000000 000000 m11_44 000000 000000
+    #         000000 000000 m11_35 000000 m11_55 000000
+    #         000000 m11_26 000000 000000 000000 m11_66
+    #     ]
+    #     m12_11 = 0.5 * m11_11
+    #     m12_22 = 54 * mᵉ * lᵉ / 420
+    #     m12_26 = -13 * mᵉ * lᵉ^2 / 420
+    #     m12_33 = m12_22
+    #     m12_35 = m12_26
+    #     m12_44 = 0.5 * m11_44
+    #     m12_55 = -3 * mᵉ * lᵉ^2 / 420
+    #     m12_66 = m12_55
+    #     M12 = [
+    #         m12_11 000000 000000 000000 000000 000000
+    #         000000 m12_22 000000 000000 000000 m12_26
+    #         000000 000000 m12_33 000000 m12_35 000000
+    #         000000 000000 000000 m12_44 000000 000000
+    #         000000 000000 -m12_35 000000 m12_55 000000
+    #         000000 -m12_26 000000 000000 000000 m12_66
+    #     ]
+    #     M22 = [
+    #         m11_11 000000 000000 000000 000000 000000
+    #         000000 m11_22 000000 000000 000000 -m11_26
+    #         000000 000000 m11_33 000000 -m11_35 000000
+    #         000000 000000 000000 m11_44 000000 000000
+    #         000000 000000 -m11_35 000000 m11_55 000000
+    #         000000 -m11_26 000000 000000 000000 m11_66
+    #     ]
+    #     Mtop = hcat(M11, M12)
+    #     Mbot = hcat(M12', M22)
+    #     Mᵉ = vcat(Mtop, Mbot)
+    # elseif elemType == "BT2"
+    #     # row 1
+    #     m11_11 = 13 * mᵉ * lᵉ / 35
+    #     m11_12 = 11 * mᵉ * lᵉ^2 / 210
+    #     m11_13 = 13 * mᵉ * x_αbᵉ * lᵉ / 35
+    #     m11_14 = 11 * mᵉ * x_αbᵉ * lᵉ^2 / 210
+    #     # row 2
+    #     m11_22 = mᵉ * lᵉ^3 / 105
+    #     m11_24 = mᵉ * x_αbᵉ * lᵉ^3 / 105
+    #     # row 3
+    #     m11_33 = 13 * lᵉ * iᵉ / 35
+    #     m11_34 = 11 * lᵉ^2 * iᵉ / 210
+    #     # row 4
+    #     m11_44 = iᵉ * lᵉ^3 / 105
+    #     # --- Block matrices ---
+    #     M11 = [
+    #         m11_11 m11_12 m11_13 m11_14
+    #         m11_12 m11_22 m11_14 m11_24
+    #         m11_13 m11_14 m11_33 m11_34
+    #         m11_14 m11_24 m11_34 m11_44
+    #     ]
+    #     # row 1
+    #     m12_11 = 9 * mᵉ * lᵉ / 70
+    #     m12_12 = -13 * mᵉ * lᵉ^2 / 420
+    #     m12_13 = 9 * mᵉ * x_αbᵉ * lᵉ / 70
+    #     m12_14 = -13 * mᵉ * x_αbᵉ * lᵉ^2 / 420
+    #     # row 2
+    #     m12_22 = -mᵉ * lᵉ^3 / 140
+    #     m12_23 = 13 * mᵉ * x_αbᵉ * lᵉ^2 / 420
+    #     m12_24 = -mᵉ * x_αbᵉ * lᵉ^3 / 140
+    #     # row 3
+    #     m12_33 = 9 * lᵉ * iᵉ / 70
+    #     m12_34 = -13 * lᵉ^2 * iᵉ / 420
+    #     # row 4
+    #     m12_44 = -iᵉ * lᵉ^3 / 140
+    #     M12 = [
+    #         m12_11 m12_12 m12_13 m12_14
+    #         -m12_12 m12_22 m12_23 m12_24
+    #         m12_13 -m12_23 m12_33 m12_34
+    #         -m12_14 m12_24 -m12_34 m12_44
+    #     ]
+    #     M22 = [
+    #         m11_11 -m11_12 m11_13 -m11_14
+    #         -m11_12 m11_22 -m11_14 m11_24
+    #         m11_13 -m11_14 m11_33 -m11_34
+    #         -m11_14 m11_24 -m11_34 m11_44
+    #     ]
+    #     Mtop = hcat(M11, M12)
+    #     Mbot = hcat(M12', M22)
+    #     Mᵉ = vcat(Mtop, Mbot)
+    # elseif elemType == "BT3" # higher order composite beam 10 DOF
+    #     az = 181 * mᵉ * lᵉ / 462
+    #     bz = 8 * mᵉ * lᵉ / 21
+    #     cz = 5 * mᵉ * lᵉ / 42
+    #     dz = 25 * mᵉ * lᵉ / 231
+    #     ez = 29 * mᵉ * lᵉ^2 / 840
+    #     fz = 11 * mᵉ * lᵉ^2 / 168
+    #     gz = 5 * mᵉ * lᵉ^2 / 168
+    #     hz = 3 * mᵉ * lᵉ^2 / 56
+    #     iz = 311 * mᵉ * lᵉ^2 / 4620
+    #     jz = 151 * mᵉ * lᵉ^2 / 4620
+    #     kz = 19 * mᵉ * lᵉ^3 / 1980
+    #     lz = 52 * mᵉ * lᵉ^3 / 3465
+    #     mz = 23 * mᵉ * lᵉ^4 / 18480
+    #     nz = 13 * mᵉ * lᵉ^4 / 13860
+    #     oz = 17 * mᵉ * lᵉ^3 / 5040
+    #     pz = 5 * mᵉ * lᵉ^3 / 1008
+    #     qz = 281 * mᵉ * lᵉ^3 / 55440
+    #     rz = 181 * mᵉ * lᵉ^3 / 55440
+    #     sz = mᵉ * lᵉ^3 / 84
+    #     tz = mᵉ * lᵉ^5 / 9240
+    #     uz = mᵉ * lᵉ^4 / 1008
+    #     vz = mᵉ * lᵉ^3 / 120
+    #     wz = mᵉ * lᵉ^4 / 1260
+    #     xz = mᵉ * lᵉ^5 / 11088
+    #     aτ = 156 * iᵉ * lᵉ / 420
+    #     bτ = 54 * iᵉ * lᵉ / 420
+    #     cτ = 22 * iᵉ * lᵉ^2 / 420
+    #     dτ = 13 * iᵉ * lᵉ^2 / 420
+    #     eτ = 4 * iᵉ * lᵉ^3 / 420
+    #     fτ = 3 * iᵉ * lᵉ^3 / 420
+    #     M11 = [
+    #         az iz qz x_αbᵉ*bz x_αbᵉ*hz
+    #         iz lz mz x_αbᵉ*fz x_αbᵉ*sz
+    #         qz mz tz x_αbᵉ*pz x_αbᵉ*uz
+    #         x_αbᵉ*bz x_αbᵉ*fz x_αbᵉ*pz aτ cτ
+    #         x_αbᵉ*hz x_αbᵉ*sz x_αbᵉ*uz cτ eτ
+    #     ]
+    #     M12 = [
+    #         dz -jz rz x_αbᵉ*cz -x_αbᵉ*gz
+    #         jz -kz nz x_αbᵉ*ez -x_αbᵉ*vz
+    #         rz -nz xz x_αbᵉ*oz -x_αbᵉ*wz
+    #         x_αbᵉ*cz -x_αbᵉ*ez x_αbᵉ*oz bτ -dτ
+    #         x_αbᵉ*gz -x_αbᵉ*vz x_αbᵉ*wz dτ -fτ
+    #     ]
+    #     M22 = [
+    #         az -iz qz x_αbᵉ*bz -x_αbᵉ*hz
+    #         -iz lz -mz -x_αbᵉ*fz x_αbᵉ*sz
+    #         qz -mz tz x_αbᵉ*pz -x_αbᵉ*uz
+    #         x_αbᵉ*bz -x_αbᵉ*fz x_αbᵉ*pz aτ -cτ
+    #         -x_αbᵉ*hz x_αbᵉ*sz -x_αbᵉ*uz -cτ eτ
+    #     ]
+    #     Mtop = hcat(M11, M12)
+    #     Mbot = hcat(M12', M22)
+    #     Mᵉ = vcat(Mtop, Mbot)
+    # elseif elemType == "COMP2"
         xb = x_αbᵉ * bz
         xf = x_αbᵉ * fz
         xh = x_αbᵉ * hz
@@ -672,7 +688,7 @@ function compute_elem_mass(mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist")
         Mtop = hcat(M11, M12)
         Mbot = hcat(M12', M22)
         Mᵉ = vcat(Mtop, Mbot)
-    end
+    # end
 
     return Mᵉ
 end

@@ -8,45 +8,87 @@ Module with generic FEM methods
 
 # KNOWN BUGS:
     span derivative may result in array size being wrong
+    NaN shows up in structural matrices that breaks the solve
+    This NaN originates from the mesh generation routine most likely
+    Zygote Buffer data types suck and you should find a more stable way.
+    I initialized the mesh properly in the Buffer but it still broke
 """
 
 
 module FEMMethods
 
-# --- Libraries ---
-using Zygote, ChainRulesCore
+# --- PACKAGES ---
+using Zygote
+using ChainRulesCore
 using DelimitedFiles
-using LinearAlgebra, StaticArrays
-include("./EBBeam.jl")
-using .EBBeam: EBBeam as BeamElement, NDOF
-include("../solvers/SolverRoutines.jl")
-using .SolverRoutines
-include("../struct/BeamProperties.jl")
-using .BeamProperties
+using LinearAlgebra
+using StaticArrays
 
-# --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+# --- DCFoil modules ---
+using ..DCFoil: RealOrComplex, DTYPE
+using ..EBBeam: EBBeam as BeamElement, NDOF
+using ..SolverRoutines
+using ..BeamProperties
+using ..DesignConstants: DynamicFoil
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
-struct FEMESH{T<:Float64}
+struct StructMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     """
     Struct to hold the mesh, element connectivity, and node properties
     """
-    mesh::Matrix{T} # node xyz coords
-    elemConn::Matrix{Int64}
-    chord::Vector{T}
-    toc::Vector{T}
-    ab::Vector{T}
-    x_αb::Vector{T}
-    θ::T # global fiber frame orientation
-    airfoilCoords::Matrix{T} # airfoil coordinates
+    mesh::TM # node xyz coords (2D array of coordinates of nodes)
+    elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
+    # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
+    chord::TA
+    toc::TA
+    ab::TA
+    x_αb::TA
+    θ::TF # global fiber frame orientation
+    airfoilCoords::TM # airfoil coordinates
 end
 
+function make_fullMesh(DVDictList, solverOptions)
+    """
+    Makes a full body mesh with element connectivity
+    """
 
-function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, nElStrut=0, spanStrut=0.0)
+    # ************************************************
+    #     Loop over appendages in the problem
+    # ************************************************
+    StructMeshList = []
+    ElemConnList = []
+    for iComp in eachindex(solverOptions["appendageList"])
+        appendageDict = solverOptions["appendageList"][iComp]
+        DVDict = DVDictList[iComp]
+        println("Meshing ", appendageDict["compName"])
+        span = DVDict["s"]
+        spanStrut = DVDict["s_strut"]
+        nElem = appendageDict["nNodes"] - 1
+        nElStrut = appendageDict["nNodeStrut"] - 1
+        config = appendageDict["config"]
+        rake = DVDict["rake"]
+        structMesh, elemConn = make_componentMesh(nElem, span; config=config, nElStrut=nElStrut, spanStrut=spanStrut, rake=rake)
+
+        # # check magnitudes of the mesh if greater than 1e5
+        # if any(abs.(structMesh) .> 1e5)
+        #     println("Mesh is too large")
+        # end
+        # This appends the structMesh and elemConn to the list that we can unpack later
+        push!(StructMeshList, structMesh)
+        push!(ElemConnList, elemConn)
+    end
+
+    return StructMeshList, ElemConnList
+
+end
+
+function make_componentMesh(
+    nElem::Int64, span::DTYPE;
+    config="wing", rake=0.000, nElStrut=0, spanStrut=0.0
+)
     """
     Makes a mesh and element connectivity
-    First element is always origin (x,y,z) = (0,0,0)
+    First element is usually origin (x,y,z) = (0,0,0) except the t-foil where the first element is shifted down by spanStrut
     You do not necessarily have to make this mesh yourself every run
     The default is to mesh y as the span
 
@@ -56,8 +98,9 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
         number of elements
     config:
         "wing" or "t-foil"
-    rotation:
+    rake:
         rotation of the foil in degrees where 0.0 is lifting up in 'z' and y is the spanwise direction
+        Positive rake is nose up
     Outputs
     -------
     mesh
@@ -65,36 +108,70 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
     elemConn
         (nElem, nNodesPerElem) array saying which elements hold which nodes
     """
-    mesh::Matrix{Float64} = zeros(nElem + 1, 3)
-    elemConn::Matrix{Int64} = zeros(nElem, 2)
+    rot = deg2rad(rake)
+    transMat = SolverRoutines.get_rotate3dMat(rot; axis="y")
+    if config == "wing"
+        nNodeTot = nElem + 1
+        nElemTot = nElem
+    elseif config == "full-wing"
+        nNodeTot = 2 * nElem + 1
+        nElemTot = 2 * nElem
+    elseif config == "t-foil"
+        nNodeTot = 2 * nElem + nElStrut + 1
+        nElemTot = 2 * nElem + nElStrut
+    end
+    mesh = zeros(DTYPE, nNodeTot, 3)
+    elemConn = zeros(Int64, nElemTot, 2)
+
     mesh_z = Zygote.Buffer(mesh)
-    elemConn_z = Zygote.Buffer(elemConn)
-    rot = deg2rad(rotation)
+    # mesh_z[:, :] .= mesh
+    # elemConn_z[:, :] .= elemConn
+    # The transformation matrix is good
+    # println("transMat initial")
+    # show(stdout, "text/plain", transMat)
+    # println("")
+    mesh, elemConn = fill_mesh(mesh_z, elemConn, transMat, span, nElem; config=config, nElStrut=nElStrut, spanStrut=spanStrut)
+
+    mesh_z = Zygote.Buffer(mesh)
+    if config == "t-foil"
+        mesh_z[:, ZDIM] = mesh_z[:, ZDIM] .- spanStrut # translate
+        for inode in 1:nNodeTot
+            mesh_z[inode, :] = transMat * mesh_z[inode, :]
+        end
+    end
+    # mesh = copy(mesh_z)
+    # elemConn = copy(elemConn_z)
+    # println("mesh")
+    # show(stdout, "text/plain", mesh)
+    # println("")
+
+    return mesh, elemConn
+end
+
+function fill_mesh(
+    mesh, elemConn, transMat, span, nElem::Int64;
+    config="wing", nElStrut=0, spanStrut=0.0
+)
+
     if config == "wing"
         # Set up a line mesh
         dl = span / (nElem) # dist btwn nodes
-        # println("span",span)
-        # println("dl",dl)
-        mesh_z[:, YDIM] = collect((0.0:dl:span))
-        transMat = SolverRoutines.get_rotate3dMat(rot; axis="x")
-        for nodeIdx in 1:nElem+1 # loop nodes and rotate
-            mesh_z[nodeIdx, :] = transMat * mesh_z[nodeIdx, :]
+        mesh[:, :] = hcat(
+            zeros(nElem + 1), #X
+            LinRange(0.0, span, nElem + 1), #Y
+            zeros(nElem + 1) #Z
+        )
+        ChainRulesCore.ignore_derivatives() do
+            for ee in 1:nElem
+                elemConn[ee, 1] = ee
+                elemConn[ee, 2] = ee + 1
+            end
         end
-        for ee in 1:nElem
-            elemConn_z[ee, 1] = ee
-            elemConn_z[ee, 2] = ee + 1
-        end
-    elseif config == "t-foil"
-        mesh = Array{Float64}(undef, 2 * nElem + nElStrut + 1, 3)
-        elemConn = Array{Int64}(undef, 2 * nElem + nElStrut, 2)
+    elseif config == "full-wing"
         # Simple meshes starting from junction at zero
         # Mesh foil wing
         dl = span / (nElem) # dist btwn nodes
-        foilwingMesh = collect(0:dl:span)
-        # Mesh strut
-        dlStrut = spanStrut / (nElStrut)
-        strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
-        # This is basically avoiding double counting the nodes
+        foilwingMesh = LinRange(0.0, span, nElem + 1)#collect(0:dl:span)
         if abs(rot) < MEPSLARGE # no rotation, just a straight wing
             elemCtr = 1 # elem counter
             nodeCtr = 1 # node counter traversing nodes
@@ -105,8 +182,10 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
             # Add foil wing first
             for nodeIdx in 1:nElem
                 mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-                elemConn[nodeCtr, 1] = nodeIdx
-                elemConn[nodeCtr, 2] = nodeIdx + 1
+                ChainRulesCore.ignore_derivatives() do
+                    elemConn[nodeCtr, 1] = nodeIdx
+                    elemConn[nodeCtr, 2] = nodeIdx + 1
+                end
                 elemCtr += 1
                 nodeCtr += 1
             end
@@ -116,31 +195,109 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
             nodeCtr += 1
 
             # Mirror wing nodes skipping first, but adding junction connectivity
-            elemConn[elemCtr, 1] = 1
-            elemConn[elemCtr, 2] = nodeCtr
+            ChainRulesCore.ignore_derivatives() do
+                elemConn[elemCtr, 1] = 1
+                elemConn[elemCtr, 2] = nodeCtr
+            end
             for nodeIdx in 2:nElem
                 mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-                elemConn[nodeCtr, 1] = nodeCtr
-                elemConn[nodeCtr, 2] = nodeCtr + 1
+                ChainRulesCore.ignore_derivatives() do
+                    elemConn[nodeCtr, 1] = nodeCtr
+                    elemConn[nodeCtr, 2] = nodeCtr + 1
+                end
                 elemCtr += 1
                 nodeCtr += 1
             end
 
             # Grab end of wing
             mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-            elemConn[elemCtr, 1] = nodeCtr - 1
-            elemConn[elemCtr, 2] = nodeCtr
+            ChainRulesCore.ignore_derivatives() do
+                elemConn[elemCtr, 1] = nodeCtr - 1
+                elemConn[elemCtr, 2] = nodeCtr
+            end
             nodeCtr += 1
             elemCtr += 1
 
-            # ************************************************
-            #     Strut mesh
-            # ************************************************
-            # Add strut going up in z
-            nodeIdx = 1
+            # in the extreme case of 3 elements, elem conn is wrong
+            ChainRulesCore.ignore_derivatives() do
+                if (2 * nElem == 2)
+                    elemConn[2, 1] = 1
+                    elemConn[2, 2] = 3
+                end
+            end
+        end
+
+    elseif config == "t-foil"
+
+        # Simple meshes starting from junction at zero
+        # Mesh foil wing
+        dl = span / (nElem) # dist btwn nodes
+        # foilwingMesh = collect(0:dl:span)
+        foilwingMesh = LinRange(0, span, nElem + 1)
+        # Mesh strut
+        dlStrut = spanStrut / (nElStrut)
+        # strutMesh = collect(dlStrut:dlStrut:spanStrut) # don't start at zero since it already exists
+        strutMesh = LinRange(dlStrut, spanStrut, nElStrut)
+        # This is basically avoiding double counting the nodes
+
+        # ************************************************
+        #     Wing mesh
+        # ************************************************
+        elemCtr = 1 # elem counter
+        nodeCtr = 1 # node counter traversing nodes
+
+        # Add foil wing first
+        ChainRulesCore.ignore_derivatives() do
+            for nodeIdx in 1:nElem
+                # mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeIdx
+                elemConn[nodeCtr, 2] = nodeIdx + 1
+                elemCtr += 1
+                nodeCtr += 1
+            end
+        end
+
+        # Grab end of wing
+        foilMesh = hcat(
+            zeros(nElem + 1),
+            foilwingMesh,
+            zeros(nElem + 1)
+        )
+        # mesh[nodeCtr, :] = [0.0, foilwingMesh[end], 0.0]
+        nodeCtr += 1
+
+        # Mirror wing nodes skipping first, but adding junction connectivity
+        ChainRulesCore.ignore_derivatives() do
+            elemConn[elemCtr, 1] = 1
+            elemConn[elemCtr, 2] = nodeCtr
+            for nodeIdx in 2:nElem
+                # mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
+                elemConn[nodeCtr, 1] = nodeCtr
+                elemConn[nodeCtr, 2] = nodeCtr + 1
+                elemCtr += 1
+                nodeCtr += 1
+            end
+        end
+
+        foilMeshPort = hcat(zeros(nElem), -foilwingMesh[2:end], zeros(nElem))
+        # Grab end of wing
+        # mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
+        ChainRulesCore.ignore_derivatives() do
+            elemConn[elemCtr, 1] = nodeCtr - 1
+            elemConn[elemCtr, 2] = nodeCtr
+        end
+        nodeCtr += 1
+        elemCtr += 1
+
+        # ************************************************
+        #     Strut mesh
+        # ************************************************
+        # Add strut going up in z
+        nodeIdx = 1
+        ChainRulesCore.ignore_derivatives() do
             for istrut in 1:nElStrut # loop elem, not nodes
                 # if nodeIdx <= nElStrut 
-                mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
+                # mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
                 if nodeIdx == 1
                     elemConn[elemCtr, 1] = 1
                     elemConn[elemCtr, 2] = nodeCtr
@@ -153,26 +310,55 @@ function make_mesh(nElem::Int64, span::Float64; config="wing", rotation=0.000, n
                 elemCtr += 1
                 nodeCtr += 1
             end
-        else
-            println("Rotation of ", rot, " radians")
         end
 
-        return mesh, elemConn
+        strutMesh = hcat(
+            zeros(nElStrut), # XDIM
+            zeros(nElStrut), # YDIM
+            strutMesh # ZDIM
+        )
+        mesh[:, :] = vcat(foilMesh, foilMeshPort, strutMesh)
+
+        # in the extreme case of 3 elements, elem conn is wrong
+        ChainRulesCore.ignore_derivatives() do
+            if (2 * nElem + nElStrut == 3)
+                elemConn[2, 1] = 1
+                elemConn[2, 2] = 3
+            end
+        end
+
 
     end
 
-    return copy(mesh_z), copy(elemConn_z)
+    # ************************************************
+    #     Lastly, translate, and rotate the mesh
+    # ************************************************
+    if config == "t-foil"
+        mesh[:, ZDIM] = mesh[:, ZDIM] .- spanStrut # translate
+    end
+
+    if transMat != Matrix(I, 3, 3)
+        for inode in eachindex(mesh[:, 1])
+            # println("pre-transformed pt", meshCopy[inode, :])
+            mesh[inode, :] = transMat * mesh[inode, :]
+            # println("translated point", transMat * meshCopy[inode, :])
+        end
+    end
+    meshCopy = copy(mesh)
+
+    return meshCopy, elemConn
 
 end
 
-function rotate3d(dataVec, rot::Float64; axis="x")
+
+function rotate3d(dataVec, rot; axis="x")
     """
     Rotates a 3D vector about axis by rot radians (RH rule!)
     """
     # rotMat = zeros(Float64, 3, 3)
     # rotMat = @SMatrix zeros(Float64, 3, 3)
-    c::Float64 = cos(rot)
-    s::Float64 = sin(rot)
+    c = cos(rot)
+    s = sin(rot)
     if axis == "x"
         rotMat = [
             1 0 0
@@ -198,13 +384,15 @@ function rotate3d(dataVec, rot::Float64; axis="x")
     return transformedVec
 end
 
-function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twist", constitutive="isotropic"; config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing)
+function assemble(
+    StructMesh::StructMesh, abVec::Vector{DTYPE}, x_αbVec::Vector{DTYPE},
+    FOIL::DynamicFoil, elemType="bend-twist", constitutive="isotropic";
+    config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
+)
     """
     Generic function to assemble the global mass and stiffness matrices
 
-    Inputs
-    ------
-        coordMat: 2D array of coordinates of nodes
+        coordMat: 
         elemConn: 2D array of element connectivity (nElem x 2)
     Outputs
     -------
@@ -215,32 +403,18 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
 
     # --- Local nodal DOF vector ---
     # Determine the number of dofs per node
-    nnd = NDOF
-    qLocal = zeros(nnd * 2)
+    qLocal = zeros(DTYPE, NDOF * 2)
 
+    abVec = FOIL.ab
+    # x_αbVec = StructMesh.x_αb
     # --- Initialize matrices ---
-    nElem::Int64 = size(elemConn)[1]
-    nNodes::Int64 = nElem + 1
-    ndim::Int64 = ndims(coordMat[1, :])
-    nElemWing::Int64 = (FOIL.nNodes - 1)
+    nElem = size(StructMesh.elemConn)[1]
+    nNodes = nElem + 1
+    globalK = zeros(DTYPE, NDOF * (nNodes), NDOF * (nNodes))
+    globalM = zeros(DTYPE, NDOF * (nNodes), NDOF * (nNodes))
+    globalF = zeros(DTYPE, NDOF * (nNodes))
     # Note: sparse arrays does not work through Zygote without some workarounds (that I haven't figured out yet)
     # globalK::SparseMatrixCSC{Float64,Int64} = spzeros(nnd * (nNodes), nnd * (nNodes))
-    globalK::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
-    globalM::Matrix{Float64} = zeros(nnd * (nNodes), nnd * (nNodes))
-    globalF::Vector{Float64} = zeros(nnd * (nNodes))
-
-
-    # --- Debug printout for initialization ---
-    ChainRulesCore.ignore_derivatives() do
-        println("+------------------------------+")
-        println("|   Assembling beam matrices   |")
-        println("+------------------------------+")
-        # println("Default 2 nodes per elem, nothing else will work")
-        println("Constitutive relations: ", constitutive)
-        println("Element: ", elemType)
-        println("No. of elems: ", nElem)
-        println("Beam nodes: ", nNodes, " (", nnd * nNodes, " DOFs)")
-    end
 
     # ************************************************
     #     Element loop
@@ -252,17 +426,51 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
     globalK_z[:, :] = globalK
     globalM_z[:, :] = globalM
     globalF_z[:] = globalF
+    populate_matrices!(globalK_z, globalM_z, globalM_z, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
+        config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
+
+
+    globalK = copy(globalK_z)
+    globalM = copy(globalM_z)
+    globalF = copy(globalF_z)
+
+    return globalK, globalM, globalF
+end
+
+function populate_matrices!(
+    globalK, globalM, globalF,
+    nElem::Int64, StructMesh, FOIL::DynamicFoil, STRUT::DynamicFoil, abVec::Vector, x_αbVec::Vector;
+    config="wing", constitutive="isotropic", verbose=true, elemType="bend-twist", ab_strut=nothing, x_αb_strut=nothing
+)
+    nNodes::Int64 = nElem + 1
+    elemConn = StructMesh.elemConn
+    coordMat = StructMesh.mesh
+    # --- Debug printout for initialization ---
+    ChainRulesCore.ignore_derivatives() do
+        if verbose
+            println("+----------------------------------------+")
+            println("|        Assembling beam matrices        |")
+            println("+----------------------------------------+")
+            println("Constitutive law: ", constitutive)
+            println("Beam element: ", elemType)
+            println("Elements: ", nElem)
+            println("Nodes: ", nNodes)
+            println("DOFs: ", NDOF * nNodes)
+        end
+    end
+
+    nElemWing = (FOIL.nNodes - 1)
+
     for elemIdx ∈ 1:nElem
         # ---------------------------
         #   Extract element info
         # ---------------------------
         n1 = elemConn[elemIdx, 1]
         n2 = elemConn[elemIdx, 2]
-        # dR::Vector{Float64} = (coordMat[elemIdx+1, :] - coordMat[elemIdx, :])
-        dR1::Float64 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
-        dR2::Float64 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
-        dR3::Float64 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
-        lᵉ::Float64 = sqrt(dR1^2 + dR2^2 + dR3^2) # length of elem
+        dR1 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
+        dR2 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
+        dR3 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
+        lᵉ = sqrt(dR1^2 + dR2^2 + dR3^2) # length of elem
         nVec = [dR1, dR2, dR3] / lᵉ # normalize
         if elemIdx <= nElemWing
             EIₛ = FOIL.EIₛ[elemIdx]
@@ -284,7 +492,7 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
                     EIIPₛ = FOIL.EIIPₛ[wingElem]
                     EAₛ = FOIL.EAₛ[wingElem]
                     GJₛ = FOIL.GJₛ[wingElem]
-                    Kₛ = FOIL.Kₛ[wingElem]
+                    Kₛ = -FOIL.Kₛ[wingElem] # negative to account for the opposite sign in the strut
                     Sₛ = FOIL.Sₛ[wingElem]
                     mₛ = FOIL.mₛ[wingElem]
                     iₛ = FOIL.Iₛ[wingElem]
@@ -305,23 +513,37 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
                     ab = ab_strut[strutElem]
                     x_αb = x_αb_strut[strutElem]
                 end
+            elseif config == "full-wing"
+                if elemIdx > nElemWing # port wing
+                    wingElem = elemIdx - nElemWing
+                    EIₛ = FOIL.EIₛ[wingElem]
+                    EIIPₛ = FOIL.EIIPₛ[wingElem]
+                    EAₛ = FOIL.EAₛ[wingElem]
+                    GJₛ = FOIL.GJₛ[wingElem]
+                    Kₛ = -FOIL.Kₛ[wingElem] #MATERIAL COUPLING MUST BE NEGATED (I debugged this)
+                    Sₛ = FOIL.Sₛ[wingElem]
+                    mₛ = FOIL.mₛ[wingElem]
+                    iₛ = FOIL.Iₛ[wingElem]
+                    ab = abVec[wingElem]
+                    x_αb = x_αbVec[wingElem]
+                end
             end
         end
 
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal::Matrix{Float64} = BeamElement.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
+        kLocal = BeamElement.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
 
         # ---------------------------
         #   Local mass matrix
         # ---------------------------
-        mLocal::Matrix{Float64} = BeamElement.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
+        mLocal = BeamElement.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
 
         # ---------------------------
         #   Local force vector
         # ---------------------------
-        fLocal::Vector{Float64} = zeros(nnd * 2)
+        fLocal = zeros(DTYPE, NDOF * 2)
 
         # ---------------------------
         #   Transform from local to global coordinates
@@ -334,28 +556,6 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         kElem = Γ' * kLocal * Γ
         mElem = Γ' * mLocal * Γ
         fElem = Γ' * fLocal
-        # kElem = kLocal
-        # mElem = mLocal
-        # fElem = fLocal
-        # println("T:")
-        # show(stdout, "text/plain", Γ[1:3, 1:3])
-        # println()
-        # println("kLocal: ")
-        # show(stdout, "text/plain", kLocal)
-        # println()
-        # println("mLocal: ")
-        # show(stdout, "text/plain", mLocal)
-        # println()
-        # println("kElem: ")
-        # show(stdout, "text/plain", kElem)
-        # println()
-        # println("mElem: ")
-        # show(stdout, "text/plain", mElem)
-        # println()
-        # writedlm("DebugKLocal.csv", kLocal, ',')
-        # writedlm("DebugMLocal.csv", mLocal, ',')
-        # writedlm("DebugKElem.csv", kElem, ',')
-        # writedlm("DebugMElem.csv", mElem, ',')
         ChainRulesCore.ignore_derivatives() do
             if any(isnan.(kElem))
                 println("NaN in elem stiffness matrix")
@@ -366,49 +566,52 @@ function assemble(coordMat, elemConn, abVec, x_αbVec, FOIL, elemType="bend-twis
         #   Assemble into global matrices
         # ---------------------------
         # The following procedure generally follows:
-        for nodeIdx ∈ 1:2 # loop over nodes in element
-            for dofIdx ∈ 1:nnd # loop over DOFs in node
-                idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * nnd + dofIdx) # idx of global dof (row of global matrix)
-                idxRowₑ = (nodeIdx - 1) * nnd + dofIdx # idx of dof within this element
+        @inbounds @fastmath begin
+            for nodeIdx ∈ 1:2 # loop over nodes in element
+                for dofIdx ∈ 1:NDOF # loop over DOFs in node
+                    idxRow = ((elemConn[elemIdx, nodeIdx] - 1) * NDOF + dofIdx) # idx of global dof (row of global matrix)
+                    idxRowₑ = (nodeIdx - 1) * NDOF + dofIdx # idx of dof within this element
 
-                # --- Assemble RHS ---
-                globalF_z[idxRow] = fElem[idxRowₑ]
+                    # --- Assemble RHS ---
+                    globalF[idxRow] = fElem[idxRowₑ]
 
-                # --- Assemble LHS ---
-                for nodeColIdx ∈ 1:2 # loop over nodes in element
-                    for dofColIdx ∈ 1:nnd # loop over DOFs in node
-                        idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * nnd + dofColIdx # idx of global dof (col of global matrix)
-                        idxColₑ = (nodeColIdx - 1) * nnd + dofColIdx # idx of dof within this element (column)
+                    # --- Assemble LHS ---
+                    for nodeColIdx ∈ 1:2 # loop over nodes in element
+                        for dofColIdx ∈ 1:NDOF # loop over DOFs in node
+                            idxCol = (elemConn[elemIdx, nodeColIdx] - 1) * NDOF + dofColIdx # idx of global dof (col of global matrix)
+                            idxColₑ = (nodeColIdx - 1) * NDOF + dofColIdx # idx of dof within this element (column)
 
-                        globalK_z[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
-                        globalM_z[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
+                            globalK[idxRow, idxCol] += kElem[idxRowₑ, idxColₑ]
+                            globalM[idxRow, idxCol] += mElem[idxRowₑ, idxColₑ]
+                        end
                     end
                 end
             end
         end
         ChainRulesCore.ignore_derivatives() do
-            if any(isnan.(globalK_z))
+            if any(isnan.(globalK))
                 println("NaN in global stiffness matrix")
             end
         end
     end
-    globalK = copy(globalK_z)
-    globalM = copy(globalM_z)
-    globalF = copy(globalF_z)
 
-    return globalK, globalM, globalF
 end
 
-function get_fixed_dofs(elemType::String, BCCond="clamped"; solverOptions=Dict())
+
+function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dict("config" => "wing"), verbose=true)
     """
     Depending on the elemType, return the indices of fixed nodes
     """
     if BCCond == "clamped"
-        if solverOptions["config"] == "wing"
-            fixedDOFs = 1:BeamElement.NDOF
-        elseif solverOptions["config"] == "t-foil"
-            nElemTot = (solverOptions["nNodes"] - 1) * 2 + solverOptions["nNodeStrut"] - 1
-            fixedDOFs = (nElemTot+1)*BeamElement.NDOF:-1:(nElemTot-1)*BeamElement.NDOF+1
+        if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
+            fixedDOFs = Vector(1:BeamElement.NDOF)
+        elseif appendageOptions["config"] == "t-foil"
+            nElemTot = (appendageOptions["nNodes"] - 1) * 2 + appendageOptions["nNodeStrut"] - 1
+            nNodeTot = nElemTot + 1
+            fixedDOFs = Vector(nNodeTot*BeamElement.NDOF:-1:nElemTot*BeamElement.NDOF+1)
+
+        else
+            error("config not recognized")
         end
 
     else
@@ -416,13 +619,15 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; solverOptions=Dict()
     end
 
     ChainRulesCore.ignore_derivatives() do
-        println("BCType: ", BCCond)
+        if verbose
+            println("BCType: ", BCCond)
+        end
     end
 
     return fixedDOFs
 end
 
-function apply_tip_load!(globalF, elemType, transMat, loadType="force")
+function apply_tip_load!(globalF, elemType, transMat, loadType="force"; solverOptions=Dict("config" => "wing"))
     """
     Routine for applying unit tip load to the end node
         globalF
@@ -467,7 +672,22 @@ function apply_tip_load!(globalF, elemType, transMat, loadType="force")
     if elemType == "COMP2"
         FLocalVec = transMat[1:m÷2, 1:n÷2]' * FLocalVec
     end
-    globalF[end-length(FLocalVec)+1:end] += FLocalVec * MAG
+    if solverOptions["config"] == "wing"
+        globalF[end-NDOF+1:end] += FLocalVec * MAG
+    elseif solverOptions["config"] == "full-wing" || solverOptions["config"] == "t-foil"
+        nElemWing = solverOptions["nNodes"] - 1
+        # STBD wing
+        inodestart = nElemWing + 1
+        idofstart = (inodestart - 1) * NDOF + 1
+        globalF[idofstart:idofstart+NDOF-1] += FLocalVec * MAG
+        # Port wing
+        inodestart = nElemWing * 2 + 1
+        idofstart = (inodestart - 1) * NDOF + 1
+        globalF[idofstart:idofstart+NDOF-1] += FLocalVec * MAG
+    else
+        error("config not recognized")
+
+    end
 
 end
 
@@ -533,19 +753,32 @@ function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
     # TODO: add gravity vector
 end
 
-function apply_BCs(K, M, F, globalDOFBlankingList)
+function apply_BCs(
+    K::Matrix, M::Matrix,
+    F::Vector,
+    globalDOFBlankingList::Vector{Int64}
+)
     """
-    Applies BCs for nodal displacements and blanks them
+    Applies BCs for nodal displacements and sets them to zero
     """
-
+    # Old method of deleting
     newK = K[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newM = M[1:end.∉[globalDOFBlankingList], 1:end.∉[globalDOFBlankingList]]
     newF = F[1:end.∉[globalDOFBlankingList]]
 
+    # newK = copy(K)
+    # newK[globalDOFBlankingList, :] .= 0.0
+    # newK[:, globalDOFBlankingList] .= 0.0
+    # newM = copy(M)
+    # newM[globalDOFBlankingList, :] .= 0.0
+    # newM[:, globalDOFBlankingList] .= 0.0
+    # newF = copy(F)
+    # newF[globalDOFBlankingList] .= 0.0
+
     return newK, newM, newF
 end
 
-function put_BC_back(q, elemType::String, BCType="clamped")
+function put_BC_back(q, elemType::String, BCType="clamped"; appendageOptions=Dict("config" => "wing"))
     """
     appends the BCs back into the solution
     """
@@ -554,7 +787,13 @@ function put_BC_back(q, elemType::String, BCType="clamped")
         if elemType == "BT2"
             uSol = vcat([0, 0, 0, 0], q)
         elseif elemType == "COMP2"
-            uSol = vcat(zeros(9), q)
+            if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
+                uSol = vcat(zeros(9), q)
+            elseif appendageOptions["config"] == "t-foil"
+                uSol = vcat(q, zeros(9))
+            else
+                error("Unsuppported config")
+            end
         else
             println("Not working")
             exit()
@@ -566,7 +805,7 @@ function put_BC_back(q, elemType::String, BCType="clamped")
     return uSol, length(uSol)
 end
 
-function solve_structure(K, M, F)
+function solve_structure(K::Matrix, M::Matrix, F::Vector)
     """
     Solve the structural system
     """
@@ -576,17 +815,7 @@ function solve_structure(K, M, F)
     return q
 end
 
-# function ChainRulesCore.rrule(::typeof(solve_structure), K, M, F)
-#     """
-#     Reverse mode rule for solve_structure (look at Giles 2008)
-#     """
-
-#     # q = (K) \ F # TODO: should probably replace this with an iterative solver
-
-#     # return q
-# end
-
-function compute_modal(K, M, nEig::Int64)
+function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
     """
     Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
     i.e., this is structural dynamics, not hydroelastics.
@@ -603,7 +832,7 @@ function compute_modal(K, M, nEig::Int64)
     return naturalFreqs, eVecs
 end
 
-function compute_proportional_damping(K, M, ζ, nMode)
+function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, nMode::Int64)
     """
     TODO: MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
     Compute the proportional (Rayleigh) damping matrix
@@ -644,5 +873,6 @@ function compute_proportional_damping(K, M, ζ, nMode)
 
     return massPropConst, stiffPropConst
 end
+
 
 end # end module

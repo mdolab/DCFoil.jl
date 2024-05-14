@@ -203,9 +203,9 @@ function test_FSeffect()
     cl_rc = zeros(length(Usweep))
     uCtr = 1
     for U∞ in Usweep
-        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
+        cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
-        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
+        cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -219,9 +219,9 @@ function test_FSeffect()
     depth = 0.1 #[m]
     uCtr = 1
     for U∞ in Usweep
-        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
+        cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * deg2rad(6)
-        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
+        cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
@@ -235,9 +235,9 @@ function test_FSeffect()
     depth = 0.05 #[m]
     uCtr = 1
     for U∞ in Usweep
-        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
+        cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=true)
         cl_rc_FS[uCtr] = cl_α[1] * 1 # rad
-        cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
+        cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * 1 # rad
 
         FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))

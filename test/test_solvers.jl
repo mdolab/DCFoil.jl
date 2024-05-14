@@ -6,20 +6,8 @@ using Printf
 using LinearAlgebra
 using Dates
 
-include("../src/solvers/SolveStatic.jl")
-using .SolveStatic
-include("../src/solvers/SolveForced.jl")
-using .SolveForced
-include("../src/solvers/SolveFlutter.jl")
-using .SolveFlutter
-include("../src/InitModel.jl")
-using .InitModel
-include("../src/struct/FEMMethods.jl")
-using .FEMMethods
-include("../src/solvers/SolverRoutines.jl")
-using .SolverRoutines
 include("../src/DCFoil.jl")
-using .DCFoil
+using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, SolveFlutter, SolveForced, SolveStatic
 
 # ==============================================================================
 #                         Test Static Solver
@@ -72,12 +60,12 @@ function test_SolveStaticRigid()
         #   Flow
         # --------------------------------
         "use_cavitation" => false,
-        "use_freesurface" => false,
+        "use_freeSurface" => false,
         # --- Static solve ---
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 0:0.1:10,
+        "fRange" => [0.0, 10.0],
         "tipForceMag" => 0.0,
         # --- Eigen solve ---
         "run_modal" => false,
@@ -112,8 +100,8 @@ function test_SolveStaticRigid()
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
-        println("cl:",costFuncs["cl"])
-        println("cmy:",costFuncs["cmy"])
+        println("cl:", costFuncs["cl"])
+        println("cmy:", costFuncs["cmy"])
         meshlvl += 1
     end
 
@@ -189,12 +177,12 @@ function test_SolveStaticIso()
         # --- General solver options ---
         "use_tipMass" => false,
         "use_cavitation" => false,
-        "use_freesurface" => false,
+        "use_freeSurface" => false,
         # --- Static solve ---
         "run_static" => true,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => 0:0.1:10,
+        "fRange" => [0.0, 10.0],
         "tipForceMag" => 0.0,
         # --- Eigen solve ---
         "run_modal" => false,
@@ -261,16 +249,15 @@ function test_SolveStaticIso()
     return rel_err
 end # test_SolveStaticIso
 
-function test_SolveStaticComp()
+function test_SolveStaticComp(DVDict, solverOptions)
     """
     Very simple mesh convergence test with hydro and structural solvers over different numbers of nodes
     Composite beam
     """
-
     # --- Reference value ---
     #  Obtained by running the code
-    refBendSol = [0.0004825455285840, 0.0004908633758853, 0.0004909057635612]
-    refTwistSol = [-0.00079926586938542, -0.0008235901040122, -0.0008357865527998]
+    refBendSol = [0.0006109616882733, 0.0006292489391756, 0.0006391615447796]
+    refTwistSol = [-0.0011393119433801, -0.0011393119433801, -0.0011393119433801]
 
     nNodess = [10, 20, 40] # list of number of nodes to test
     # ************************************************
@@ -278,51 +265,13 @@ function test_SolveStaticComp()
     # ************************************************
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
-    DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
-        "s_strut" => 0.4, # from Yingqian
-    )
-    solverOptions = Dict(
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "U∞" => 6.0, # free stream velocity [m/s]
-        # --- I/O ---
-        "name" => "akcabay",
-        "debug" => false,
-        "outputDir" => "test_out/",
-        # --- General solver options ---
-        "config" => "wing",
-        # "config" => "t-foil",
-        "nNodes" => nNodes, # number of nodes on foil half wing
-        "nNodeStrut" => 10, # nodes on strut
-        "use_tipMass" => false,
-        "material" => "cfrp", # preselect from material library
-        "rotation" => 0.0, # deg
-        # --------------------------------
-        #   Flow
-        # --------------------------------
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        # --- Static solve ---
-        "run_static" => true,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 0:0.1:10,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => false,
-        "run_flutter" => false,
-        "nModes" => 5,
-        "uRange" => nothing,
-        "config" => "wing",
-    )
+    DVDict["c"] = 0.1 * ones(nNodes) # chord length [m]
+    DVDict["ab"] => 0 * ones(nNodes) # dist from midchord to EA [m]
+    DVDict["x_αb"] => 0 * ones(nNodes) # static imbalance [m]
+    DVDict["toc"] => 0.12 * ones(nNodes) # static imbalance [m]
+    appendageOptions = solverOptions["appendageList"][1]
+    appendageOptions["nNodes"] = nNodes # number of nodes on foil half wing
+    solverOptions["appendageList"] = [appendageOptions]
     mkpath(solverOptions["outputDir"])
 
     # ************************************************
@@ -339,16 +288,22 @@ function test_SolveStaticComp()
     meshlvl = 1
     for nNodes in nNodess
         # --- Resize some stuff ---
-        solverOptions["nNodes"] = nNodes
+        appendageOptions["nNodes"] = nNodes
+        solverOptions["appendageList"] = [appendageOptions]
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
         DVDict["x_αb"] = 0 * ones(nNodes)
+        DVDict["toc"] = 0.12 * ones(nNodes)
 
-        DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-        costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
+        DVDictList::Vector = [DVDict]
 
-        tipBendData[meshlvl] = costFuncs["wtip"]
-        tipTwistData[meshlvl] = costFuncs["psitip"]
+        # FIX THESE TESTS AND FIGURE OUT WHY THE FSI SOLVE NOW TAKES A BUNCH OF ITERATIONS...
+        DCFoil.init_model(DVDictList, evalFuncs; solverOptions=solverOptions)
+        SOLDICT = DCFoil.run_model(DVDictList, evalFuncs; solverOptions=solverOptions)
+        costFuncs = DCFoil.evalFuncs(SOLDICT, DVDictList, evalFuncs, solverOptions)
+
+        tipBendData[meshlvl] = costFuncs["wtip-"*appendageOptions["compName"]]
+        tipTwistData[meshlvl] = costFuncs["psitip-"*appendageOptions["compName"]]
         meshlvl += 1
     end
 
@@ -398,7 +353,7 @@ end # end test_SolveForcedComp
 # ==============================================================================
 #                         Test Flutter Solver
 # ==============================================================================
-function test_modal()
+function test_modal(DVDict, solverOptions)
     """
     Test modal solver
     NOTE: only testing the frequencies bc it is assumed the eigenvector coming out is right
@@ -414,47 +369,14 @@ function test_modal()
     # ************************************************
     nNodes = 40 # spatial nodes
 
-    # --- Yingqian's Viscous FSI Paper (2019) ---
-    DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
-        "c" => 0.0925 * ones(nNodes), # chord length [m]
-        "s" => 0.2438, # semispan [m]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.03459, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(0), # fiber angle global [rad]
-    )
-    solverOptions = Dict(
-        # --- I/O ---
-        "debug" => false,
-        "outputDir" => "",
-        # --- General solver options ---
-        "nNodes" => nNodes,
-        "use_tipMass" => false,
-        "use_cavitation" => false,
-        "use_freesurface" => false,
-        "material" => "cfrp", # preselect from material library
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fSweep" => 0:0.1:10,
-        "tipForceMag" => 0.0,
-        # --- Eigen solve ---
-        "run_modal" => true,
-        "run_flutter" => false,
-        "nModes" => 5,
-        "uRange" => nothing,
-    )
     # --- Mesh ---
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    DCFoil.set_defaultOptions!(solverOptions)
+    appendageOptions = solverOptions["appendageList"][1]
+    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
     nElem = nNodes - 1
-    structMesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
-    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(structMesh, elemConn, DVDict, solverOptions)
+    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 1.0, zeros(2, 2))
+    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
 
     # ************************************************
     #     Relative error
@@ -493,7 +415,7 @@ function test_pk_staticDiv()
 
     nNodes = 10
     df = 1
-    fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+    fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
     uRange = [20.0, 40.0] # flow speed [m/s] sweep for flutter
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -531,7 +453,7 @@ function test_pk_staticDiv()
         "run_static" => false,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => fSweep,
+        "fRange" => fRange,
         "tipForceMag" => tipForceMag,
         # --- Eigen solve ---
         "run_modal" => true,
@@ -569,7 +491,7 @@ function test_pk_flutter()
     ref_val = 0.05347
     nNodes = 10
     df = 1
-    fSweep = 0.1:df:1000.0 # forcing and search frequency sweep [Hz]
+    fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
     uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -607,7 +529,7 @@ function test_pk_flutter()
         "run_static" => false,
         # --- Forced solve ---
         "run_forced" => false,
-        "fSweep" => fSweep,
+        "fRange" => fRange,
         "tipForceMag" => tipForceMag,
         # --- Eigen solve ---
         "run_modal" => true,

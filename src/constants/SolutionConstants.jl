@@ -19,6 +19,7 @@ const P_IM_TOL = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on sta
 # Bigger values catch the real roots and too small cause them to disappear
 # You just don't want them too big that they pick up wrong roots
 
+const GRAV = 9.80665 # gravity [m/s^2]
 const XDIM = 1
 const YDIM = 2
 const ZDIM = 3
@@ -26,31 +27,31 @@ const ZDIM = 3
 # ==============================================================================
 #                         STRUCTS
 # ==============================================================================
-mutable struct DCFoilConstants{T}
+struct DCFoilSolverParams{TF,TI,TS}
     """
-    This is a catch all mutable struct to store variables that we do not
+    This is a catch all immutable struct to store variables that we do not
     want in function calls like r(u) or f(u)
-
     """
-    Kmat::Matrix{T} # structural stiffness matrix (after BC blanking)
-    Mmat::Matrix{T} # structural mass matrix (after BC blanking)
-    Cmat::Matrix{T} # structural damping matrix (after BC blanking)
-    elemType::String
-    mesh::Array{T,2}
-    AICmat::Matrix{T} # Aero influence coeff matrix
-    mode::String # type of derivative for drdu
-    planformArea::T
+    Kmat::Matrix{TF} # structural stiffness matrix (no BC blanking)
+    Mmat::Matrix{TF} # structural mass matrix (no BC blanking)
+    Cmat::Matrix{TF} # structural damping matrix (no BC blanking)
+    elemType::TS
+    AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
+    mode::TS # type of derivative for drdu
+    planformArea::TF
+    dofBlank::Vector{TI} # DOF to blank out
+    downwashAngles::TF # downwash angles [rad]
 end
 
-mutable struct DCFoilDynamicConstants{T}
+struct DCFoilDynamicConstants{TF,TC,TI,TS,TA<:AbstractVector{TF}}
     """
     For the dynamic hydroelastic solve, there are more constants to store
     """
-    elemType::String
-    mesh::Array{T,2}
-    Dmat::Matrix{ComplexF64} # dynamic matrix 
-    AICmat::Matrix{ComplexF64} # just the aero part of Dmat 
-    extForceVec::Vector{T} # external force vector excluding BC nodes
+    elemType::TS
+    mesh::Matrix{TF}
+    Dmat::Matrix{TC} # dynamic matrix 
+    AICmat::Matrix{TC} # just the aero part of Dmat 
+    extForceVec::TA # external force vector excluding BC nodes
 end
 
 end # end module

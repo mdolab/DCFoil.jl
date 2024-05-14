@@ -10,31 +10,42 @@ by the AD tool (e.g., anything related to file writing)
 In julia, the chainrules rrule is '_b'
 """
 
-# --- Libraries ---
+# --- PACKAGES ---
 using LinearAlgebra
 using Zygote
 using ChainRulesCore
-include("./NewtonRaphson.jl")
-using .NewtonRaphson
-include("./EigenvalueProblem.jl")
-using .EigenvalueProblem
+using FLOWMath: abs_cs_safe
+
+# --- DCFoil modules ---
+using ..NewtonRaphson
+using ..EigenvalueProblem
 
 # --- Globals ---
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants: XDIM, YDIM, ZDIM
-include("../struct/EBBeam.jl")
-using .EBBeam: EBBeam as BeamElement
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using ..EBBeam: EBBeam as BeamElement
+using ..DesignConstants: SORTEDDVS
+using ..DCFoil: RealOrComplex, DTYPE
 
-
-const RealOrComplex = Union{Real,Complex}
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e-6, is_verbose=true, mode="analytic", is_cmplx=false)
+function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
+    maxIters=200, tol=1e-6, is_verbose=false,
+    solverParams=nothing,
+    appendageOptions=Dict(),
+    solverOptions=Dict(),
+    mode="Analytic",
+    # mode="RAD",
+    # mode="FiDi",
+    is_cmplx=false,
+    iComp=1, CLMain=0.0
+)
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
     """
+
+    x0 = x0List[iComp]
 
     # ************************************************
     #     Main solver loop
@@ -46,50 +57,42 @@ function converge_r(compute_residuals, compute_∂r∂u, u; maxIters=200, tol=1e
     end
 
     # Somewhere here, you could do something besides Newton-Raphson if you want
-    converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(compute_residuals, compute_∂r∂u, u, maxIters, tol, is_verbose, mode, is_cmplx)
+    converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(
+        compute_residuals, compute_∂r∂u, u0, x0List;
+        maxIters, tol, is_verbose, mode, is_cmplx,
+        solverParams=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, CLMain=CLMain)
 
     return converged_u, converged_r
 
 end # converge_r
 
-function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=nothing, solverOptions=Dict())
+function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; appendageOptions=Dict(), alphaCorrection=0.0)
     """
     Returns the deflected + rigid shape of the foil
+    So like pre-twist
     Inputs
     ------
         foilStructuralStates - structural states of the foil in global ref frame!
-        α₀ - angle of attack
+        alphaCorrection - correction to alpha in deg
         elemType - element type
-        beta - yaw angle
     Outputs
     -------
         foilTotalStates - total states of the foil in global reference frame
         nDOF - number of DOF per node
     """
 
-    # alfaRad = α₀ * π / 180
-    alfaRad = deg2rad(α₀)
-    if STRUT != nothing
-        beta = STRUT.α₀
-    else
-        beta = 0.0
-    end
-    betaRad = deg2rad(beta)
+    alfaRad = deg2rad(DVDict["α₀"]) + alphaCorrection
+    rakeRad = deg2rad(DVDict["rake"])
+    betaRad = deg2rad(DVDict["beta"])
     nDOF = BeamElement.NDOF
-    # Get flow angles of attack in local beam coords first
+    # Get flow angles of attack in "local" beam coords first
     #TODO: pretwist will change this
-    if elemType == "bend"
-        error("Only bend-twist element type is supported for load computation")
-    elseif elemType == "bend-twist"
-        nDOF = 3
-        staticOffset = [0, 0, alfaRad]
-    elseif elemType == "BT2"
-        nDOF = 4
+    if elemType == "BT2"
         nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
-        staticOffset = [0, 0, alfaRad, 0] 
+        staticOffset = [0, 0, alfaRad, 0]
     elseif elemType == "COMP2"
-        staticOffset_wing = [0, 0, 0, alfaRad, 0, 0, 0, 0, 0]
-        staticOffset_strut = [0, 0, 0, betaRad, 0, 0, 0, 0, 0]
+        staticOffset_wing = [0, 0, 0, alfaRad + rakeRad, 0, betaRad, 0, 0, 0]
+        staticOffset_strut = [0, 0, 0, betaRad, 0, rakeRad, 0, 0, 0]
     end
 
     # ---------------------------
@@ -108,12 +111,11 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
         ]
         staticOffset_wing = transMatL2G * staticOffset_wing
         staticOffset_junctionNode = staticOffset_wing
-        if solverOptions["config"] == "t-foil"
-            # TODO: MAKE IT SO ALL WING NODES ARE YAWED ALSO
+        if appendageOptions["config"] == "t-foil"
             angleDefault = deg2rad(-90)
             axisDefault = "x"
             T2 = get_rotate3dMat(angleDefault, axis=axisDefault)
-            T = T2*T1
+            T = T2 * T1
             transMatL2G = [
                 T Z Z
                 Z T Z
@@ -121,7 +123,9 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
             ]
             staticOffset_strut = transMatL2G * staticOffset_strut
 
-            staticOffset_junctionNode = staticOffset_strut + staticOffset_wing
+            staticOffset_junctionNode = staticOffset_wing
+        elseif appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "wing"
+            staticOffset_junctionNode = staticOffset_wing
         end
     else
         angleDefault = 0.0
@@ -130,25 +134,27 @@ function return_totalStates(foilStructuralStates, α₀, elemType="BT2"; STRUT=n
     # In the following formulation, we assume junction node is always first!
     nStrutDOFs = 0
     staticOffsetGlobalRef_strut = []
-    if solverOptions["config"] == "t-foil"
-        nStrutDOFs = (solverOptions["nNodeStrut"]-1)*nDOF # subtract 1 because of the junction node
+    if appendageOptions["config"] == "t-foil"
+        nStrutDOFs = (appendageOptions["nNodeStrut"] - 1) * nDOF # subtract 1 because of the junction node
         w_strut = foilStructuralStates[end-nStrutDOFs+1:nDOF:end]
         staticOffsetGlobalRef_strut = repeat(staticOffset_strut, outer=[length(w_strut)])
     end
     w_wing = foilStructuralStates[1:nDOF:end-nStrutDOFs] # These wing DOFS include the junction node
-    
+
     # # Correct the root "junction" node
-    staticOffsetGlobalRef_wing = vcat(staticOffset_junctionNode, repeat(staticOffset_wing, outer=[length(w_wing)-1]))
+    staticOffsetGlobalRef_wing = vcat(staticOffset_junctionNode, repeat(staticOffset_wing, outer=[length(w_wing) - 1]))
     # staticOffsetGlobalRef_wing[1:nDOF] = staticOffset_junctionNode
 
     staticOffsetGlobalRef = vcat(staticOffsetGlobalRef_wing, staticOffsetGlobalRef_strut)
 
     # Add static angle of attack to deflected foil
+    # AKA jig shape
     foilTotalStates = copy(foilStructuralStates) + staticOffsetGlobalRef
 
 
-    return foilTotalStates, nDOF
+    return foilTotalStates
 end # return_totalStates
+
 
 # ==============================================================================
 #                         Linear algebra routines
@@ -166,7 +172,7 @@ function compute_eigsolve(K, M, nEigs; issym=true)
     return eVals, eVecs
 end # compute_eigsolve
 
-function cmplxInverse(A_r::Matrix{Float64}, A_i::Matrix{Float64}, n::Int64)
+function cmplxInverse(A_r, A_i, n)
     """
     Compute inverse of a complex square matrix
 
@@ -251,9 +257,6 @@ function cmplxInverse_d(A_r, A_rd, A_i, A_id, n)
     return Ainv_r, Ainv_rd, Ainv_i, Ainv_id
 end # cmplxInverse_d
 
-function cmplxInverse_b()
-    # TODO:
-end
 
 function cmplxMatmult(A_r, A_i, B_r, B_i)
     """
@@ -521,7 +524,7 @@ function cmplxStdEigValProb2(A_r, A_i, n; nEigs=10)
     # eigen() is a spectral decomposition
     @fastmath begin
         A = A_r + 1im * A_i
-        
+
         w, Vr = eigen(A)
         # TODO: swap this out with a more efficient eigen method
         # w, Vr = lanczos(A, nEigs)
@@ -550,7 +553,7 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
     """
     Reverse rule for the eigenvalue problem
     """
-    
+
     # Primal function
     y = cmplxStdEigValProb2(A_r, A_i, n)
 
@@ -560,12 +563,12 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
             with eigenvalues d_k
             Ā = U^-H * (D̄ + F ∘ (U^H * Ū)) * U^H
             where F_ij = (d_j - d_i)^-1 for i != j and zero otherwise --> F_ij = E_ij^-1
-    
+
             overbar terms are the reverse seeds
-    
+
         See:
             Giles, M. (2008). An extended collection of matrix derivative results for forward and reverse mode algorithmic differentiation
-    
+
         Inputs
         ------
         A_r - nxn real part matrix
@@ -645,73 +648,7 @@ end
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================
-function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
-    """
-    Interpolate/extrapolate polynomials of order 'd-1'
-    Providing 'd' points of array of size m x n, we obtain inter/extrapolant order 'd-1'
-    Comes from Eirikur's DLM4PY code
 
-    Inputs
-    ------
-        x0 - input array size(d) (domain)
-        y0 - input array y0(x0) size(m,n,d) (values)
-        m, n  - size of array
-        d - number of points to use for interpolation
-        x  - the location we want to inter/extrapolate at - scalar
-    Outputs
-    -------
-        y  - the inter/extrapolated array at x, or y(x)
-    """
-
-    # 2 dimensional array interpolation
-    y::Matrix{Float64} = zeros(m, n)
-
-    # @simd for ii in 1:d
-    @inbounds @fastmath begin
-        for ii in 1:d
-            L = 1.0
-            for jj in 1:d
-                if jj != ii
-                    L *= (x - x0[jj]) / (x0[ii] - x0[jj])
-                end
-            end
-            y += y0[:, :, ii] .* L
-        end
-    end
-
-    return y
-end
-
-function lagrangeInterp(x0, y0, n, x)
-    """
-    Interpolate/extrapolate polynomial of order 'm'
-    Providing 'n' points gives us inter/extrapolant of order m = n-1
-
-    Inputs
-    ------
-        x0 - input vector
-        y0 - input vector y0(x0)
-        n  - size of array
-        x  - the location we want to inter/extrapolate at
-    Outputs
-    -------
-        y  - the inter/extrapolated value at x, or y(x)
-    """
-    y = 0.0
-
-    for ii in 1:n # loop over points
-        L = 1.0 # Lagrange weight
-        for kk in 1:n
-            if kk != ii
-                # This is the lagrange polynomial
-                L *= (x - x0[kk]) / (x0[ii] - x0[kk])
-            end
-        end
-        y += y0[ii] * L
-    end
-
-    return y
-end
 
 function argmax2d(A)
     """
@@ -808,7 +745,7 @@ function ipack1d(A, mask, nFlow)
     return B, nFound
 end # ipack1d
 
-function find_signChange(x::Vector{Float64})
+function find_signChange(x)
     """
     Find the location where a sign changes in an array
     Inputs
@@ -826,7 +763,7 @@ function find_signChange(x::Vector{Float64})
     for ii in 1:n-1
         @fastmath @inbounds begin
             if sgn[ii+1] != sgn[ii]
-                return ii, ii+1
+                return ii, ii + 1
             else
                 continue
             end
@@ -839,10 +776,10 @@ function get_rotate3dMat(rot; axis="x")
     """
     Give rotation matrix about axis by rot radians (RH rule!)
     """
-    rotMat = zeros(Float64, 3, 3)
+    rotMat = zeros(DTYPE, 3, 3)
     # rotMat = @SMatrix zeros(Float64, 3, 3)
-    c::Float64 = cos(rot)
-    s::Float64 = sin(rot)
+    c = cos(rot)
+    s = sin(rot)
     if axis == "x"
         rotMat = [
             1 0 0
@@ -895,7 +832,7 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
 end
 
 
-function get_transMat(dR1::Float64, dR2::Float64, dR3::Float64, l::Float64, elemType="BT2")
+function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     """
     Returns the transformation matrix for a given element type into 3D space
 
@@ -907,30 +844,38 @@ function get_transMat(dR1::Float64, dR2::Float64, dR3::Float64, l::Float64, elem
     """
     # This line breaks when the vector is straight up and down
     # TODO: there is probably a better angle parametrization like Rodrigues or quaternions!
-    if dR1 == 0.0 && dR2 == 0.0
+    if abs_cs_safe(dR1) < MEPSLARGE && abs_cs_safe(dR2) < MEPSLARGE # beam is straight up and down
         rxyz_div = 1.0 / sqrt(dR1^2 + dR2^2 + dR3^2)
         ca = dR1 * rxyz_div
         cb = dR2 * rxyz_div
         cc = dR3 * rxyz_div
         T1 = get_rotate3dMat(-deg2rad(90); axis="x")
         T2 = get_rotate3dMat(-deg2rad(90); axis="z")
-        T = T2*T1
-    else    
+        T = T2 * T1
+    else
         # beta is the angle above the xy plane
-        rxy_div::Float64 = 1 / sqrt(dR1^2 + dR2^2) # length of projection onto xy plane
-        calpha::Float64 = dR1 * rxy_div
-        salpha::Float64 = dR2 * rxy_div
-        cbeta::Float64 = 1 / rxy_div / l
-        sbeta::Float64 = dR3 / l
+        rxy_div = 1 / sqrt(dR1^2 + dR2^2) # length of projection onto xy plane
+        calpha = dR1 * rxy_div
+        salpha = dR2 * rxy_div
+        cbeta = 1 / rxy_div / l
+        sbeta = dR3 / l
         # Direction cosine matrix to get from 3d space to having x-axis be the long dimension
-        T =  [
+        T = [
             calpha*cbeta salpha calpha*sbeta
             -salpha*cbeta calpha -salpha*sbeta
             -sbeta 0.0 cbeta
         ]
     end
+    ChainRulesCore.ignore_derivatives() do
+        if any(isnan.(T))
+            println("NaN in transformation matrix")
+            println("dR1", dR1)
+            println("dR2", dR2)
+            # show(stdout, "text/plain", T)
+        end
+    end
 
-    Z = zeros(3, 3)
+    Z = zeros(DTYPE, 3, 3)
 
     if elemType == "BT2"
         # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
@@ -971,160 +916,21 @@ function get_transMat(dR1::Float64, dR2::Float64, dR3::Float64, l::Float64, elem
 
     return Γ
 end
-# ==============================================================================
-#                         INTERPOLATION ROUTINES
-# ==============================================================================
-# The following functions are based off of Andrew Ning's publicly available akima spline code
-# Except the derivatives are generated implicitly using Zygote RAD
-function abs_smooth(x, Δx)
+
+
+function do_linear_interp(xpt, ypt, xqvec)
     """
-    Absolute value function with quadratic in valley for C1 continuity
+    KNOWN BUG, DOES NOT LIKE NEGATIVE DOMAINS
     """
-    y = 0.0
-    if (x >= Δx)
-        y = x
-    elseif (x <= -Δx)
-        y = -x
-    else
-        y = x^2 / (2.0 * Δx) + Δx / 2.0
-    end
-
-    return y
-end
-
-function setup_akima(npt, xpt, ypt, Δx)
-    """
-    Setup for the akima spline
-    Returns spline coefficients
-    """
-    eps = 1e-30
-
-    # --- Output ---
-    p0 = zeros(npt - 1)
-    p1 = zeros(npt - 1)
-    p2 = zeros(npt - 1)
-    p3 = zeros(npt - 1)
-
-    # --- Local working vars ---
-    t = zeros(npt)
-    m = zeros(npt + 3) # segment slopes
-    # There are two extra end points and beginning and end
-    # x---x---o--....--o---x---x
-    # estimate             estimate
-
-    # Zygote buffers
-    p0_z = Zygote.Buffer(p0)
-    p1_z = Zygote.Buffer(p1)
-    p2_z = Zygote.Buffer(p2)
-    p3_z = Zygote.Buffer(p3)
-    t_z = Zygote.Buffer(t)
-    m_z = Zygote.Buffer(m)
-
-    # --- Compute segment slopes ---
-    for ii in 1:npt-1
-        m_z[ii+2] = (ypt[ii+1] - ypt[ii]) / (xpt[ii+1] - xpt[ii])
-    end
-    # Estimations
-    m_z[2] = 2.0 * m_z[3] - m_z[4]
-    m_z[1] = 2.0 * m_z[2] - m_z[3]
-    m_z[npt+2] = 2.0 * m_z[npt+1] - m_z[npt]
-    m_z[npt+3] = 2.0 * m_z[npt+2] - m_z[npt+1]
-    m = copy(m_z)
-
-    # --- Slope at points ---
-    for ii in 1:npt
-        m1 = m[ii]
-        m2 = m[ii+1]
-        m3 = m[ii+2]
-        m4 = m[ii+3]
-        w1 = abs_smooth(m4 - m3, Δx)
-        w2 = abs_smooth(m2 - m1, Δx)
-        if (w1 < eps && w2 < eps)
-            t_z[ii] = 0.5 * (m2 + m3)  # special case to avoid divide by zero
-        else
-            t_z[ii] = (w1 * m2 + w2 * m3) / (w1 + w2)
-        end
-    end
-    t = copy(t_z)
-
-    # --- Polynomial coefficients ---
-    for ii in 1:npt-1
-        dx = xpt[ii+1] - xpt[ii]
-        t1 = t[ii]
-        t2 = t[ii+1]
-        p0_z[ii] = ypt[ii]
-        p1_z[ii] = t1
-        p2_z[ii] = (3.0 * m[ii+2] - 2.0 * t1 - t2) / dx
-        p3_z[ii] = (t1 + t2 - 2.0 * m[ii+2]) / dx^2
-    end
-
-    return copy(p0_z), copy(p1_z), copy(p2_z), copy(p3_z)
-end
-
-function interp_akima(npt, n, x, xpt, p0, p1, p2, p3,
-    dp0dxpt, dp1dxpt, dp2dxpt, dp3dxpt, dp0dypt, dp1dypt, dp2dypt, dp3dypt,
-)
-    """
-    Evaluate Akima spline and its derivatives
-
-    Returns
-    y - interpolated value
-    dydx - derivative of y wrt x
-    dydxpt, dydypt - derivative of y wrt xpt and ypt
-    """
-    # --- Outputs ---
-    y = zeros(n)
-    dydx = zeros(n)
-    dydxpt = zeros(n, npt)
-    dydypt = zeros(n, npt)
-    # Zygote buffers
-    y_z = Zygote.Buffer(y)
-    dydx_z = Zygote.Buffer(dydx)
-    dydxpt_z = Zygote.Buffer(dydxpt)
-    dydypt_z = Zygote.Buffer(dydypt)
-
-
-    # --- Interpolate at each point ---
-    for ii in 1:n
-
-        # --- Find location of spline in array (uses end segments if out of bounds) ---
-        jj = 1 # give jj an initial value
-        if x[ii] < xpt[1]
-            jj = 1
-        else
-            # Linear search
-            for jj in npt-1:-1:1
-                if x[ii] >= xpt[jj]
-                    break
-                end
-            end
-        end
-
-        # --- Evaluate poly and derivative ---
-        dx = (x[ii] - xpt[jj])
-        y_z[ii] = p0[jj] + p1[jj] * dx + p2[jj] * dx^2 + p3[jj] * dx^3
-        dydx_z[ii] = p1[jj] + 2.0 * p2[jj] * dx + 3.0 * p3[jj] * dx^2
-
-
-        for kk in 1:npt
-            dydxpt_z[ii, kk] = dp0dxpt[jj, kk] + dp1dxpt[jj, kk] * dx + dp2dxpt[jj, kk] * dx^2 + dp3dxpt[jj, kk] * dx^3
-            if (kk == jj)
-                dydxpt_z[ii, kk] = dydxpt[ii, kk] - dydx_z[ii]
-            end
-            dydypt_z[ii, kk] = dp0dypt[jj, kk] + dp1dypt[jj, kk] * dx + dp2dypt[jj, kk] * dx^2 + dp3dypt[jj, kk] * dx^3
-        end
-    end
-
-    return copy(y_z), copy(dydx_z), copy(dydxpt_z), copy(dydypt_z)
-end
-
-function do_akima_interp(xpt, ypt, xq, Δx=1e-7)
     npt = length(xpt)
-    n = length(xq)
-    p0, p1, p2, p3 = setup_akima(npt, xpt, ypt, Δx)
-    zeros_in = zeros(npt - 1, npt)
-    y, _, _, _ = interp_akima(npt, n, xq, xpt, p0, p1, p2, p3, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in, zeros_in)
-
+    n = length(xqvec)
+    y = zeros(DTYPE, n)
+    y_z = Zygote.Buffer(y)
+    if length(xpt) != length(ypt)
+        throw(ArgumentError("xpt and ypt must be the same length"))
+    end
+    loop_interp!(y_z, xpt, ypt, xqvec, n, npt)
+    y = copy(y_z)
     if n == 1 # need it returned as a float
         return y[1]
     else
@@ -1132,17 +938,22 @@ function do_akima_interp(xpt, ypt, xq, Δx=1e-7)
     end
 end
 
-function do_linear_interp(xpt, ypt, xqvec)
-    npt = length(xpt)
-    n = length(xqvec)
-    y = zeros(n)
-    y_z = Zygote.Buffer(y)
+# function do_linear_interp(xpt::Vector, ypt::Vector, xqvec)
+#     npt = length(xpt)
+#     n = length(xqvec)
+#     y = zeros(RealOrComplex, n)
+#     if length(xpt) != length(ypt)
+#         throw(ArgumentError("xpt and ypt must be the same length"))
+#     end
+#     loop_interp!(y, xpt, ypt, xqvec, n, npt)
+#     if n == 1 # need it returned as a float
+#         return y[1]
+#     else
+#         return y
+#     end
+# end
 
-    if length(xpt) != length(ypt)
-        throw(ArgumentError("xpt and ypt must be the same length"))
-    end
-
-
+function loop_interp!(y, xpt, ypt, xqvec, n, npt)
     for jj in 1:n
         @inbounds @fastmath begin
             xq = xqvec[jj]
@@ -1174,44 +985,10 @@ function do_linear_interp(xpt, ypt, xqvec)
             end
 
             m = (y1 - y0) / (x1 - x0) # slope
-            y_z[jj] = y0 + m * (xq - x0)
+            y[jj] = y0 + m * (xq - x0)
         end
     end
-    y = copy(y_z)
-
-    if n == 1 # need it returned as a float
-        return y[1]
-    else
-        return y
-    end
 end
 
-function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
-    """
-    MATRIX MULTIPLY RULE
-    """
-    function times_pullback(ΔΩ)
-        ∂A = @thunk(ΔΩ * B')
-        ∂B = @thunk(A' * ΔΩ)
-        return (NoTangent(), ∂A, ∂B)
-    end
-    return A * B, times_pullback
-end
-
-function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
-    """
-    MATRIX INVERSE
-    """
-    Ω = inv(A)
-
-    function inv_pullback(ΔΩ)
-
-        ∂A = -Ω' * ΔΩ * Ω'
-
-        return (NoTangent(), ∂A)
-    end
-
-    return Ω, inv_pullback
-end
 
 end # SolverRoutines

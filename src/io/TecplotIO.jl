@@ -9,17 +9,14 @@ When in doubt, refer to the Tecplot Data Format Guide
 
 
 module TecplotIO
-
+# --- PACKAGES ---
 using Printf
-include("../constants/SolutionConstants.jl")
-using .SolutionConstants
 
-# --- Globals ---
-XDIM = SolutionConstants.XDIM
-YDIM = SolutionConstants.YDIM
-ZDIM = SolutionConstants.ZDIM
+# --- DCFoil modules ---
+using ..SolverRoutines: get_rotate3dMat
+using ..SolutionConstants: XDIM, YDIM, ZDIM
 
-function write_mesh(DVDict::Dict, FEMESH, solverOptions::Dict, outputDir::String, fname="mesh.dat")
+function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::String, fname="mesh.dat")
     """
     Top level routine to write the mesh file
     """
@@ -31,9 +28,19 @@ function write_mesh(DVDict::Dict, FEMESH, solverOptions::Dict, outputDir::String
     write(io, "TITLE = \"Mesh Data\"\n")
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
 
-    write_1Dfemmesh(io, FEMESH)
-    write_strips(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=solverOptions["nNodes"])
-    write_oml(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=solverOptions["nNodes"])
+    for icomp in eachindex(FEMESHLIST)
+        options = solverOptions["appendageList"][icomp]
+
+        FEMESH = FEMESHLIST[icomp]
+
+        # Offset by xmount just for the visualization purpose. 
+        # Solution still happens in the local foil frame
+        FEMESHCopy = deepcopy(FEMESH)
+        FEMESHCopy.mesh[:, XDIM] .+= options["xMount"]
+        write_1Dfemmesh(io, FEMESHCopy)
+        # write_strips(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=options["nNodes"])
+        # write_oml(io, DVDict, FEMESH; config=solverOptions["config"], nNodeWing=options["nNodes"])
+    end
 
     close(io)
 end
@@ -58,55 +65,219 @@ function generate_naca4dig(toc)
     return foil_coords
 end
 
-function transform_airfoil(foilCoords, localChord)
+function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     """
     Unit airfoil to DCFoil frame
+    considering pretwist where positive tilts up
     """
     # Translate airfoil to be centered at the midchord
     foilCoordsXform = copy(foilCoords)
     foilCoordsXform[:, XDIM] .+= -0.5
     # Scale airfoil
     foilCoordsXform = localChord * foilCoordsXform
+    # 2D rotation matrix
+    s = sin(-pretwist)
+    c = cos(-pretwist)
+    rmat = [
+        c -s
+        s c
+    ]
+    # Rotate airfoil
+    for ii in 1:size(foilCoordsXform)[1]
+        foilCoordsXform[ii, :] = (rmat * foilCoordsXform[ii, :])
+    end
     return foilCoordsXform
 end
 
-function write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
     """
     TODO generalize to take in a normal vector in spanwise direction
     """
 
+    function write_slice(io, unode, iairfoilpt, foilCoords, nodeLoc::Vector, dus, dvs, dws)
+        write(io, @sprintf(
+            "%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+            foilCoords[iairfoilpt, XDIM] + nodeLoc[XDIM],
+            nodeLoc[YDIM],
+            foilCoords[iairfoilpt, YDIM] + nodeLoc[ZDIM],
+            unode[1] + dus[iairfoilpt],
+            unode[2] + dvs[iairfoilpt],
+            unode[3] + dws[iairfoilpt],
+            unode[4],
+            unode[5],
+            unode[6])
+        )
+    end
+
     foilCoords = generate_naca4dig(DVDict["toc"][1])
+    baserake = deg2rad(DVDict["α₀"])
+    rake = deg2rad(DVDict["rake"])
+    if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
+        for ii in 1:appendageOptions["nNodes"] # iterate over span
+            nodeLoc = mesh[ii, :]
+            localChord = DVDict["c"][ii]
+            foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
-    for ii in 1:size(mesh)[dim] # iterate over span
-        spanLoc = mesh[ii, :]
-        localChord = DVDict["c"][ii]
-        foilCoordsXform = transform_airfoil(foilCoords, localChord)
+            # Get u, v, w based on rotations
+            nAirfoilPts = size(foilCoordsXform)[1]
+            # uAirfoil = u[ii] * ones(size(foilCoordsScaled)[1])
+            dws = -foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
+            dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
+            dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
 
-        # Get u, v, w based on rotations
-        nAirfoilPts = size(foilCoordsXform)[1]
-        # uAirfoil = u[ii] * ones(size(foilCoordsScaled)[1])
-        dws = foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
-        dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
-        dus = foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
-
-        # --- Header ---
-        write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", spanLoc[XDIM], spanLoc[YDIM], spanLoc[ZDIM]))
-        write(io, @sprintf("NODES = %d, ", nAirfoilPts))
-        write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
-        write(io, "DATAPACKING = POINT\n")
-        # --- Values ---
-        for jj in 1:nAirfoilPts
-            write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", foilCoordsXform[jj, XDIM], spanLoc[YDIM], foilCoordsXform[jj, YDIM], u[ii] + dus[jj], v[ii] + dvs[jj], w[ii] + dws[jj], phi[ii], theta[ii], psi[ii]))
+            # --- Header ---
+            write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM]))
+            write(io, @sprintf("NODES = %d, ", nAirfoilPts))
+            write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
+            write(io, "DATAPACKING = POINT\n")
+            # --- Values ---
+            for jj in 1:nAirfoilPts
+                unode = [u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii]]
+                write_slice(io, unode, jj, foilCoordsXform, nodeLoc, dus, dvs, dws)
+            end
+            # --- Connectivities ---
+            for jj in 1:nAirfoilPts-1
+                write(io, @sprintf("%d\t%d\n", jj, jj + 1))
+            end
         end
-        # --- Connectivities ---
-        for jj in 1:nAirfoilPts-1
-            write(io, @sprintf("%d\t%d\n", jj, jj + 1))
+        if appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
+            for ii in appendageOptions["nNodes"]+1:2*appendageOptions["nNodes"]-1 # iterate over span
+                nodeLoc = mesh[ii, :]
+                localChord = DVDict["c"][ii-appendageOptions["nNodes"]]
+                foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
+
+                # Get u, v, w based on rotations
+                nAirfoilPts = size(foilCoordsXform)[1]
+                dws = -foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
+                dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
+                dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
+
+                # --- Header ---
+                write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM]))
+                write(io, @sprintf("NODES = %d, ", nAirfoilPts))
+                write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
+                write(io, "DATAPACKING = POINT\n")
+                # --- Values ---
+                for jj in 1:nAirfoilPts
+                    unode = [u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii]]
+                    write_slice(io, unode, jj, foilCoordsXform, nodeLoc, dus, dvs, dws)
+                end
+                # --- Connectivities ---
+                for jj in 1:nAirfoilPts-1
+                    write(io, @sprintf("%d\t%d\n", jj, jj + 1))
+                end
+            end
         end
+
+        if appendageOptions["config"] == "t-foil"
+
+            foilCoords = generate_naca4dig(DVDict["toc_strut"][1])
+            for ii in appendageOptions["nNodes"]*2:(appendageOptions["nNodes"]*2+appendageOptions["nNodeStrut"]-2) # iterate over strut
+                spanLoc = mesh[ii, :]
+                localChord = DVDict["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]
+                foilCoordsXform = transform_airfoil(foilCoords, localChord)
+
+                # Get u, v, w based on rotations
+                nAirfoilPts = size(foilCoordsXform)[1]
+                dws = foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
+                dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
+                dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
+
+                # --- Header ---
+                write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", spanLoc[XDIM], spanLoc[YDIM], spanLoc[ZDIM]))
+                write(io, @sprintf("NODES = %d, ", nAirfoilPts))
+                write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
+                write(io, "DATAPACKING = POINT\n")
+                # --- Values ---
+                for jj in 1:nAirfoilPts
+                    # THIS PART CHANGED BECAUSE THE STRUT IS VERTICAL
+                    # Strut rake doesn't really show up in the airfoil drawing
+                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+                        foilCoordsXform[jj, XDIM] + spanLoc[XDIM],
+                        foilCoordsXform[jj, YDIM],
+                        spanLoc[ZDIM],
+                        u[ii] + dus[jj],
+                        v[ii] + dvs[jj],
+                        w[ii] + dws[jj],
+                        phi[ii],
+                        theta[ii],
+                        psi[ii]))
+                end
+                # --- Connectivities ---
+                for jj in 1:nAirfoilPts-1
+                    write(io, @sprintf("%d\t%d\n", jj, jj + 1))
+                end
+            end
+        end
+    else
+        error("Unsupported config: ", appendageOptions["config"])
     end
 end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
+function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static";
+    appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1
+)
+    """
+    """
+    fTractions = STATICSOL.fHydro
+    deflections = STATICSOL.structStates
+    mesh = copy(FEMESH.mesh)
+    mesh[:, XDIM] .+= appendageOptions["xMount"]
+    elemConn = FEMESH.elemConn
+    nNode = length(mesh[:, 1])
+    nElem = length(elemConn[:, 1])
+
+    @printf("Writing deformed structure to %s_<>.dat\n", basename)
+
+    outfile = @sprintf("%s%s_comp%03d.dat", outputDir, basename, iComp)
+    io = open(outfile, "w")
+
+    # ************************************************
+    #     Header
+    # ************************************************
+    write(io, @sprintf("TITLE = \"STATIC DEFLECTION Uinf = %.8f m/s\"\n", solverOptions["U∞"]))
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
+    write(io, "ZONE T = \"1D BEAM\" \n")
+    write(io, @sprintf("NODES = %d, ", nNode))
+    write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    # ************************************************
+    #     Write contents
+    # ************************************************
+    # ---------------------------
+    #   Values
+    # ---------------------------
+    u = deflections[1:9:end]
+    v = deflections[2:9:end]
+    w = deflections[3:9:end]
+    phi = deflections[4:9:end]
+    theta = deflections[5:9:end]
+    psi = deflections[6:9:end]
+    # --- Write them ---
+    for ii in 1:nNode
+        nodeLoc = mesh[ii, :]
+
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM], u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii])
+        write(io, stringData)
+    end
+    # ---------------------------
+    #   Connectivities
+    # ---------------------------
+    for ii in 1:nElem
+        write(io, @sprintf("%d\t%d\n", elemConn[ii, 1], elemConn[ii, 2]))
+    end
+
+    # ************************************************
+    #     Airfoils
+    # ************************************************
+    write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
+
+    close(io)
+end
+
 function write_1Dfemmesh(io, FEMESH)
     """
     Write the jig shape FEM stick mesh to tecplot
@@ -114,7 +285,7 @@ function write_1Dfemmesh(io, FEMESH)
 
     mesh = FEMESH.mesh
     nNodes = length(mesh[:, 1])
-    nElem = length(FEMESH.elemConn[:,1])
+    nElem = length(FEMESH.elemConn[:, 1])
     # ************************************************
     #     Header
     # ************************************************
@@ -122,7 +293,7 @@ function write_1Dfemmesh(io, FEMESH)
     write(io, @sprintf("NODES = %d,", nNodes))
     write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nElem))
     write(io, "DATAPACKING = POINT\n")
-    
+
     # ************************************************
     #     Write contents
     # ************************************************
@@ -135,7 +306,7 @@ function write_1Dfemmesh(io, FEMESH)
     elseif ndims(mesh) == 2 # 1D beam in 3D space
         # Loop by nodes
         for ii in 1:nNodes
-            nodeLoc = mesh[ii, :]            
+            nodeLoc = mesh[ii, :]
             stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
             write(io, stringData)
         end
@@ -148,10 +319,9 @@ function write_1Dfemmesh(io, FEMESH)
 
 end # end write_mesh
 
-function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode")
+function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode"; solverOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
-    # TODO: should mode 3 be in-plane?? No it shouldn't. Why does it appear?
     Currently writes out a NACA 4-digit airfoil
     """
 
@@ -248,7 +418,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
                 # ************************************************
                 #     Airfoils
                 # ************************************************
-                write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+                write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
 
                 close(io)
             end
@@ -256,7 +426,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
     end
 end # end write_hydroelastic_mode
 
-function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String)
+function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String; solverOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
     Currently writes out a NACA 4-digit airfoil
@@ -324,7 +494,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
 
         close(io)
     end
@@ -380,12 +550,11 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, dim, u, v, w, phi, theta, psi)
+        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
 
         close(io)
     end
 end # end write_natural_mode
-
 
 # ==============================================================================
 #                         Hydro Routines
@@ -441,7 +610,7 @@ function write_strips(io, DVDict, FEMESH; config="wing", nNodeWing=10)
                 write(io, stringData)
             else
                 if config == "t-foil"
-                    if ii <= (nNodeWing*2 - 1)
+                    if ii <= (nNodeWing * 2 - 1)
                         iwing = ii - nNodeWing
                         localChord = DVDict["c"][iwing]
                         b = localChord * 0.5
@@ -458,11 +627,11 @@ function write_strips(io, DVDict, FEMESH; config="wing", nNodeWing=10)
                         stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords2[XDIM], XYZCoords2[YDIM], XYZCoords2[ZDIM])
                         write(io, stringData)
                     else
-                        istrut = ii - nNodeWing*2 + 1
+                        istrut = ii - nNodeWing * 2 + 1
                         localChord = DVDict["c_strut"][istrut]
                         b = localChord * 0.5
                         nodeLoc = FEMESH.mesh[ii, :]
-        
+
                         # ---------------------------
                         #   Write aero strip
                         # ---------------------------
@@ -535,40 +704,40 @@ function write_oml(io, DVDict, FEMESH; config="wing", nNodeWing=10)
                 if ii <= nNodeWing
                     localChord = DVDict["c"][ii]
                     b = localChord * 0.5
-                    
+
                     nodeLoc = FEMESH.mesh[ii, :]
                     if factor == -1
                         nodeLoc = FEMESH.mesh[end-ii+1, :]
                     end
-                    
+
                     XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
                     stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
                     write(io, stringData)
                 else
-                    if ii <= (nNodeWing*2 - 1)
+                    if ii <= (nNodeWing * 2 - 1)
                         iwing = ii - nNodeWing
                         localChord = DVDict["c"][iwing]
                         b = localChord * 0.5
-                        
+
                         nodeLoc = FEMESH.mesh[iwing, :]
                         nodeLoc[YDIM] *= -1.0
                         if factor == -1
                             nodeLoc = FEMESH.mesh[end-iwing+1, :]
                         end
-                        
+
                         XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
                         stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
                         write(io, stringData)
                     else
-                        istrut = ii - 2*nNodeWing +1
+                        istrut = ii - 2 * nNodeWing + 1
                         localChord = DVDict["c_strut"][istrut]
                         b = localChord * 0.5
-                        
+
                         nodeLoc = FEMESH.mesh[ii, :]
                         if factor == -1
                             nodeLoc = FEMESH.mesh[end-ii+1, :]
                         end
-                        
+
                         XYZCoords = nodeLoc + factor * [b, 0.0, 0.0]
                         stringData = @sprintf("%.16f\t%.16f\t%.16f\n", XYZCoords[XDIM], XYZCoords[YDIM], XYZCoords[ZDIM])
                         write(io, stringData)

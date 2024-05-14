@@ -16,7 +16,10 @@ Check the Project.toml for version dependencies.
 
 ## Package
 
-The code can be added with ```Pkg.add("DCFoil"); using DCFoil```
+The code can be added with 
+```
+Pkg.add("DCFoil"); using DCFoil
+```
 
 ## Developers Notes
 
@@ -57,24 +60,47 @@ NOTE:
 Please use this coding convention:
 
 * `camelCase` - variables
-* `PascalCase` - modules and module filenames
+* `PascalCase` - modules, module filenames, and structs
 * `snake_case` - functions (all functions should contain a verb) and non-module filenames
 * `SCREAMING_SNAKE_CASE` - constants
 
-### Sensitivities
+### Data types
+
+Only use **parametric** types for structs.
+Concrete types in function arguments do not usually make the code faster; 
+they only restrict usage (unless it is on purpose for multiple dispatch).
+However, you should declare the struct type argument in function signatures
+The DTYPE constant in the code `RealOrComplex` should be used when structs are not used in the function
+https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
+
+### Derivatives
 
 #### Adding new cost functions or design variables
 
-* For the given solver you're adding the DV or cost func to, check its `.evalFuncsSens()`
+* For the given solver you're adding the DV or cost func to, check its `<solver-name>.evalFuncsSens()`
 
 #### Try not to do this
 
-* `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`
-* Mutating arrays that require the Zygote.Buffer data type. It is SUPER slow.
+* NOTE: as of February 24, 2024, `LinRange` is actually better and improves the flutter prediction accuracy. 
+I wrote the custom rule with the help of the Julia slack channel.
+`LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))` 
+* Mutating arrays that require the `Zygote.Buffer` data type. It is SUPER slow.
+* Don't use `ForwardDiff` because it cannot do matrix operations and I haven't figured out the chain rules.
+It also doesn't fit with the data types
+
+#### AD Packages
+
+* `AbstractDifferentiation` is a wrapper level tool
+* `Zygote` is an RAD package
+
+### Performance
+
+* Don't add type annotations for function arguments unless for multiple dispatch
+* Don't do ```zeros(n)```, but rather ```zeros(typeof(x), n)```
 
 ### DCFoil as a package
 
-The Project.toml means this is a julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```
+The Project.toml means this is a Julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```
 However, in development mode, just go into julia for this directory and type ```] dev .```.
 
 ### Package Dependencies
@@ -122,7 +148,7 @@ pyspline
 pygeo
 ```
 
-The MACH2DCFoil wrapper requires TODO: GGGGGGGGGGGGGGGGGGGGGGGGGG
+The MACH2DCFoil wrapper requires TODO:
 ```
 pip install julia
 ```

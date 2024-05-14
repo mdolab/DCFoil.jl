@@ -47,7 +47,8 @@ from kramer_src.kramerData import wetFreqHz, wetThetaDeg, dryFreqHz, dryThetaDeg
 # ==============================================================================
 fname = "kramer.pdf"
 analysisDir = "../OUTPUT/kramer_theta"
-fiberAngles = np.arange(0, 90 + 10, 10)
+step = 5
+fiberAngles = np.arange(0, 90 + step, step)
 nModes = 5  # number of modes analyzed in DCFoil
 
 # plt.style.use(niceplots.get_style())  # all settings
@@ -55,13 +56,11 @@ nModes = 5  # number of modes analyzed in DCFoil
 myOptions = {
     "font.size": 30,
     "font.family": "serif",  # set to "serif" to get the same as latex
-    "font.serif": ["Times New Roman"],  # this does not work on all systems
-    # "text.usetex": True, # use external latex for all text
+    "text.usetex": True, # use external latex for all text
     "text.latex.preamble": [
         r"\usepackage{lmodern}",  # latin modern font
         r"\usepackage{amsmath}",  # for using equation commands
-        # r"\usepackage{helvet}",  # should make latex serif in helvet now
-        r"\usepackage{newtxmath, newtxtext}",  # times new roman
+        r"\usepackage{helvet}",  # should make latex serif in helvet now
     ],
 }
 plt.rcParams.update(myOptions)
@@ -90,7 +89,7 @@ if __name__ == "__main__":
     dosave = not not fname
 
     # Create figure object
-    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(11, 8))
+    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(10, 7))
 
     # ---------------------------
     #   Wet modal validation
@@ -104,10 +103,10 @@ if __name__ == "__main__":
             wetFreqHz[ii],
             # label=f"Mode {ii+1} (ABAQUS)",
             c=cm[ii],
-            alpha=0.5,
+            alpha=0.3,
         )
-    ax.set_xlabel(r"$\theta_f$ [$\degree$]")
-    ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, ha="right")
+    ax.set_xlabel(r"$\theta_f$ [$^{\circ}$]")
+    ax.set_ylabel(r"$f$ [Hz]", rotation=0.0, ha="right", va="center")
     ax.legend(fontsize=25, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_title("Modal validation")
 
@@ -115,10 +114,10 @@ if __name__ == "__main__":
     for ii in range(len(dryFreqHz)):
         ax.plot(-fiberAngles, structNatFreqs[:, ii], label=f"Mode {ii+1} (DCFoil)", c=cm[ii])
     for ii in range(len(dryFreqHz)):
-        ax.plot(dryThetaDeg[ii], dryFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.5)
+        ax.plot(dryThetaDeg[ii], dryFreqHz[ii], label=f"Mode {ii+1} (ABAQUS)", c=cm[ii], alpha=0.3)
 
-    ax.annotate("Dry modes", xy=(0.25, 0.45), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.5)
-    ax.annotate("Wet modes", xy=(0.75, 0.45), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.5)
+    ax.annotate("Dry modes", xy=(0.25, 0.45), ha="center", xycoords="axes fraction", size=25, color="gray", alpha=0.8)
+    ax.annotate("Wet modes", xy=(0.75, 0.45), ha="center", xycoords="axes fraction", size=25, color="blue", alpha=0.8)
 
     ax.set_ylim(bottom=0.0)
     ax.set_xticks(np.arange(-90, 90 + 45, 45))

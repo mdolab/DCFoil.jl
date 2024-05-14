@@ -27,9 +27,16 @@ import matplotlib.pyplot as plt
 # Extension modules
 # ==============================================================================
 import niceplots
-from helperFuncs import load_jld, readlines, get_bendingtwisting, postprocess_flutterevals, find_DivAndFlutterPoints
+from helperFuncs import (
+    load_jld,
+    readlines,
+    get_bendingtwisting,
+    postprocess_flutterevals,
+    find_DivAndFlutterPoints,
+)
 from helperPlotFuncs import (
     plot_static2d,
+    plot_dragbuildup,
     plot_deformedShape,
     plot_naturalModeShapes,
     plot_modeShapes,
@@ -47,9 +54,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
 parser.add_argument("--output", type=str, default=None)
 parser.add_argument("--is_static", action="store_true", default=False)
+parser.add_argument("--drag_buildup", action="store_true", default=False)
 parser.add_argument("--is_forced", action="store_true", default=False)
 parser.add_argument("--is_modal", action="store_true", default=False)
 parser.add_argument("--is_flutter", action="store_true", default=False)
+parser.add_argument("--secondset", action="store_true", help="Custom second data set", default=False)
 parser.add_argument(
     "--make_eigenvectors",
     help="Do you want to make the hydroelastic mode shape plots and movie?",
@@ -66,8 +75,8 @@ args = parser.parse_args()
 #                         COMMON PLOT SETTINGS
 # ==============================================================================
 dataDir = "../OUTPUT/"
-labels = ["SS", "CFRP"]
-labels = ["CFRP"]
+labels = ["NOFS", "FS"]
+labels = ["$-15^{\\circ}$", "$0^{\\circ}$", "$15^{\\circ}$"]
 cm, fs_lgd, fs, ls, markers = set_my_plot_settings(args.is_paper)
 
 
@@ -134,13 +143,26 @@ if __name__ == "__main__":
             except KeyError:
                 nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
 
+    if args.secondset:
+        for ii, caseDir in enumerate(caseDirs):
+            key = args.cases[ii]
+            newkey = key.replace("t-foil", "t-foil-fs")
+            fscaseDir = caseDir.replace("t-foil", "t-foil-fs")
+
+            # --- Read in DVDict ---
+            DVDictDict[newkey] = json.load(open(f"{fscaseDir}/init_DVDict.json"))
+            SolverOptions[newkey] = json.load(open(f"{fscaseDir}/solverOptions.json"))
+
+            # --- Read in funcs ---
+            funcsDict[newkey] = json.load(open(f"{fscaseDir}/funcs.json"))
+
     # ==============================================================================
     #                         READ IN DATA
     # ==============================================================================
     # ************************************************
     #     Static hydroelastic
     # ************************************************
-    if args.is_static:
+    if args.is_static or args.drag_buildup:
         # ************************************************
         #     Read in data
         # ************************************************
@@ -167,6 +189,26 @@ if __name__ == "__main__":
             # --- Read moment ---
             fname = f"{caseDir}/static/moments.dat"
             momentDict[key] = np.loadtxt(fname)
+
+        if args.secondset:
+            for ii, caseDir in enumerate(caseDirs):
+                key = args.cases[ii].replace("t-foil", "t-foil-fs")
+                caseDir = caseDir.replace("t-foil", "t-foil-fs")
+                # --- Read bending ---
+                fname = f"{caseDir}/static/bending.dat"
+                bendingDict[key] = np.loadtxt(fname)
+
+                # --- Read twisting ---
+                fname = f"{caseDir}/static/twisting.dat"
+                twistingDict[key] = np.loadtxt(fname)
+
+                # --- Read lift ---
+                fname = f"{caseDir}/static/lift.dat"
+                liftDict[key] = np.loadtxt(fname)
+
+                # --- Read moment ---
+                fname = f"{caseDir}/static/moments.dat"
+                momentDict[key] = np.loadtxt(fname)
 
     # ************************************************
     #     Dynamic hydroelastic
@@ -283,9 +325,9 @@ if __name__ == "__main__":
                 R_r=evecs_r,
                 R_i=evecs_i,
             )
-            # breakpoint()
             # You only need to know the stability point on one processor really
-            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U")
+            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U",altKey="pvals_i")
+
         # ************************************************
         #     Debug code
         # ************************************************
@@ -384,7 +426,7 @@ if __name__ == "__main__":
         dosave = not not fname
 
         # Create figure object
-        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, constrained_layout=True, figsize=(14, 8))
+        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, constrained_layout=True, figsize=(18, 8))
         lpad = 40
         ytickBend = []
         ytickTwist = []
@@ -400,18 +442,31 @@ if __name__ == "__main__":
             spanLift[0] *= 2
             spanMoment[0] *= 2
 
-            ytickBend.append(np.max(np.abs(bending)))
-            ytickTwist.append(np.max(np.abs(twisting)))
+            if iic < 1:
+                ytickBend.append(np.max(np.abs(bending)))
+                ytickTwist.append(np.max(np.abs(twisting)))
 
             fig, axes = plot_static2d(
-                fig, axes, nodes, bending, twisting, spanLift, spanMoment, funcs, labels[iic], cm[iic], fs_lgd, iic
+                fig,
+                axes,
+                nodes,
+                bending,
+                twisting,
+                spanLift,
+                spanMoment,
+                funcs,
+                labels[iic],
+                cm[iic],
+                fs_lgd,
+                iic,
+                solverOptions=SolverOptions[key],
             )
 
         fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
         flowSpeed = SolverOptions[key]["U∞"]
         AOA = DVDictDict[key]["α₀"]
         sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
-        flowString = "$U_{\\infty} =$" + f"{flowSpeed*1.9438:.1f}" + " kts"
+        flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
         alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
         sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
         fiberString = "$\\theta_f$ = " + f"{fiberAngle:.1f}" + "$^{\\circ}$"
@@ -420,18 +475,59 @@ if __name__ == "__main__":
         fig.suptitle(titleTxt)
 
         axes[0, 0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+
+        # --- Put second set after legend call so it's not labeled ---
+        if args.secondset:
+            for iic, key in enumerate(args.cases):
+                newkey = key.replace("t-foil", "t-foil-fs")
+                funcs = funcsDict[newkey]
+                bending = bendingDict[newkey]
+                twisting = np.rad2deg(twistingDict[newkey])
+                spanLift = liftDict[newkey]
+                spanMoment = momentDict[newkey]
+
+                # If you used a half strip on the root, we're doubling the lift and moment there
+                spanLift[0] *= 2
+                spanMoment[0] *= 2
+
+                fig, axes = plot_static2d(
+                    fig,
+                    axes,
+                    nodes,
+                    bending,
+                    twisting,
+                    spanLift,
+                    spanMoment,
+                    funcs,
+                    labels[iic],
+                    cm[iic],
+                    fs_lgd,
+                    iic,
+                    solverOptions=SolverOptions[key],
+                    ls="--",
+                )
+
         yticks = np.array(ytickBend)
-        ytickBend = np.concatenate((yticks, -yticks)).tolist()
+        # ytickBend = np.concatenate((yticks, -yticks)).tolist()
+        ytickBend = yticks.tolist()
         axes[0, 0].set_yticks(ytickBend + [0.0])
-        axes[0, 0].set_ylim(-1.1 * np.max(ytickBend), 1.1 * np.max(ytickBend))
+        axes[0, 0].set_ylim(-0.2 * np.max(ytickBend), 1.1 * np.max(ytickBend))
+
         yticks = np.array(ytickTwist)
-        ytickTwist = np.concatenate((yticks, -yticks)).tolist()
+        # ytickTwist = np.concatenate((yticks, -yticks)).tolist()
+        ytickTwist = yticks.tolist()
         axes[0, 1].set_yticks(ytickTwist + [0.0])
-        axes[0, 1].set_ylim(-1.1 * np.max(ytickTwist), 1.1 * np.max(ytickTwist))
+        axes[0, 1].set_ylim(-0.1 * np.max(ytickTwist), 1.1 * np.max(ytickTwist))
+
+        xticks = [0.0, DVDictDict[key]["s"]]
+        axes[0, 0].set_xticks(xticks)
 
         plt.show(block=(not dosave))
-        for ax in axes.flatten():
-            niceplots.adjust_spines(ax, outward=True)
+        for ii, ax in enumerate(axes.flatten()):
+            # niceplots.adjust_spines(ax, ["left", "bottom"], outward=True)
+            # if ii < 2:
+            ax.yaxis.set_label_position("right")
+            niceplots.adjust_spines(ax, ["right", "bottom"], outward=True)
         if dosave:
             plt.savefig(fname, format="pdf")
             print("Saved to:", fname)
@@ -462,6 +558,60 @@ if __name__ == "__main__":
         #     print("Saved to:", fname)
         # plt.close()
 
+    if args.drag_buildup:
+        fname = f"{outputDir}/drag-buildup.pdf"
+        dosave = not not fname
+
+        fig, axes = plt.subplots(nrows=2, ncols=3, sharey=True, constrained_layout=True, figsize=(15, 10))
+
+        for iic, key in enumerate(args.cases):
+            funcs = funcsDict[key]
+
+            fig, axes = plot_dragbuildup(
+                fig,
+                axes,
+                funcs,
+                labels[iic],
+                cm,
+                fs_lgd,
+                iic,
+                solverOptions=SolverOptions[key],
+            )
+
+        if args.secondset:
+            for iic, key in enumerate(args.cases):
+                newkey = key.replace("t-foil", "t-foil-fs")
+                funcs = funcsDict[newkey]
+
+                fig, axes = plot_dragbuildup(
+                    fig,
+                    axes,
+                    funcs,
+                    labels[iic],
+                    cm,
+                    fs_lgd,
+                    iic + 3,
+                    solverOptions=SolverOptions[key],
+                )
+
+        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
+        flowSpeed = SolverOptions[key]["U∞"]
+        AOA = DVDictDict[key]["α₀"]
+        sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
+        flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
+        alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
+        sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
+        fiberString = "$\\theta_f$ = " + f"{fiberAngle:.1f}" + "$^{\\circ}$"
+        titleTxt = flowString + ", " + alfaString + ", " + sweepString + ", " + fiberString
+
+        fig.suptitle(titleTxt)
+
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
+
     if args.is_forced:
         # --- File name ---
         fname = f"{outputDir}/forced-dynamics.pdf"
@@ -470,7 +620,13 @@ if __name__ == "__main__":
         nrows = 2
         ncols = 2
         figsize = (6 * ncols, 6 * nrows)
-        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex=True, constrained_layout=True, figsize=figsize)
+        fig, axes = plt.subplots(
+            nrows=nrows,
+            ncols=ncols,
+            sharex=True,
+            constrained_layout=True,
+            figsize=figsize,
+        )
 
         fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
         flowSpeed = SolverOptions[key]["U∞"]
@@ -558,7 +714,14 @@ if __name__ == "__main__":
         # --- Create figure object ---
         fact = 0.85  # scale size
         figsize = (18 * fact, 13 * fact)
-        fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", constrained_layout=True, figsize=figsize)
+        fig, axes = plt.subplots(
+            nrows=2,
+            ncols=2,
+            sharex="col",
+            sharey="row",
+            constrained_layout=True,
+            figsize=figsize,
+        )
 
         for ii, key in enumerate(args.cases):
             if ii == 0:
@@ -580,28 +743,28 @@ if __name__ == "__main__":
                 instabPts=instabPtsDict[key],
             )
 
-            # --- Set limits ---
-            # IMOCA60 paper
-            axes[0, 0].set_ylim(top=0.8, bottom=-4)
-            axes[1, 0].set_ylim(top=18.0)
-            # axes[0, 0].set_xlim(right=50, left=5)
-            # axes[0,0].set_xlim(right=40, left=25)
-            # axes[0, 0].set_ylim(top=1, bottom=-5)
-            # axes[0, 0].set_xlim(right=190, left=170)
-            # axes[0, 0].set_ylim(top=1, bottom=-5)
-            # axes[1, 1].set_xlim(right=1, left=-5)
-            # axes[1, 1].set_ylim(top=20, bottom=0)
-            axes[0, 0].set_xticks([10, 60] + [instabPtsDict[key][0][0] * 1.9438])
-            # axes[0, 0].set_xticks([10, 55])
+            # # --- Set limits ---
+            # # IMOCA60 paper
+            # axes[0, 0].set_ylim(top=0.8, bottom=-4)
+            # axes[1, 0].set_ylim(top=18.0)
+            # # axes[0, 0].set_xlim(right=50, left=5)
+            # # axes[0,0].set_xlim(right=40, left=25)
+            # # axes[0, 0].set_ylim(top=1, bottom=-5)
+            # # axes[0, 0].set_xlim(right=190, left=170)
+            # # axes[0, 0].set_ylim(top=1, bottom=-5)
+            # # axes[1, 1].set_xlim(right=1, left=-5)
+            # # axes[1, 1].set_ylim(top=20, bottom=0)
+            # axes[0, 0].set_xticks([10, 60] + [instabPtsDict[key][0][0] * 1.9438])
+            # # axes[0, 0].set_xticks([10, 55])
 
             # # akcabay limits
-            # # # swept flutter
-            # # axes[0, 0].set_ylim(top=50)
-            # # axes[0, 0].set_xlim(right=185)
-            # # axes[0, 0].set_xticks([170, 185] + [instabPtsDict[key][0][0]])
-            # # static div
-            # axes[0, 0].set_ylim(top=20)
-            # axes[0, 0].set_xticks([20, 40] + [instabPtsDict[key][0][0]])
+            # # swept flutter
+            # axes[0, 0].set_ylim(top=50)
+            # axes[0, 0].set_xlim(left=160,right=175)
+            # axes[0, 0].set_xticks([160, 175] + [instabPtsDict[key][0][0]])
+            # static div
+            axes[0, 0].set_ylim(top=20)
+            axes[0, 0].set_xticks([20, 40] + [instabPtsDict[key][0][0]])
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -660,7 +823,10 @@ if __name__ == "__main__":
             # Create output directory if it doesn't exist
             Path(dirname).mkdir(parents=True, exist_ok=True)
 
-            vRange = [0.20, 50.0]  # set the speed range to plot in whatever units you choose
+            vRange = [
+                0.20,
+                50.0,
+            ]  # set the speed range to plot in whatever units you choose
             fact = 0.85  # scale size
             for ii, key in enumerate(args.cases):
                 # --- Plot ---

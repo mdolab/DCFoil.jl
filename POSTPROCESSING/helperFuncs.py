@@ -177,16 +177,17 @@ def postprocess_flutterevals(iblankIn, rho, U, dynP, pvals_r, pvals_i, R_r, R_i)
     return dataDict
 
 
-def find_DivAndFlutterPoints(d: dict, xKey: str, yKey: str, debug=False):
+def find_DivAndFlutterPoints(data: dict, xKey: str, yKey: str, altKey=None, debug=False):
     """
     Finds the velocity where damping crosses zero
     Input :
-        d : dictionary with flutter solution
+        data : dictionary with flutter solution
         xKey : The key that represents the known variable, usually "pvals_r" or "pmG"
         yKey : Key for the unknown we want to find, usually "dynp"
+        altKey : None
     Output :
         instabPts : list of tuples that contains the interpolated flutter
-            and divergence points. The tuple is (x,y)=(dynp, damping)
+            and divergence points. The tuple is (x,y,z,a)=(dynp, damping, key, ptID, frequency)
     From Eirikur Jonsson with modifications by Galen Ng
     """
 
@@ -194,11 +195,13 @@ def find_DivAndFlutterPoints(d: dict, xKey: str, yKey: str, debug=False):
     print(120 * "=")
     print("Processing for: {0:s} and {1:s}".format(xKey, yKey))
     print(120 * "=")
-    for k, v in d.items():
+    for k, v in data.items():
         print("Mode: {0:10s}".format(k), end="")
 
-        x = d[k][xKey]  # This is either "pvals_r" or "pmG"
-        y = d[k][yKey]  # This is "U"
+        x = data[k][xKey]  # This is either "pvals_r" or "pmG"
+        y = data[k][yKey]  # This is "U"
+        if altKey is not None:
+            xalt = data[k][altKey]
 
         asign = np.sign(x)
         # Search for the first sign change since that indicates the flutter point
@@ -215,12 +218,16 @@ def find_DivAndFlutterPoints(d: dict, xKey: str, yKey: str, debug=False):
                 xInt = 0.0
                 yInt = (y[i + 1] - y[i]) / (x[i + 1] - x[i]) * (xInt - x[i]) + y[i]
 
+                if altKey is not None:
+                    xaltInt = (xalt[i + 1] - xalt[i]) / (x[i + 1] - x[i]) * (xInt - x[i]) + xalt[i]
+                else:
+                    xaltInt = 0.0
                 # # Check what kind of processing is done
                 # if xKey.lower() is "pmg" and useSW:
                 #     print("HELLO")
 
                 print(f"Found crossing between {i} and {i+1} at U = {yInt} m/s ({yInt*1.9438:.3f} kts)", end="")
-                instabPts.append([yInt, xInt, k, i])
+                instabPts.append([yInt, xInt, k, i, xaltInt])
                 break
         # Print new line to close
         print("")

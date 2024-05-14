@@ -2,19 +2,14 @@
 Test derivative routines with super basic tests
 """
 
-include("../src/solvers/SolverRoutines.jl")
-using .SolverRoutines
-include("../src/hydro/HydroStrip.jl")
-include("../src/InitModel.jl")
-include("../src/struct/FEMMethods.jl")
-include("../src/solvers/SolveFlutter.jl")
-using .HydroStrip, .InitModel, .FEMMethods, .SolveFlutter
-using FiniteDifferences, Zygote
+using FiniteDifferences, Zygote, Enzyme
 using Plots
 using Printf
 using LinearAlgebra
 using JLD2
 
+include("../src/DCFoil.jl")
+using .DCFoil: SolverRoutines, HydroStrip, SolveFlutter, FEMMethods
 # ==============================================================================
 #                         Aero-node tests
 # ==============================================================================
@@ -41,7 +36,7 @@ function test_hydromass()
     test1 = norm(test1, 2)
     test2 = norm(test2, 2)
     return min(test1, test2)
-end 
+end
 
 function test_hydrodamp()
     # Test values
@@ -82,12 +77,12 @@ function test_hydrodamp()
     test3 = derivs[3] - fdderivs3
 
     return max(norm(test1, 2), norm(test2, 2), norm(test3, 2))
-end 
+end
 
 function test_interp()
     """Test the my linear interpolation"""
     mesh = collect(0:0.1:2)
-    yVec = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
+    yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
     xq = 0.5
 
     derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
@@ -113,11 +108,12 @@ function test_hydroderiv(DVDict, solverOptions)
     """
 
     nElem = solverOptions["nNodes"] - 1
-    mesh, elemConn = FEMMethods.make_mesh(nElem, DVDict["s"])
+    mesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
         DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions
     )
-    globalKs, _, _ = FEMMethods.assemble(mesh, elemConn, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, θ, zeros(2, 2))
+    globalKs, _, _ = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
 
     dim = size(globalKs, 1) # big problem
     ω = 0.1
@@ -134,10 +130,16 @@ function test_hydroderiv(DVDict, solverOptions)
         # return globalCf_r
     end
 
+    function new_compute_AICs(Mf, dim, x1, x2, x3, x4, x5, FOIL, U∞, ω)
+        Mf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω, "BT2")
+    end
+
 
     # --- AD ---
     derivs = Zygote.jacobian((x1, x2, x3, x4, x5) -> my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω),
         mesh, Λ, chordVec, abVec, ebVec)
+
+    Enzyme.jacobian(Reverse, my_compute_AICs, dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω)
 
     # --- FD ---
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, x, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω),
@@ -251,7 +253,7 @@ function test_theodorsenDeriv()
     # ---------------------------
     #   Test glauert lift distribution
     # ---------------------------
-    cl_α = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
+    cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
     pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
     plot!(title="lift slope")
 
@@ -352,9 +354,9 @@ function test_pkflutterderiv(DVDict, solverOptions)
     Also some profiling
     """
 
-    @time SolveFlutter.compute_costFuncs(DVDict, solverOptions)
-    @time funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
-    @time funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
+    @time SolveFlutter.get_sol(DVDict, solverOptions)
+    @time funcsSensAD = SolveFlutter.evalFuncsSens(["ksflutter"], DVDict, solverOptions; mode="RAD")
+    @time funcsSensFD = SolveFlutter.evalFuncsSens(["ksflutter"], DVDict, solverOptions; mode="FiDi")
 
 
     # Print it out
@@ -387,7 +389,7 @@ end
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-nNodes = 10
+nNodes = 4
 DVDict = Dict(
     "α₀" => 6.0, # initial angle of attack [deg]
     "Λ" => deg2rad(-15.0), # sweep angle [rad]
@@ -398,8 +400,26 @@ DVDict = Dict(
     "toc" => 0.12, # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
     "θ" => deg2rad(15), # fiber angle global [rad]
+    # --- Strut vars ---
+    "rake" => 0.0,
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.14 * ones(nNodes), # chord length [m]
+    "toc_strut" => 0.095, # thickness-to-chord ratio (mean)
+    "ab_strut" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "x_αb_strut" => 0 * ones(nNodes), # static imbalance [m]
+    "θ_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
+appendageDict = Dict(
+    "nNodes" => nNodes,
+    "config" => "wing",
+    "rotation" => 0.0, # deg
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_tipMass" => false,
+    "material" => "cfrp", # preselect from material library
+    "config" => "wing",
+)
 solverOptions = Dict(
     # --- I/O ---
     "name" => "test",
@@ -408,26 +428,21 @@ solverOptions = Dict(
     # --- General solver options ---
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "material" => "cfrp", # preselect from material library
-    "nNodes" => nNodes,
-    "config" => "wing",
-    "rotation" => 0.0, # deg
-    "gravityVector" => [0.0, 0.0, -9.81],
-    "use_tipMass" => false,
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
+    "appendageList" => [appendageDict],
     # --- Static solve ---
     "run_static" => false,
     # --- Forced solve ---
     "run_forced" => false,
-    "fSweep" => range(0.1, 1000.0, 1000),
+    "fRange" => [0.0, 1.0],
     "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
     # --- Eigen solve ---
     "run_modal" => false,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [180, 190.0],
+    "uRange" => [185, 190.0],
     "maxQIter" => 100,
     "rhoKS" => 80.0,
 )
@@ -437,8 +452,8 @@ using BenchmarkTools
 using TimerOutputs
 using Profile
 
-test_pkflutterderiv(DVDict, solverOptions) # primal
-@profview test_pkprofile(DVDict, solverOptions) #deriv
+# test_pkflutterderiv(DVDict, solverOptions) # primal
+# @profview test_pkprofile(DVDict, solverOptions) #deriv
+# @benchmark test_pkprofile(DVDict, solverOptions) #benchmark
 # Zygote.@profile test_pkprofile(DVDict, solverOptions) # this doesn't work
-Profile.clear() # run to clear compilation stuff
-
+# Profile.clear() # run to clear compilation stuff
