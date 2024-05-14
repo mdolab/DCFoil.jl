@@ -19,6 +19,7 @@ docs/latex/*.pdf
 test_out/
 DebugOutput/
 validations/*.pdf
+test*.pdf
 
 # Any old runscripts
 runscripts/*.jl

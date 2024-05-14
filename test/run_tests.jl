@@ -151,8 +151,8 @@ solverOptions2 = Dict(
     @test test_damping() <= 1e-10
     @test test_mass() <= 1e-10
     # @test test_FSeffect() <= 1e-5 # not ready yet
-    @test test_dwWake()
-    @test test_dwWave()
+    @test test_dwWake() <= 1e-5
+    @test test_dwWave() <= 1e-5
 
     # ************************************************
     #     Solver tests
