@@ -9,7 +9,7 @@ POSTPROCESSING/PLOTS/
 *.jld*
 
 # Docs
-docs/*.pdf
+docs/latex/*.pdf
 
 # MACH structural meshes
 *.bdf

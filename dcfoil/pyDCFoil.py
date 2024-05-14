@@ -42,7 +42,7 @@ class DCFOILWarning(object):
 #                         Wrapper class
 # ==============================================================================
 class DCFOIL:
-    def __init__(self, DVDict: dict, evalFuncs, options=None, debug=False):
+    def __init__(self, DVDictList, evalFuncs, options=None, debug=False):
         """
         Create the flutter solver class
 
@@ -71,8 +71,9 @@ class DCFOIL:
             if debug:
                 # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME
                 # Pull from local directory
-                Pkg.activate("../")
-                Main.include("../src/DCFoil.jl")
+                repoDir = Path(__file__).parent.parent
+                Pkg.activate(f"{repoDir}")
+                Main.include(f"{repoDir}/src/DCFoil.jl")
                 Main.using(".DCFoil")
                 DCFoil = Main.DCFoil
             else:
@@ -95,7 +96,7 @@ class DCFOIL:
 
         setupTime = time.time()
 
-        self.DVDict = DVDict
+        self.DVDictList = DVDictList
         self.evalFuncs = evalFuncs
 
         self.solverOptions = {}
@@ -137,12 +138,7 @@ class DCFOIL:
             # ---------------------------
             #   General appendage options
             # ---------------------------
-            "config": "wing",
-            "nNodes": 10,  # number of nodes on foil half wing
-            "nNodeStrut": 10,  # nodes on strut
-            "rotation": 0.0,  # Rotation of the wing about the x-axis [deg]
             "gravityVector": [0.0, 0.0, -9.81],
-            "use_tipMass": False,
             # ---------------------------
             #   Flow
             # ---------------------------
@@ -152,11 +148,6 @@ class DCFOIL:
             "use_freeSurface": False,
             "use_ventilation": False,
             # ---------------------------
-            #   Structure
-            # ---------------------------
-            "material": "cfrp",  # preselect from material library
-            "strut_material": "cfrp",
-            # ---------------------------
             #   Solver modes
             # ---------------------------
             # --- Static solve ---
@@ -164,7 +155,6 @@ class DCFOIL:
             # --- Forced solve ---
             "run_forced": False,
             "fSweep": np.linspace(0.0, 1.0, 10),
-            "tipForceMag": 0.0,
             # --- p-k (Eigen) solve ---
             "run_modal": False,
             "run_flutter": False,
@@ -180,17 +170,17 @@ class DCFOIL:
         Solve foil problem
         """
 
-        DVDict = self.DVDict
+        DVDictList = self.DVDictList
         evalFuncs = self.evalFuncs
 
         solverOptions = self.solverOptions
 
-        self.DCFoil.init_model(DVDict, evalFuncs, solverOptions=solverOptions)
-        FLUTTERSOL = self.DCFoil.run_model(
-            DVDict, evalFuncs, solverOptions=solverOptions
+        self.DCFoil.init_model(DVDictList, evalFuncs, solverOptions=solverOptions)
+        SOLDICT = self.DCFoil.run_model(
+            DVDictList, evalFuncs, solverOptions=solverOptions
         )
 
-        self.FLUTTERSOL = FLUTTERSOL
+        self.SOLDICT = SOLDICT
 
         # if self.getOption("printTiming"):
         #     print("+-------------------------------------------------+")
@@ -229,7 +219,7 @@ class DCFOIL:
 
         solverOptions = self.solverOptions
 
-        FLUTTERSOL = self.FLUTTERSOL
+        FLUTTERSOL = self.SOLDICT
 
         costFuncs = self.DCFoil.evalFuncs(FLUTTERSOL, evalFuncs, solverOptions)
         # funcs = DCFoil.evalFuncs(FLUTTERSOL, evalFuncs, solverOptions)

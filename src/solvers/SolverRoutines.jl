@@ -34,8 +34,8 @@ function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
     solverParams=nothing,
     appendageOptions=Dict(),
     solverOptions=Dict(),
-    mode="Analytic",
-    # mode="RAD",
+    # mode="Analytic",
+    mode="RAD",
     # mode="FiDi",
     is_cmplx=false,
     iComp=1, CLMain=0.0

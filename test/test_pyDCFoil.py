@@ -54,13 +54,7 @@ if __name__ == "__main__":
         # ---------------------------
         #   General appendage options
         # ---------------------------
-        "config": "wing",
-        # "config": "t-foil",
-        "nNodes": nNodes,  # number of nodes on foil half wing
-        "nNodeStrut": nNodesStrut,  # nodes on strut
-        "rotation": 0.0,  # deg
         "gravityVector": [0.0, 0.0, -9.81],
-        "use_tipMass": False,
         # ---------------------------
         #   Flow
         # ---------------------------
@@ -69,11 +63,6 @@ if __name__ == "__main__":
         "use_freeSurface": False,
         "use_cavitation": False,
         "use_ventilation": False,
-        # ---------------------------
-        #   Structure
-        # ---------------------------
-        "material": "cfrp",  # preselect from material library
-        "strut_material": "cfrp",
         # ---------------------------
         #   Solver modes
         # ---------------------------

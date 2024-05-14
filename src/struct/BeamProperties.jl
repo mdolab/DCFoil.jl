@@ -152,7 +152,7 @@ function compute_section_property(section::SectionProperty, constitutive::String
 end
 
 function compute_beam(nNodes::Int64,
-    chord::Vector, t::Vector, ab::Vector, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ,
+    chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ,
     constitutive::String
 )
     EIₛ = zeros(DTYPE, nNodes)
