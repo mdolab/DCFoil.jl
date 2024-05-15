@@ -146,7 +146,7 @@ end
 #                         Lift forces
 # ==============================================================================
 function compute_glauert_circ(
-    semispan::DTYPE, chordVec, α₀, U∞, nNodes;
+    semispan, chordVec, α₀, U∞, nNodes;
     h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, config="wing"
 )
     """

@@ -747,7 +747,7 @@ function compute_∂f∂u(
 end
 
 function compute_∂r∂x(
-    allStructStates::Vector, DVDict::Dict;
+    allStructStates, DVDict::Dict;
     mode="FiDi", SOLVERPARAMS=nothing, appendageOptions=nothing, solverOptions=nothing, iComp=1, CLMain=0.0, DVDictList=[]
 )
     """
@@ -769,9 +769,9 @@ function compute_∂r∂x(
                 u, DVVec, DVLengths;
                 appendageOptions=appendageOptions,
                 solverOptions=solverOptions,
-                DVDictList=DVDictList,
                 iComp=iComp,
                 CLMain=CLMain,
+                DVDictList=DVDictList,
             )
             DVVec[ii] += dh
             r_f = SolveStatic.compute_residuals(
@@ -787,37 +787,29 @@ function compute_∂r∂x(
             ∂r∂x[:, ii] = (r_f - r_i) ./ dh
         end
 
-        # # This uses the AD package
-        # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-        # ∂r∂x, = AD.jacobian(
-        #     backend,
-        #     x -> SolveStatic.compute_residuals(
-        #         u,
-        #         x,
-        #         DVLengths;
-        #         appendageOptions=appendageOptions,
-        #         solverOptions=solverOptions,
-        #         iComp=iComp,
-        #         CLMain=CLMain,
-        #         DVDictList=DVDictList,
-        #     ),
-        #     DVVec, # compute deriv at this DV
-        # )
-    elseif uppercase(mode) == "CS" # TODO: THIS WOULD BE THE BEST APPROACH
-        dh = 1e-14
+    elseif uppercase(mode) == "CS" # TODO: THIS WOULD BE THE BEST APPROACH BUT DOESN'T WORK RIGHT NOW
+        dh = 1e-100
         ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
-        println("step size:", dh)
+        if solverOptions["debug"]
+            println("step size:", dh)
+        end
+        # create a complex copy of the design variables
+        DVVecCS = complex(copy(DVVec))
         for ii in eachindex(DVVec)
-            DVVec[ii] += 1im * dh
+            DVVecCS[ii] += 1im * dh
             r_f = SolveStatic.compute_residuals(
                 u, DVVec, DVLengths;
                 appendageOptions=appendageOptions,
                 solverOptions=solverOptions,
+                iComp=iComp,
+                CLMain=CLMain,
+                DVDictList=DVDictList,
             )
-            DVVec[ii] -= 1im * dh
+            DVVecCS[ii] -= 1im * dh
 
-            ∂r∂x[:, ii] = imag((r_f)) ./ dh
+            ∂r∂x[:, ii] = imag((r_f)) / dh
         end
+
     elseif uppercase(mode) == "ANALYTIC"
 
     elseif uppercase(mode) == "FAD" # this is fked
@@ -885,12 +877,14 @@ function compute_∂r∂u(
     elseif uppercase(mode) == "CS" # Complex step
 
         dh = 1e-100
-        println("step size:", dh)
+        if solverOptions["debug"]
+            println("step size:", dh)
+        end
 
         ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
 
         # create a complex copy of the structural states
-        structuralStatesCS = complex(copy(structuralStates)) 
+        structuralStatesCS = complex(copy(structuralStates))
         for ii in eachindex(structuralStates)
 
             r_i = compute_residuals(
@@ -946,12 +940,21 @@ function compute_residuals(
 
     DVDict = Utilities.repack_dvdict(DVs, DVLengths)
 
+    # Need to put DVDict in the iComp spot of the DVDictListWork array
+    indicesNotMatchingiComp = 1:length(DVDictList) .!= iComp
+    DVDictWork = copy(DVDictList[indicesNotMatchingiComp])
+    if iComp == 1
+        DVDictListWork = vcat([DVDict], [DVDictWork])
+    else
+        DVDictListWork = vcat([DVDictWork], [DVDict])
+    end
+
     # There is probably a nicer way to restructure the code so the order of calls is
     # 1. top level solve call to applies the newton raphson
     # 2.    compute_residuals
     # solverOptions["debug"] = false
     # THIS IS SLOW
-    _, _, SOLVERPARAMS = setup_problem(DVDictList, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
+    _, _, SOLVERPARAMS = setup_problem(DVDictListWork, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
 
     allStructuralStates, _ = FEMMethods.put_BC_back(structStates, elemType; appendageOptions=appendageOptions)
     foilTotalStates = SolverRoutines.return_totalStates(

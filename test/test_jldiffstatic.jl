@@ -8,6 +8,8 @@
 using Printf # for better file name
 using FileIO
 using Zygote
+using AbstractDifferentiation: AbstractDifferentiation as AD
+
 include("../src/DCFoil.jl")
 
 using .DCFoil
@@ -204,18 +206,62 @@ funcVal = 0.0
 # ************************************************
 #     Complex step derivative
 # ************************************************
-DVDictList = [DVDict, DVDict]
-_, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+# # ---------------------------
+# #   drdu
+# # ---------------------------
+# DVDictList = [DVDict, DVDict]
+# _, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
 
-mode = "CS"
-structStates = zeros(size(solverParams.Kmat, 1) - length(solverParams.dofBlank))
-@time jacobianCS = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions)
+# mode = "CS"
+# structStates = zeros(size(solverParams.Kmat, 1) - length(solverParams.dofBlank))
+# @time jacobianCS = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; 
+# DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions)
 
-mode = "RAD"
-@time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions))
+# mode = "RAD"
+# @time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions))
 
-mode = "Analytic"
-@time jacobianAN = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions)
+# # mode = "Analytic"
+# # @time jacobianAN = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions)
 
-# --- Compare ---
-jacobianCS .- jacobianAD
+# # --- Compare ---
+# jacobianCS .- jacobianAD
+
+
+# We don't need this to be complex step safe just yet. Work on later...
+# # ---------------------------
+# #   drdx
+# # ---------------------------
+# DVDictList = [DVDict, DVDict]
+# _, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+# # Check if derivs of setup_problem are correct
+# DVVec, DVLengths = DCFoil.Utilities.unpack_dvdict(DVDictList[1])
+# DVVecCS = complex(copy(DVVec))
+# dh = 1e-100
+# for ii in eachindex(DVVec)
+
+#     DVDict = DCFoil.Utilities.repack_dvdict(DVVecCS, DVLengths)
+#     DVDictList[1] = DVDict
+#     _, _, solverParams_i = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+#     DVVecCS[ii] += dh * 1im
+#     DVDict = DCFoil.Utilities.repack_dvdict(DVVecCS, DVLengths)
+#     DVDictList[1] = DVDict
+#     _, _, solverParams_f = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+# end
+
+# mode = "CS"
+# structStates = zeros(size(solverParams.Kmat, 1))
+# @time jacobianCS = DCFoil.SolveStatic.compute_∂r∂x(
+#     structStates, DVDict;
+#     mode=mode, DVDictList=DVDictList, SOLVERPARAMS=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions
+# )
+
+# mode = "RAD"
+# @time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂x(
+#     structStates, DVDict; mode=mode, DVDictList=DVDictList, SOLVERPARAMS=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions
+# ))
+
+# # --- Compare ---
+# jacobianCS .- jacobianAD
