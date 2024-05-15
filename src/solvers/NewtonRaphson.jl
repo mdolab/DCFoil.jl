@@ -1,7 +1,7 @@
+module NewtonRaphson
 """
 Newton-Raphson solver
 """
-module NewtonRaphson
 
 export do_newton_raphson
 
