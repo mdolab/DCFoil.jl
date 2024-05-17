@@ -252,7 +252,7 @@ Structural damping is typically small compared to hydrodynamic damping so its ma
 % 
 \subsection{Hydrodynamic loads}
 % 
-\subsubsection{Steady lifting line}
+\subsubsection{Glauert's steady lifting line}
 % 
 The lifting line model derives from~\citet[Ch. XI]{Glauert1983a} and works for arbitrary chord.
 Specifically, we are after sectional lift slopes ($\textstyle c_{\ell_\alpha} = \tn{d}c_\ell/\tn{d}\alpha$).
@@ -350,6 +350,7 @@ Here's the digestion of the Julia code which does the numerical solution of Equa
      & c_{\ell_{\alpha}} = \frac{c_\ell}{\alpha}
 \end{align*}
 
+\subsubsection{Phillip's lifting line}
 \subsubsection{Flap effects}
 The effect of a flap comes from thin airfoil theory and is outlined in \citet{Glauert1924,Glauert1927}.
 A parameter $\phi = \cos^{-1}\left(\frac{c_f}{2} -1\right)$ is a parametric variable for flap angle accounting for the length of flap chord $c_f$

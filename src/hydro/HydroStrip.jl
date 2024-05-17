@@ -280,7 +280,7 @@ function compute_glauert_circ(
         p2 = plot(y, wy ./ U∞, label="w(y)/Uinf", ylabel="w(y)/Uinf", linecolor=:red)
         p3 = plot(y, cl, label="cl(y)", ylabel="cl(y)", linecolor=:green, ylim=(-1.0, 1.0))
         plot(p1, p2, p3, layout=layout)
-        savefig("spanwise_distribution.png")
+        savefig("debug_spanwise_distribution.png")
     end
 
     return reverse(cl_α), Fx_ind, CDi

@@ -34,6 +34,7 @@ for headerName in [
     "solvers/EigenvalueProblem",
     "solvers/SolverRoutines",
     "hydro/HydroStrip",
+    "hydro/VPM", "hydro/LiftingLine", # General LL code
     "adrules/CustomRules",
     # --- Used in this script ---
     "InitModel", "struct/FEMMethods",
