@@ -28,7 +28,7 @@ struct Airfoil{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
 end
 
 function initialize(xx, yy, control_xy, sweep=0.0)
-
+    
     # Quick error check
     if size(control_xy)[1] != 2
         error("Control points must be in the form [x,y]")
@@ -38,17 +38,31 @@ function initialize(xx, yy, control_xy, sweep=0.0)
     vortex_xy = copy(hcat(xx .* cos(sweep), yy)')
 
     panelLengths = sqrt.(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
-
+    
     AIRFOIL = Airfoil(vortex_xy, control_xy, panelLengths, nodeCt, sweep)
-
+    
     P11, P12, P21, P22 = compute_panelMatrix(AIRFOIL)
-
+    
     Amat = zeros(nodeCt, nodeCt)
-    Amat[1:end-1, 1:end-1] += diff(AIRFOIL.vortexXY[XDIM, :]) .* P21 ./ AIRFOIL.panelLengths
-    .-diff(AIRFOIL.vortexXY[YDIM, :]) .* P11 ./ AIRFOIL.panelLengths
+    dx = (diff(AIRFOIL.vortexXY[XDIM, :]))
+    dy = (diff(AIRFOIL.vortexXY[YDIM, :]))
+    # TODO: something very strange with order and signs in the python code
+    mat1 = (dx) .* P21 ./ (AIRFOIL.panelLengths)
+    mat2 = (dy) .* P11 ./ (AIRFOIL.panelLengths)
+    Amat[1:end-1, 1:end-1] += mat1 .- mat2
+    
+    # # Debug code
+    # matplot = mat1
+    # plot(eachindex(matplot[:, 1]), matplot[1, :], label="row 0")
+    # plot!(eachindex(matplot[:, 1]), matplot[11, :], label="row 10")
+    # plot!(eachindex(matplot[:, 1]), matplot[end-9, :], label="row -10")
+    # plot!(eachindex(matplot[:, 1]), matplot[end, :], label="row end")
+    # savefig("eta.png")
+    
+    mat1 = (dx) .* P22 ./ (AIRFOIL.panelLengths)
+    mat2 = (dy) .* P12 ./ (AIRFOIL.panelLengths)
+    Amat[1:end-1, 2:end] += mat1 .- mat2
 
-    Amat[1:end-1, 2:end] += diff(AIRFOIL.vortexXY[XDIM, :]) .* P22 ./ AIRFOIL.panelLengths
-    .-diff(AIRFOIL.vortexXY[YDIM, :]) .* P12 ./ AIRFOIL.panelLengths
 
     # Kutta condition
     Amat[end, 1] = 1.0
@@ -71,9 +85,16 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     # Airfoil surface vorticity strengths
     γi = Amat \ RHS
+    # # Debug code
+    # plot(eachindex(Amat[1,:]), Amat[1,:], label="row 0")
+    # plot!(eachindex(Amat[1,:]), Amat[11,:], label="row 10")
+    # plot!(eachindex(Amat[1,:]), Amat[end-10,:], label="row 10")
+    # plot!(eachindex(Amat[1,:]), Amat[end,:], label="row end")
+    # ylims!(-1, 1)
+    # savefig("eta.png")
 
     # Total circulation for the airfoil
-    Γi = sum(0.5 * (γi[1:end-1] + γi[2:end]) .* Airfoil.panelLengths)
+    Γi = sum(0.5 * (γi[1:end-1] .+ γi[2:end]) .* Airfoil.panelLengths)
 
     cℓ = 2.0 * Vinf * Γi / (chord * cos(Airfoil.sweep) * Vref^2)
     cpDist = 1.0 .- (γi ./ Vref) .^ 2
@@ -125,22 +146,23 @@ function compute_panelMatrix(Airfoil)
     l = Airfoil.panelLengths
 
     # Code is slightly different from Reid 2020 b/c Julia is column-major
-    matrix1 = (x1 .- xx)' .* (xc .- xx')
-    matrix2 = (y1 .- yy)' .* (yc .- yy')
-    matrix3 = -(y1 .- yy)' .* (xc .- xx')
-    matrix4 = (x1 .- xx)' .* (yc .- yy')
+    mat1 = transpose(x1 .- xx) .* (xc .- transpose(xx))
+    mat2 = transpose(y1 .- yy) .* (yc .- transpose(yy))
+    mat3 = -transpose(y1 .- yy) .* (xc .- transpose(xx))
+    mat4 = transpose(x1 .- xx) .* (yc .- transpose(yy))
     # matSum = matrix1 .+ matrix2
-    η = zeros(DTYPE, size(matrix3))
-    ξ = zeros(DTYPE, size(matrix3))
-    for ii in 1:size(matrix3)[1]
-        ξ[ii, :] = (1 ./ l) .* (matrix1[ii, :] .+ matrix2[ii, :])
-        η[ii, :] = (1 ./ l) .* (matrix3[ii, :] .+ matrix4[ii, :])
+    # η = (1 / l) * ( (x1 - xx)(yc - yy) - (y1 - yy)(xc - xx))
+    η = zeros(DTYPE, size(mat3))
+    ξ = zeros(DTYPE, size(mat3))
+    for ii in 1:size(mat3)[1]
+        ξ[ii, :] = (1 ./ l) .* (mat1[ii, :] .+ mat2[ii, :])
+        η[ii, :] = (1 ./ l) .* (mat3[ii, :] .+ mat4[ii, :])
     end
-    
+
     # Matrix
     arg1 = zeros(DTYPE, size(η))
     arg2 = zeros(DTYPE, size(η))
-    
+
     # Matrix
     numerator = zeros(DTYPE, size(η))
     denominator = zeros(DTYPE, size(η))
@@ -150,14 +172,13 @@ function compute_panelMatrix(Airfoil)
         numerator[ii, :] = η[ii, :] .^ 2 + ξ[ii, :] .^ 2
         denominator[ii, :] = η[ii, :] .* η[ii, :] .+ (ξ[ii, :] .- l) .* (ξ[ii, :] .- l)
     end
-    # Everything up to here is debugged, but the calculations for P11, P12, P21, P22 are not correct
-    # TODO: I think Φ is wrong
+    # Φ = tan⁻¹( ηl / (η² + (ξ - l)²))
     Φ = atan_cs_safe.(arg1, arg2)
     Ψ = 0.5 * log.(numerator ./ denominator)
     # Vector
-    constant = 2 .* π .* l .^ 2
-    
-    
+    constant = 2π .* l .^ 2
+
+
     # Vectors
     XY11 = (x1 .- xx) ./ constant
     XY12 = -(y1 .- yy) ./ constant
@@ -169,8 +190,6 @@ function compute_panelMatrix(Airfoil)
     P21_pre = zeros(DTYPE, size(η))
     P22_pre = zeros(DTYPE, size(η))
 
-    mat1 = zeros(DTYPE, size(η))
-    mat2 = zeros(DTYPE, size(η))
     vec1 = zeros(DTYPE, size(η))
     for ii in 1:size(η)[1]
         vec1[ii, :] = (l .- ξ[ii, :])
@@ -178,27 +197,28 @@ function compute_panelMatrix(Airfoil)
         mat2[ii, :] = η[ii, :] .* Ψ[ii, :]
         P11_pre[ii, :] = mat1[ii, :] + mat2[ii, :]
         P12_pre[ii, :] = (ξ[ii, :] .* Φ[ii, :]) .- (η[ii, :] .* Ψ[ii, :])
-        P21_pre[ii, :] = η[ii, :] .* Φ[ii, :] .- (l[ii] .- ξ[ii, :]) .* Ψ[ii, :] .- l[ii]
-        P22_pre[ii, :] = -(η[ii, :] .* Φ[ii, :]) .- ξ[ii, :] .* Ψ[ii, :] .+ l[ii]
+
+
+        P21_pre[ii, :] = η[ii, :] .* Φ[ii, :] .- (l .- ξ[ii, :]) .* Ψ[ii, :] .- l
+        P22_pre[ii, :] = -(η[ii, :] .* Φ[ii, :]) .- ξ[ii, :] .* Ψ[ii, :] .+ l
     end
     # P11_pre = (l .- ξ) .* Φ .+ η .* Ψ
     # P12_pre = (ξ .* Φ) .- (η .* Ψ)
     # P21_pre = η .* Φ .- (l .- ξ) .* Ψ .- l
     # P22_pre = -(η .* Φ) .- ξ .* Ψ .+ l
 
+    P11 = transpose(XY11) .* P11_pre .+ transpose(XY12) .* P21_pre
+    P12 = transpose(XY11) .* P12_pre .+ transpose(XY12) .* P22_pre
+    P21 = transpose(XY21) .* P11_pre .+ transpose(XY22) .* P21_pre
+    P22 = transpose(XY21) .* P12_pre .+ transpose(XY22) .* P22_pre
 
-    P11 = XY11 .* P11_pre .+ XY12 .* P21_pre
-    P12 = XY11 .* P12_pre .+ XY12 .* P22_pre
-    P21 = XY21 .* P11_pre .+ XY22 .* P21_pre
-    P22 = XY21 .* P12_pre .+ XY22 .* P22_pre
-
-    # Debug code
-    # η::Matrix{DTYPE} = (1 ./ l) .* (matrix1) .+ (1 ./ l) .* (matrix2)
-    plot(eachindex(η[:, 1]), mat1[1, :], label="row 0")
-    # plot!(eachindex(η[:, 1]), (1 ./ l) .* matrix1[1, :], label="matrix1")
-    # plot!(eachindex(η[:, 1]), (1 ./ l) .* matrix2[1, :], label="matrix2")
-    plot!(eachindex(η[:, 1]), mat1[11, :], label="row 10")
-    savefig("eta.png")
+    # # Debug code
+    # matplot = P21_pre
+    # plot(eachindex(matplot[:, 1]), matplot[1, :], label="row 0")
+    # plot!(eachindex(matplot[:, 1]), matplot[11, :], label="row 10")
+    # plot!(eachindex(matplot[:, 1]), matplot[end-9, :], label="row -10")
+    # plot!(eachindex(matplot[:, 1]), matplot[end, :], label="row end")
+    # savefig("eta.png")
 
     return P11, P12, P21, P22
 end
