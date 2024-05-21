@@ -701,6 +701,8 @@ function test_VPM()
 
     V = [0.9961947, 0.0, -0.08715574]
     cl, cm, Gamma, cpDist = VPM.solve(Airfoil, Amat, V)
+    println("cl", cl)
+    println("cm", cm)
     p = plot(airfoilX, -cpDist, label="Airfoil", layout=(2, 1))
     plot!(airfoilX, airfoilY, subplot=2)
     ylims!(-1.0, 2)

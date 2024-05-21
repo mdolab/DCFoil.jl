@@ -27,7 +27,12 @@ struct Airfoil{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     sweep::TF # sweep angle [rad]
 end
 
-function initialize(xx, yy, control_xy, sweep=0.0)
+function setup(xx, yy, control_xy, sweep=0.0)
+    """
+    xx: x-coordinates of the airfoil vertices
+    yy: y-coordinates of the airfoil vertices
+    control_xy: control points for the VPM (center of panels)
+    """
     
     # Quick error check
     if size(control_xy)[1] != 2
@@ -46,7 +51,6 @@ function initialize(xx, yy, control_xy, sweep=0.0)
     Amat = zeros(nodeCt, nodeCt)
     dx = (diff(AIRFOIL.vortexXY[XDIM, :]))
     dy = (diff(AIRFOIL.vortexXY[YDIM, :]))
-    # TODO: something very strange with order and signs in the python code
     mat1 = (dx) .* P21 ./ (AIRFOIL.panelLengths)
     mat2 = (dy) .* P11 ./ (AIRFOIL.panelLengths)
     Amat[1:end-1, 1:end-1] += mat1 .- mat2
@@ -85,6 +89,7 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     # Airfoil surface vorticity strengths
     γi = Amat \ RHS
+
     # # Debug code
     # plot(eachindex(Amat[1,:]), Amat[1,:], label="row 0")
     # plot!(eachindex(Amat[1,:]), Amat[11,:], label="row 10")
@@ -150,7 +155,7 @@ function compute_panelMatrix(Airfoil)
     mat2 = transpose(y1 .- yy) .* (yc .- transpose(yy))
     mat3 = -transpose(y1 .- yy) .* (xc .- transpose(xx))
     mat4 = transpose(x1 .- xx) .* (yc .- transpose(yy))
-    # matSum = matrix1 .+ matrix2
+
     # η = (1 / l) * ( (x1 - xx)(yc - yy) - (y1 - yy)(xc - xx))
     η = zeros(DTYPE, size(mat3))
     ξ = zeros(DTYPE, size(mat3))
@@ -225,7 +230,6 @@ end
 
 function compute_sweepCorr(angle, V)
     """
-
     """
     alpha, beta, Vinf = compute_anglesFromVector(V)
     Ca = cos(alpha)
