@@ -1,11 +1,10 @@
-# --- Julia 1.9---
+module BeamProperties
 """
 @File    :   BeamProperties.jl
 @Time    :   2024/01/30
 @Author  :   Galen Ng
 @Desc    :   Module for computing sectional properties of composite beams
 """
-module BeamProperties
 
 using Zygote
 

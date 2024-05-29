@@ -1,4 +1,4 @@
-# --- Julia ---
+module DCFoil
 """
 @File    :   DCFoil.jl
 @Time    :   2022/07/23
@@ -6,7 +6,6 @@
 @Desc    :   This is a required "gluing" file so the package 
              management works properly. This is the module imported
 """
-module DCFoil
 
 # ==============================================================================
 #                         PACKAGES

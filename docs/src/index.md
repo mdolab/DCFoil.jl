@@ -4,7 +4,7 @@ CurrentModule = DCFoil
 
 # DCFoil
 
-Documentation for [DCFoil](https://github.com/gawng/DCFoil.jl).
+Documentation for [DCFoil](https://github.com/mdolab/DCFoil.jl).
 
 ```@index
 ```
