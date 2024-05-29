@@ -1,7 +1,7 @@
 push!(LOAD_PATH, "../src/")
 
 using Documenter
-include("../src/DCFoil.jl")
+include("./DCFoil.jl")
 using .DCFoil
 
 DocMeta.setdocmeta!(DCFoil, :DocTestSetup, :(using DCFoil); recursive=true)
