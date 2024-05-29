@@ -8,6 +8,8 @@
 using Printf # for better file name
 using FileIO
 using Zygote
+using AbstractDifferentiation: AbstractDifferentiation as AD
+
 include("../src/DCFoil.jl")
 
 using .DCFoil
@@ -172,31 +174,94 @@ funcVal = 0.0
 # pfpx_rad = DCFoil.SolveStatic.compute_∂f∂x("lift", SOL["STATIC"][1], DVDict;
 #     mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions)
 
+# # ************************************************
+# #     FULL TEST
+# # ************************************************
+# DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+# SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+# costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+# funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
+# funcsSensAdjoint[1][dvKey]
+# for (ii, dh) in enumerate(steps)
+#     DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+#     SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+#     costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+#     flutt_i = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
+#     global funcVal = flutt_i
+#     DVDict[dvKey][1] += dh
+#     SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+#     costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+#     flutt_f = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
+
+#     derivs[ii] = (flutt_f - flutt_i) / dh
+#     @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
+
+#     # --- Reset DV ---
+#     DVDict[dvKey][1] -= dh
+# end
+
+# save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
+
+
 # ************************************************
-#     FULL TEST
+#     Complex step derivative
 # ************************************************
-DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
-funcsSensAdjoint[1][dvKey]
-for (ii, dh) in enumerate(steps)
-    DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-    SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-    costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-    flutt_i = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
-    global funcVal = flutt_i
-    DVDict[dvKey][1] += dh
-    SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-    costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-    flutt_f = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
+# # ---------------------------
+# #   drdu
+# # ---------------------------
+# DVDictList = [DVDict, DVDict]
+# _, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
 
-    derivs[ii] = (flutt_f - flutt_i) / dh
-    @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
+# mode = "CS"
+# structStates = zeros(size(solverParams.Kmat, 1) - length(solverParams.dofBlank))
+# @time jacobianCS = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; 
+# DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions)
 
-    # --- Reset DV ---
-    DVDict[dvKey][1] -= dh
-end
+# mode = "RAD"
+# @time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions))
 
-save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
+# # mode = "Analytic"
+# # @time jacobianAN = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions)
 
+# # --- Compare ---
+# jacobianCS .- jacobianAD
+
+
+# We don't need this to be complex step safe just yet. Work on later...
+# # ---------------------------
+# #   drdx
+# # ---------------------------
+# DVDictList = [DVDict, DVDict]
+# _, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+# # Check if derivs of setup_problem are correct
+# DVVec, DVLengths = DCFoil.Utilities.unpack_dvdict(DVDictList[1])
+# DVVecCS = complex(copy(DVVec))
+# dh = 1e-100
+# for ii in eachindex(DVVec)
+
+#     DVDict = DCFoil.Utilities.repack_dvdict(DVVecCS, DVLengths)
+#     DVDictList[1] = DVDict
+#     _, _, solverParams_i = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+#     DVVecCS[ii] += dh * 1im
+#     DVDict = DCFoil.Utilities.repack_dvdict(DVVecCS, DVLengths)
+#     DVDictList[1] = DVDict
+#     _, _, solverParams_f = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
+
+# end
+
+# mode = "CS"
+# structStates = zeros(size(solverParams.Kmat, 1))
+# @time jacobianCS = DCFoil.SolveStatic.compute_∂r∂x(
+#     structStates, DVDict;
+#     mode=mode, DVDictList=DVDictList, SOLVERPARAMS=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions
+# )
+
+# mode = "RAD"
+# @time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂x(
+#     structStates, DVDict; mode=mode, DVDictList=DVDictList, SOLVERPARAMS=solverParams, appendageOptions=appendageOptions[1], solverOptions=solverOptions
+# ))
+
+# # --- Compare ---
+# jacobianCS .- jacobianAD

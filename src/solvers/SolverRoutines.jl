@@ -35,7 +35,8 @@ function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
     solverParams=nothing,
     appendageOptions=Dict(),
     solverOptions=Dict(),
-    mode="Analytic",
+    # mode="Analytic",
+    mode="CS",
     # mode="RAD",
     # mode="FiDi",
     is_cmplx=false,
@@ -55,7 +56,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
         println("+", "-"^50, "+")
         println("|              Beginning NL solve                  |")
         println("+", "-"^50, "+")
-        println(@sprintf("Derivatives computed via the %s mode", uppercase(mode)))
+        println(@sprintf("Residual Jacobian computed via the %s mode", uppercase(mode)))
     end
 
     # Somewhere here, you could do something besides Newton-Raphson if you want

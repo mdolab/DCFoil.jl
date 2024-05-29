@@ -40,7 +40,7 @@ function unpack_dvdict(DVDict::Dict)
     return DVVec, DVLengths
 end
 
-function repack_dvdict(DVVec::Vector, DVLengths::Vector{Int64})
+function repack_dvdict(DVVec, DVLengths::Vector{Int64})
     """
     Repack DVVec into a dictionary
     """

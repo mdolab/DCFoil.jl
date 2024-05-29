@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/gawng/DCFoil.jl.git",
+    repo="github.com/mdolab/DCFoil.jl.git",
     devbranch="main",
 )
