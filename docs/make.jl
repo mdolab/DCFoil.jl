@@ -22,5 +22,5 @@ makedocs(;
 
 deploydocs(;
     repo="github.com/gawng/DCFoil.jl.git",
-    devbranch="main",
+    # devbranch="main",
 )
