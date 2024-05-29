@@ -7,6 +7,12 @@ OUTPUT/
 POSTPROCESSING/MOVIES/
 POSTPROCESSING/PLOTS/
 *.jld*
+*.hst
+
+# Tecplot files
+*.plt
+*.szplt
+*.lay
 
 # Docs
 docs/latex/*.pdf
@@ -20,6 +26,7 @@ test_out/
 DebugOutput/
 validations/*.pdf
 test*.pdf
+debug*.png
 
 # Any old runscripts
 runscripts/*.jl

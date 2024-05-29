@@ -115,7 +115,7 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
     ax.set_xlim([y[0], y[-1] * 1.25])
     ax.set_ylim([-0.5 * DVDict["c"][0] * 1.5, 0.5 * DVDict["c"][0] * 1.5])
     ax.set_xlabel("$y$ [m]")
-    ax.set_ylabel("$x$ [m]", labelpad=labelpad, rotation=0)
+    ax.set_ylabel("$x$ [m]", labelpad=labelpad, rotation=0, ha="right")
     ax.set_aspect("equal")
 
     ax.set_title("Wing planform")
@@ -123,9 +123,9 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
     # --- Text annotations ---
     geomText = f"$\\alpha_0$\n$\\Lambda$\n$\\theta_f$\n$t/c$\nnNode\nnDOF"
     try:
-        toc = DVDict['toc'][0]*100
+        toc = DVDict["toc"][0] * 100
     except:
-        toc = DVDict['toc']*100
+        toc = DVDict["toc"] * 100
     valText = (
         f"{DVDict['α₀']}"
         + "$^{{\\circ}}$\n"
@@ -232,11 +232,11 @@ def plot_deformedShape(fig, ax, DVDict: dict, bending, twisting):
 
     # --- Set labels and axes ---
     ax.set_xlabel(r"$x$", labelpad=30)
-    ax.set_ylabel(r"$y$", labelpad=20)
+    ax.set_ylabel(r"$y$", labelpad=20, va="center")
     ax.set_zlabel(r"$w(y)$ [in]", labelpad=20)
     ax.view_init(20, 25)  # [elevtion, azimuthal]
     cbar = fig.colorbar(surf, shrink=0.5, aspect=7)
-    cbar.ax.set_ylabel(r"$w(y)$ [in]", rotation=360)
+    cbar.ax.set_ylabel(r"$w(y)$ [in]", rotation=360, va="center")
     cbar.ax.get_yaxis().labelpad = 25
     ax.tick_params(pad=10)
 
@@ -280,23 +280,13 @@ def plot_static2d(
     ax.plot(nodes, bending, ls=ls, color=lc, label=label)
     ax.yaxis.tick_right()
     # ax.yaxis.set_label_position("right")
-    ax.set_ylabel(
-        "$w$ [m]",
-        rotation="horizontal",
-        ha="left",
-        labelpad=lpad,
-    )
+    ax.set_ylabel("$w$ [m]", rotation="horizontal", ha="left", labelpad=lpad, va="center")
 
     ax = axes[0, 1]
     ax.plot(nodes, twisting, ls=ls, color=lc, label=label)
     ax.yaxis.tick_right()
     # ax.yaxis.set_label_position("right")
-    ax.set_ylabel(
-        "$\\theta$ [$^{\\circ}$]",
-        rotation="horizontal",
-        ha="left",
-        labelpad=lpad,
-    )
+    ax.set_ylabel("$\\theta$ [$^{\\circ}$]", rotation="horizontal", ha="left", labelpad=lpad, va="center")
 
     liftTitle = f"Lift ({lift:0.1e}N, $C_L$={cl:.2f})"
     momTitle = f"Mom. ({mom:0.1e}N-m," + " $C_{My}$=" + f"{cmy:.2f})"
@@ -304,12 +294,7 @@ def plot_static2d(
     ax = axes[1, 0]
     xloc = 0.05
     ax.plot(nodes, spanLift, ls=ls, color=lc, label=label)
-    ax.set_ylabel(
-        "$L$ [N/m]",
-        rotation="horizontal",
-        ha="left",
-        labelpad=lpad,
-    )
+    ax.set_ylabel("$L$ [N/m]", rotation="horizontal", ha="left", labelpad=lpad, va="center")
     ax.set_xlabel("$y$ [m]")
     if do_annotate:
         ax.annotate(
@@ -375,7 +360,7 @@ def plot_dragbuildup(
 
     # Bar plot with drag components
     ax.bar(labels, costData, color=cm[0])
-    ax.set_ylabel("$C_D$", rotation="horizontal", ha="right")
+    ax.set_ylabel("$C_D$", rotation="horizontal", ha="right", va="center")
     # TODO: Niceplots horizontal bar plot?
     # Put percentages on top of bars
     for ii, cost in enumerate(costData):
@@ -458,7 +443,7 @@ def plot_forced(
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     # ax.annotate("$U_{\infty}=$%.1f" % (flowSpeed), xy=(0.8, 0.9), xycoords="axes fraction", color=cm[0])
-    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_xlabel(xLabel)
 
     ax = axes[0, 1]
@@ -470,7 +455,7 @@ def plot_forced(
     for ii, entry in enumerate(rao[:, -2, -2]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
 
     # ************************************************
     #     Cross-correlations
@@ -484,7 +469,7 @@ def plot_forced(
     for ii, entry in enumerate(rao[:, OOPIdx, TwistIdx]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 1]
     # yLabel = r"$\frac{\psi}{\psi_{f0}}$"
@@ -495,7 +480,7 @@ def plot_forced(
     for ii, entry in enumerate(rao[:, TwistIdx, OOPIdx]):
         realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    ax.set_ylabel(yLabel, rotation="horizontal", ha="right")
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
 
     # NOTE: TBH these are not terribly useful unless you're looking at transmitted force into the hull of the boat
     # which you should not, because you want to couple the foil to the ship model!
@@ -598,7 +583,7 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
         #     size=legfs,
         # )
 
-    ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_title("Dry Modes", pad=labelpad)
     ax.legend(
         fontsize=legfs,
@@ -630,7 +615,7 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
             color=ccm[ii],
         )
 
-    ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_xlabel(r"$\bar{y}$ [-]")
 
     # ---------------------------
@@ -651,7 +636,7 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
 
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
         ax.plot(eta, wetBM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii])
-        ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad)
+        ax.set_ylabel(bendLabel, rotation=0, labelpad=labelpad, va="center")
         # ax.annotate(
         #     f"Mode {ii+1} {labelString}",
         #     xy=(eta[-1 - nshift], wetBM[ii, -1 - nshift]),
@@ -687,7 +672,7 @@ def plot_naturalModeShapes(fig, axes, y, nModes: int, modeShapes: dict, modeFreq
         labelString = f"({wetNatFreqs[ii]:.2f}" + " Hz)"
         ax.plot(eta, wetTM[ii, :], label=f"Mode {ii+1} {labelString}", ls=ls, color=ccm[ii])
 
-    ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(twistLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_xlabel("$\\bar{y}$ [-]")
 
     fig.suptitle("Normalized mode shapes", fontsize=40)
@@ -866,7 +851,9 @@ def plot_vg_vf_rl(
     flutterColor = "magenta"
 
     # Hardcoded settings
-    xytext = (-5, 6)
+    xytext = (-5, -2)
+    xytextVG = (-5, -3)
+    # xytext = (-7, 10)
     labelpad = 40
     legfs = 20
 
@@ -883,12 +870,15 @@ def plot_vg_vf_rl(
     xlabel = "$U_{\infty}$ " + f"[{units}]"
     yticks = []
     emptyModes = []
+    bifCtr = 0  # Bifurcation counter
     for ii, key in enumerate(sortedModesNumbers):
         iic = ii % len(cm)  # color index
 
         # --- Units for labeling ---
         vSweep = flutterSol[key]["U"]
         gSweep = flutterSol[key]["pvals_r"] * hz2rad
+        fSweep = flutterSol[key]["pvals_i"] * hz2rad  # for checking bifurcation
+
         if units == "kts":
             vSweep = 1.94384 * np.array(vSweep)  # kts
         elif units == "m/s":
@@ -908,27 +898,50 @@ def plot_vg_vf_rl(
                 alpha=alpha,
             )
             # ax.scatter(vSweep, gSweep, color=(cm[iic]), marker=marker)
-            start = np.array([vSweep[0 + nShift], gSweep[0 + nShift]])
-            end = np.array([vSweep[-1], gSweep[-1]])
             # --- Label mode number on the line ---
             if annotateModes:
+                # check if mode is bifurcated and then alternate the label position
+                if fSweep[0] < 1e-2:
+                    if bifCtr % 2 == 0:
+                        va = "top"
+                        xytextVG = (-7, 0)
+                    else:
+                        xytextVG = (-7, 0)
+                        va = "bottom"
+                    ha = "right"
+                    nShift = 3
+                    bifCtr += 1
+                elif ii + 1 == 2:  # special case don't delete
+                    xytext = (7, 7)
+                    va = "top"
+                    ha = "left"
+                elif ii + 1 == 4:  # special case don't delete
+                    nShift = 20
+                else:
+                    ha = "right"
+                    va = "top"
+
+                start = np.array([vSweep[0 + nShift], gSweep[0 + nShift]])
+                end = np.array([vSweep[-1], gSweep[-1]])
+
                 ax.annotate(
                     f"Mode {ii+1}",
                     xy=(start[0], start[1]),
-                    ha="left",
                     # xy=(end[0], end[1]),
+                    ha=ha,
+                    va=va,
                     color=cm[iic],
                     fontsize=legfs,
-                    xytext=xytext,
+                    xytext=xytextVG,
                     textcoords="offset points",
-                    # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    bbox=dict(boxstyle="square,pad=-0.1", ec="white", linewidth=0, fc="white", alpha=0.9),
                 )
             yticks.append(gSweep[end])
         except Exception:
             emptyModes.append(key)
     print(f"Empty modes: {emptyModes}")
     ax.set_ylim(top=10)
-    ax.set_ylabel(gLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(gLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_title("$V$-$g$", pad=labelpad)
     ax.set_xlabel(xlabel)
     # --- Put flutter boundary on plot ---
@@ -936,16 +949,18 @@ def plot_vg_vf_rl(
         y=0.0,
         # label="Flutter boundary",
         color=flutterColor,
-        ls="--",
+        ls="-",
+        alpha=0.5,
         # path_effects=[patheffects.withTickedStroke()], # ugly
     )
     ax.annotate(
         "Hydroelastic instability",
-        xy=(0.5, 0.9),
+        xy=(0.5, 0.95),
         ha="center",
         xycoords="axes fraction",
         size=legfs,
         color=flutterColor,
+        alpha=0.5,
     )
     # ax.set_yticks(yticks + [0])
 
@@ -959,7 +974,7 @@ def plot_vg_vf_rl(
                 critSpeed = pt[0]
             else:
                 print(f"Unsupported units: {units}")
-            ax.scatter(critSpeed, pt[1], color=cm[iic], marker="x", s=100)
+            ax.scatter(critSpeed, pt[1], color=cm[iic], marker="x", s=100, alpha=alpha)
 
     # ************************************************
     #     V-f diagram
@@ -997,15 +1012,15 @@ def plot_vg_vf_rl(
             if fSweep[0] < 1e-2:
                 if bifCtr % 2 == 0:
                     va = "bottom"
+                    xytext = (-5, 0)
                 else:
-                    xytext = (-5, -3)
+                    xytext = (-5, 0)
                     va = "top"
                 ha = "right"
                 bifCtr += 1
-            # elif fSweep[0] < 80:
-            #     va="top"
-            #     xytext = (-5, -3)
-            #     ha="left"
+            # elif ii+1 == 2: # special case
+            #     xytext = (-5, -2)
+            #     va = "top"
             else:
                 ha = "left"
                 va = "bottom"
@@ -1020,13 +1035,13 @@ def plot_vg_vf_rl(
                     fontsize=legfs,
                     xytext=xytext,
                     textcoords="offset points",
-                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    bbox=dict(boxstyle="square,pad=-0.1", ec="white", linewidth=0, fc="white", alpha=0.9),
                 )
         except Exception:
             continue
-    
+
     # --- Instability points ---
-    # Also plot point at frequency of instability 
+    # Also plot point at frequency of instability
     if instabPts is not None:
         for pt in instabPts:
             iic = (int(pt[2]) - 1) % len(cm)
@@ -1036,9 +1051,9 @@ def plot_vg_vf_rl(
                 critSpeed = pt[0]
             else:
                 print(f"Unsupported units: {units}")
-            ax.scatter(critSpeed, pt[-1], color=cm[iic], marker="x", s=100)
+            ax.scatter(critSpeed, pt[-1], color=cm[iic], marker="x", s=100, alpha=alpha, clip_on=False)
 
-    ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_title("$V$-$f$", pad=labelpad)
     # ax.set_xlim(vSweep[0] * 0.99, vSweep[-1] * 1.01)
     ax.set_xlabel(xlabel)
@@ -1126,7 +1141,7 @@ def plot_vg_vf_rl(
                     fontsize=legfs * 0.8,
                     xytext=(5, -5),
                     textcoords="offset points",
-                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
+                    bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5, pad=-0.3),
                     va="top",
                 )
 
@@ -1143,7 +1158,7 @@ def plot_vg_vf_rl(
         except Exception:
             continue
 
-    ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(fLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_title("Root locus", pad=labelpad)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
     ax.set_xlabel(gLabel)
@@ -1155,7 +1170,8 @@ def plot_vg_vf_rl(
         x=0.0,
         # label="Flutter boundary",
         color=flutterColor,
-        ls="--",
+        ls="-",
+        alpha=0.5,
         # path_effects=[patheffects.withTickedStroke()], # ugly
     )
     ax.annotate(
@@ -1165,6 +1181,7 @@ def plot_vg_vf_rl(
         xycoords="axes fraction",
         size=legfs,
         color=flutterColor,
+        alpha=0.5,
     )
 
     for ax in axes.flatten():
@@ -1276,7 +1293,7 @@ def plot_dlf(
         zorder=1,
     )
 
-    ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_xlabel(xLabel)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
@@ -1311,7 +1328,7 @@ def plot_dlf(
         except Exception:
             continue
 
-    ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad)
+    ax.set_ylabel(yLabel, rotation=0, labelpad=labelpad, va="center")
     ax.set_xlabel(xLabel)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 

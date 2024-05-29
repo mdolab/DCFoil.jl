@@ -56,7 +56,7 @@ nModes = 5  # number of modes analyzed in DCFoil
 myOptions = {
     "font.size": 30,
     "font.family": "serif",  # set to "serif" to get the same as latex
-    "text.usetex": True, # use external latex for all text
+    "text.usetex": True,  # use external latex for all text
     "text.latex.preamble": [
         r"\usepackage{lmodern}",  # latin modern font
         r"\usepackage{amsmath}",  # for using equation commands

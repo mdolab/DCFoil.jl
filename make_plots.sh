@@ -30,12 +30,15 @@ cd postprocessing
 # python ./run_postprocessing.py --case 2023-12-03_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal
 
 
-# python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_IM6-epoxy_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_IM6-epoxy_f30.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 
-python ./run_postprocessing.py --case 2024-01-28_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
+# python ./run_postprocessing.py --case 2024-01-28_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
+# --- Journal paper ---
+# python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_paper
+python ./run_postprocessing.py --cases 2024-02-24_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_paper
+python ./run_postprocessing.py --cases 2024-03-06_IMOCA60Keel_cfrp_f15.0_w0.0 2024-02-24_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_paper
 
 # # ---------------------------
 # #     No bulb IMOCA
@@ -56,9 +59,11 @@ python ./run_postprocessing.py --case 2024-01-28_IMOCA60Keel_cfrp_f15.0_w0.0 --i
 # python ./run_postprocessing.py --cases 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_comp2 2023-10-06_akcabay-swept_cfrp_f15.0_w-15.0_bt2 --is_flutter 
 # python ./run_postprocessing.py --cases 2023-10-06_akcabay_cfrp_f-15.0_w0.0_comp2 2023-10-06_akcabay_cfrp_f-15.0_w0.0_bt2 --is_flutter 
 # python ./run_postprocessing.py --cases  2023-11-06_akcabay-swept_cfrp_f15.0_w-15.0  --is_flutter 
-# --- PAPER ---
-# python ./run_postprocessing.py --cases 2024-01-08_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_paper
-# python ./run_postprocessing.py --cases 2024-01-08_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
+# # --- PAPER ---
+# # python ./run_postprocessing.py --cases 2024-01-08_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_paper
+# # python ./run_postprocessing.py --cases 2024-01-08_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
+# python ./run_postprocessing.py --cases 2024-02-24_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_paper
+# python ./run_postprocessing.py --cases 2024-02-24_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
 
 cd ..
 

@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 from julia import Main, Pkg
 
+
 class DCFOILWarning(object):
     """
     Format a warning message
@@ -176,9 +177,7 @@ class DCFOIL:
         solverOptions = self.solverOptions
 
         self.DCFoil.init_model(DVDictList, evalFuncs, solverOptions=solverOptions)
-        SOLDICT = self.DCFoil.run_model(
-            DVDictList, evalFuncs, solverOptions=solverOptions
-        )
+        SOLDICT = self.DCFoil.run_model(DVDictList, evalFuncs, solverOptions=solverOptions)
 
         self.SOLDICT = SOLDICT
 
@@ -262,9 +261,7 @@ class DCFOIL:
 
         solverOptions = self.solverOptions
 
-        costFuncsSens = self.DCFoil.evalFuncsSens(
-            DVDict, evalFuncs, solverOptions, mode="RAD"
-        )
+        costFuncsSens = self.DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions, mode="RAD")
 
         self.costFuncsSens = costFuncsSens
 

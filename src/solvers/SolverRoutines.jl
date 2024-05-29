@@ -14,7 +14,7 @@ In julia, the chainrules rrule is '_b'
 using LinearAlgebra
 using Zygote
 using ChainRulesCore
-using FLOWMath: abs_cs_safe
+using FLOWMath: abs_cs_safe, atan_cs_safe
 using Printf
 
 # --- DCFoil modules ---
@@ -834,6 +834,15 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
     return RMat
 end
 
+function compute_anglesFromVector(V)
+    """
+    Compute angles from a vector where V1 is streamwise
+    """
+    V1 = V[XDIM]
+    V2 = V[YDIM]
+    V3 = V[ZDIM]
+    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), sqrt(V1^2 + V2^2 + V3^2)
+end
 
 function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     """
