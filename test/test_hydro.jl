@@ -696,17 +696,18 @@ function test_VPM()
 
     airfoilCtrlXY = copy(hcat(airfoilCtrlX, airfoilCtrlY)')
 
-    Airfoil, Amat = VPM.initialize(airfoilX, airfoilY, airfoilCtrlXY)
+    Airfoil, Amat = VPM.setup(airfoilX, airfoilY, airfoilCtrlXY)
 
 
     V = [0.9961947, 0.0, -0.08715574]
+    angle = rad2deg(atan(V[3], V[1]))
+    println("Angle airfoil is rotated wrt xz axis: ", angle, "deg")
     cl, cm, Gamma, cpDist = VPM.solve(Airfoil, Amat, V)
     println("cl", cl)
     println("cm", cm)
-    p = plot(airfoilX, -cpDist, label="Airfoil", layout=(2, 1))
-    plot!(airfoilX, airfoilY, subplot=2)
-    ylims!(-1.0, 2)
+    p = plot(airfoilX, -cpDist, label="-Cp", layout=(2, 1), xlims=(-0.05, 1.05), ylims=(-1.2, 2.2))
+    plot!(airfoilX, airfoilY, subplot=2, aspect_ratio=:equal, ylims=(-0.1, 0.1), xlims=(-0.05, 1.05), label="Airfoil")
     savefig(p, "test_VPM.png")
 end
 
-@run test_VPM()
+test_VPM()

@@ -269,7 +269,7 @@ This is because the circulation across a wing is not constant.
 The free vortex system is a sheet of trailing vortices springing from the trailing edge.
 The induced velocity of an element of the line ($ds$) at point $P$ from one vortex line of constant strength $\Gamma$ is
 \be
-dq = \frac{\Gamma}{4 \pi r^2} \sin(\theta) ds
+\tn{d}q = \frac{\Gamma}{4 \pi r^2} \sin(\theta) \tn{d}s
 \ee
 but in practice, one would solve this as an integral over the entire vortex line, so we will build up to the full wing.
 
@@ -760,6 +760,7 @@ The wave elevation is
 
 The previous formulation appeared to have reflecting waves.
 In this formulation, we use the unsteady free-surface boundary condition with time marching.
+This is called the mixed Euler-Lagrange method.
 The dipole moves with speed $U(t) = 1-e^{-4t}$ in the positive $x$ direction and has strength $\mu = 1$.
 The potential is
 \be

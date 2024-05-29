@@ -6,7 +6,7 @@ DocMeta.setdocmeta!(DCFoil, :DocTestSetup, :(using DCFoil); recursive=true)
 makedocs(;
     modules=[DCFoil],
     authors="Galen Ng <nggw@umich.edu>",
-    sitename="DCFoil.jl",
+    sitename="DCFoil.jl documentation",
     format=Documenter.HTML(;
         canonical="https://gawng.github.io/DCFoil.jl",
         edit_link="main",
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/gawng/DCFoil.jl",
+    repo="github.com/gawng/DCFoil.jl.git",
     devbranch="main",
 )
