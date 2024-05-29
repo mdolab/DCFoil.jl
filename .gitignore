@@ -16,6 +16,7 @@ POSTPROCESSING/PLOTS/
 
 # Docs
 docs/latex/*.pdf
+docs/build
 
 # MACH structural meshes
 *.bdf

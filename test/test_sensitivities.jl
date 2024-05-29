@@ -367,7 +367,7 @@ function test_staticDeriv(DVDict, solverOptions, wingOptions)
     run_static = true
     debug = false
 
-    
+
 
     # ************************************************
     #     I/O
