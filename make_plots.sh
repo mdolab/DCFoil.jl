@@ -35,10 +35,10 @@ cd postprocessing
 # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_IM6-epoxy_f30.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
 
 # python ./run_postprocessing.py --case 2024-01-28_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_static --is_forced --is_modal --is_paper
-# --- Journal paper ---
-# python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_paper
-python ./run_postprocessing.py --cases 2024-02-24_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_paper
-python ./run_postprocessing.py --cases 2024-03-06_IMOCA60Keel_cfrp_f15.0_w0.0 2024-02-24_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_paper
+# # --- Journal paper ---
+# # python ./run_postprocessing.py --case 2024-01-14_IMOCA60Keel_ss_f-10.0_w0.0 --is_flutter --is_paper
+# python ./run_postprocessing.py --cases 2024-02-24_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_paper
+# python ./run_postprocessing.py --cases 2024-03-06_IMOCA60Keel_cfrp_f15.0_w0.0 2024-02-24_IMOCA60Keel_cfrp_f15.0_w0.0 --is_flutter --is_paper
 
 # # ---------------------------
 # #     No bulb IMOCA
@@ -64,6 +64,11 @@ python ./run_postprocessing.py --cases 2024-03-06_IMOCA60Keel_cfrp_f15.0_w0.0 20
 # # python ./run_postprocessing.py --cases 2024-01-08_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
 # python ./run_postprocessing.py --cases 2024-02-24_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_paper
 # python ./run_postprocessing.py --cases 2024-02-24_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
+
+# ************************************************
+#     t-foil paper plots
+# ************************************************
+python ./plot_polar.py --cases 2024-04-26_t-foil_cfrp_polar 2024-04-26_t-foil_ss_polar --is_paper
 
 cd ..
 

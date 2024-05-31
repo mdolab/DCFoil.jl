@@ -383,7 +383,7 @@ function set_defaultOptions!(solverOptions)
         #     Solver modes
         # ************************************************
         "run_static",
-        "res_jacobian"
+        "res_jacobian",
         "run_forced",
         "run_modal",
         "run_flutter",

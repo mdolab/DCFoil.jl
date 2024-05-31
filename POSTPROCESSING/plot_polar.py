@@ -51,7 +51,7 @@ from helperPlotFuncs import (
 #                         Command line arguments
 # ==============================================================================
 parser = argparse.ArgumentParser()
-parser.add_argument("--cases", type=str, default=None, help="Folder dir")
+parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
 parser.add_argument("--output", type=str, default=None)
 parser.add_argument("--is_paper", action="store_true", default=False)
 args = parser.parse_args()
@@ -62,6 +62,7 @@ args = parser.parse_args()
 dataDir = "../OUTPUT/"
 # labels = ["NOFS", "FS"]
 labels = ["-15", "0", "+15"]
+compName = "rudder"
 cm, fs_lgd, fs, ls, markers = set_my_plot_settings(args.is_paper)
 alphas = np.arange(-5, 15.5, 0.5)
 fiberangles = [-15, 0.0, 15.0]
@@ -127,7 +128,7 @@ if __name__ == "__main__":
     # ************************************************
 
     # Output plot directory
-    outputDir = f"./PLOTS/{args.cases}/"
+    outputDir = f"./PLOTS/{args.cases[0]}/"
     if args.output is not None:
         outputDir += args.output
 
@@ -149,9 +150,9 @@ if __name__ == "__main__":
         caseFSDirs = []
         if args.cases is not None:
             for alpha in alphas:
-                caseDirs.append(dataDir + args.cases + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}")
+                caseDirs.append(dataDir + args.cases[0] + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}")
                 caseFSDirs.append(
-                    dataDir + args.cases.replace("t-foil", "t-foil-fs") + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
+                    dataDir + args.cases[0].replace("t-foil", "t-foil-fs") + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
                 )
         else:
             raise ValueError("Please specify a case to run postprocessing on")
@@ -162,7 +163,10 @@ if __name__ == "__main__":
         for ii, caseDir in enumerate(caseDirs):
 
             # --- Read in DVDict ---
-            DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
+            try:
+                DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
+            except FileNotFoundError:
+                DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
             AlfaList.append(DVDict["α₀"])
 
             # --- Read in funcs ---
@@ -172,8 +176,8 @@ if __name__ == "__main__":
                 funcs = None
                 print("No funcs.json file found...")
 
-            CLDict[fiberang].append(funcs["cl"])
-            CD = funcs["cdi"] + funcs["cds"] + funcs["cdpr"] + funcs["cdj"]
+            CLDict[fiberang].append(funcs[f"cl-{compName}"])
+            CD = funcs[f"cdi-{compName}"] + funcs[f"cds-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cdj-{compName}"]
             CDDict[fiberang].append(CD)
 
         CLFSDict[fiberang] = []
@@ -182,7 +186,10 @@ if __name__ == "__main__":
         for ii, caseDir in enumerate(caseFSDirs):
 
             # --- Read in DVDict ---
-            DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
+            try:
+                DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
+            except FileNotFoundError:
+                DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
             AlfaList.append(DVDict["α₀"])
 
             # --- Read in funcs ---
@@ -192,9 +199,64 @@ if __name__ == "__main__":
                 funcs = None
                 print("No funcs.json file found...")
 
-            CLFSDict[fiberang].append(funcs["cl"])
-            CD = funcs["cdi"] + funcs["cds"] + funcs["cdpr"] + funcs["cdj"]
+            CLFSDict[fiberang].append(funcs[f"cl-{compName}"])
+            CD = funcs[f"cdi-{compName}"] + funcs[f"cds-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cdj-{compName}"]
             CDFSDict[fiberang].append(CD)
+
+    # Rigid results
+    caseDirs = []
+    caseFSDirs = []
+    for alpha in alphas:
+        caseDirs.append(dataDir + args.cases[1] + f"/f0.0_w0.0_alfa{alpha:.2f}")
+        caseFSDirs.append(
+            dataDir + args.cases[1].replace("t-foil", "t-foil-fs") + f"/f0.0_w0.0_alfa{alpha:.2f}"
+        )
+
+    AlfaList = []
+    CLDict["rigid"] = []
+    CDDict["rigid"] = []
+    for ii, caseDir in enumerate(caseDirs):
+
+        # --- Read in DVDict ---
+        try:
+            DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
+        except FileNotFoundError:
+            DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
+        AlfaList.append(DVDict["α₀"])
+
+        # --- Read in funcs ---
+        try:
+            funcs = json.load(open(f"{caseDir}/funcs.json"))
+        except FileNotFoundError:
+            funcs = None
+            print("No funcs.json file found...")
+
+        CLDict["rigid"].append(funcs[f"cl-{compName}"])
+        CD = funcs[f"cdi-{compName}"] + funcs[f"cds-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cdj-{compName}"]
+        CDDict["rigid"].append(CD)
+
+    CLFSDict["rigid"] = []
+    CDFSDict["rigid"] = []
+    AlfaList = []
+    for ii, caseDir in enumerate(caseFSDirs):
+
+        # --- Read in DVDict ---
+        try:
+            DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
+        except FileNotFoundError:
+            DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
+        AlfaList.append(DVDict["α₀"])
+
+        # --- Read in funcs ---
+        try:
+            funcs = json.load(open(f"{caseDir}/funcs.json"))
+        except FileNotFoundError:
+            funcs = None
+            print("No funcs.json file found...")
+
+        CLFSDict["rigid"].append(funcs[f"cl-{compName}"])
+        CD = funcs[f"cdi-{compName}"] + funcs[f"cds-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cdj-{compName}"]
+        CDFSDict["rigid"].append(CD)
 
     # ************************************************
     #     Drag polar
