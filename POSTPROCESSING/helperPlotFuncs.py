@@ -1297,6 +1297,7 @@ def plot_dlf(
     ax.set_xlabel(xLabel)
     # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
+    print(f"nshift for dlf plot: {nShift}")
     # ************************************************
     #     Plot DLF vs. k
     # ************************************************

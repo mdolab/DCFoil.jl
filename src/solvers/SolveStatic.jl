@@ -64,12 +64,21 @@ function solve(
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], fTractions[1:end.∉[SOLVERPARAMS.dofBlank]])
 
+    if lowercase(solverOptions["res_jacobian"]) == "cs"
+        mode = "CS"
+    elseif lowercase(solverOptions["res_jacobian"]) == "rad"
+        mode = "RAD"
+    elseif lowercase(solverOptions["res_jacobian"]) == "analytic"
+        mode = "Analytic"
+    end
+
     # Actual solve
     qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q_ss0, DVDictList;
         is_verbose=true,
         solverParams=SOLVERPARAMS,
         appendageOptions=appendageOptions,
         solverOptions=solverOptions,
+        mode=mode,
         iComp=iComp,
         CLMain=CLMain,
     )
