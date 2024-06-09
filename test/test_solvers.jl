@@ -461,7 +461,7 @@ function test_pk_staticDiv()
         "nModes" => 4,
         "uRange" => uRange,
         "maxQIter" => 4000,
-        "rhoKS" => 80.0,
+        "rhoKS" => 100.0,
     )
     evalFuncs = ["ksflutter"]
 
@@ -537,7 +537,7 @@ function test_pk_flutter()
         "nModes" => 4,
         "uRange" => uRange,
         "maxQIter" => 4000,
-        "rhoKS" => 80.0,
+        "rhoKS" => 100.0,
     )
     evalFuncs = ["ksflutter"]
 

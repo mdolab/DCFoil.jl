@@ -445,7 +445,7 @@ function test_AICs()
         "nModes" => 1,
         "uRange" => [1, 2],
         "maxQIter" => 100, # that didn't fix the slow run time...
-        "rhoKS" => 80.0,
+        "rhoKS" => 100.0,
     )
 
     FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)

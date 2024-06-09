@@ -569,7 +569,7 @@ solverOptions = Dict(
     "nModes" => 4,
     "uRange" => [185, 190.0],
     "maxQIter" => 100,
-    "rhoKS" => 80.0,
+    "rhoKS" => 100.0,
 )
 
 # Profiling code

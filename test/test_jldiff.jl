@@ -110,7 +110,7 @@ solverOptions = Dict(
     "nModes" => nModes,
     "uRange" => uRange,
     "maxQIter" => 100,
-    "rhoKS" => 80.0,
+    "rhoKS" => 100.0,
 )
 # ************************************************
 #     I/O

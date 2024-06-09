@@ -117,7 +117,7 @@ solverOptions = Dict(
     "nModes" => nModes,
     "uRange" => [1.0,2.0],
     "maxQIter" => 100, # that didn't fix the slow run time...
-    "rhoKS" => 80.0,
+    "rhoKS" => 100.0,
 )
 
 # ************************************************

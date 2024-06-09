@@ -569,7 +569,7 @@ function test_FiniteElementIso3D()
         "nModes" => 1,
         "uRange" => [1, 2],
         "maxQIter" => 100, # that didn't fix the slow run time...
-        "rhoKS" => 80.0,
+        "rhoKS" => 100.0,
     )
     FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
@@ -708,7 +708,7 @@ function test_FiniteElementBend()
         "nModes" => 1,
         "uRange" => [1, 2],
         "maxQIter" => 100, # that didn't fix the slow run time...
-        "rhoKS" => 80.0,
+        "rhoKS" => 100.0,
     )
     FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
