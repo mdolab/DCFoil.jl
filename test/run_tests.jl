@@ -262,7 +262,7 @@ appendageOptions2 = [wingOptions2]
 solverOptions2 = Dict(
     # --- I/O ---
     "name" => "akcabay-div",
-    "debug" => true,
+    "debug" => false,
     # --- General solver options ---
     "U∞" => 5.0, # free stream velocity [m/s]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
