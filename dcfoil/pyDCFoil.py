@@ -3,7 +3,7 @@
 @File    :   pyDCFoil.py
 @Time    :   2024/01/22
 @Author  :   Galen Ng, Prof. Sicheng He
-@Desc    :   Python interface to DCFoil
+@Desc    :   Python interface to DCFoil containing two classes
 """
 
 # ==============================================================================
@@ -39,11 +39,8 @@ class DCFOILWarning(object):
         print(msg)
 
 
-# ==============================================================================
-#                         Wrapper class
-# ==============================================================================
 class DCFOIL:
-    def __init__(self, DVDictList, evalFuncs, options=None, debug=False):
+    def __init__(self, DVDictList:list, evalFuncs, options=None, debug=False):
         """
         Create the flutter solver class
 
@@ -97,16 +94,20 @@ class DCFOIL:
 
         setupTime = time.time()
 
+        # if type(DVDictList) == list:
         self.DVDictList = DVDictList
+        # else:
+        #     DCFOILWarning("DVs must be a list of dictionaries")
+
         self.evalFuncs = evalFuncs
 
         self.solverOptions = {}
-        # --- Set all solver options ---
-        for key, val in defaultOptions.items():
-            if key not in options:  # Use default
-                self.solverOptions[key] = val
-            else:
-                self.solverOptions[key] = options[key]
+        # # --- Set all solver options ---
+        # for key, val in defaultOptions.items():
+        #     if key not in options:  # Use default
+        #         self.solverOptions[key] = val
+        #     else:
+        #         self.solverOptions[key] = options[key]
         self.solverOptions = options
 
         # --- Make output directory ---
@@ -148,6 +149,7 @@ class DCFOIL:
             "use_cavitation": False,
             "use_freeSurface": False,
             "use_ventilation": False,
+            "use_dwCorrection": True,
             # ---------------------------
             #   Solver modes
             # ---------------------------
@@ -155,12 +157,12 @@ class DCFOIL:
             "run_static": False,
             # --- Forced solve ---
             "run_forced": False,
-            "fSweep": np.linspace(0.0, 1.0, 10),
+            # "fSweep": np.linspace(0.0, 1.0, 10),
             # --- p-k (Eigen) solve ---
             "run_modal": False,
             "run_flutter": False,
             "nModes": 3,  # Number of struct modes to solve for (starting)
-            "uRange": [1.0, 5.0],  # Range of velocities to sweep
+            # "uRange": [1.0, 5.0],  # Range of velocities to sweep
             "maxQIter": 100,  # max dyn pressure iters
             "rhoKS": 80.0,
         }
@@ -216,12 +218,7 @@ class DCFOIL:
         if evalFuncs is None:
             evalFuncs = sorted(self.evalFuncs)
 
-        solverOptions = self.solverOptions
-
-        FLUTTERSOL = self.SOLDICT
-
-        costFuncs = self.DCFoil.evalFuncs(FLUTTERSOL, evalFuncs, solverOptions)
-        # funcs = DCFoil.evalFuncs(FLUTTERSOL, evalFuncs, solverOptions)
+        costFuncs = self.DCFoil.evalFuncs(self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions)
         # Convert costFuncs to a dictionary to fill 'funcs'
 
         for key, val in costFuncs.items():
@@ -261,8 +258,7 @@ class DCFOIL:
 
         solverOptions = self.solverOptions
 
-        costFuncsSens = self.DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions, mode="RAD")
-
+        costFuncsSens = self.DCFoil.evalFuncsSens(self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions, mode="ADJOINT")
         self.costFuncsSens = costFuncsSens
 
         # if self.getOption("printTiming") and self.comm.rank == 0:

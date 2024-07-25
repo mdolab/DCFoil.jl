@@ -421,7 +421,7 @@ function compute_funcs(
 end
 
 function get_sol(
-    DVDictList::Vector, solverOptions::Dict, evalFuncs::Vector{String};
+    DVDictList, solverOptions::Dict, evalFuncs::Vector{String};
     iComp=1, CLMain=0.0
 )
     """
@@ -477,6 +477,7 @@ function evalFuncsSens(
 
     solverOptions["debug"] = false
 
+    # --- Loop foils ---
     for iComp in eachindex(DVDictList)
 
         DVDict = DVDictList[iComp]
@@ -490,19 +491,6 @@ function evalFuncsSens(
         end
 
         if uppercase(mode) == "FIDI" # use finite differences the stupid way
-
-            # I do not trust this
-            # # It's a tuple bc of DVDict
-            # sensitivities, = FiniteDifferences.jacobian(
-            #     forward_fdm(2, 1),
-            #     (x1) ->
-            #         SolveStatic.cost_funcsFromDVs(
-            #             x1, iComp, solverOptions, evalFuncsSensList;
-            #             DVDictList=DVDictList, CLMain=CLMain
-            #         ),
-            #     DVDict,
-            # )
-            # dfdx = sensitivities
             dh = 1e-4
             println("step size: ", dh)
             dfdx = zeros(DTYPE, length(evalFuncsSensList), sum(DVLengths))
@@ -549,14 +537,19 @@ function evalFuncsSens(
             println("Computing ∂r∂u...")
             @time ∂r∂u = compute_∂r∂u(
                 u,
-                "Analytic";
+                solverOptions["res_jacobian"];
                 solverParams=solverParams,
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
                 DVDictList=DVDictList,
                 CLMain=CLMain,
                 iComp=iComp
             )
 
+            # --- Loop over cost functions ---
             for (ifunc, costFunc) in enumerate(evalFuncsSensList)
+                funcsSens[costFunc] = Dict()
+
                 @time ∂f∂u = compute_∂f∂u(costFunc, STATSOL, DVDict;
                     mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
                 )
@@ -570,16 +563,19 @@ function evalFuncsSens(
                 # println(size(∂f∂uT)) # should be (n_u x n_f) a column vector!
                 psiVec = compute_adjointVec(∂r∂u, ∂f∂uT;
                     solverParams=solverParams)
-                # psiMat[:, ifunc] = psiVec
 
                 # --- Compute total sensitivities ---
                 # funcsSens[costFunc] = ∂f∂x - transpose(psiMat) * ∂r∂x
                 # Transpose the adjoint vector so it's now a row vector
                 dfdx = ∂f∂x - (transpose(psiVec) * ∂r∂x)
                 giDV = 1
+
                 for (iiDV, dvkey) in enumerate(SORTEDDVS)
                     ndv = DVLengths[iiDV]
-                    funcsSens[dvkey][ifunc, :] = dfdx[giDV:giDV+ndv-1]
+                    
+                    # --- Pack sensitivities into dictionary ---
+                    funcsSens = Utilities.pack_funcsSens(funcsSens, costFunc, dvkey, dfdx[giDV:giDV+ndv-1])
+
                     giDV += ndv # starting value for next set
                 end
             end
@@ -599,8 +595,10 @@ function evalFuncsSens(
 
             @time ∂r∂u = compute_∂r∂u(
                 u,
-                "Analytic";
+                solverOptions["res_jacobian"];
                 solverParams=solverParams,
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
                 DVDictList=DVDictList,
                 CLMain=CLMain,
                 iComp=iComp
@@ -624,7 +622,10 @@ function evalFuncsSens(
                 giDV = 1
                 for (iiDV, dvkey) in enumerate(SORTEDDVS)
                     ndv = DVLengths[iiDV]
-                    funcsSens[dvkey][ifunc, :] = dfdx[giDV:giDV+ndv-1]
+                    
+                    # --- Pack sensitivities into dictionary ---
+                    funcsSens = Utilities.pack_funcsSens(funcsSens, costFunc, dvkey, dfdx[giDV:giDV+ndv-1])
+
                     giDV += ndv # starting value for next set
                 end
             end
@@ -673,7 +674,7 @@ function compute_∂f∂x(
         ∂f∂x = reshape(∂f∂x, 1, length(∂f∂x))
     elseif uppercase(mode) == "FIDI"
         dh = 1e-3
-        println("step size:", dh)
+        println("step size: ", dh)
         DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
         ∂f∂x = zeros(DTYPE, length(DVVec))
         for ii in eachindex(DVVec)
@@ -772,7 +773,7 @@ function compute_∂r∂x(
         # This is the manual FD
         dh = 1e-4
         ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
-        println("step size:", dh)
+        println("step size: ", dh)
         for ii in eachindex(DVVec)
             r_i = SolveStatic.compute_residuals(
                 u, DVVec, DVLengths;
@@ -799,9 +800,9 @@ function compute_∂r∂x(
     elseif uppercase(mode) == "CS" # TODO: THIS WOULD BE THE BEST APPROACH BUT DOESN'T WORK RIGHT NOW
         dh = 1e-100
         ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
-        if solverOptions["debug"]
-            println("step size:", dh)
-        end
+
+        println("step size: ", dh)
+        
         # create a complex copy of the design variables
         DVVecCS = complex(copy(DVVec))
         for ii in eachindex(DVVec)
@@ -886,9 +887,7 @@ function compute_∂r∂u(
     elseif uppercase(mode) == "CS" # Complex step
 
         dh = 1e-100
-        if solverOptions["debug"]
-            println("step size:", dh)
-        end
+        # println("step size: ", dh)
 
         ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
 
@@ -951,11 +950,12 @@ function compute_residuals(
 
     # Need to put DVDict in the iComp spot of the DVDictListWork array
     indicesNotMatchingiComp = 1:length(DVDictList) .!= iComp
-    DVDictWork = copy(DVDictList[indicesNotMatchingiComp])
+    # DVDictWork::Vector = copy(DVDictList[indicesNotMatchingiComp]) # this is a vector...
+    # TODO: make this better
     if iComp == 1
-        DVDictListWork = vcat([DVDict], [DVDictWork])
+        DVDictListWork = vcat([DVDict], [DVDictList[2]])
     else
-        DVDictListWork = vcat([DVDictWork], [DVDict])
+        DVDictListWork = vcat([DVDictList[1]], [DVDict])
     end
 
     # There is probably a nicer way to restructure the code so the order of calls is

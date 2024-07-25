@@ -297,8 +297,9 @@ function correct_downwash(
     xM = solverOptions["appendageList"][1]["xMount"]
     xR = solverOptions["appendageList"][iComp]["xMount"]
     ℓᵣ = xR - xM # distance from main wing AC to downstream wing AC, +ve downstream
-    sWing = DVDictList[1]["s"]
-    cRefWing = sum(DVDictList[1]["c"]) / length(DVDictList[1]["c"])
+    upstreamDict = DVDictList[1]
+    sWing = upstreamDict["s"]
+    cRefWing = sum(upstreamDict["c"]) / length(upstreamDict["c"])
     chordMMean = cRefWing
     # ChainRulesCore.ignore_derivatives() do
     #     if solverOptions["debug"]

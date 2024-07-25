@@ -91,7 +91,7 @@ DVDictMain = Dict(
     "ab" => 0.0 * ones(Float64, nNodes), # dist from midchord to EA [m]
     "toc" => 0.128 * ones(Float64, nNodes), # thickness-to-chord ratio (max from paper)
     "x_αb" => 0.0 * ones(Float64, nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "θ" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle about top of strut [deg]
     "depth0" => 0.5, # submerged depth of strut [m] # from Yingqian
@@ -138,15 +138,18 @@ solverOptions = Dict(
     #   Flow
     # ---------------------------
     "U∞" => 18.0, # free stream velocity [m/s]
+    # "U∞" => 11.0, # free stream velocity [m/s]
     "ρ_f" => 1025.0, # fluid density [kg/m³]
     "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,
+    "use_dwCorrection" => true,
     # ---------------------------
     #   Solver modes
     # ---------------------------
     # --- Static solve ---
     "run_static" => run_static,
+    "res_jacobian" => "CS",
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fSweep" => fSweep,
@@ -175,8 +178,8 @@ outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
     solverOptions["name"],
     wingOptions["material"],
-    rad2deg(DVDict["θ"]),
-    rad2deg(DVDict["Λ"]))
+    rad2deg(DVDictList[1]["θ"]),
+    rad2deg(DVDictList[1]["Λ"]))
 mkpath(outputDir)
 
 solverOptions["outputDir"] = outputDir

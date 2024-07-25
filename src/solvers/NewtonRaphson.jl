@@ -61,6 +61,7 @@ function do_newton_raphson(
     # --- Initialize output ---
     DVDict = DVDictList[iComp]
     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+
     res = compute_residuals(
         u0, x0, DVLengths;
         appendageOptions=appendageOptions,

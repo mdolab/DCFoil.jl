@@ -6,7 +6,6 @@
 @Desc    :   Vortex panel method for the circulation distribution over an airfoil surface
 """
 
-
 module VPM
 
 # --- PACKAGES ---
@@ -241,4 +240,5 @@ function compute_sweepCorr(angle, V)
     VinfCorr = Vinf * sqrt(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / sqrtSaSb
     return alphaCorr, VinfCorr
 end
+
 end

@@ -63,4 +63,24 @@ function repack_dvdict(DVVec, DVLengths::Vector{Int64})
 
 end
 
+function pack_funcsSens(funcsSens::Dict, funcKey, dvKey, dfdx)
+    """
+    We want the function sensitivities dictionary 
+    to be the same way ADflow stores its data.
+    That is,
+    funcsSens = Dict(
+    costFunc1 => Dict(
+        dv1 => array[sens1], # if DV is scalar
+        dv2 => array[sens1, sens2, ...], # if DV is vector
+        ...
+    ),
+    """
+
+    funcsSens[funcKey] = Dict(
+        dvKey => dfdx
+    )
+
+    return funcsSens
+end
+
 end
