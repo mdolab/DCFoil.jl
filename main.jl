@@ -137,9 +137,9 @@ solverOptions = Dict(
     # ---------------------------
     #   Flow
     # ---------------------------
-    "U∞" => 18.0, # free stream velocity [m/s]
-    # "U∞" => 11.0, # free stream velocity [m/s]
-    "ρ_f" => 1025.0, # fluid density [kg/m³]
+    "Uinf" => 18.0, # free stream velocity [m/s]
+    # "Uinf" => 11.0, # free stream velocity [m/s]
+    "rhof" => 1025.0, # fluid density [kg/m³]
     "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,

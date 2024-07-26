@@ -463,7 +463,7 @@ if __name__ == "__main__":
             )
 
         fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
-        flowSpeed = SolverOptions[key]["U∞"]
+        flowSpeed = SolverOptions[key]["Uinf"]
         AOA = DVDictDict[key]["alfa0"]
         sweepAngle = np.rad2deg(DVDictDict[key]["sweep"])
         flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
@@ -595,7 +595,7 @@ if __name__ == "__main__":
                 )
 
         fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
-        flowSpeed = SolverOptions[key]["U∞"]
+        flowSpeed = SolverOptions[key]["Uinf"]
         AOA = DVDictDict[key]["alfa0"]
         sweepAngle = np.rad2deg(DVDictDict[key]["sweep"])
         flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
@@ -629,7 +629,7 @@ if __name__ == "__main__":
         )
 
         fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
-        flowSpeed = SolverOptions[key]["U∞"]
+        flowSpeed = SolverOptions[key]["Uinf"]
         # --- Plot ---
         fig, axes = plot_forced(
             fig,

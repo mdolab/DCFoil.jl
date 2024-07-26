@@ -52,8 +52,8 @@ wingOptions1 = Dict(
     "xMount" => 0.0,
 )
 solverOptions1 = Dict(
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "U∞" => 6.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 6.0, # free stream velocity [m/s]
     # --- I/O ---
     "name" => "akcabay",
     "debug" => false,
@@ -113,8 +113,8 @@ solverOptions2 = Dict(
     "appendageList" => [wingOptions2],
     "use_cavitation" => false,
     "use_freeSurface" => false,
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     # --- Static solve ---
     "run_static" => false,
     # --- Forced solve ---
@@ -198,8 +198,8 @@ solverOptions = Dict(
     "debug" => false,
     "outputDir" => "./test_out/",
     # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => [wingOptions],
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => false,
@@ -264,8 +264,8 @@ solverOptions2 = Dict(
     "name" => "akcabay-div",
     "debug" => false,
     # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => appendageOptions2,
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_freeSurface" => false,

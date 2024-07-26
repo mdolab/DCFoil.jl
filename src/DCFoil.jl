@@ -369,8 +369,8 @@ function set_defaultOptions!(solverOptions)
         # ************************************************
         #     Flow
         # ************************************************
-        "U∞",
-        "ρ_f",
+        "Uinf",
+        "rhof",
         "use_freeSurface",
         "use_cavitation",
         "use_ventilation",

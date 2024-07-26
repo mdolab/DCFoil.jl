@@ -51,9 +51,9 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # --- Yingqian's Viscous FSI Paper (2019) ---
 DVDict = Dict(
     "alfa0" => 6.0, # initial angle of attack [deg]
-    "U∞" => 5.0, # free stream velocity [m/s]
+    "Uinf" => 5.0, # free stream velocity [m/s]
     "sweep" => deg2rad(0.0), # sweep angle [rad]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.0925 * ones(nNodes), # chord length [m]
@@ -93,8 +93,8 @@ solverOptions = Dict(
     # ---------------------------
     #   Flow
     # ---------------------------
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,

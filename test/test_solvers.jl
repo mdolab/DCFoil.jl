@@ -42,8 +42,8 @@ function test_SolveStaticRigid()
         "s_strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "U∞" => 6.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 6.0, # free stream velocity [m/s]
         # --- I/O ---
         "name" => "akcabay",
         "debug" => false,
@@ -169,8 +169,8 @@ function test_SolveStaticIso()
         # --- I/O ---
         "name" => "akcabay",
         "nNodes" => nNodes,
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
-        "U∞" => 6.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 6.0, # free stream velocity [m/s]
         "material" => "ss", # preselect from material library
         "debug" => false,
         "outputDir" => "test_out/",
@@ -440,8 +440,8 @@ function test_pk_staticDiv()
         "config" => "wing",
         "nNodes" => nNodes,
         "nNodeStrut" => 10,
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "rotation" => 0.0, # deg
         "material" => "cfrp", # preselect from material library
         "gravityVector" => [0.0, 0.0, -9.81],
@@ -516,8 +516,8 @@ function test_pk_flutter()
         "config" => "wing",
         "nNodes" => nNodes,
         "nNodeStrut" => 10,
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "rotation" => 0.0, # deg
         "material" => "cfrp", # preselect from material library
         "gravityVector" => [0.0, 0.0, -9.81],

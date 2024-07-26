@@ -421,8 +421,8 @@ function test_AICs()
         # ---------------------------
         #   Flow
         # ---------------------------
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,

@@ -91,8 +91,8 @@ solverOptions = Dict(
     # --- General solver options ---
     "appendageList" => appendageOptions,
     "use_freeSurface" => false,
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_cavitation" => false,
     "use_ventilation" => false,

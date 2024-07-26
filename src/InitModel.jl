@@ -53,18 +53,18 @@ function init_static(
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα, _, _ = HydroStrip.compute_glauert_circ(span, chord, deg2rad(α₀ + rake), solverOptions["U∞"], nNodes;
+  clα, _, _ = HydroStrip.compute_glauert_circ(span, chord, deg2rad(α₀ + rake), solverOptions["Uinf"], nNodes;
     h=depth0,
     useFS=solverOptions["use_freeSurface"],
-    rho=solverOptions["ρ_f"],
+    rho=solverOptions["rhof"],
     config=foilOptions["config"],
   )
 
   # ---------------------------
   #   Build final model
   # ---------------------------
-  wingModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], zeta,
-    clα, eb, ab, chord, solverOptions["ρ_f"], foilOptions["nNodes"], constitutive)
+  wingModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["Uinf"], zeta,
+    clα, eb, ab, chord, solverOptions["rhof"], foilOptions["nNodes"], constitutive)
 
   # ************************************************
   #     Strut properties
@@ -81,13 +81,13 @@ function init_static(
     # ---------------------------
     #   Hydrodynamics
     # ---------------------------
-    clα, _, _ = HydroStrip.compute_glauert_circ(span_strut, c_strut, deg2rad(0.001), solverOptions["U∞"], nNodesStrut)
+    clα, _, _ = HydroStrip.compute_glauert_circ(span_strut, c_strut, deg2rad(0.001), solverOptions["Uinf"], nNodesStrut)
 
     # ---------------------------
     #   Build final model
     # ---------------------------
-    strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["U∞"], zeta,
-      clα, eb_strut, ab_strut, c_strut, solverOptions["ρ_f"], foilOptions["nNodeStrut"], constitutive)
+    strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["Uinf"], zeta,
+      clα, eb_strut, ab_strut, c_strut, solverOptions["rhof"], foilOptions["nNodeStrut"], constitutive)
 
   elseif foilOptions["config"] == "wing" || foilOptions["config"] == "full-wing"
     strutModel = nothing

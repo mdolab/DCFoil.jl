@@ -237,7 +237,7 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     # ************************************************
     #     Header
     # ************************************************
-    write(io, @sprintf("TITLE = \"STATIC DEFLECTION Uinf = %.8f m/s\"\n", solverOptions["U∞"]))
+    write(io, @sprintf("TITLE = \"STATIC DEFLECTION Uinf = %.8f m/s\"\n", solverOptions["Uinf"]))
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
     write(io, "ZONE T = \"1D BEAM\" \n")
     write(io, @sprintf("NODES = %d, ", nNode))

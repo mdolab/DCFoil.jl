@@ -63,7 +63,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["sweep"]
-    U∞ = solverOptions["U∞"]
+    U∞ = solverOptions["Uinf"]
     α₀ = DVDict["alfa0"]
     rake = DVDict["rake"]
     zeta = DVDict["zeta"]

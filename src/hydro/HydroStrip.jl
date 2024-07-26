@@ -292,7 +292,7 @@ function correct_downwash(
     """
     """
     DVDict = DVDictList[iComp]
-    Uinf = solverOptions["U∞"]
+    Uinf = solverOptions["Uinf"]
     depth = DVDict["depth0"]
     xM = solverOptions["appendageList"][1]["xMount"]
     xR = solverOptions["appendageList"][iComp]["xMount"]

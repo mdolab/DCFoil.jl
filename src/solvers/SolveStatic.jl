@@ -333,10 +333,10 @@ function compute_funcs(
             DVDict["s"],
             WING.chord,
             deg2rad(DVDict["alfa0"]),
-            solverOptions["U∞"], appendageOptions["nNodes"];
+            solverOptions["Uinf"], appendageOptions["nNodes"];
             h=DVDict["depth0"],
             useFS=solverOptions["use_freeSurface"],
-            rho=solverOptions["ρ_f"],
+            rho=solverOptions["rhof"],
             twist=wingTwist,
             debug=solverOptions["debug"],
             config=appendageOptions["config"],
@@ -386,8 +386,8 @@ function compute_funcs(
         println("I'm not debugged")
         # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
         NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
-        Re = solverOptions["U∞"] * meanChord / NU
-        # Ma = solverOptions["U∞"] / 1500
+        Re = solverOptions["Uinf"] * meanChord / NU
+        # Ma = solverOptions["Uinf"] / 1500
         cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
         xcmax = 0.3 # chordwise position of the maximum thickness
         # # --- Raymer equation 12.30 ---

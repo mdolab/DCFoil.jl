@@ -78,8 +78,8 @@ if __name__ == "__main__":
         # ---------------------------
         #   Flow
         # ---------------------------
-        "U∞": 5.0,  # free stream velocity [m/s]
-        "ρ_f": 1000.0,  # fluid density [kg/m³]
+        "Uinf": 5.0,  # free stream velocity [m/s]
+        "rhof": 1000.0,  # fluid density [kg/m³]
         "use_freeSurface": False,
         "use_cavitation": False,
         "use_ventilation": False,
@@ -167,7 +167,12 @@ if __name__ == "__main__":
         # funcs["obj"] = funcs["ksflutter"]
         for iapp in STICKSolver.solverOptions["appendageList"]:
             compName = iapp["compName"]
-            funcs["obj"] += funcs[f"cdi-{compName}"] + funcs[f"cdj-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cds-{compName}"]
+            funcs["obj"] += (
+                funcs[f"cdi-{compName}"]
+                + funcs[f"cdj-{compName}"]
+                + funcs[f"cdpr-{compName}"]
+                + funcs[f"cds-{compName}"]
+            )
 
         print("These are the funcs: ")
         pp(funcs)
@@ -188,14 +193,9 @@ if __name__ == "__main__":
         # --- Solve sensitivity ---
         funcsSens = STICKSolver.evalFunctionsSens(funcsSens, evalFuncs=evalFuncs)
 
-        # --- Set objective ---
-        # funcsSens["obj"] = funcsSens["ksflutter"]
-        funcs["obj"] = 0
-        for iapp in STICKSolver.solverOptions["appendageList"]:
-            compName = iapp["compName"]
-            funcsSens["obj"] += funcsSens[f"cdi-{compName}"] + funcsSens[f"cdj-{compName}"] + funcsSens[f"cdpr-{compName}"] + funcsSens[f"cds-{compName}"]
-
+        print("all funcsSens:")
         pp(funcsSens)
+        print("", flush=True)
 
         return funcsSens
 

@@ -67,7 +67,8 @@ class DCFOIL:
         # ************************************************
         try:
             if debug:
-                # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME
+                # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME. 
+                # It will be faster when the package is in the registry (else statement)
                 # Pull from local directory
                 repoDir = Path(__file__).parent.parent
                 Pkg.activate(f"{repoDir}")
@@ -144,8 +145,8 @@ class DCFOIL:
             # ---------------------------
             #   Flow
             # ---------------------------
-            "U∞": 5.0,  # free stream velocity [m/s]
-            "ρ_f": 1000.0,  # fluid density [kg/m³]
+            "Uinf": 5.0,  # free stream velocity [m/s]
+            "rhof": 1000.0,  # fluid density [kg/m³]
             "use_cavitation": False,
             "use_freeSurface": False,
             "use_ventilation": False,

@@ -84,8 +84,8 @@ solverOptions = Dict(
     "name" => "akcabay-div",
     "debug" => debug,
     # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf"f" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => appendageOptions,
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_freeSurface" => false,
@@ -135,13 +135,13 @@ evalFunc = "moment"
 # ==============================================================================
 derivs = zeros(length(steps))
 funcVal = 0.0
-# # ************************************************
-# #     Setup test values
-# # ************************************************
-# DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-# _, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem([DVDict], wingOptions, solverOptions)
-# SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-# u_test = SOL["STATIC"][1].structStates
+# ************************************************
+#     Setup test values
+# ************************************************
+DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+_, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem([DVDict], wingOptions, solverOptions)
+SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+u_test = SOL["STATIC"][1].structStates
 
 # # ************************************************
 # #     Check ∂r∂x
@@ -163,8 +163,8 @@ funcVal = 0.0
 # pfpu_fidi = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
 #     mode="FiDi", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 # # 2024-07-25 OK
-# pfpu_rad = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
-#     mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
+pfpu_rad = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
+    mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
 # # ************************************************
 # #     Check ∂f∂x
@@ -182,7 +182,6 @@ funcVal = 0.0
 # DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
 # SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
 # costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-# # TODO: PICKUP DEBUGGING HERE
 # funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
 # funcsSensAdjoint[1][evalFunc]
 # for (ii, dh) in enumerate(steps)

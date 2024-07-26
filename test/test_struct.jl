@@ -545,8 +545,8 @@ function test_FiniteElementIso3D()
         # ---------------------------
         #   Flow
         # ---------------------------
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -684,8 +684,8 @@ function test_FiniteElementBend()
         # ---------------------------
         #   Flow
         # ---------------------------
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -801,8 +801,8 @@ function test_FEBT3()
     solverOptions = Dict(
         "material" => "test-comp", # preselect from material library
         "nNodes" => nNodes,
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
     )
     FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
 
@@ -911,8 +911,8 @@ function test_FECOMP2()
     )
     solverOptions = Dict(
         "appendageList" => [wingOptions],
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "run_body" => false,
     )

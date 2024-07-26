@@ -92,8 +92,8 @@ solverOptions = Dict(
     # ---------------------------
     #   Flow
     # ---------------------------
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "use_freeSurface" => false,
     "use_cavitation" => false,

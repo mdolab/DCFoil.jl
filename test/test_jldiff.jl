@@ -91,8 +91,8 @@ solverOptions = Dict(
     "name" => "akcabay-swept",
     "debug" => debug,
     # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => appendageOptions,
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_freeSurface" => false,
