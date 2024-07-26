@@ -389,15 +389,15 @@ function test_AICs()
     Λ = 0.0
     nNodes = 2
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => deg2rad(-15.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(15), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
     )
 

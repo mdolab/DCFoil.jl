@@ -54,15 +54,15 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # ************************************************
 # Anything in DVDict is what we calculate derivatives wrt
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12*ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(-15), # fiber angle global [rad]
+    "theta_f" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
@@ -70,7 +70,7 @@ DVDict = Dict(
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -128,8 +128,8 @@ outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
     solverOptions["name"],
     solverOptions["material"],
-    rad2deg(DVDict["θ"]),
-    rad2deg(DVDict["Λ"]))
+    rad2deg(DVDict["theta_f"]),
+    rad2deg(DVDict["sweep"]))
 mkpath(outputDir)
 
 solverOptions["outputDir"] = outputDir

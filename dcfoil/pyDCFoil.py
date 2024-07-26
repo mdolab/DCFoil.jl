@@ -256,8 +256,6 @@ class DCFOIL:
         if evalFuncs is None:
             evalFuncs = sorted(self.evalFuncs)
 
-        solverOptions = self.solverOptions
-
         costFuncsSens = self.DCFoil.evalFuncsSens(self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions, mode="ADJOINT")
         self.costFuncsSens = costFuncsSens
 

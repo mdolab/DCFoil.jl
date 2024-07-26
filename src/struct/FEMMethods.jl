@@ -43,7 +43,7 @@ struct StructMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     toc::TA
     ab::TA
     x_αb::TA
-    θ::TF # global fiber frame orientation
+    theta_f::TF # global fiber frame orientation
     airfoilCoords::TM # airfoil coordinates
 end
 

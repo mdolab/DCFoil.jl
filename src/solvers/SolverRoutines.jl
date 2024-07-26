@@ -84,7 +84,7 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
         nDOF - number of DOF per node
     """
 
-    alfaRad = deg2rad(DVDict["α₀"]) + alphaCorrection
+    alfaRad = deg2rad(DVDict["alfa0"]) + alphaCorrection
     rakeRad = deg2rad(DVDict["rake"])
     betaRad = deg2rad(DVDict["beta"])
     nDOF = BeamElement.NDOF

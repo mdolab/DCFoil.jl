@@ -110,9 +110,9 @@ function test_hydroderiv(DVDict, solverOptions)
     nElem = solverOptions["nNodes"] - 1
     mesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
-        DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions
+        DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions
     )
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, θ, zeros(2, 2))
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, theta_f, zeros(2, 2))
     globalKs, _, _ = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
 
     dim = size(globalKs, 1) # big problem
@@ -378,8 +378,8 @@ function test_staticDeriv(DVDict, solverOptions, wingOptions)
     outputDir = @sprintf("./test_out/%s_%s_f%.1f_w%.1f/",
         solverOptions["name"],
         wingOptions["material"],
-        rad2deg(DVDict["θ"]),
-        rad2deg(DVDict["Λ"]))
+        rad2deg(DVDict["theta_f"]),
+        rad2deg(DVDict["sweep"]))
     mkpath(outputDir)
     # ************************************************
     #     Cost functions
@@ -393,10 +393,10 @@ function test_staticDeriv(DVDict, solverOptions, wingOptions)
     #                         Call DCFoil
     # ==============================================================================
     steps = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16] # step sizes
-    # dvKey = "θ" # dv to test deriv
-    # dvKey = "Λ" # dv to test deriv
+    # dvKey = "theta_f" # dv to test deriv
+    # dvKey = "sweep" # dv to test deriv
     dvKey = "rake" # dv to test deriv
-    # dvKey = "α₀" # dv to test deriv
+    # dvKey = "alfa0" # dv to test deriv
     # dvKey = "toc" # dv to test deriv
     # evalFunc = "ksflutter"
     evalFunc = "lift"
@@ -516,15 +516,15 @@ end
 # ==============================================================================
 nNodes = 4
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(-15.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0,
     "beta" => 0.0, # yaw angle wrt flow [deg]
@@ -532,8 +532,8 @@ DVDict = Dict(
     "c_strut" => 0.14 * ones(nNodes), # chord length [m]
     "toc_strut" => 0.095, # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodes), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 appendageDict = Dict(

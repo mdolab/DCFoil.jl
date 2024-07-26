@@ -60,7 +60,7 @@ function solve(
     outputDir = solverOptions["outputDir"]
 
     # Initial guess on unknown deflections (excluding BC nodes)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["α₀"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, elemType;
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], fTractions[1:end.∉[SOLVERPARAMS.dofBlank]])
 
@@ -88,7 +88,7 @@ function solve(
     # --- Get hydroLoads again on solution ---
     # _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(uSol), structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; 
     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["α₀"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, SOLVERPARAMS.elemType;
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, SOLVERPARAMS.elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
 
@@ -118,14 +118,14 @@ function setup_problem(
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"];
         config=appendageOptions["config"], nElStrut=STRUT.nNodes - 1, spanStrut=DVDict["s_strut"], rake=DVDict["rake"])
 
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, WING.chord, DVDict["toc"], WING.ab, DVDict["x_αb"], DVDict["θ"], zeros(10, 2))
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, WING.chord, DVDict["toc"], WING.ab, DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
 
-    globalK, globalM, _ = FEMMethods.assemble(FEMESH, WING.ab, DVDict["x_αb"], WING, elemType, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, ab_strut=STRUT.ab, x_αb_strut=DVDict["x_αb_strut"], verbose=verbose)
+    globalK, globalM, _ = FEMMethods.assemble(FEMESH, WING.ab, DVDict["x_ab"], WING, elemType, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, ab_strut=STRUT.ab, x_αb_strut=DVDict["x_ab_strut"], verbose=verbose)
     alphaCorrection::DTYPE = 0.0
     if iComp > 1
         alphaCorrection = HydroStrip.correct_downwash(iComp, CLMain, DVDictList, solverOptions)
     end
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(FEMESH, WING, size(globalM)[1], DVDict["Λ"], WING.U∞, 0.0, elemType; appendageOptions=appendageOptions, STRUT=STRUT)
+    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(FEMESH, WING, size(globalM)[1], DVDict["sweep"], WING.U∞, 0.0, elemType; appendageOptions=appendageOptions, STRUT=STRUT)
     DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
     derivMode = "RAD"
@@ -265,7 +265,7 @@ function compute_funcs(
     # solconstants = SOL.SOLVERPARAMS
 
     # --- Now update the inputs from DVDict ---
-    α₀ = DVDict["α₀"]
+    α₀ = DVDict["alfa0"]
     rake = DVDict["rake"]
     WING, STRUT, constants, FEMESH = setup_problem(DVDictList, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
     # solverOptions["debug"] = false
@@ -332,7 +332,7 @@ function compute_funcs(
         _, Fxi, CDi = HydroStrip.compute_glauert_circ(
             DVDict["s"],
             WING.chord,
-            deg2rad(DVDict["α₀"]),
+            deg2rad(DVDict["alfa0"]),
             solverOptions["U∞"], appendageOptions["nNodes"];
             h=DVDict["depth0"],
             useFS=solverOptions["use_freeSurface"],
@@ -391,7 +391,7 @@ function compute_funcs(
         cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
         xcmax = 0.3 # chordwise position of the maximum thickness
         # # --- Raymer equation 12.30 ---
-        # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["Λ"])^0.28)
+        # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["sweep"])^0.28)
         # --- Torenbeek 1990 ---
         # First term is increase in skin friction due to thickness and quartic is separation drag
         FF = 1 .+ 2.7 .* DVDict["toc"] .+ 100 .* DVDict["toc"] .^ 4
@@ -473,7 +473,6 @@ function evalFuncsSens(
 
     # Initialize output
     funcsSensList::Vector = []
-    funcsSens = Dict()
 
     solverOptions["debug"] = false
 
@@ -486,9 +485,9 @@ function evalFuncsSens(
 
         DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
         funcsSens = Dict()
-        for (iDV, dvkey) in enumerate(SORTEDDVS)
-            funcsSens[dvkey] = zeros(DTYPE, length(evalFuncsSensList), DVLengths[iDV])
-        end
+        # for (iDV, dvkey) in enumerate(SORTEDDVS)
+        #     funcsSens[dvkey] = zeros(DTYPE, length(evalFuncsSensList), DVLengths[iDV])
+        # end
 
         if uppercase(mode) == "FIDI" # use finite differences the stupid way
             dh = 1e-4
@@ -758,7 +757,8 @@ end
 
 function compute_∂r∂x(
     allStructStates, DVDict::Dict;
-    mode="FiDi", SOLVERPARAMS=nothing, appendageOptions=nothing, solverOptions=nothing, iComp=1, CLMain=0.0, DVDictList=[]
+    mode="FiDi", SOLVERPARAMS=nothing, appendageOptions=nothing, 
+    solverOptions=nothing, iComp=1, CLMain=0.0, DVDictList=[]
 )
     """
     Partial derivatives of residuals with respect to design variables w/o reconverging the solution
@@ -952,12 +952,15 @@ function compute_residuals(
     indicesNotMatchingiComp = 1:length(DVDictList) .!= iComp
     # DVDictWork::Vector = copy(DVDictList[indicesNotMatchingiComp]) # this is a vector...
     # TODO: make this better
-    if iComp == 1
-        DVDictListWork = vcat([DVDict], [DVDictList[2]])
+    if length(DVDictList) > 1
+        if iComp == 1
+            DVDictListWork = vcat([DVDict], [DVDictList[2]])
+        else
+            DVDictListWork = vcat([DVDictList[1]], [DVDict])
+        end
     else
-        DVDictListWork = vcat([DVDictList[1]], [DVDict])
+        DVDictListWork = [DVDict]
     end
-
     # There is probably a nicer way to restructure the code so the order of calls is
     # 1. top level solve call to applies the newton raphson
     # 2.    compute_residuals

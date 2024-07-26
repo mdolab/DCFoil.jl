@@ -55,16 +55,16 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 #     Setup solver options
 # ************************************************
 DVDictRudder = Dict(
-    "α₀" => 2.0, # initial angle of attack [deg] (base rake)
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 2.0, # initial angle of attack [deg] (base rake)
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => 0.14 * ones(nNodes), # chord length [m]
     "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
     "s" => 0.333, # semispan [m]
     "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (mean)
-    "x_αb" => 0.0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "depth0" => 0.5, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0, # rake angle about top of strut [deg]
@@ -73,8 +73,8 @@ DVDictRudder = Dict(
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 
@@ -83,15 +83,15 @@ DVDictRudder = Dict(
 # ************************************************
 # Dimensions are from Day 2019
 DVDictMain = Dict(
-    "α₀" => 2.0, # initial angle of attack [deg] (base rake)
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 2.0, # initial angle of attack [deg] (base rake)
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => collect(LinRange(0.125, 0.045, nNodes)), # chord length [m]
     "s" => 0.494, # semispan [m]
     "ab" => 0.0 * ones(Float64, nNodes), # dist from midchord to EA [m]
     "toc" => 0.128 * ones(Float64, nNodes), # thickness-to-chord ratio (max from paper)
-    "x_αb" => 0.0 * ones(Float64, nNodes), # static imbalance [m]
-    "θ" => deg2rad(-15), # fiber angle global [rad]
+    "x_ab" => 0.0 * ones(Float64, nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle about top of strut [deg]
     "depth0" => 0.5, # submerged depth of strut [m] # from Yingqian
@@ -100,8 +100,8 @@ DVDictMain = Dict(
     "c_strut" => 0.11 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.145 * ones(nNodesStrut), # thickness-to-chord ratio (max from paper)
     "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 DVDictList = [DVDictMain, DVDictRudder]
 
@@ -178,8 +178,8 @@ outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
     solverOptions["name"],
     wingOptions["material"],
-    rad2deg(DVDictList[1]["θ"]),
-    rad2deg(DVDictList[1]["Λ"]))
+    rad2deg(DVDictList[1]["theta_f"]),
+    rad2deg(DVDictList[1]["sweep"]))
 mkpath(outputDir)
 
 solverOptions["outputDir"] = outputDir

@@ -267,7 +267,7 @@ if __name__ == "__main__":
                 DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
             except FileNotFoundError:
                 DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
-            AlfaList.append(DVDict["α₀"])
+            AlfaList.append(DVDict["alfa0"])
 
             # --- Read in funcs ---
             try:
@@ -295,7 +295,7 @@ if __name__ == "__main__":
                 DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
             except FileNotFoundError:
                 DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
-            AlfaList.append(DVDict["α₀"])
+            AlfaList.append(DVDict["alfa0"])
 
             # --- Read in funcs ---
             try:
@@ -334,7 +334,7 @@ if __name__ == "__main__":
             DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
         except FileNotFoundError:
             DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
-        AlfaList.append(DVDict["α₀"])
+        AlfaList.append(DVDict["alfa0"])
 
         # --- Read in funcs ---
         try:
@@ -362,7 +362,7 @@ if __name__ == "__main__":
             DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
         except FileNotFoundError:
             DVDict = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
-        AlfaList.append(DVDict["α₀"])
+        AlfaList.append(DVDict["alfa0"])
 
         # --- Read in funcs ---
         try:

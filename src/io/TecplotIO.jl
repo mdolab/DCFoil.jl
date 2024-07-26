@@ -110,7 +110,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
     end
 
     foilCoords = generate_naca4dig(DVDict["toc"][1])
-    baserake = deg2rad(DVDict["α₀"])
+    baserake = deg2rad(DVDict["alfa0"])
     rake = deg2rad(DVDict["rake"])
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
         for ii in 1:appendageOptions["nNodes"] # iterate over span

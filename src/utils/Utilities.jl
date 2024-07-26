@@ -76,9 +76,7 @@ function pack_funcsSens(funcsSens::Dict, funcKey, dvKey, dfdx)
     ),
     """
 
-    funcsSens[funcKey] = Dict(
-        dvKey => dfdx
-    )
+    funcsSens[funcKey][dvKey] = dfdx
 
     return funcsSens
 end

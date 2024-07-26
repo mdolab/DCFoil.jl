@@ -4,9 +4,9 @@
 @Time    :   2023/12/25
 @Author  :   Galen Ng
 @Desc    :   Modern lifting line from Phillips and Snyder 2000, Reid 2020 appendix
-The major weakness is the discontinuity in the locus of aerodynamic centers
-for a highly swept wing at the root.
-    Reid 2020 overcame this using a blending function
+             The major weakness is the discontinuity in the locus of aerodynamic centers
+             for a highly swept wing at the root.
+             Reid 2020 overcame this using a blending function at the wing root
 """
 
 module LiftingLine
@@ -25,7 +25,10 @@ struct LiftingSurface{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
 end
 
 function setup(wingSpan, sweepAng, ; airfoilCoords="input.dat")
-
+    """
+    
+    """
+    # TODO: PICKUP HERE
     sigma = 4 * cos(sweepAng)^2 / (blend^2 * wingSpan^2)
     area = rootChord * wingSpan * (1 + TR) * 0.5
 

@@ -22,7 +22,7 @@ struct SectionProperty{TF,TC}
     E₂::TF # Young's modulus in-plane fiber normal direction (y)
     G₁₂::TF # In-plane Shear modulus
     ν₁₂::TF # Poisson ratio
-    θ::TC # global fiber frame orientation
+    theta_f::TC # global fiber frame orientation
     airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 
@@ -66,7 +66,7 @@ function compute_section_property(section::SectionProperty, constitutive::String
     E₂ = section.E₂
     G₁₂ = section.G₁₂
     ν₁₂ = section.ν₁₂
-    θ = section.θ
+    theta_f = section.theta_f
 
     # Compute nu_21 by E2 * nu12 = E1 * nu12
     ν₂₁ = (E₂ / E₁) * ν₁₂
@@ -90,8 +90,8 @@ function compute_section_property(section::SectionProperty, constitutive::String
         q₆₆ = G₁₂
 
         # Convert to physical frame
-        m = cos(θ)
-        n = sin(θ)
+        m = cos(theta_f)
+        n = sin(theta_f)
         q₁₁ₚ = q₁₁ * m^4 + q₂₂ * n^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
         q₂₂ₚ = q₁₁ * n^4 + q₂₂ * m^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
         q₁₂ₚ = (q₁₁ + q₂₂ - 4 * q₆₆) * m^2 * n^2 + q₁₂ * (m^4 + n^4)
@@ -151,7 +151,7 @@ function compute_section_property(section::SectionProperty, constitutive::String
 end
 
 function compute_beam(nNodes::Int64,
-    chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ,
+    chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f,
     constitutive::String
 )
     EIₛ = zeros(DTYPE, nNodes)
@@ -179,7 +179,7 @@ function compute_beam(nNodes::Int64,
     m_z[:] = mₛ
 
     for ii in 1:nNodes
-        section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ, zeros(20, 2))
+        section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, zeros(20, 2))
 
         # TODO: should probably redo this to be element-based, not node-based
         EI, EIIP, K, GJ, S, EA, I, m = compute_section_property(section, constitutive)

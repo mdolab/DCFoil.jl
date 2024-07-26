@@ -33,7 +33,7 @@ run_modal = true
 debug = true
 
 # --- Fill out task details ---
-θ_sweep = deg2rad.(0.0:5.0:90.0)
+theta_f_sweep = deg2rad.(0.0:5.0:90.0)
 
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
@@ -50,9 +50,9 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # --- Yingqian's Viscous FSI Paper (2019) ---
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -61,7 +61,7 @@ DVDict = Dict(
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459*ones(nNodes), # thickness-to-chord ratio
     "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
     "s_strut" => 0.4, # from Yingqian
     # --- Strut vars ---
     "beta" => 0.0, # yaw angle wrt flow [deg]
@@ -70,7 +70,7 @@ DVDict = Dict(
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -128,8 +128,8 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-for theta in θ_sweep
-    DVDict["θ"] = theta
+for theta in theta_f_sweep
+    DVDict["theta_f"] = theta
     outputDir = @sprintf("./OUTPUT/kramer_theta%02.1f/", rad2deg(theta))
     mkpath(outputDir)
     solverOptions["outputDir"] = outputDir

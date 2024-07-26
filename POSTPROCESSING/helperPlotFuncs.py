@@ -88,7 +88,7 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
     )
 
     # --- Plot static imbalance arm from E.A. ---
-    xalpha = -np.array(DVDict["x_αb"]) - np.array(DVDict["ab"])
+    xalpha = -np.array(DVDict["x_ab"]) - np.array(DVDict["ab"])
     ax.plot(y, xalpha, color=cm[1], ls="-.", alpha=alpha)
     ax.annotate(
         "C.G.",
@@ -131,7 +131,7 @@ def plot_wingPlanform(DVDict: dict, nNodes, cm):
         + "$^{{\\circ}}$\n"
         + f"{DVDict['Λ']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
-        + f"{DVDict['θ']*180/np.pi:.1f}"
+        + f"{DVDict['theta_f']*180/np.pi:.1f}"
         + "$^{{\\circ}}$\n"
         + f"{toc:0.1f}%\n"
         + f"{nNodes}\n"

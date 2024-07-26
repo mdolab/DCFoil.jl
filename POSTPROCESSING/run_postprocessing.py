@@ -462,10 +462,10 @@ if __name__ == "__main__":
                 solverOptions=SolverOptions[key],
             )
 
-        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
+        fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
         flowSpeed = SolverOptions[key]["U∞"]
-        AOA = DVDictDict[key]["α₀"]
-        sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
+        AOA = DVDictDict[key]["alfa0"]
+        sweepAngle = np.rad2deg(DVDictDict[key]["sweep"])
         flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
         alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
         sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
@@ -594,10 +594,10 @@ if __name__ == "__main__":
                     solverOptions=SolverOptions[key],
                 )
 
-        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
+        fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
         flowSpeed = SolverOptions[key]["U∞"]
-        AOA = DVDictDict[key]["α₀"]
-        sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
+        AOA = DVDictDict[key]["alfa0"]
+        sweepAngle = np.rad2deg(DVDictDict[key]["sweep"])
         flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
         alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
         sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
@@ -628,7 +628,7 @@ if __name__ == "__main__":
             figsize=figsize,
         )
 
-        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
+        fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
         flowSpeed = SolverOptions[key]["U∞"]
         # --- Plot ---
         fig, axes = plot_forced(
@@ -799,7 +799,7 @@ if __name__ == "__main__":
                 flutterSol=flutterSolDict[key],
                 cm=cm,
                 semichord=0.5 * np.mean(DVDictDict[key]["c"]),
-                sweepAng=DVDictDict[key]["Λ"],
+                sweepAng=DVDictDict[key]["sweep"],
                 ls=ls[ii],
                 units="kts",
                 nShift=500,

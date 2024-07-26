@@ -113,7 +113,7 @@ function init_model(DVDictList, evalFuncsList; solverOptions)
         DVDict = DVDictList[iComp]
         structMesh = structMeshList[iComp]
         elemConn = elemConnList[iComp]
-        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["θ"], zeros(10, 2))
+        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
 
         push!(FEMESHLIST, FEMESH)
     end

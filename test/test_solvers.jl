@@ -30,15 +30,15 @@ function test_SolveStaticRigid()
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(0.0), # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => deg2rad(0.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(15), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
@@ -94,7 +94,7 @@ function test_SolveStaticRigid()
         solverOptions["nNodes"] = nNodes
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
-        DVDict["x_αb"] = 0 * ones(nNodes)
+        DVDict["x_ab"] = 0 * ones(nNodes)
 
         DCFoil.run_model(DVDict, evalFuncs; solverOptions)
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
@@ -155,15 +155,15 @@ function test_SolveStaticIso()
     nNodes = nNodess[1] # spatial nodes
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => 0.0 * π / 180, # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => 15 * π / 180, # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => 15 * π / 180, # fiber angle global [rad]
     )
     solverOptions = Dict(
         # --- I/O ---
@@ -211,7 +211,7 @@ function test_SolveStaticIso()
         solverOptions["nNodes"] = nNodes
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
-        DVDict["x_αb"] = 0 * ones(nNodes)
+        DVDict["x_ab"] = 0 * ones(nNodes)
 
         DCFoil.run_model(DVDict, evalFuncs; solverOptions)
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
@@ -267,7 +267,7 @@ function test_SolveStaticComp(DVDict, solverOptions)
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict["c"] = 0.1 * ones(nNodes) # chord length [m]
     DVDict["ab"] => 0 * ones(nNodes) # dist from midchord to EA [m]
-    DVDict["x_αb"] => 0 * ones(nNodes) # static imbalance [m]
+    DVDict["x_ab"] => 0 * ones(nNodes) # static imbalance [m]
     DVDict["toc"] => 0.12 * ones(nNodes) # static imbalance [m]
     appendageOptions = solverOptions["appendageList"][1]
     appendageOptions["nNodes"] = nNodes # number of nodes on foil half wing
@@ -292,7 +292,7 @@ function test_SolveStaticComp(DVDict, solverOptions)
         solverOptions["appendageList"] = [appendageOptions]
         DVDict["c"] = 0.1 * ones(nNodes)
         DVDict["ab"] = 0 * ones(nNodes)
-        DVDict["x_αb"] = 0 * ones(nNodes)
+        DVDict["x_ab"] = 0 * ones(nNodes)
         DVDict["toc"] = 0.12 * ones(nNodes)
 
         DVDictList::Vector = [DVDict]
@@ -420,15 +420,15 @@ function test_pk_staticDiv()
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(0.0), # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => deg2rad(0.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(-15), # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(-15), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
     )
 
@@ -469,8 +469,8 @@ function test_pk_staticDiv()
         string(Dates.today()),
         solverOptions["name"],
         solverOptions["material"],
-        rad2deg(DVDict["θ"]),
-        rad2deg(DVDict["Λ"]))
+        rad2deg(DVDict["theta_f"]),
+        rad2deg(DVDict["sweep"]))
     mkpath(outputDir)
 
     solverOptions["outputDir"] = outputDir
@@ -496,15 +496,15 @@ function test_pk_flutter()
     tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(-15.0), # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => deg2rad(-15.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 0.1 * ones(nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 0.12, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(15), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
     )
 
@@ -545,8 +545,8 @@ function test_pk_flutter()
         string(Dates.today()),
         solverOptions["name"],
         solverOptions["material"],
-        rad2deg(DVDict["θ"]),
-        rad2deg(DVDict["Λ"]))
+        rad2deg(DVDict["theta_f"]),
+        rad2deg(DVDict["sweep"]))
     mkpath(outputDir)
 
     solverOptions["outputDir"] = outputDir

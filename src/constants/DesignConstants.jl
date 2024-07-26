@@ -88,13 +88,13 @@ const SORTEDDVS::Vector{String} = [
     "s_strut"
     "toc"
     "toc_strut"
-    "x_αb"
-    "x_αb_strut"
+    "x_ab"
+    "x_ab_strut"
     "zeta"
-    "Λ"
-    "α₀"
-    "θ"
-    "θ_strut"
+    "sweep"
+    "alfa0"
+    "theta_f"
+    "theta_f_strut"
 ]
 
 end # end module

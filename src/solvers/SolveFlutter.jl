@@ -102,7 +102,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
     return obj, pmG, FLUTTERSOL
 end # end solve
 
-function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solverOptions::Dict)
+function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, solverOptions::Dict)
     """
     Setup function to be called before solve()
     """
@@ -120,7 +120,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, solve
     if length(solverOptions["appendageList"]) == 1
         foilOptions = solverOptions["appendageList"][1]
         tipMass = foilOptions["use_tipMass"]
-        global FOIL, _ = InitModel.init_dynamic(α₀, 0.0, span, c, toc, ab, x_αb, zeta, θ,
+        global FOIL, _ = InitModel.init_dynamic(α₀, 0.0, span, c, toc, ab, x_αb, zeta, theta_f,
             nothing, nothing, nothing, nothing, nothing, nothing, nothing,
             foilOptions, solverOptions; uRange=uRange, fRange=fRange)
     else
@@ -229,10 +229,10 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     #   Assemble structure
     # ---------------------------
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    Λ = DVDict["Λ"]
+    Λ = DVDict["sweep"]
     globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     if tipMass
@@ -1922,7 +1922,7 @@ function get_sol(DVDict::Dict, solverOptions::Dict)
 
     # # Setup
     # structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-    #     setup_solverFromDVs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
+    #     setup_solverFromDVs(DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions)
 
     # # Solve
     # obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
@@ -1933,7 +1933,7 @@ function get_sol(DVDict::Dict, solverOptions::Dict)
 end
 
 function cost_funcsFromDVs(
-    # α₀, Λ, span, c, toc, ab, x_αb, zeta, θ, 
+    # α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
     DVVec, DVLengths,
     solverOptions
 )
@@ -1944,7 +1944,7 @@ function cost_funcsFromDVs(
     DVDict = Utilities.repack_dvdict(DVVec, DVLengths)
     # Setup
     structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-        setup_solverFromDVs(DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions)
+        setup_solverFromDVs(DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions)
 
     # Solve
     obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug)

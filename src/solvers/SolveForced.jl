@@ -59,12 +59,12 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     # ************************************************
     
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    Λ = DVDict["Λ"]
+    Λ = DVDict["sweep"]
     U∞ = solverOptions["U∞"]
-    α₀ = DVDict["α₀"]
+    α₀ = DVDict["alfa0"]
     rake = DVDict["rake"]
     zeta = DVDict["zeta"]
     structMesh = FEMESH.mesh

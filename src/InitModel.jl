@@ -21,8 +21,8 @@ using ..MaterialLibrary: MaterialLibrary
 using ..HullLibrary: HullLibrary
 
 function init_static(
-  α₀, rake, span, chord, toc, ab, x_αb, zeta, θ,
-  beta, span_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut,
+  α₀, rake, span, chord, toc, ab, x_ab, zeta, theta_f,
+  beta, span_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut,
   depth0,
   foilOptions::Dict, solverOptions::Dict
 )
@@ -49,7 +49,7 @@ function init_static(
 
   # --- Compute the structural properties for the foil ---
   nNodes = foilOptions["nNodes"]
-  EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ, constitutive)
+  EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive)
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
@@ -76,7 +76,7 @@ function init_static(
     t_strut = toc_strut .* c_strut
     eb_strut = 0.25 * c_strut .+ ab_strut
 
-    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodesStrut, c_strut, t_strut, ab_strut, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ_strut, constitutive)
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodesStrut, c_strut, t_strut, ab_strut, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f_strut, constitutive)
 
     # ---------------------------
     #   Hydrodynamics
@@ -99,16 +99,16 @@ function init_static(
 
 end
 
-function init_dynamic(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, depth0,
+function init_dynamic(α₀, rake, span, c, toc, ab, x_ab, ζ, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0,
   foilOptions::Dict, solverOptions::Dict; fRange=[0.1, 1], uRange=[0.0, 1.0]
 )
   """
   Perform much of the same initializations as init_static() except with other features
   """
   # statModel = init_static(DVDict, solverOptions)
-  statWingModel, statStrutModel = init_static(α₀, rake, span, c, toc, ab, x_αb, ζ, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, depth0, foilOptions, solverOptions)
+  statWingModel, statStrutModel = init_static(α₀, rake, span, c, toc, ab, x_ab, ζ, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, foilOptions, solverOptions)
 
-  # model = DesignConstants.DynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_αb, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fRange, uRange)
+  # model = DesignConstants.DynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_ab, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fRange, uRange)
   WingModel = DesignConstants.DynamicFoil(
     statWingModel.mₛ, statWingModel.Iₛ, statWingModel.EIₛ, statWingModel.EIIPₛ, statWingModel.GJₛ, statWingModel.Kₛ, statWingModel.Sₛ, statWingModel.EAₛ, statWingModel.U∞, statWingModel.ζ,
     statWingModel.clα, statWingModel.eb, statWingModel.ab, statWingModel.chord, statWingModel.ρ_f, statWingModel.nNodes, statWingModel.constitutive,
@@ -144,26 +144,26 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
   #     DVs that need to be unpacked
   # ************************************************
   # NOTE: this is not all DVs!
-  α₀ = DVDict["α₀"]
+  α₀ = DVDict["alfa0"]
   rake = DVDict["rake"]
   span = DVDict["s"]
   c = DVDict["c"]
   toc = DVDict["toc"]
   ab = DVDict["ab"]
-  x_αb = DVDict["x_αb"]
+  x_ab = DVDict["x_ab"]
   zeta = DVDict["zeta"]
-  θ = DVDict["θ"]
+  theta_f = DVDict["theta_f"]
   beta = DVDict["beta"]
   s_strut = DVDict["s_strut"]
   c_strut = DVDict["c_strut"]
   toc_strut = DVDict["toc_strut"]
   ab_strut = DVDict["ab_strut"]
-  x_αb_strut = DVDict["x_αb_strut"]
-  θ_strut = DVDict["θ_strut"]
+  x_ab_strut = DVDict["x_ab_strut"]
+  theta_f_strut = DVDict["theta_f_strut"]
   depth0 = DVDict["depth0"]
 
   # if length(solverOptions["appendageList"]) == 1
-  WingModel, StrutModel = init_dynamic(α₀, rake, span, c, toc, ab, x_αb, zeta, θ, beta, s_strut, c_strut, toc_strut, ab_strut, x_αb_strut, θ_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
+  WingModel, StrutModel = init_dynamic(α₀, rake, span, c, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
   # else
   # error("Only one appendage is supported at the moment")
   # end

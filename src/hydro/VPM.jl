@@ -3,7 +3,9 @@
 @File    :   VPM.jl
 @Time    :   2024/05/16
 @Author  :   Galen Ng
-@Desc    :   Vortex panel method for the circulation distribution over an airfoil surface
+@Desc    :   Vortex panel method for the circulation distribution 
+             over an airfoil surface.
+             This code more accurately computes the sectional lift cₗ
 """
 
 module VPM
@@ -19,11 +21,11 @@ using ..DCFoil: DTYPE
 using ..SolverRoutines: compute_anglesFromVector
 
 struct Airfoil{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
-    vortexXY::TM # vortex points [x,y] for each panel, size [2, n] where n is the number of vertices
-    controlXY::TM # control points [x,y] for each panel, size [2, n-1] where n is the number of vertices
-    panelLengths::TA # panel lengths [m]
-    n::TI # number of panel vertices
-    sweep::TF # sweep angle [rad]
+    vortexXY::TM        # vortex points [x,y] for each panel, size [2, n] where n is the number of vertices
+    controlXY::TM       # control points [x,y] for each panel, size [2, n-1] where n is the number of vertices
+    panelLengths::TA    # panel lengths [m]
+    n::TI               # number of panel vertices
+    sweep::TF           # sweep angle [rad]
 end
 
 function setup(xx, yy, control_xy, sweep=0.0)
@@ -32,7 +34,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
     yy: y-coordinates of the airfoil vertices
     control_xy: control points for the VPM (center of panels)
     """
-    
+
     # Quick error check
     if size(control_xy)[1] != 2
         error("Control points must be in the form [x,y]")
@@ -42,18 +44,18 @@ function setup(xx, yy, control_xy, sweep=0.0)
     vortex_xy = copy(hcat(xx .* cos(sweep), yy)')
 
     panelLengths = sqrt.(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
-    
+
     AIRFOIL = Airfoil(vortex_xy, control_xy, panelLengths, nodeCt, sweep)
-    
+
     P11, P12, P21, P22 = compute_panelMatrix(AIRFOIL)
-    
+
     Amat = zeros(nodeCt, nodeCt)
     dx = (diff(AIRFOIL.vortexXY[XDIM, :]))
     dy = (diff(AIRFOIL.vortexXY[YDIM, :]))
     mat1 = (dx) .* P21 ./ (AIRFOIL.panelLengths)
     mat2 = (dy) .* P11 ./ (AIRFOIL.panelLengths)
     Amat[1:end-1, 1:end-1] += mat1 .- mat2
-    
+
     # # Debug code
     # matplot = mat1
     # plot(eachindex(matplot[:, 1]), matplot[1, :], label="row 0")
@@ -61,7 +63,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
     # plot!(eachindex(matplot[:, 1]), matplot[end-9, :], label="row -10")
     # plot!(eachindex(matplot[:, 1]), matplot[end, :], label="row end")
     # savefig("eta.png")
-    
+
     mat1 = (dx) .* P22 ./ (AIRFOIL.panelLengths)
     mat2 = (dy) .* P12 ./ (AIRFOIL.panelLengths)
     Amat[1:end-1, 2:end] += mat1 .- mat2

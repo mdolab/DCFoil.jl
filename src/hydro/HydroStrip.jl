@@ -841,7 +841,7 @@ function integrate_hydroLoads(
     # --- Initializations ---
     # This is dynamic deflection + rigid shape of foil
     DVDict = Dict(
-        "α₀" => α₀,
+        "alfa0" => α₀,
         "rake" => rake,
         "beta" => 0.0,
     )

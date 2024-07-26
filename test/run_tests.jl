@@ -22,15 +22,15 @@ nNodes = 40
 nNodesStrut = 2
 
 DVDict1 = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle wrt flow [deg]
     "depth0" => 0.1,
@@ -39,8 +39,8 @@ DVDict1 = Dict(
     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
 )
 wingOptions1 = Dict(
     "compName" => "test-comp",
@@ -77,15 +77,15 @@ solverOptions1 = Dict(
     "uRange" => nothing,
 )
 DVDict2 = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "c" => 0.0925 * ones(nNodes), # chord length [m]
     "s" => 0.2438, # semispan [m]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459 * ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle wrt flow [deg]
     "depth0" => 0.1,
@@ -94,8 +94,8 @@ DVDict2 = Dict(
     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
 )
 wingOptions2 = Dict(
     "compName" => "test-comp",
@@ -176,15 +176,15 @@ end
 # ==============================================================================
 nNodes = 4
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(-15.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
     "rake" => 0.0, # rake angle wrt flow [deg]
 )
 wingOptions = Dict(
@@ -228,15 +228,15 @@ nNodes = 3 # spatial nodes
 nNodesStrut = 3 # spatial nodes
 
 DVDict2 = Dict(
-    "α₀" => 2.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 2.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(-15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0,
@@ -245,8 +245,8 @@ DVDict2 = Dict(
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 wingOptions2 = Dict(

@@ -7,9 +7,9 @@ This file is just meant to store DV dictionaries of designs we analyze in the pa
 # ==============================================================================
 # THIS COMPARES WELL WITH RESULTS FROM THE PAPER
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "sweep" => deg2rad(-15.0), # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -17,15 +17,15 @@ DVDict = Dict(
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
 )
 
 # Static divergence case
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -33,17 +33,17 @@ DVDict = Dict(
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(-15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(-15), # fiber angle global [rad]
 )
 
 # --- Blake & Maga's cantilever strut in water (1975) ---
 # Not great agreement with paper, need to test
 # Table 1: 2.75 in x 20 in strut
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 0.0, # free stream velocity [m/s]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "ss", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -51,15 +51,15 @@ DVDict = Dict(
     "s" => 20 * 2.54 / 100, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.06, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => 0 * π / 180, # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => 0 * π / 180, # fiber angle global [rad]
 )
 
 # --- Yingqian's Sweep & Anisotropy Paper (2018) ---
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => 30.0 * π / 180, # sweep angle [rad]
+    "sweep" => 30.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -67,15 +67,15 @@ DVDict = Dict(
     "s" => 2.7, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.06, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => 30 * π / 180, # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => 30 * π / 180, # fiber angle global [rad]
 )
 
 # --- Yingqian's Viscous FSI Paper (2019) ---
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -83,16 +83,16 @@ DVDict = Dict(
     "s" => 0.2438, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => 0 * π / 180, # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => 0 * π / 180, # fiber angle global [rad]
 )
 
 
 # --- Dummy test with 1's ---
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 5.0, # free stream velocity [m/s]
-    "Λ" => 30.0 * π / 180, # sweep angle [rad]
+    "sweep" => 30.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1000.0, # fluid density [kg/m³]
     "material" => "test-iso", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -100,15 +100,15 @@ DVDict = Dict(
     "s" => 1, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 1, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => 0 * π / 180, # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => 0 * π / 180, # fiber angle global [rad]
 )
 
 # --- Eirikur's flat plate ---
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
+    "alfa0" => 6.0, # initial angle of attack [deg]
     "U∞" => 10.0, # free stream velocity [m/s]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "ρ_f" => 1.2250, # fluid density [kg/m³]
     "material" => "eirikurPl", # preselect from material library
     "zeta" => 0.04, # modal damping ratio at first 2 modes
@@ -116,8 +116,8 @@ DVDict = Dict(
     "s" => 0.85, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.00666666, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => 0 * π / 180, # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => 0 * π / 180, # fiber angle global [rad]
 )
 
 # ==============================================================================
@@ -125,16 +125,16 @@ DVDict = Dict(
 # ==============================================================================
 # --- IMOCA 60 bulb keel ---
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     # "toc" => 0.1, # thickness-to-chord ratio
     "toc" => 0.15, # thickness-to-chord ratio
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.65 * ones(nNodes), # chord length [m]
     "s" => 4.0, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
 )
 
 solverOptions = Dict(
@@ -210,16 +210,16 @@ DVDict = Dict()
 # ************************************************
 # Dimensions are from Yingqian
 DVDictRudder = Dict(
-    "α₀" => 2.0, # initial angle of attack [deg] (base rake)
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 2.0, # initial angle of attack [deg] (base rake)
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => 0.14 * ones(nNodes), # chord length [m]
     "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
     "s" => 0.333, # semispan [m]
     "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (mean)
-    "x_αb" => 0.0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0, # rake angle about top of strut [deg]
@@ -228,8 +228,8 @@ DVDictRudder = Dict(
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 
@@ -238,15 +238,15 @@ DVDictRudder = Dict(
 # ************************************************
 # Dimensions are from Day 2019
 DVDictMain = Dict(
-    "α₀" => 2.0, # initial angle of attack [deg] (base rake)
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 2.0, # initial angle of attack [deg] (base rake)
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => collect(LinRange(0.125, 0.045, nNodes)), # chord length [m]
     "s" => 0.494, # semispan [m]
     "ab" => 0.0 * ones(Float64, nNodes), # dist from midchord to EA [m]
     "toc" => 0.128 * ones(Float64, nNodes), # thickness-to-chord ratio (max from paper)
-    "x_αb" => 0.0 * ones(Float64, nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "x_ab" => 0.0 * ones(Float64, nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle about top of strut [deg]
     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
@@ -255,6 +255,6 @@ DVDictMain = Dict(
     "c_strut" => 0.11 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.145 * ones(nNodesStrut), # thickness-to-chord ratio (max from paper)
     "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )

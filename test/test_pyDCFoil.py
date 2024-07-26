@@ -107,15 +107,15 @@ if __name__ == "__main__":
         "rhoKS": 80.0,
     }
     DVDict = {  # THIS IS BASED OFF OF THE MOTH RUDDER
-        "α₀": 6.0,  # initial angle of attack [deg]
-        "Λ": np.deg2rad(0.0),  # sweep angle [rad]
+        "alfa0": 6.0,  # initial angle of attack [deg]
+        "sweep": np.deg2rad(0.0),  # sweep angle [rad]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
         "c": 0.1 * np.ones(nNodes),  # chord length [m]
         "s": 0.3,  # semispan [m]
         "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
         "toc": 0.12 * np.ones(nNodes),  # thickness-to-chord ratio
-        "x_αb": 0 * np.ones(nNodes),  # static imbalance [m]
-        "θ": np.deg2rad(15),  # fiber angle global [rad]
+        "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
+        "theta_f": np.deg2rad(15),  # fiber angle global [rad]
         # --- Strut vars ---
         "depth0": 0.5,  # submerged depth of strut [m] # from Yingqian
         "rake": 0.0,  # rake angle about top of strut [deg]
@@ -124,8 +124,8 @@ if __name__ == "__main__":
         "c_strut": 0.14 * np.ones(nNodesStrut),  # chord length [m]
         "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (mean)
         "ab_strut": 0.0 * np.ones(nNodesStrut),  # dist from midchord to EA [m]
-        "x_αb_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
-        "θ_strut": np.deg2rad(0),  # fiber angle global [rad]
+        "x_ab_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
+        "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
     }
     evalFuncs = [
         "wtip",
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
         # Update design variables
         DVDict["c"] = x["chord"]
-        DVDict["θ"] = x["fiberangle"].item()
+        DVDict["theta_f"] = x["fiberangle"].item()
         STICKSolver.setDesignVars(DVDict)
 
         # --- Solve ---
@@ -182,7 +182,7 @@ if __name__ == "__main__":
 
         # Update design variables
         DVDict["c"] = x["chord"]
-        DVDict["θ"] = x["fiberangle"].item()
+        DVDict["theta_f"] = x["fiberangle"].item()
         STICKSolver.setDesignVars(DVDict)
 
         # --- Solve sensitivity ---
@@ -231,7 +231,7 @@ if __name__ == "__main__":
         name="fiberangle",
         nVars=1,
         varType="c",
-        value=DVDict["θ"],
+        value=DVDict["theta_f"],
         lower=-np.deg2rad(-45),
         upper=np.deg2rad(45),
         scale=1.0,
