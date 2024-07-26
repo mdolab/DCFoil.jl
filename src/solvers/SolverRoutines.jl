@@ -856,7 +856,7 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     """
     # This line breaks when the vector is straight up and down
     # TODO: there is probably a better angle parametrization like Rodrigues or quaternions!
-    if abs_cs_safe(dR1) < MEPSLARGE && abs_cs_safe(dR2) < MEPSLARGE # beam is straight up and down
+    if abs_cs_safe(real(dR1)) < MEPSLARGE && abs_cs_safe(real(dR2)) < MEPSLARGE # beam is straight up and down
         rxyz_div = 1.0 / sqrt(dR1^2 + dR2^2 + dR3^2)
         ca = dR1 * rxyz_div
         cb = dR2 * rxyz_div
@@ -936,7 +936,7 @@ function do_linear_interp(xpt, ypt, xqvec)
     """
     npt = length(xpt)
     n = length(xqvec)
-    y = zeros(DTYPE, n)
+    y = zeros(RealOrComplex, n)
     y_z = Zygote.Buffer(y)
     if length(xpt) != length(ypt)
         throw(ArgumentError("xpt and ypt must be the same length"))
@@ -972,12 +972,12 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
 
             # Catch cases in case we're just outside the domain
             # This extends the slope of the first/last segment
-            if xq <= xpt[1]
+            if real(xq) <= real(xpt)[1]
                 x0 = xpt[1]
                 x1 = xpt[2]
                 y0 = ypt[1]
                 y1 = ypt[2]
-            elseif xq >= xpt[npt]
+            elseif real(xq) >= real(xpt)[npt]
                 x0 = xpt[npt-1]
                 x1 = xpt[npt]
                 y0 = ypt[npt-1]
@@ -985,7 +985,7 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
             else
                 # Perform search
                 ii = 1
-                while xq > xpt[ii+1]
+                while real(xq) > real(xpt)[ii+1]
                     ii += 1
                 end
 

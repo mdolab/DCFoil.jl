@@ -531,7 +531,9 @@ function evalFuncsSens(
             u = STATSOL.structStates[1:end.∉[solverParams.dofBlank]]
 
             @time ∂r∂x = compute_∂r∂x(STATSOL.structStates, DVDict;
-                mode="FiDi", SOLVERPARAMS=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp)
+                # mode="FiDi", 
+                mode="CS", 
+                SOLVERPARAMS=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp)
 
             println("Computing ∂r∂u...")
             @time ∂r∂u = compute_∂r∂u(
@@ -797,7 +799,7 @@ function compute_∂r∂x(
             ∂r∂x[:, ii] = (r_f - r_i) ./ dh
         end
 
-    elseif uppercase(mode) == "CS" # TODO: THIS WOULD BE THE BEST APPROACH BUT DOESN'T WORK RIGHT NOW
+    elseif uppercase(mode) == "CS" # works but slow (4 sec)
         dh = 1e-100
         ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
 
@@ -807,8 +809,8 @@ function compute_∂r∂x(
         DVVecCS = complex(copy(DVVec))
         for ii in eachindex(DVVec)
             DVVecCS[ii] += 1im * dh
-            r_f = SolveStatic.compute_residuals(
-                u, DVVec, DVLengths;
+            r_f = compute_residuals(
+                u, DVVecCS, DVLengths;
                 appendageOptions=appendageOptions,
                 solverOptions=solverOptions,
                 iComp=iComp,
@@ -894,10 +896,6 @@ function compute_∂r∂u(
         # create a complex copy of the structural states
         structuralStatesCS = complex(copy(structuralStates))
         for ii in eachindex(structuralStates)
-
-            r_i = compute_residuals(
-                structuralStatesCS, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
-            )
             structuralStatesCS[ii] += dh * 1im
             r_f = compute_residuals(
                 structuralStatesCS, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
@@ -916,7 +914,7 @@ function compute_∂r∂u(
         # NOTE Kf = AIC matrix
         # where AIC * states = forces on RHS (external)
         # _, _, solverParams = setup_problem(DVDict, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
-        ∂r∂u = solverParams.Kmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
+        ∂r∂u::Matrix{DTYPE} = solverParams.Kmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
         +solverParams.AICmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
         # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
         # converge to the same solution as the RAD, which only takes 2 NL iterations.

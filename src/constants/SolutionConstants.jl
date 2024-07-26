@@ -27,14 +27,14 @@ const ZDIM = 3
 # ==============================================================================
 #                         STRUCTS
 # ==============================================================================
-struct DCFoilSolverParams{TF,TI,TS}
+struct DCFoilSolverParams{TF,TC,TI,TS}
     """
     This is a catch all immutable struct to store variables that we do not
     want in function calls like r(u) or f(u)
     """
-    Kmat::Matrix{TF} # structural stiffness matrix (no BC blanking)
-    Mmat::Matrix{TF} # structural mass matrix (no BC blanking)
-    Cmat::Matrix{TF} # structural damping matrix (no BC blanking)
+    Kmat::Matrix{TC} # structural stiffness matrix (no BC blanking)
+    Mmat::Matrix{TC} # structural mass matrix (no BC blanking)
+    Cmat::Matrix{TC} # structural damping matrix (no BC blanking)
     elemType::TS
     AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
     mode::TS # type of derivative for drdu

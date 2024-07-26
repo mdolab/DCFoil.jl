@@ -32,19 +32,19 @@ using ..BeamProperties
 using ..DesignConstants: DynamicFoil
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
-struct StructMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+struct StructMesh{TF,TC,TI}
     """
     Struct to hold the mesh, element connectivity, and node properties
     """
-    mesh::TM # node xyz coords (2D array of coordinates of nodes)
+    mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes)
     elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
-    chord::TA
-    toc::TA
-    ab::TA
-    x_αb::TA
-    theta_f::TF # global fiber frame orientation
-    airfoilCoords::TM # airfoil coordinates
+    chord::Vector{TC}
+    toc::Vector{TC}
+    ab::Vector{TC}
+    x_αb::Vector{TC}
+    theta_f::TC # global fiber frame orientation
+    airfoilCoords::AbstractMatrix # airfoil coordinates
 end
 
 function make_fullMesh(DVDictList, solverOptions)
@@ -83,7 +83,7 @@ function make_fullMesh(DVDictList, solverOptions)
 end
 
 function make_componentMesh(
-    nElem::Int64, span::DTYPE;
+    nElem::Int64, span;
     config="wing", rake=0.000, nElStrut=0, spanStrut=0.0
 )
     """
@@ -120,7 +120,7 @@ function make_componentMesh(
         nNodeTot = 2 * nElem + nElStrut + 1
         nElemTot = 2 * nElem + nElStrut
     end
-    mesh = zeros(DTYPE, nNodeTot, 3)
+    mesh = zeros(RealOrComplex, nNodeTot, 3)
     elemConn = zeros(Int64, nElemTot, 2)
 
     mesh_z = Zygote.Buffer(mesh)
@@ -402,16 +402,16 @@ function assemble(StructMesh, abVec, x_αbVec,
 
     # --- Local nodal DOF vector ---
     # Determine the number of dofs per node
-    qLocal = zeros(DTYPE, NDOF * 2)
+    qLocal = zeros(NDOF * 2)
 
     abVec = FOIL.ab
     # x_αbVec = StructMesh.x_αb
     # --- Initialize matrices ---
     nElem = size(StructMesh.elemConn)[1]
     nNodes = nElem + 1
-    globalK = zeros(DTYPE, NDOF * (nNodes), NDOF * (nNodes))
-    globalM = zeros(DTYPE, NDOF * (nNodes), NDOF * (nNodes))
-    globalF = zeros(DTYPE, NDOF * (nNodes))
+    globalK = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
+    globalM = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
+    globalF = zeros(RealOrComplex, NDOF * (nNodes))
     # Note: sparse arrays does not work through Zygote without some workarounds (that I haven't figured out yet)
     # globalK::SparseMatrixCSC{Float64,Int64} = spzeros(nnd * (nNodes), nnd * (nNodes))
 

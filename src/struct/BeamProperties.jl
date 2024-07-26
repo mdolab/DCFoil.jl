@@ -154,12 +154,12 @@ function compute_beam(nNodes::Int64,
     chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f,
     constitutive::String
 )
-    EIₛ = zeros(DTYPE, nNodes)
-    Kₛ = zeros(DTYPE, nNodes)
-    GJₛ = zeros(DTYPE, nNodes)
-    Sₛ = zeros(DTYPE, nNodes)
-    Iₛ = zeros(DTYPE, nNodes)
-    mₛ = zeros(DTYPE, nNodes)
+    EIₛ = zeros(RealOrComplex, nNodes)
+    Kₛ = zeros(RealOrComplex, nNodes)
+    GJₛ = zeros(RealOrComplex, nNodes)
+    Sₛ = zeros(RealOrComplex, nNodes)
+    Iₛ = zeros(RealOrComplex, nNodes)
+    mₛ = zeros(RealOrComplex, nNodes)
     # --- Loop over the span ---
     EI_z = Zygote.Buffer(EIₛ)
     EIIP_z = Zygote.Buffer(EIₛ)

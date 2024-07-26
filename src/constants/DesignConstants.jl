@@ -9,7 +9,7 @@
 module DesignConstants
 using ..DCFoil: RealOrComplex
 
-struct Foil{TF,TI,TS,TA<:AbstractVector{TF}}
+struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """
     DO NOT STORE DVS HERE
     Foil object with key properties for the system solution
@@ -25,17 +25,17 @@ struct Foil{TF,TI,TS,TA<:AbstractVector{TF}}
     Sₛ::TA # warping resistance vector [N-m⁴]
     EAₛ::TA # axial stiffness vector [N-m²]
     U∞::TF # flow speed [m/s]
-    ζ::TF # modal damping ratio at first 2 modes
-    clα::TA # lift slopes [1/rad]
-    eb::TA # distance from center of pressure ahead of elastic axis [m]
-    ab::TA # distance from midchord to EA, +ve for EA aft [m]
-    chord::TA # chord vector [m]
+    ζ::TC # modal damping ratio at first 2 modes
+    clα::Vector # lift slopes [1/rad]
+    eb::TB # distance from center of pressure ahead of elastic axis [m]
+    ab::TB # distance from midchord to EA, +ve for EA aft [m]
+    chord::TB # chord vector [m]
     ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
 end
 
-struct DynamicFoil{TF,TI,TS,TA<:AbstractVector{TF}}
+struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
@@ -48,17 +48,17 @@ struct DynamicFoil{TF,TI,TS,TA<:AbstractVector{TF}}
     Sₛ::TA # warping resistance vector [N-m⁴]
     EAₛ::TA # axial stiffness vector [N-m²]
     U∞::TF # flow speed [m/s]
-    ζ::TF # modal damping ratio at first 2 modes
-    clα::TA # lift slopes [1/rad]
-    eb::TA
-    ab::TA
-    chord::TA
+    ζ::TC # modal damping ratio at first 2 modes
+    clα::Vector # lift slopes [1/rad]
+    eb::TB
+    ab::TB
+    chord::TB
     ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
     # --- Only things different for the dynamic foil ---
-    fRange::TA # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
-    uRange::TA # forward speed sweep [m/s] (for flutter solution)
+    fRange::Vector # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    uRange::Vector # forward speed sweep [m/s] (for flutter solution)
 end
 
 struct Hull{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}

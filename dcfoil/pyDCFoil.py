@@ -65,6 +65,7 @@ class DCFOIL:
         # ************************************************
         #     Load DCFOIL module from Julia
         # ************************************************
+        # TODO LINK: https://julialang.github.io/PackageCompiler.jl/stable/libs.html#libraries
         try:
             if debug:
                 # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME. 

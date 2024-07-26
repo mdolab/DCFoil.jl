@@ -470,17 +470,17 @@ function compute_AICs(
     # elemConn = AEROMESH.elemConn
 
     # --- Initialize global matrices ---
-    globalMf_z = Zygote.Buffer(zeros(dim, dim))
-    globalCf_r_z = Zygote.Buffer(zeros(dim, dim))
-    globalCf_i_z = Zygote.Buffer(zeros(dim, dim))
-    globalKf_r_z = Zygote.Buffer(zeros(dim, dim))
-    globalKf_i_z = Zygote.Buffer(zeros(dim, dim))
+    globalMf_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
+    globalCf_r_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
+    globalCf_i_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
+    globalKf_r_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
+    globalKf_i_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
     # Zygote initialization
-    globalMf_z[:, :] = zeros(dim, dim)
-    globalCf_r_z[:, :] = zeros(dim, dim)
-    globalCf_i_z[:, :] = zeros(dim, dim)
-    globalKf_r_z[:, :] = zeros(dim, dim)
-    globalKf_i_z[:, :] = zeros(dim, dim)
+    globalMf_z[:, :] = zeros(RealOrComplex, dim, dim)
+    globalCf_r_z[:, :] = zeros(RealOrComplex, dim, dim)
+    globalCf_i_z[:, :] = zeros(RealOrComplex, dim, dim)
+    globalKf_r_z[:, :] = zeros(RealOrComplex, dim, dim)
+    globalKf_i_z[:, :] = zeros(RealOrComplex, dim, dim)
 
     # --- Initialize planform area counter ---
     planformArea = 0.0
@@ -741,7 +741,7 @@ function get_strip_vecs(
 
     nStrips = size(aeroMesh)[1]
 
-    stripVecs = zeros(nStrips, 3)
+    stripVecs = zeros(RealOrComplex, nStrips, 3)
     stripVecs_z = Zygote.Buffer(stripVecs)
     stripVecs_z[:, :] = stripVecs
     nElemWing = solverOptions["nNodes"] - 1

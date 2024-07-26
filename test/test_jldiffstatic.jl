@@ -84,7 +84,7 @@ solverOptions = Dict(
     "name" => "akcabay-div",
     "debug" => debug,
     # --- General solver options ---
-    "Uinf"f" => 5.0, # free stream velocity [m/s]
+    "Uinf" => 5.0, # free stream velocity [m/s]
     "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => appendageOptions,
     "gravityVector" => [0.0, 0.0, -9.81],
@@ -93,6 +93,7 @@ solverOptions = Dict(
     "use_ventilation" => false,
     # --- Static solve ---
     "run_static" => run_static,
+    "res_jacobian" => "CS",
     "run_body" => false,
 )
 # ************************************************
@@ -125,8 +126,8 @@ dvKey = "rake" # dv to test deriv
 # dvKey = "alfa0" # dv to test deriv
 # dvKey = "toc" # dv to test deriv
 evalFunc = "ksflutter"
-evalFunc = "lift"
 evalFunc = "moment"
+evalFunc = "lift"
 
 
 
@@ -143,10 +144,10 @@ _, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem([DVDict], wingOptions, sol
 SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
 u_test = SOL["STATIC"][1].structStates
 
-# # ************************************************
-# #     Check ∂r∂x
-# # ************************************************
-# # 2024-07-25 OK
+# ************************************************
+#     Check ∂r∂x
+# ************************************************
+# 2024-07-25 OK
 # prpx_fidi = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
 #     mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
@@ -163,8 +164,9 @@ u_test = SOL["STATIC"][1].structStates
 # pfpu_fidi = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
 #     mode="FiDi", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 # # 2024-07-25 OK
-pfpu_rad = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
-    mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
+# # Profiling shows that most of the slow down is in the setup problem in the beam property computations
+# @profview pfpu_rad = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
+#     mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
 # # ************************************************
 # #     Check ∂f∂x
@@ -176,33 +178,33 @@ pfpu_rad = DCFoil.SolveStatic.compute_∂f∂u("lift", SOL["STATIC"][1], DVDict;
 # pfpx_rad = DCFoil.SolveStatic.compute_∂f∂x("lift", SOL["STATIC"][1], DVDict;
 #     mode="RAD", appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
-# # ************************************************
-# #     FULL TEST
-# # ************************************************
-# DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-# SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-# costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-# funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
-# funcsSensAdjoint[1][evalFunc]
-# for (ii, dh) in enumerate(steps)
-#     DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-#     SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-#     costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-#     flutt_i = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
-#     global funcVal = flutt_i
-#     # DVDict[dvKey][1] += dh
-#     DVDict[dvKey] += dh # for scalars
-#     SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
-#     costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
-#     flutt_f = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
+# ************************************************
+#     FULL TEST
+# ************************************************
+DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+funcsSensAdjoint = DCFoil.evalFuncsSens(SOL, [DVDict], evalFuncsSensList, solverOptions; mode="Adjoint")
+funcsSensAdjoint[1][evalFunc]
+for (ii, dh) in enumerate(steps)
+    DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+    SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+    flutt_i = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
+    global funcVal = flutt_i
+    # DVDict[dvKey][1] += dh
+    DVDict[dvKey] += dh # for scalars
+    SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
+    costFuncs = DCFoil.evalFuncs(SOL, [DVDict], evalFuncs, solverOptions)
+    flutt_f = costFuncs[evalFuncsSensList[1]*"-"*wingOptions["compName"]]
 
-#     derivs[ii] = (flutt_f - flutt_i) / dh
-#     @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
+    derivs[ii] = (flutt_f - flutt_i) / dh
+    @sprintf("dh = %f, deriv = %f", dh, derivs[ii])
 
-#     # --- Reset DV ---
-#     # DVDict[dvKey][1] -= dh
-#     DVDict[dvKey] -= dh # for scalars
-# end
+    # --- Reset DV ---
+    # DVDict[dvKey][1] -= dh
+    DVDict[dvKey] -= dh # for scalars
+end
 
 # save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
 
