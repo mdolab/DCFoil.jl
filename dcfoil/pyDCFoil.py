@@ -180,6 +180,8 @@ class DCFOIL:
 
         solverOptions = self.solverOptions
 
+        breakpoint()
+        # TODO: WHY IS THERE A BUG HERE
         self.DCFoil.init_model(DVDictList, evalFuncs, solverOptions=solverOptions)
         SOLDICT = self.DCFoil.run_model(DVDictList, evalFuncs, solverOptions=solverOptions)
 
