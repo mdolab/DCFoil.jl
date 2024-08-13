@@ -3,9 +3,9 @@
 @File    :   VPM.jl
 @Time    :   2024/05/16
 @Author  :   Galen Ng
-@Desc    :   Vortex panel method for the circulation distribution 
-             over an airfoil surface.
-             This code more accurately computes the sectional lift cₗ
+@Desc    :   Vortex panel method for the circulation distribution over an airfoil surface.
+             This code more accurately computes the sectional lift (cℓ) and 
+             sectional lift slope (∂cℓ / ∂α ≐ 1 / rad) than thin airfoil theory
 """
 
 module VPM
@@ -20,7 +20,10 @@ using ..SolutionConstants: XDIM, YDIM, ZDIM
 using ..DCFoil: DTYPE
 using ..SolverRoutines: compute_anglesFromVector
 
-struct Airfoil{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+struct AirfoilMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+    """
+    Struct to hold the airfoil geometry discretization
+    """
     vortexXY::TM        # vortex points [x,y] for each panel, size [2, n] where n is the number of vertices
     controlXY::TM       # control points [x,y] for each panel, size [2, n-1] where n is the number of vertices
     panelLengths::TA    # panel lengths [m]
@@ -30,6 +33,8 @@ end
 
 function setup(xx, yy, control_xy, sweep=0.0)
     """
+    Discretize the airfoil into panels and setup the VPM linear systems to solve
+
     xx: x-coordinates of the airfoil vertices
     yy: y-coordinates of the airfoil vertices
     control_xy: control points for the VPM (center of panels)
@@ -45,7 +50,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
 
     panelLengths = sqrt.(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
 
-    AIRFOIL = Airfoil(vortex_xy, control_xy, panelLengths, nodeCt, sweep)
+    AIRFOIL = AirfoilMesh(vortex_xy, control_xy, panelLengths, nodeCt, sweep)
 
     P11, P12, P21, P22 = compute_panelMatrix(AIRFOIL)
 
@@ -79,6 +84,10 @@ end
 function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
     """
     Solve vortex strength and lift and moment
+
+    Airfoil: AirfoilMesh struct
+    Amat: Panel matrix
+    V: Freestream velocity vector [U, V, W]
     """
 
     alpha, Vinf = compute_sweepCorr(Airfoil.sweep, V)
@@ -231,6 +240,12 @@ end
 
 function compute_sweepCorr(angle, V)
     """
+    Correct the angle of attack and freestream velocity for the sweep angle
+
+    Inputs:
+    -------
+    angle - Sweep angle [rad]
+    V - Velocity vector [U, V, W]
     """
     alpha, beta, Vinf = compute_anglesFromVector(V)
     Ca = cos(alpha)

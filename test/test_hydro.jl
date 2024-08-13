@@ -7,7 +7,7 @@ using Printf
 
 
 include("../src/DCFoil.jl")
-using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM
+using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine
 using Plots, Printf
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -710,4 +710,18 @@ function test_VPM()
     savefig(p, "test_VPM.png")
 end
 
-test_VPM()
+function test_LL()
+
+    Uinf = [1.0, 0.0, 0.0]
+    span = 8.0
+    sweep = 0.0
+    rootChord = 1.0
+    TR = 1.0
+    LLStruct, FlowCond = LiftingLine.setup(Uinf, span, sweep, rootChord, TR; npt_wing=99, npt_airfoil=99)
+    LLOutputs = LiftingLineSystem.solve(LLStruct, FlowCond)
+end
+# ==============================================================================
+#                         Run some tests
+# ==============================================================================
+# test_VPM()
+test_LL()

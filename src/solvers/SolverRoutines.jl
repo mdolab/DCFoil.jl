@@ -1002,5 +1002,9 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
     end
 end
 
+function normalize_3Dvector(r)
+    rhat = r ./ sqrt(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
+    return rhat
+end
 
 end # SolverRoutines
