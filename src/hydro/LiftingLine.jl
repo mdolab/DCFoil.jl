@@ -83,8 +83,8 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ************************************************
     #     Make wing coordinates
     # ************************************************
-    wing_xyz = zeros(npt_wing + 1, 3)
-    wing_ctrl_xyz = zeros(npt_wing, 3)
+    wing_xyz = zeros(3, npt_wing + 1)
+    wing_ctrl_xyz = zeros(3, npt_wing)
 
     # ---------------------------
     #   Y coords (span)
@@ -101,12 +101,16 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ---------------------------
     local_chords = zeros(npt_wing + 1)
     local_chords_ctrl = zeros(npt_wing)
+
+    # ∂c/∂y
     local_dchords = zeros(npt_wing + 1)
     local_dchords_ctrl = zeros(npt_wing)
-    local_chords = rootChord * (1.0 - 2.0 * (1.0 - taperRatio) * abs_cs_safe(wing_xyz[YDIM, :]) / wingSpan)
-    local_chords_ctrl = rootChord * (1.0 - 2.0 * (1.0 - taperRatio) * abs_cs_safe(self.wing_ctrl_xyz[YDIM, :]) / wingSpan)
+
+    local_chords = rootChord * (1.0 - 2.0 * (1.0 - taperRatio) .* abs_cs_safe.(wing_xyz[YDIM, :]) ./ wingSpan)
+    local_chords_ctrl = rootChord * (1.0 - 2.0 * (1.0 - taperRatio) * abs_cs_safe.(wing_ctrl_xyz[YDIM, :]) / wingSpan)
     local_dchords = 2.0 * rootChord * (taperRatio - 1.0) * sign(wing_xyz[YDIM, :]) / wingSpan
     local_dchords_ctrl = 2.0 * rootChord * (taperRatio - 1.0) * sign(wing_ctrl_xyz[YDIM, :]) / wingSpan
+
     LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, local_chords, zeros(1, 1), zeros(1, 1), zeros(1, 1), npt_airfoil, 0.0, 0.0, AR, rootChord, sweepAng, 0.0)
 
     # --- Locus of aerodynamic centers (LAC) ---
@@ -184,8 +188,8 @@ function compute_LAC(LiftingSystem, y, c, cr, Λ, span; model="kuechemann")
         tanl = 2π * tan(Λₖ) / (Λₖ * c)
         lam = sqrt(1.0 + (tanl * y)^2) -
               tanl * abs_cs_safe(y) -
-              sqrt(1.0 + (tanl * (span / 2.0 - abs_cs_safe(y)))^2)
-        +tanl * (span / 2.0 - abs_cs_safe(y))
+              sqrt(1.0 + (tanl * (span / 2.0 - abs_cs_safe(y)))^2) +
+              tanl * (span / 2.0 - abs_cs_safe(y))
 
         fs = 0.25 * cr +
              tan(Λ) * abs_cs_safe(y) -
@@ -222,8 +226,8 @@ function compute_dLACds(LiftingSystem, y, c, ∂c∂y, Λ, span; model="kuechema
         tanl = 2π * tan(Λₖ) / (Λₖ * c)
         lam = sqrt(1.0 + (tanl * y)^2) -
               tanl * abs_cs_safe(y) -
-              sqrt(1.0 + (tanl * (span / 2.0 - abs_cs_safe(y)))^2)
-        +tanl * (span / 2.0 - abs_cs_safe(y))
+              sqrt(1.0 + (tanl * (span / 2.0 - abs_cs_safe(y)))^2) +
+              tanl * (span / 2.0 - abs_cs_safe(y))
 
         lamp = (tanl * tanl * (y * c - y * y * ∂c∂y) / c) / sqrt(1.0 + (tanl * y)^2) -
                tanl * (sign(y) * c - abs_cs_safe(y) * ∂c∂y) / c +
@@ -231,9 +235,9 @@ function compute_dLACds(LiftingSystem, y, c, ∂c∂y, Λ, span; model="kuechema
                sqrt(1.0 + (tanl * (b / 2.0 - abs_cs_safe(y)))^2) -
                tanl * (sign(y) * c + (b / 2.0 - abs_cs_safe(y)) * ∂c∂y) / c
 
-        dx = tan(Λ) * sign(y)
-        +lamp * Λₖ * c / (2π * K)
-        -∂c∂y * (1.0 - (1.0 + 2.0 * lam * Λₖ / π) / K) * 0.25
+        dx = tan(Λ) * sign(y) +
+             lamp * Λₖ * c / (2π * K) -
+             ∂c∂y * (1.0 - (1.0 + 2.0 * lam * Λₖ / π) / K) * 0.25
     else
         println("Model not implemented yet")
     end
@@ -272,16 +276,18 @@ function solve(FlowConditions, LiftingSystem)
 
     bound_mask = ones(LiftingSystem.npt_wing, LiftingSystem.npt_wing) - diagm(ones(LiftingSystem.npt_wing))
 
-    TV_influence = -compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LiftingSystem.rc)
-    +compute_straightSegment(P1, P2, ctrlPtMat, LiftingSystem.rc)
-    +compute_straightSegment(P3, P4, ctrlPtMat, LiftingSystem.rc)
-    +compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LiftingSystem.rc)
+    TV_influence = -compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LiftingSystem.rc) +
+                   compute_straightSegment(P1, P2, ctrlPtMat, LiftingSystem.rc) +
+                   compute_straightSegment(P3, P4, ctrlPtMat, LiftingSystem.rc) +
+                   compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LiftingSystem.rc)
 
     # ---------------------------
     #   Solve for circulation
     # ---------------------------
     # First guess
-    g0 = 0.5 * LiftingSystem.rootChord * LiftingSystem.airfoil_CLa * cos(LiftingSystem.sweepAng) * (FlowConditions.Uinf[ZDIM] / FlowConditions.Uinf[XDIM] - LiftingSystem.airfoil_aL0) * (1 - (2.0 * LiftingSystem.wing_ctrl_xyz[YDIM, :] / LiftingSystem.span)^4)^(1 / 4)
+    g0 = 0.5 * LiftingSystem.rootChord * LiftingSystem.airfoil_CLa * cos(LiftingSystem.sweepAng) *
+         (FlowConditions.Uinf[ZDIM] / FlowConditions.Uinf[XDIM] - LiftingSystem.airfoil_aL0) *
+         (1 - (2.0 * LiftingSystem.wing_ctrl_xyz[YDIM, :] / LiftingSystem.span)^4)^(1 / 4)
 
     # Solve for circulation distribution
     Gconv, residuals = SolverRoutines.converge_r(compute_LLresiduals, compute_LLJacobian, g0)
@@ -303,9 +309,17 @@ function solve(FlowConditions, LiftingSystem)
 
     # --- Final outputs ---
     ux, uy, uz = FlowConditions.uvec
-    CL = -Forces[XDIM] * uz + Forces[ZDIM] * ux / (ux^2 + uz^2)
-    CDi = Forces[XDIM] * ux + Forces[YDIM] * uy + Forces[ZDIM] * uz
-    CS = (-Forces[XDIM] * ux * uy - Forces[ZDIM] * uz * uy + Forces[YDIM] * (uz^2 + ux^2)) / sqrt(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
+    CL = -Forces[XDIM] * uz +
+         Forces[ZDIM] * ux / (ux^2 + uz^2)
+    CDi = Forces[XDIM] * ux +
+          Forces[YDIM] * uy +
+          Forces[ZDIM] * uz
+    CS = (
+        -Forces[XDIM] * ux * uy -
+        Forces[ZDIM] * uz * uy +
+        Forces[YDIM] * (uz^2 + ux^2)
+    ) /
+         sqrt(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
 
     LLResults = LiftingLineOutputs(Forces, Γdist, CL, CDi, CS)
 
@@ -460,8 +474,9 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     d = ifelse.(r1dotr1r2 .< 0.0, r1mag, d)
     d = ifelse.(r2dotr1r2 .< 0.0, r2mag, d)
 
-    influence = (r1mag + r2mag) + cross(r1, r2, axis=1) * d^2 / sqrt(rc^4 + d^4) /
-                                  (4π * r1mag * r2mag * (r1mag * r2mag + r1dotr2))
+    influence = (r1mag + r2mag) +
+                cross(r1, r2, axis=1) * d^2 / sqrt(rc^4 + d^4) /
+                (4π * r1mag * r2mag * (r1mag * r2mag + r1dotr2))
 
     return influence
 end

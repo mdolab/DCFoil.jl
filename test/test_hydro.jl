@@ -718,7 +718,7 @@ function test_LL()
     rootChord = 1.0
     TR = 1.0
     LLStruct, FlowCond = LiftingLine.setup(Uinf, span, sweep, rootChord, TR; npt_wing=99, npt_airfoil=99)
-    LLOutputs = LiftingLineSystem.solve(LLStruct, FlowCond)
+    LLOutputs = LiftingLine.solve(LLStruct, FlowCond)
 end
 # ==============================================================================
 #                         Run some tests
