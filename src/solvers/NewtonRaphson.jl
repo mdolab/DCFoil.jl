@@ -23,7 +23,7 @@ function print_solver_history(iterNum::Int64, resNorm, stepNorm)
 end
 
 function do_newton_raphson(
-    compute_residuals, compute_∂r∂u, u0::Vector, DVDictList::Vector;
+    compute_residuals, compute_∂r∂u, u0::Vector, DVDictList=nothing;
     maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false,
     appendageOptions=Dict(),
     solverOptions=Dict(),
@@ -44,7 +44,7 @@ function do_newton_raphson(
         must have signature f(u, mode; solverParams)
     u0 : array
         Initial guess
-    x0 : dict
+    x0 : dict, optional
         Dictionary of design variables (these do not change during the solve)
     maxIters : int
         Maximum number of iterations
@@ -59,17 +59,21 @@ function do_newton_raphson(
     """
 
     # --- Initialize output ---
-    DVDict = DVDictList[iComp]
-    x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+    if !isnothing(DVDictList)
+        DVDict = DVDictList[iComp]
+        x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+        res = compute_residuals(
+            u0, x0, DVLengths;
+            appendageOptions=appendageOptions,
+            solverOptions=solverOptions,
+            iComp=iComp,
+            CLMain=CLMain,
+            DVDictList=DVDictList,
+        )
+    else
+        res = compute_residuals(u0; solverParams=solverParams)
+    end
 
-    res = compute_residuals(
-        u0, x0, DVLengths;
-        appendageOptions=appendageOptions,
-        solverOptions=solverOptions,
-        iComp=iComp,
-        CLMain=CLMain,
-        DVDictList=DVDictList,
-    )
 
     converged_u = copy(u0)
     converged_r = copy(res)

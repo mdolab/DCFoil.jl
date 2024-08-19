@@ -30,25 +30,31 @@ using ..DCFoil: RealOrComplex, DTYPE
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
+function converge_resNonlinear(compute_residuals, compute_∂r∂u, u0::Vector, x0List=nothing;
     maxIters=200, tol=1e-6, is_verbose=false,
     solverParams=nothing,
     appendageOptions=Dict(),
     solverOptions=Dict(),
     mode="Analytic",
-    # mode="CS",
-    # mode="RAD",
-    # mode="FiDi",
     is_cmplx=false,
     iComp=1, CLMain=0.0
 )
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
+
+    Parameters:
+    -----------
+    compute_residuals : function handle
+    compute_∂r∂u : function handle
+        Residual Jacobian
+    mode : String
+        Analytic, CS, RAD, or FiDi
+
     """
-
-    x0 = x0List[iComp]
-
+    if !isnothing(x0List)
+        x0 = x0List[iComp]
+    end
     # ************************************************
     #     Main solver loop
     # ************************************************
@@ -67,7 +73,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
 
     return converged_u, converged_r
 
-end # converge_r
+end
 
 function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; appendageOptions=Dict(), alphaCorrection=0.0)
     """
@@ -648,6 +654,24 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
     return y, cmplxStdEigen_pullback
 end
 
+function cross3D(arr1, arr2)
+    """
+    Cross product of two 3D arrays
+    where the first dimension is length 3
+    """
+    @assert size(arr1, 1) == 3
+    @assert size(arr2, 1) == 3
+    M, N = size(arr1, 2), size(arr1, 3)
+    arr1crossarr2 = zeros(3, M, N)
+    for jj in 1:M
+        for kk in 1:N
+            arr1crossarr2[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+        end
+    end
+
+    return arr1crossarr2
+
+end
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================
@@ -843,6 +867,35 @@ function compute_anglesFromVector(V)
     V3 = V[ZDIM]
     return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), sqrt(V1^2 + V2^2 + V3^2)
 end
+
+function compute_vectorFromAngle(alpha, beta, Uinf)
+    """
+    Defines a flow vector from flow angles and magnitude .
+
+    Parameters
+    ----------
+    alpha : scalar , optional
+        Angle between the freestream and the x-y plane (rad ).
+    beta : scalar , optional
+        Angle between the freestream and the x-z plane (rad).
+    Uinf : scalar , optional
+        The magnitude of the freestream velocity .
+    Returns
+    -------
+    V : array_like
+        An array of size [3] containing the x, y, and z components of the
+        freestream velocity .
+    """
+
+    cosa = cos(alpha)
+    sina = sin(alpha)
+    cosb = cos(beta)
+    sinb = sin(beta)
+    sqrtsinasinb = sqrt(1.0 - sina^2 * sinb^2)
+
+    return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sqrtsinasinb
+end
+
 
 function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     """

@@ -133,9 +133,10 @@ function make_componentMesh(
     mesh, elemConn = fill_mesh(mesh_z, elemConn, transMat, span, nElem; config=config, nElStrut=nElStrut, spanStrut=spanStrut)
 
     mesh_z = Zygote.Buffer(mesh)
+    mesh_z[:, :] = mesh
     if config == "t-foil"
-        mesh_z[:, ZDIM] = mesh_z[:, ZDIM] .- spanStrut # translate
         for inode in 1:nNodeTot
+            mesh_z[inode, ZDIM] = mesh_z[inode, ZDIM] - spanStrut # translate
             mesh_z[inode, :] = transMat * mesh_z[inode, :]
         end
     end

@@ -5,7 +5,8 @@
 @Author  :   Galen Ng
 @Desc    :   Vortex panel method for the circulation distribution over an airfoil surface.
              This code more accurately computes the sectional lift (cℓ) and 
-             sectional lift slope (∂cℓ / ∂α ≐ 1 / rad) than thin airfoil theory
+             sectional lift slope (∂cℓ / ∂α ≐ 1 / rad) than thin airfoil theory and introduces the
+             "nonlinear" lift slope into the nonlinear lifting line
 """
 
 module VPM
@@ -46,7 +47,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
     end
 
     nodeCt = length(xx)
-    vortex_xy = copy(hcat(xx .* cos(sweep), yy)')
+    vortex_xy = copy(transpose(hcat(xx .* cos(sweep), yy)))
 
     panelLengths = sqrt.(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
 
@@ -86,7 +87,7 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
     Solve vortex strength and lift and moment
 
     Airfoil: AirfoilMesh struct
-    Amat: Panel matrix
+    Amat: Panel matrix of influences
     V: Freestream velocity vector [U, V, W]
     """
 

@@ -73,7 +73,7 @@ function solve(
     end
 
     # Actual solve
-    qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q_ss0, DVDictList;
+    qSol, _ = SolverRoutines.converge_resNonlinear(compute_residuals, compute_∂r∂u, q_ss0, DVDictList;
         is_verbose=true,
         solverParams=SOLVERPARAMS,
         appendageOptions=appendageOptions,

@@ -415,7 +415,7 @@ function use_free_surface(γ, α₀, U∞, chordVec, h)
 
     Fnh = U∞ / (sqrt(9.81 * h))
     # Find limiting case
-    if Fnh < 10 / sqrt(h / mean(chordVec))
+    if real(Fnh) < real(10 / sqrt(h / mean(chordVec)))
         println("Violating high-speed free-surface BC with Fnh*sqrt(h/c) of")
         println(Fnh * sqrt(h / mean(chordVec)))
         println("Fnh is")

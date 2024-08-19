@@ -150,7 +150,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
         #   Solve for dynamic states
         # ---------------------------
         # The below way is the numerical way to do it but might skip if this doesntwork
-        # qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
+        # qSol, _ = SolverRoutines.converge_resNonlinear(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
         H = inv(D) # RAO
         qSol = real(H * extForceVec)
         uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
@@ -300,7 +300,7 @@ end
 #     return converged_u, converged_r
 # end
 
-# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="RAD")
+# function converge_resNonlinear(u0, maxIters=200, tol=1e-6, verbose=true, mode="RAD")
 #     """
 #     Given initial input u0, solve system r(u) = 0 with complex Newton
 #     """
