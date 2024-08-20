@@ -86,6 +86,7 @@ struct LiftingLineNLParams
     """
     TV_influence
     LLSystem # LiftingLineMesh
+    FlowCond # Flow conditions
     # Stuff for the 2D VPM solve
     Airfoil #
     Airfoil_influences #
@@ -232,7 +233,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # Where the 2D VPM comes into play
     aeroProperties = Vector(undef, npt_wing)
     for (ii, sweep) in enumerate(localSweepsCtrl)
-        LLHydro = compute_hydroProperties(sweep, airfoil_xy, airfoil_ctrl_xy)
+        LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(sweep, airfoil_xy, airfoil_ctrl_xy)
         aeroProperties[ii] = LLHydro
     end
 
@@ -487,7 +488,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     # ---------------------------
     # First guess
     c_r = LLMesh.rootChord
-    # TODO: WEIRD BUG HERE
     clα = LLHydro.airfoil_CLa
     αL0 = LLHydro.airfoil_aL0
     Λ = LLMesh.sweepAng
@@ -498,9 +498,10 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
     # --- Pack up parameters for the NL solve ---
-    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, Airfoil, Airfoil_influences)
+    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, FlowCond, Airfoil, Airfoil_influences)
 
     # --- Nonlinear solve for circulation distribution ---
+    # TODO: PICKUP DEBUGGING HERE
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0; solverParams=LLNLParams)
 
     Gjvji = TV_influence * Gconv
@@ -544,7 +545,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     Nonlinear , nondimensional lifting - line equation .
     Parameters
     ----------
-    G : array_like
+    G : vector
     Circulation distribution normalized by the freestream velocity
     magnitude.
 
@@ -562,20 +563,37 @@ function compute_LLresiduals(G; solverParams=nothing)
     LLSystem = solverParams.LLSystem
     Airfoil = solverParams.Airfoil
     Airfoil_influences = solverParams.Airfoil_influences
+    FlowCond = solverParams.FlowCond
+    ζi = LLSystem.sectionVectors
 
-    _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
+    # This is a (3 , npt, npt) × (npt,) multiplication
+    # PYTHON: _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
+    uix = TV_influence[XDIM, :, :] * G .+ FlowCond.uvec[XDIM]
+    uiy = TV_influence[YDIM, :, :] * G .+ FlowCond.uvec[YDIM]
+    uiz = TV_influence[ZDIM, :, :] * G .+ FlowCond.uvec[ZDIM]
+    ui = cat(uix, uiy, uiz, dims=2)
+    ui = permutedims(ui, [2, 1])
 
     # Do a curve fit on aero props
     # if self._aero_approx:
     # _CL = self._lift_from_aero(*self._aero_properties, self.local_sweep_ctrl, self.Vinf * _Vi, self.Vinf)
     # else:
-    # Actually solve VPM
-    _CL = [VPM.solve(Airfoil, Airfoil_influences, V_local) for V_local in FlowCond.Uinfvec * transpose(_Vi)]
+    # Actually solve VPM for each local velocity c
+    Ui = FlowCond.Uinfvec .* (ui) # dimensionalize the local velocities
+    _CL = [VPM.solve(Airfoil, Airfoil_influences, V_local)[1] for V_local in eachcol(Ui)] # remember to only grab CL out of VPM solve
 
-    u∞_plus_ΣGjvji_cross_ζi = cross(_Vi, LLSystem.sectionVectors)
-    u∞_plus_ΣGjvji_cross_ζi_mag = sqrt.(u∞_plus_ΣGjvji_cross_ζi[XDIM, :] .^ 2 + u∞_plus_ΣGjvji_cross_ζi[YDIM, :] .^ 2, u∞_plus_ΣGjvji_cross_ζi[ZDIM, :] .^ 2)
+    ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
+    ui_cross_ζi = hcat(ui_cross_ζi...) # now it's a (3, npt) matrix
+    ui_cross_ζi_mag = sqrt.(ui_cross_ζi[XDIM, :] .^ 2 + ui_cross_ζi[YDIM, :] .^ 2 + ui_cross_ζi[ZDIM, :] .^ 2)
 
-    _dF = 2.0 * u∞_plus_ΣGjvji_cross_ζi_mag * G
+    # println(size(ui_cross_ζi))
+    # println(size(ui_cross_ζi_mag))
+    # println(size(G))
+    
+    _dF = 2.0 * ui_cross_ζi_mag .* G
+    
+    # println(size(_CL))
+    # println(size(_dF))
 
     return _dF - _CL
 end

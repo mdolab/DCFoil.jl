@@ -91,6 +91,10 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
     V: Freestream velocity vector [U, V, W]
     """
 
+    if length(V) != 3
+        error("Velocity must be a 3D vector [U, V, W]")
+    end
+
     alpha, Vinf = compute_sweepCorr(Airfoil.sweep, V)
 
     RHS = zeros(DTYPE, Airfoil.n)
