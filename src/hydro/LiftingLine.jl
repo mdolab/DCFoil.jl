@@ -225,7 +225,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     fprimeEff = compute_dLACdseffective(LLSystem, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
 
-    println("local sweeps: $(localSweeps)")
+    # println("local sweeps: $(localSweeps)")
     # --- Other section properties ---
     sectionVectors = wing_xyz[:, 1:end-1] - wing_xyz[:, 2:end] # dℓᵢ
 
@@ -259,7 +259,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     wing_joint_xyz[YDIM, :] = wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps)
     wing_joint_xyz_eff[YDIM, :, :] = transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff)
 
-    println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
+    # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
 
     # Store all computed quantities here
@@ -362,14 +362,14 @@ function compute_LACeffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ
 
         LACeff = (1.0 .- blend) .* LACwork .+
                  blend .* (fprime0 .* (ywork .- y0work) .+ LAC0work)
-        println("c: $(c)")
-        println("cr: $(cr)")
-        println("sweep: $(Λ)")
+        # println("c: $(c)")
+        # println("cr: $(cr)")
+        # println("sweep: $(Λ)")
         # println("y: $(y)")
         # println("y0: $(y0)")
-        println("LACwork: $(LACwork[1,:])")
-        println("LAC0work: $(LAC0work[:,1])")
-        println("LACeff: $(LACeff[1,:])")
+        # println("LACwork: $(LACwork[1,:])")
+        # println("LAC0work: $(LAC0work[:,1])")
+        # println("LACeff: $(LACeff[1,:])")
         return LACeff
     else
         println("Model not implemented yet")
@@ -522,15 +522,15 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     # println("ctrlpts y: $(ctrlPtMat[YDIM, :, 1])")
     # println("ctrlpts z: $(ctrlPtMat[ZDIM, :, 1])")
 
-    # A little off...
-    p1 = plot(1:LLMesh.npt_wing, P1[XDIM, :, 1], label="P1[XDIM, :, 1]")
-    plot!(1:LLMesh.npt_wing, P1[YDIM, 1, :], label="P1[YDIM, :, 1]")
-    plot!(1:LLMesh.npt_wing, P1[ZDIM, 1, :], label="P1[ZDIM, :, 1]")
-    # println("P1 xdim: $(P1[XDIM, :, 1])")
-    # println("P1 ydim: $(P1[YDIM, 1, :])")
-    # println("P1 zdim: $(P1[ZDIM, :, 1])")
-    plot(p1)
-    savefig("test_P1.pdf")
+    # OK
+    # p1 = plot(1:LLMesh.npt_wing, P2[XDIM, :, 1], label="P2[XDIM, :, 1]")
+    # plot!(1:LLMesh.npt_wing, P2[YDIM, 1, :], label="P2[YDIM, :, 1]")
+    # plot!(1:LLMesh.npt_wing, P2[ZDIM, 1, :], label="P2[ZDIM, :, 1]")
+    # # println("P1 xdim: $(P1[XDIM, :, 1])")
+    # # println("P1 ydim: $(P1[YDIM, 1, :])")
+    # # println("P1 zdim: $(P1[ZDIM, :, 1])")
+    # plot(p1)
+    # savefig("test_P1.pdf")
 
     # Mask for the bound segment (npt_wing x npt_wing)
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
@@ -767,7 +767,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     -------
     startpt : ndarray
         Starting point of the semi-infinite vortex filament
-    endvec : ndarray
+    endvec : Array{Float64, 3}
         Unit vector of the semi-infinite vortex filament
     pt : ndarray
         Point at which the influence is computed (field point)
@@ -785,7 +785,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     r1mag = sqrt.(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     uinf = endvec
 
-    r1dotuinf = r1[XDIM, :, :] * uinf[XDIM, :, :] + r1[YDIM, :, :] * uinf[YDIM, :, :] + r1[ZDIM, :, :] * uinf[ZDIM, :, :]
+    r1dotuinf = r1[XDIM, :, :] .* uinf[XDIM, :, :] .+ r1[YDIM, :, :] .* uinf[YDIM, :, :] .+ r1[ZDIM, :, :] .* uinf[ZDIM, :, :]
 
     r1crossuinf = cross3D(r1, uinf)
     uinfcrossr1 = cross3D(uinf, r1)
@@ -798,7 +798,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
 
     numerator = uinfcrossr1 .* (d .^ 2 ./ sqrt.(rc^4 .+ d .^ 4))
 
-    denominator = (4π * r1mag * (r1mag .- r1dotuinf))
+    denominator = (4π * r1mag .* (r1mag .- r1dotuinf))
     denominator = reshape(denominator, 1, size(denominator)...)
 
     influence = numerator ./ denominator
@@ -807,6 +807,25 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence = replace(influence, NaN => 0.0)
     influence = replace(influence, Inf => 0.0)
     influence = replace(influence, -Inf => 0.0)
+
+    # println("d:\n $(d[1,:,1])") # good
+    # println("pt: \n$(pt[:,1,1])")
+    # println("startpt: \n$(startpt[:,1,1])")
+    # println("r1:\n $(r1[:,1,1])")
+    # println("r1mag:\n $(r1mag[1,:])") # good
+    # println("uinf:\n $(uinf[:,1,1])") # good
+    # TODO: PICKUP HERE
+    # println("r1dotuinf:\n $(r1dotuinf[1,:])") # good
+    # println("influence:\n $(influence[ZDIM,1,:])")
+
+    # p1 = plot(1:size(r1, 2), numerator[XDIM, :, 1])
+    # plot!(1:size(r1, 2), numerator[YDIM, :, 1])
+    # plot!(1:size(r1, 2), numerator[ZDIM, :, 1])
+    # p2 = plot(1:size(r1, 2), denominator[1, :, 1])
+
+    # plot(p1, p2, layout=(2, 1))
+    # savefig("test_semiinf.pdf")
+
 
     return influence
 end
@@ -851,7 +870,6 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     d = ifelse.(r1dotr1r2 .< 0.0, r1mag, d)
     d = ifelse.(r2dotr1r2 .< 0.0, r2mag, d)
 
-
     # termx = r1crossr2[XDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
     #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
     # termy = r1crossr2[YDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
@@ -868,7 +886,7 @@ function compute_straightSegment(startpt, endpt, pt, rc)
 
     influence = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
     influence = influence .* (d .^ 2) ./ sqrt.(rc^4 .+ d .^ 4)
-    denominator = (4π * r1mag .* r2mag * (r1mag .* r2mag .+ r1dotr2))
+    denominator = (4π * r1mag .* r2mag .* (r1mag .* r2mag .+ r1dotr2))
 
     # Reshape the denominator to have the same dimensions as the influence    
     denominator = reshape(denominator, 1, size(denominator)...)
