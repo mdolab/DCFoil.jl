@@ -149,14 +149,15 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ---------------------------
     #   Y coords (span)
     # ---------------------------
-    # Even spacing
-    θ_bound = LinRange(-wingSpan / 2, wingSpan / 2, npt_wing * 2 + 1)
-
+    # --- Even spacing ---
+    # θ_bound = LinRange(-wingSpan * 0.5, wingSpan * 0.5, npt_wing * 2 + 1)
+    # --- Cosine spacing ---
+    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
     for (ii, θ) in enumerate(θ_bound[1:2:end])
-        wing_xyz[YDIM, ii] = θ
+        wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
     end
     for (ii, θ) in enumerate(θ_bound[2:2:end])
-        wing_ctrl_xyz[YDIM, ii] = θ
+        wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
     end
 
     # ---------------------------
@@ -195,13 +196,18 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
 
     if (!isnothing(options)) && options["make_plot"]
         println("Making plot")
-        plot(wing_xyz[XDIM, :], wing_xyz[YDIM, :], label="Wing LAC", marker=:circle)
-        plot!(wing_ctrl_xyz[XDIM, :], wing_ctrl_xyz[YDIM, :], label="Control LAC", marker=:cross)
-        plot!(xlabel="X", ylabel="Y", title="Locus of Aerodynamic Centers")
-        xlims!(0, 1.0)
+        plot(wing_xyz[YDIM, :], wing_xyz[XDIM, :], label="Wing LAC", marker=:circle)
+        plot!(wing_ctrl_xyz[YDIM, :], wing_ctrl_xyz[XDIM, :], label="Control LAC", marker=:cross)
+        plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .+ 0.75 * local_chords, label="Planform", linestyle=:solid, color=:black)
+        plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .- 0.25 * local_chords, linestyle=:solid, color=:black)
+        plot!(xlabel="Y", ylabel="X", title="Locus of Aerodynamic Centers")
+        xlims!(-4.0, 4.0)
+        ylims!(-1, 3)
         savefig("LAC.pdf")
     end
     # Need a mess of LAC's for each control point
+    # println("wing_xyz:\n $(wing_xyz[YDIM,:])") # these are right
+    # println("wing_ctrl_xyz:\n $(wing_ctrl_xyz[YDIM,:])") # these are right
     LACeff = compute_LACeffective(LLSystem, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     # This is a 3D array
     wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
@@ -219,6 +225,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     fprimeEff = compute_dLACdseffective(LLSystem, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
 
+    println("local sweeps: $(localSweeps)")
     # --- Other section properties ---
     sectionVectors = wing_xyz[:, 1:end-1] - wing_xyz[:, 2:end] # dℓᵢ
 
@@ -243,13 +250,17 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # These are where the bound vortex lines kink and then bend to follow the freestream direction
     wing_joint_xyz = zeros(size(wing_xyz))
     wing_joint_xyz_eff = zeros(size(wing_xyz_eff))
-    local_chords_colmat = reshape(local_chords, 1, length(local_chords))
+    local_chords_colmat = reshape(local_chords, 1, size(local_chords)...)
 
     wing_joint_xyz[XDIM, :] = wing_xyz[XDIM, :] + δ * local_chords .* cos.(localSweeps)
     wing_joint_xyz_eff[XDIM, :, :] = wing_xyz_eff[XDIM, :, :] + δ * local_chords_colmat .* cos.(localSweepEff)
 
+
     wing_joint_xyz[YDIM, :] = wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps)
     wing_joint_xyz_eff[YDIM, :, :] = transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff)
+
+    println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
+    # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
 
     # Store all computed quantities here
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas, aeroProperties,
@@ -285,11 +296,11 @@ function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
         if Λ == 0
             fs = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
         else
-            tanl = vec(2π * tan(Λₖ) / (Λₖ * c))
+            tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
             lam = sqrt.(1.0 .+ (tanl .* y) .^ 2) .-
                   tanl .* abs_cs_safe.(y) .-
-                  sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
-                  tanl .* (span / 2.0 .- abs_cs_safe.(y))
+                  sqrt.(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
+                  tanl .* (0.5 * span .- abs_cs_safe.(y))
 
             fs = 0.25 * cr .+
                  tan(Λ) .* abs_cs_safe.(y) .-
@@ -299,13 +310,21 @@ function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
         println("Model not implemented yet")
     end
 
+    # println("====================================")
+    # println("Λk: $(Λₖ)")
+    # println("K: $(K)") # good
+    # println("y: $(y)")
+    # println("tanl\n: $(tanl)")
+    # println("lam:\n $(lam)")
+    # println("fs: $(fs)") #good
+    # println("====================================")
 
     return fs
 end
 
 function compute_LACeffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr, span; model="kuechemann")
     """
-    The effective LAC , based on Küchemann's equation .
+    The effective LAC, based on Küchemann's equation .
 
     Parameters
     ----------
@@ -327,20 +346,31 @@ function compute_LACeffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ
     """
 
     # This is a matrix
-    ywork = reshape(y, 1, length(y))
-    y0work = reshape(y0, length(y0), 1)
+    ywork = reshape(y, 1, size(y)...)
+    y0work = reshape(y0, size(y0)..., 1)
     blend = exp.(-σ * (y0work .- ywork) .^ 2)
 
     if model == "kuechemann"
 
-        LAC = compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span)
-        LACwork = reshape(LAC, 1, length(LAC))
-        LAC0 = compute_LAC(LLMesh, LLHydro, y0, c_y0, cr, Λ, span)
-        LAC0work = reshape(LAC0, length(LAC0), 1)
-        fprime0 = compute_dLACds(LLMesh, LLHydro, y0, c_y0, dc_y0, Λ, span)
+        LAC = compute_LAC(LLMesh, LLHydro, ywork[1, :], c, cr, Λ, span)
+        LACwork = reshape(LAC, 1, size(LAC)...)
 
-        return (1.0 .- blend) .* LACwork .+
-               blend .* (fprime0 .* (ywork .- y0work) .+ LAC0work)
+        LAC0 = compute_LAC(LLMesh, LLHydro, y0work[:, 1], c_y0, cr, Λ, span)
+        LAC0work = reshape(LAC0, size(LAC0)..., 1)
+
+        fprime0 = compute_dLACds(LLMesh, LLHydro, y0work[:, 1], c_y0, dc_y0, Λ, span)
+
+        LACeff = (1.0 .- blend) .* LACwork .+
+                 blend .* (fprime0 .* (ywork .- y0work) .+ LAC0work)
+        println("c: $(c)")
+        println("cr: $(cr)")
+        println("sweep: $(Λ)")
+        # println("y: $(y)")
+        # println("y0: $(y0)")
+        println("LACwork: $(LACwork[1,:])")
+        println("LAC0work: $(LAC0work[:,1])")
+        println("LACeff: $(LACeff[1,:])")
+        return LACeff
     else
         println("Model not implemented yet")
     end
@@ -370,26 +400,36 @@ function compute_dLACds(LLMesh, LLHydro, y, c, ∂c∂y, Λ, span; model="kueche
         if Λ == 0
             dx = -∂c∂y * (1.0 - 1.0 / K) * 0.25
         else
-            tanl = vec(2π * tan(Λₖ) / (Λₖ * c))
-            lam = sqrt.(1.0 .+ (tanl .* y)^2) .-
+            tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
+            lam = sqrt.(1.0 .+ (tanl .* y) .^ 2) .-
                   tanl .* abs_cs_safe.(y) .-
                   sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
                   tanl .* (span / 2.0 .- abs_cs_safe.(y))
 
-            lamp = (tanl .^ 2 .* (y .* c - y .^ 2 .* ∂c∂y) ./ c) / sqrt.(1.0 + (tanl .* y) .^ 2) .-
-                   tanl .* (sign.(y) * c - abs_cs_safe.(y) .* ∂c∂y) ./ c +
-                   (tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c + ∂c∂y .* (span / 2.0 .- abs_cs_safe.(y)) .^ 2) ./ c) ./
-                   sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .-
-                   tanl .* (sign.(y) .* c + (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c
+            lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ sqrt.(1.0 .+ (tanl .* y) .^ 2) -
+                    tanl .* (sign.(y) .* c .- abs_cs_safe.(y) .* ∂c∂y) ./ c +
+                    ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
+                    tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
 
-            dx = tan(Λ) * sign(y) .+
-                 lamp .* Λₖ * c / (2π * K) .-
+            # so this is wrong
+            dx = tan(Λ) * sign.(y) .+
+                 lamp * Λₖ .* c / (2π * K) .-
                  ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
         end
     else
         println("Model not implemented yet")
     end
 
+    # println("Λk: $(Λₖ)")
+    # println("K: $(K)")
+    # println("====================================")
+    # println("y: $(y)")
+    # println("c: $(c)")
+    # println("tanl: $(tanl)")
+    # println("lam: $(lam)")
+    # println("lamp: $(lamp)")
+    # println("dx:\n $(dx)") # good
+    # println("====================================")
 
     return dx
 end
@@ -469,18 +509,50 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     P3 = LLMesh.wing_xyz_eff[:, :, 1:end-1]
     P4 = LLMesh.wing_joint_xyz_eff[:, :, 1:end-1]
 
-    ctrlPts = reshape(LLMesh.collocationPts, 3, LLMesh.npt_wing, 1)
+    ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
     ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
+    # OK
+    # println("collocation X $(LLMesh.collocationPts[XDIM,:])")
+    # println("collocation Y $(LLMesh.collocationPts[YDIM,:])")
+    # println("collocation Z $(LLMesh.collocationPts[ZDIM,:])")
+
+    # OK
+    # println("ctrlpts x: $(ctrlPtMat[XDIM, :, 1])")
+    # println("ctrlpts y: $(ctrlPtMat[YDIM, :, 1])")
+    # println("ctrlpts z: $(ctrlPtMat[ZDIM, :, 1])")
+
+    # A little off...
+    p1 = plot(1:LLMesh.npt_wing, P1[XDIM, :, 1], label="P1[XDIM, :, 1]")
+    plot!(1:LLMesh.npt_wing, P1[YDIM, 1, :], label="P1[YDIM, :, 1]")
+    plot!(1:LLMesh.npt_wing, P1[ZDIM, 1, :], label="P1[ZDIM, :, 1]")
+    # println("P1 xdim: $(P1[XDIM, :, 1])")
+    # println("P1 ydim: $(P1[YDIM, 1, :])")
+    # println("P1 zdim: $(P1[ZDIM, :, 1])")
+    plot(p1)
+    savefig("test_P1.pdf")
+
+    # Mask for the bound segment (npt_wing x npt_wing)
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
 
     influence_semiinfa = compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LLMesh.rc)
     influence_straightsega = compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
-    influence_straightsegb = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
+    influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
+    influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
     influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
+
+    p1 = plot(-influence_semiinfa[ZDIM, :, 1], label="semiinfa")
+    p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
+    p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
+    p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
+    p5 = plot(influence_semiinfb[ZDIM, :, 1], label="semiinfb")
+    plot(p1, p2, p3, p4, p5, layout=(5, 1))
+    savefig("test_influences.pdf")
+
     TV_influence = -influence_semiinfa +
                    influence_straightsega +
                    influence_straightsegb +
+                   influence_straightsegc +
                    influence_semiinfb
 
     # ---------------------------
@@ -494,6 +566,11 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     Ux, _, Uz = FlowCond.Uinfvec
     span = LLMesh.span
     ctrl_pts = LLMesh.collocationPts
+    # println("cla:", clα)
+    println("Uz: $(Uz)")
+    println("Ux: $(Ux)")
+    println("αL0: $(αL0)")
+    # println(ctrl_pts[YDIM, :])
     g0 = 0.5 * c_r * clα * cos(Λ) * (Uz / Ux - αL0) *
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
@@ -501,7 +578,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, FlowCond, Airfoil, Airfoil_influences)
 
     # --- Nonlinear solve for circulation distribution ---
-    # TODO: PICKUP DEBUGGING HERE
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0; solverParams=LLNLParams)
 
     Gjvji = TV_influence * Gconv
@@ -580,7 +656,10 @@ function compute_LLresiduals(G; solverParams=nothing)
     # else:
     # Actually solve VPM for each local velocity c
     Ui = FlowCond.Uinfvec .* (ui) # dimensionalize the local velocities
-    _CL = [VPM.solve(Airfoil, Airfoil_influences, V_local)[1] for V_local in eachcol(Ui)] # remember to only grab CL out of VPM solve
+    # println("size Ui: $(size(Ui)) \n")
+    println("Ui:")
+    show(stdout, "text/plain", Ui)
+    c_l = [VPM.solve(Airfoil, Airfoil_influences, V_local)[1] for V_local in eachcol(Ui)] # remember to only grab CL out of VPM solve
 
     ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
     ui_cross_ζi = hcat(ui_cross_ζi...) # now it's a (3, npt) matrix
@@ -589,13 +668,24 @@ function compute_LLresiduals(G; solverParams=nothing)
     # println(size(ui_cross_ζi))
     # println(size(ui_cross_ζi_mag))
     # println(size(G))
-    
-    _dF = 2.0 * ui_cross_ζi_mag .* G
-    
+
+    dFimag = 2.0 * ui_cross_ζi_mag .* G
+
     # println(size(_CL))
     # println(size(_dF))
 
-    return _dF - _CL
+    # Make plots
+    testvar = TV_influence[XDIM, :, 1]
+    p1 = plot(1:length(G), testvar, xlabel="Section", ylabel="Influence", yguidefontrotation=-90.0, ylims=(-1, 1))
+    p2 = plot(1:length(c_l), c_l, xlabel="Section", ylabel="cℓ", yguidefontrotation=-90.0, ylims=(-15.0, 1.0))
+    plot!(size=(200, 200))
+    # println("cl_i: $(c_l) \n")
+    p3 = plot(1:length(G), G * FlowCond.Uinf, xlabel="Section", ylabel="Γ", yguidefontrotation=-90.0, ylims=(0.0, 0.13))
+    # println("G: $(G) \n")
+    plot(p1, p2, p3, layout=(3, 1))
+    savefig("test_CL_Gamma.pdf")
+
+    return dFimag - c_l
 end
 
 function compute_LLJacobian(LLHydro, FlowCond, LLSystem, Gi, TV_influence)
@@ -689,34 +779,35 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence : ndarray
         Influence of the semi-infinite vortex filament at the field point. This is everything but the Γ in the induced velocity equation.
     """
-    r1 = pt - startpt
+
+
+    r1 = pt .- startpt
     r1mag = sqrt.(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     uinf = endvec
 
-    # TODO: This might be wrong
     r1dotuinf = r1[XDIM, :, :] * uinf[XDIM, :, :] + r1[YDIM, :, :] * uinf[YDIM, :, :] + r1[ZDIM, :, :] * uinf[ZDIM, :, :]
 
     r1crossuinf = cross3D(r1, uinf)
     uinfcrossr1 = cross3D(uinf, r1)
 
     d = sqrt.(r1crossuinf[XDIM, :, :] .^ 2 + r1crossuinf[YDIM, :, :] .^ 2 + r1crossuinf[ZDIM, :, :] .^ 2)
-
     d = ifelse.(r1dotuinf .< 0.0, r1mag, d)
 
-    numx = uinfcrossr1[XDIM, :, :] * (d .^ 2 ./ sqrt.(rc^4 .+ d .^ 4))
-    numy = uinfcrossr1[YDIM, :, :] * (d .^ 2 ./ sqrt.(rc^4 .+ d .^ 4))
-    numz = uinfcrossr1[ZDIM, :, :] * (d .^ 2 ./ sqrt.(rc^4 .+ d .^ 4))
+    # Reshape d to have a singleton dimension for correct broadcasting
+    d = reshape(d, 1, size(d)...)
+
+    numerator = uinfcrossr1 .* (d .^ 2 ./ sqrt.(rc^4 .+ d .^ 4))
 
     denominator = (4π * r1mag * (r1mag .- r1dotuinf))
+    denominator = reshape(denominator, 1, size(denominator)...)
 
-    infx = numx ./ denominator
-    infy = numy ./ denominator
-    infz = numz ./ denominator
+    influence = numerator ./ denominator
 
-    influence = cat(infx, infy, infz, dims=3)
-    influence = permutedims(influence, [3, 1, 2])
+    # Replace NaNs and Infs with 0.0
+    influence = replace(influence, NaN => 0.0)
+    influence = replace(influence, Inf => 0.0)
+    influence = replace(influence, -Inf => 0.0)
 
-    # influence = replace.(influence, NaN => 0.0)
     return influence
 end
 
@@ -726,28 +817,30 @@ function compute_straightSegment(startpt, endpt, pt, rc)
 
     Parameters
     ----------
-    startpt : array_like
+    startpt : Array{Float64,3}
         The position vector of the beginning point of the vortex segment ,
         in three dimensions .
-    endpt : array_like
+    endpt : Array{Float64,3}
         The position vector of the end point of the vortex segment ,
         in three dimensions .
-    pt : array_like
+    pt : Array{Float64,3}
         The position vector of the point at which the influence of the
         vortex segment is calculated , in three dimensions .
-    rc : scalar
+    rc : Float64
         The radius of the vortex finite core .
     Returns
     -------
-    influence : array_like
+    influence : Array{Float64,3}
         The influence of vortex segment at the point, in three dimensions .
     """
-    r1 = pt - startpt
+    r1 = pt .- startpt
     r1mag = sqrt.(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
-    r2 = pt - endpt
+    r2 = pt .- endpt
     r2mag = sqrt.(r2[XDIM, :, :] .^ 2 + r2[YDIM, :, :] .^ 2 + r2[ZDIM, :, :] .^ 2)
-    r1r2 = r1 - r2
+    r1r2 = r1 .- r2
+
     r1r2mag = sqrt.(r1r2[XDIM, :, :] .^ 2 + r1r2[YDIM, :, :] .^ 2 + r1r2[ZDIM, :, :] .^ 2)
+
     r1dotr2 = r1[XDIM, :, :] .* r2[XDIM, :, :] + r1[YDIM, :, :] .* r2[YDIM, :, :] + r1[ZDIM, :, :] .* r2[ZDIM, :, :]
     r1dotr1r2 = r1[XDIM, :, :] .* r1r2[XDIM, :, :] + r1[YDIM, :, :] .* r1r2[YDIM, :, :] + r1[ZDIM, :, :] .* r1r2[ZDIM, :, :]
     r2dotr1r2 = r2[XDIM, :, :] .* r1r2[XDIM, :, :] + r2[YDIM, :, :] .* r1r2[YDIM, :, :] + r2[ZDIM, :, :] .* r1r2[ZDIM, :, :]
@@ -758,18 +851,35 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     d = ifelse.(r1dotr1r2 .< 0.0, r1mag, d)
     d = ifelse.(r2dotr1r2 .< 0.0, r2mag, d)
 
-    termx = r1crossr2[XDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
-            (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
-    termy = r1crossr2[YDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
-            (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
-    termz = r1crossr2[ZDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
-            (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
-    secondterm = cat(termx, termy, termz, dims=3)
-    secondterm = permutedims(secondterm, [3, 1, 2])
 
-    influence = reshape(r1mag + r2mag, 1, size(r1mag, 1), size(r2mag, 2)) .* secondterm
+    # termx = r1crossr2[XDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
+    #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
+    # termy = r1crossr2[YDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
+    #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
+    # termz = r1crossr2[ZDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
+    #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
+    # secondterm = cat(termx, termy, termz, dims=3)
+    # secondterm = permutedims(secondterm, [3, 1, 2])
 
-    # influence = replace.(influence, NaN => 0.0)
+    # influence = reshape(r1mag + r2mag, 1, size(r1mag)...) .* secondterm
+
+    # Reshape d to have a singleton dimension for correct broadcasting
+    d = reshape(d, 1, size(d)...)
+
+    influence = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
+    influence = influence .* (d .^ 2) ./ sqrt.(rc^4 .+ d .^ 4)
+    denominator = (4π * r1mag .* r2mag * (r1mag .* r2mag .+ r1dotr2))
+
+    # Reshape the denominator to have the same dimensions as the influence    
+    denominator = reshape(denominator, 1, size(denominator)...)
+
+    influence = influence ./ denominator
+
+    # Replace NaNs and Infs with 0.0
+    influence = replace(influence, NaN => 0.0)
+    influence = replace(influence, Inf => 0.0)
+    influence = replace(influence, -Inf => 0.0)
+
     return influence
 end
 
@@ -803,17 +913,23 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
 
     # --- VPM of airfoil ---
     Airfoil, Airfoil_influences = VPM.setup(airfoil_xy[XDIM, :], airfoil_xy[YDIM, :], airfoil_ctrl_xy, 0.0) # setup with no sweep
+    # println("airfoil x:", airfoil_xy[XDIM, :])
+    # println("airfoil y:", airfoil_xy[YDIM, :])
     _, _, Γ1, _ = VPM.solve(Airfoil, Airfoil_influences, V1)
     _, _, Γ2, _ = VPM.solve(Airfoil, Airfoil_influences, V2)
     _, _, Γ3, _ = VPM.solve(Airfoil, Airfoil_influences, V3)
-
-    Γairfoils = [Γ1, Γ2, Γ3]
+    Γairfoils = [Γ1 Γ2 Γ3]
     Γbar = (Γ1 + Γ2 + Γ3) / 3.0
 
     airfoil_Γa = (angles[1] * (Γairfoils[1] - Γbar) +
                   angles[2] * (Γairfoils[2] - Γbar) +
                   angles[3] * (Γairfoils[3] - Γbar)) /
-                 (angles[1]^2 + angles[2]^2 + angles[3]^2)
+                 (angles[1]^2 + angles[2]^2 + angles[3]^2) # this should not be 0.0
+    # println("Angles: $(angles)") # correct
+    # println("Vectors: $(V1) $(V2) $(V3)")
+    # println("Circulation values: $(Γairfoils) ")
+    # println("Γbar: $(Γbar)")
+    # println("Γa: $(airfoil_Γa)")
 
     airfoil_aL0 = -Γbar / airfoil_Γa
     airfoil_CLa = 2.0 * airfoil_Γa / cos(Λ)

@@ -893,7 +893,8 @@ function compute_vectorFromAngle(alpha, beta, Uinf)
     sinb = sin(beta)
     sqrtsinasinb = sqrt(1.0 - sina^2 * sinb^2)
 
-    return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sqrtsinasinb
+    # OLD WAY return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sqrtsinasinb
+    return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sqrtsinasinb
 end
 
 

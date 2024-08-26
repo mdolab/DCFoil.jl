@@ -919,13 +919,13 @@ function test_LL()
 
     Uinf = [1.0, 0.0, 0.0]
     span = 8.0
-    sweep = 0.0
+    sweep = deg2rad(1.0)
     rootChord = 1.0
     TR = 1.0
     options = Dict(
         "make_plot" => true,
     )
-    options = nothing
+    # options = nothing
     LLSystem, FlowCond, Airfoil, Airfoil_influences = LiftingLine.setup(Uinf, span, sweep, rootChord, TR; npt_wing=99, npt_airfoil=99, airfoil_xy=airfoilXY, airfoil_ctrl_xy=airfoilCtrlXY, options=options)
     LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLSystem.HydroProperties[1], Airfoil, Airfoil_influences)
 end

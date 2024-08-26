@@ -305,7 +305,7 @@ function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
         )
         evalFuncsDict = merge(evalFuncsDict, flutterCostFuncsDict)
     else
-        println("Unsupported cost function: ", key, "or solver mode not on")
+        println("Unsupported cost function: $(key) or solver mode not on")
     end
 
     # --- Write cost funcs to file ---
@@ -354,7 +354,7 @@ function set_defaultOptions!(solverOptions)
 
     function check_key!(solverOptions::Dict, key::String, default)
         if !haskey(solverOptions, key)
-            println("Setting default option: ", key, " to ", default)
+            println("Setting default option: $(key) to ", default)
             solverOptions[key] = default
         end
     end
