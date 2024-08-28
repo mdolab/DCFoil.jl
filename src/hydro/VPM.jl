@@ -97,7 +97,7 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     alpha, Vinf = compute_sweepCorr(Airfoil.sweep, V)
 
-    RHS = zeros(DTYPE, Airfoil.n)
+    RHS = zeros(typeof(Vinf),Airfoil.n)
     RHS[1:end-1] = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
                                                     .-
                                                     diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))

@@ -96,7 +96,7 @@ function do_newton_raphson(
                 )
             else
                 res = compute_residuals(u; solverParams=solverParams)
-                ∂r∂u = compute_∂r∂u(u; solverParams=solverParams)
+                ∂r∂u = compute_∂r∂u(u; solverParams=solverParams, mode=mode)
             end
 
 

@@ -15,6 +15,8 @@ module LiftingLine
 using FLOWMath: abs_cs_safe, atan_cs_safe
 using Plots
 using LinearAlgebra
+using AbstractDifferentiation: AbstractDifferentiation as AD
+using FiniteDifferences
 # --- DCFoil modules ---
 using ..VPM: VPM
 using ..SolutionConstants: XDIM, YDIM, ZDIM
@@ -71,9 +73,12 @@ struct FlowConditions{TF,TA<:AbstractVector{TF}}
     beta::TF
 end
 
-struct LiftingLineOutputs{TF,TA<:AbstractVector{TF}}
+struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+    """
+    Nondimensional outputs of interest
+    """
+    Fdist::TM # Loads distribution vector
     Γdist::TA # Circulation distribution (Γᵢ) [m^2/s]
-    Fdist::TA # Loads distribution vector 
     F::TA # Total integrated loads vector [Fx, Fy, Fz, Mx, My, Mz]
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
     CDi::TF # Induced drag coefficient (aligned w/ freestream)
@@ -542,13 +547,13 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
     influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
 
-    p1 = plot(-influence_semiinfa[ZDIM, :, 1], label="semiinfa")
-    p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
-    p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
-    p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
-    p5 = plot(influence_semiinfb[ZDIM, :, 1], label="semiinfb")
-    plot(p1, p2, p3, p4, p5, layout=(5, 1))
-    savefig("test_influences.pdf")
+    # p1 = plot(-influence_semiinfa[ZDIM, :, 1], label="semiinfa")
+    # p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
+    # p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
+    # p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
+    # p5 = plot(influence_semiinfb[ZDIM, :, 1], label="semiinfb")
+    # plot(p1, p2, p3, p4, p5, layout=(5, 1))
+    # savefig("test_influences.pdf")
 
     TV_influence = -influence_semiinfa +
                    influence_straightsega +
@@ -573,10 +578,12 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     Ux, _, Uz = FlowCond.Uinfvec
     span = LLMesh.span
     ctrl_pts = LLMesh.collocationPts
+    ζi = LLMesh.sectionVectors
+    dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
     # println("cla:", clα)
-    println("Uz: $(Uz)")
-    println("Ux: $(Ux)")
-    println("αL0: $(αL0)")
+    # println("Uz: $(Uz)")
+    # println("Ux: $(Ux)")
+    # println("αL0: $(αL0)")
     # println(ctrl_pts[YDIM, :])
     g0 = 0.5 * c_r * clα * cos(Λ) * (Uz / Ux - αL0) *
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
@@ -585,18 +592,40 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoil, Airfoil_influences)
 
     # --- Nonlinear solve for circulation distribution ---
-    Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0; solverParams=LLNLParams)
+    Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
+        solverParams=LLNLParams, is_verbose=true,
+        # mode="FiDi"
+        mode="CS" # faster than fidi
+    )
 
-    Gjvji = TV_influence * Gconv
-    uvecmat = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
+    Gjvji = TV_influence .* reshape(Gconv, 1, size(Gconv)...)
+    Gjvjix = TV_influence[XDIM, :, :] * Gconv
+    Gjvjiy = TV_influence[YDIM, :, :] * Gconv
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
+    Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
+    Gjvji = permutedims(Gjvji, [2, 1])
+    u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
+
+    ui = Gjvji .+ u∞ # Local velocities (nondimensional)
+
 
     # This is the Biot--Savart law but nondimensional
-    Forces = 2.0 * cross(Gjvji + uvecmat, LLMesh.sectionVectors) * Gconv * LLMesh.sectionAreas / LLMesh.SRef
-    # Integrated = 2 Σ ( uvec + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-    IntegratedForces = 2.0 * sum(cross(Gjvji + uvecmat, LLMesh.sectionVectors) *
-                                 Gconv * LLMesh.sectionAreas / LLMesh.SRef, dims=2)
+    # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+    uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+    Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
+    # println(size(uicrossζi))
+    # println(size(dAi))
+    coeff = 2.0 / LLMesh.SRef
+    NondimForces = coeff * (uicrossζi .* Gi) .* dAi
 
-    Γdist = Gconv * FlowCond.Uinfvec
+    # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
+    IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+
+    Γdist = Gconv * FlowCond.Uinf # dimensionalize the circulation distribution
+    # Forces = NondimForces .* LLMesh.SRef * 0.5 * ϱ * FlowCond.Uinf^2 # dimensionalize the forces
 
     # --- Vortex core viscous correction ---
     if LLMesh.rc != 0
@@ -606,19 +635,18 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     # --- Final outputs ---
     ux, uy, uz = FlowCond.uvec
 
-    CL = -Forces[XDIM] * uz +
-         Forces[ZDIM] * ux / (ux^2 + uz^2)
-    CDi = Forces[XDIM] * ux +
-          Forces[YDIM] * uy +
-          Forces[ZDIM] * uz
+    CL = -IntegratedForces[XDIM] * uz +
+         IntegratedForces[ZDIM] * ux / (ux^2 + uz^2)
+    CDi = IntegratedForces[XDIM] * ux +
+          IntegratedForces[YDIM] * uy +
+          IntegratedForces[ZDIM] * uz
     CS = (
-        -Forces[XDIM] * ux * uy -
-        Forces[ZDIM] * uz * uy +
-        Forces[YDIM] * (uz^2 + ux^2)
-    ) /
-         sqrt(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
+        -IntegratedForces[XDIM] * ux * uy -
+        IntegratedForces[ZDIM] * uz * uy +
+        IntegratedForces[YDIM] * (uz^2 + ux^2)
+    ) / sqrt(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
 
-    LLResults = LiftingLineOutputs(Forces, Γdist, IntegratedForces, CL, CDi, CS)
+    LLResults = LiftingLineOutputs(NondimForces, Γdist, IntegratedForces, CL, CDi, CS)
 
     return LLResults
 end
@@ -666,6 +694,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     # Actually solve VPM for each local velocity c
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
 
+    # TODO: accelerate this!!
     c_l = [VPM.solve(Airfoil, Airfoil_influences, V_local)[1] for V_local in eachcol(Ui)] # remember to only grab CL out of VPM solve
 
     ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
@@ -696,7 +725,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     return dFimag - c_l
 end
 
-function compute_LLJacobian(Gi; solverParams)
+function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     """
     Compute the Jacobian of the nonlinear, nondimensional lifting line equation
 
@@ -711,115 +740,142 @@ function compute_LLJacobian(Gi; solverParams)
 
     """
 
-    TV_influence = solverParams.TV_influence
-    LLSystem = solverParams.LLSystem
-    LLHydro = solverParams.LLHydro
-    # Airfoil = solverParams.Airfoil
-    # Airfoil_influences = solverParams.Airfoil_influences
-    FlowCond = solverParams.FlowCond
-    # ζi = LLSystem.sectionVectors
-    vji = TV_influence
+    if mode == "Analytic" # some reason, this is not working. It's busted
 
-    # (u∞ + Σ Gj vji)
-    uix = vji[XDIM, :, :] * Gi .+ FlowCond.uvec[XDIM]
-    uiy = vji[YDIM, :, :] * Gi .+ FlowCond.uvec[YDIM]
-    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
-    uiz = -vji[ZDIM, :, :] * Gi .+ FlowCond.uvec[ZDIM]
+        TV_influence = solverParams.TV_influence
+        LLSystem = solverParams.LLSystem
+        LLHydro = solverParams.LLHydro
+        # Airfoil = solverParams.Airfoil
+        # Airfoil_influences = solverParams.Airfoil_influences
+        FlowCond = solverParams.FlowCond
+        # ζi = LLSystem.sectionVectors
+        vji = TV_influence
 
-    ui = cat(uix, uiy, uiz, dims=2)
-    ui = permutedims(ui, [2, 1])
+        # (u∞ + Σ Gj vji)
+        uix = vji[XDIM, :, :] * Gi .+ FlowCond.uvec[XDIM]
+        uiy = vji[YDIM, :, :] * Gi .+ FlowCond.uvec[YDIM]
+        #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+        uiz = -vji[ZDIM, :, :] * Gi .+ FlowCond.uvec[ZDIM]
 
-    ζ = LLSystem.sectionVectors
-    # 3d array of ζ
-    ζArr = repeat(reshape(ζ, size(ζ)..., 1), 1, 1, size(ζ, 2))
-    # println("size(ζ): $(size(ζ))")
-    # println("size(ui): $(size(ui))")
-    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
-    uxy = -cross.(eachcol(ui), eachcol(ζ))
-    uxy = hcat(uxy...) # now it's a (3, npt) matrix
-    uxy_norm = sqrt.(uxy[XDIM, :] .^ 2 + uxy[YDIM, :] .^ 2 + uxy[ZDIM, :] .^ 2)
+        ui = cat(uix, uiy, uiz, dims=2)
+        ui = permutedims(ui, [2, 1])
 
-    vxy = cross3D(vji, ζArr)
-    # This is downwash contribution
-    uxzdotvxz = uxy[XDIM, :] .* vxy[XDIM, :, :] .+ uxy[YDIM, :] .* vxy[YDIM, :, :] .+ uxy[ZDIM, :] .* vxy[ZDIM, :, :]
-    numerator = 2.0 * uxzdotvxz .* Gi
-    J = numerator ./ uxy_norm .+ 2.0 * diagm(uxy_norm)
-    # println("uxy:\n $(uxy[:, 1])")
-    # println("vxy $(vxy[XDIM, 1,:])") # OK
-    # println("vxy $(vxy[YDIM, 1,:])") # OK
-    # println("vxy $(vxy[ZDIM, 1,:])") # OK
-    # println("vxy $(vxy[XDIM, :, 1])")  # OK
-    # println("vxy $(vxy[YDIM, :, 1])") # OK
-    # println("vxy $(vxy[ZDIM, :, 1])") # OK
-    # println("uxzdotvxz: $(uxzdotvxz[1,:])") # OK
-    # println("numerator: $(size(numerator))")
-    # println("numerator: $(numerator[1,:])") # OK
+        ζ = LLSystem.sectionVectors
+        # 3d array of ζ
+        ζArr = repeat(reshape(ζ, size(ζ)..., 1), 1, 1, size(ζ, 2))
+        # println("size(ζ): $(size(ζ))")
+        # println("size(ui): $(size(ui))")
+        #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+        uxy = -cross.(eachcol(ui), eachcol(ζ))
+        uxy = hcat(uxy...) # now it's a (3, npt) matrix
+        uxy_norm = sqrt.(uxy[XDIM, :] .^ 2 + uxy[YDIM, :] .^ 2 + uxy[ZDIM, :] .^ 2)
 
-    _CLa, _aL0 = LLHydro.airfoil_CLa, LLHydro.airfoil_aL0
-    Λ = LLSystem.local_sweeps_ctrl
-    _Cs = cos.(Λ)
-    _Ss = sin.(Λ)
-    αs = atan_cs_safe.(uiz, uix)
-    βs = atan_cs_safe.(uiy, uix)
-    _aL = atan_cs_safe.(uiz, uix .* _Cs .+ uiy .* _Ss)
-    _bL = βs .- Λ
-    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
-    numerator = transpose(uix) .* (-vji[ZDIM, :, :]) .- transpose(uiz) .* vji[XDIM, :, :]
-    denominator = reshape(uix .^ 2 .+ uiz .^ 2, size(uix)..., 1)
-    _da = numerator ./ denominator
-    # println("numerator: $(numerator[1,:])") # OK
-    # println("denominator: $(size(denominator))") # OK
-    # println("denominator: $(denominator)") # OK
+        vxy = cross3D(vji, ζArr)
+        # This is downwash contribution
+        uxzdotvxz = uxy[XDIM, :] .* vxy[XDIM, :, :] .+ uxy[YDIM, :] .* vxy[YDIM, :, :] .+ uxy[ZDIM, :] .* vxy[ZDIM, :, :]
+        numerator = 2.0 * uxzdotvxz .* Gi
+        J = numerator ./ uxy_norm .+ 2.0 * diagm(uxy_norm)
+        # println("uxy:\n $(uxy[:, 1])")
+        # println("vxy $(vxy[XDIM, 1,:])") # OK
+        # println("vxy $(vxy[YDIM, 1,:])") # OK
+        # println("vxy $(vxy[ZDIM, 1,:])") # OK
+        # println("vxy $(vxy[XDIM, :, 1])")  # OK
+        # println("vxy $(vxy[YDIM, :, 1])") # OK
+        # println("vxy $(vxy[ZDIM, :, 1])") # OK
+        # println("uxzdotvxz: $(uxzdotvxz[1,:])") # OK
+        # println("numerator: $(size(numerator))")
+        # println("numerator: $(numerator[1,:])") # OK
 
-    numerator = transpose(uix) * vji[YDIM, :, :] .- transpose(uiy) .* vji[XDIM, :, :]
-    denominator = reshape(uix .^ 2 + uiy .^ 2, size(uix)..., 1)
-    # println("numerator: $(numerator[1,:])")
-    # println("denominator: $(size(denominator))")
-    # println("denominator: $(denominator)")
-    _db = numerator ./ denominator
+        _CLa, _aL0 = LLHydro.airfoil_CLa, LLHydro.airfoil_aL0
+        Λ = LLSystem.local_sweeps_ctrl
+        _Cs = cos.(Λ)
+        _Ss = sin.(Λ)
+        αs = atan_cs_safe.(uiz, uix)
+        βs = atan_cs_safe.(uiy, uix)
+        _aL = atan_cs_safe.(uiz, uix .* _Cs .+ uiy .* _Ss)
+        _bL = βs .- Λ
+        #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+        numerator = transpose(uix) .* (-vji[ZDIM, :, :]) .- transpose(uiz) .* vji[XDIM, :, :]
+        denominator = reshape(uix .^ 2 .+ uiz .^ 2, size(uix)..., 1)
+        _da = numerator ./ denominator
+        # println("numerator: $(numerator[1,:])") # OK
+        # println("denominator: $(size(denominator))") # OK
+        # println("denominator: $(denominator)") # OK
 
-    firstTerm = (transpose(uix) .* transpose(_Cs) .+ transpose(uiy) .* transpose(_Ss)) .* (-vji[ZDIM, :, :])
-    secondTerm = transpose(uiz) .* (vji[XDIM, :, :] .* transpose(_Cs) .+ vji[YDIM, :, :] .* transpose(_Ss))
-    denominator = reshape(uix .^ 2 .+ (uix .* _Cs .+ uiy .* _Ss) .^ 2, size(uix)..., 1)
-    println(size(denominator))
-    _daL = (firstTerm .- secondTerm) ./ denominator
+        numerator = transpose(uix) * vji[YDIM, :, :] .- transpose(uiy) .* vji[XDIM, :, :]
+        denominator = reshape(uix .^ 2 + uiy .^ 2, size(uix)..., 1)
+        # println("numerator: $(numerator[1,:])")
+        # println("denominator: $(size(denominator))")
+        # println("denominator: $(denominator)")
+        _db = numerator ./ denominator
 
-    # println("αs: $(αs)") # OK
-    # println("βs: $(βs)") # OK
-    # println("aL: $(_aL)") # OK
-    # println("bL: $(_bL)") # OK
+        firstTerm = (transpose(uix) .* transpose(_Cs) .+ transpose(uiy) .* transpose(_Ss)) .* (-vji[ZDIM, :, :])
+        secondTerm = transpose(uiz) .* (vji[XDIM, :, :] .* transpose(_Cs) .+ vji[YDIM, :, :] .* transpose(_Ss))
+        denominator = reshape(uix .^ 2 .+ (uix .* _Cs .+ uiy .* _Ss) .^ 2, size(uix)..., 1)
+        # println(size(denominator))
+        _daL = (firstTerm .- secondTerm) ./ denominator
 
-    # # --- not good ---
-    # println("$(size(_da))")
-    # println("$(size(_db))")
-    # println("_da: $(_da[1,:])")
-    # println("_db: $(_db[1,:])") #OK for now
-    # println("_daL: $(_daL[1,:])") #OK for now
-    # println("J: $(size(J))")
-    # TODO: PICKUP HERE
-    println("J: $(J[1,:])")
+        # println("αs: $(αs)") # OK
+        # println("βs: $(βs)") # OK
+        # println("aL: $(_aL)") # OK
+        # println("bL: $(_bL)") # OK
 
-    _Ca = cos.(αs)
-    _Sa = sin.(αs)
-    _Cb = cos.(βs)
-    _Sb = sin.(βs)
-    _CaL = cos.(_aL)
-    _SaL = sin.(_aL)
-    _CbL = cos.(_bL)
-    _SbL = sin.(_bL)
-    _Rn = sqrt.(_Ca .^ 2 .* _CbL .^ 2 .+ _Sa .^ 2 .* _Cb .^ 2)
-    _Rd = sqrt.(1.0 .- _Sa .^ 2 .* _Sb .^ 2)
-    _RLd = sqrt.(1.0 .- _SaL .^ 2 .* _SbL .^ 2)
-    _R = _Rn ./ _Rd
-    _RL = _CbL ./ _RLd
-    _dR = transpose(_Sa .* _Ca .* (_Sb .^ 2 .* _Rn ./ (_Rd .^ 2) .+ (_Cb .^ 2 .- _CbL .^ 2) ./ _Rn) ./ _Rd) .* _da .+
-          transpose((_Sa .^ 2 .* _Sb .* _Cb .* _Rn ./ (_Rd .^ 2) .- (_Ca .^ 2 .* _SbL .* _CbL .+ _Sa .^ 2 .* _Sb .* _Cb) ./ _Rn) ./ _Rd) .* _db
-    _dRL = transpose(_SaL .* _CaL .* _SbL .^ 2 .* _CbL ./ (_RLd .^ 3)) .* _daL .-
-           transpose(_CaL .^ 2 .* _SbL ./ (_RLd .^ 3)) .* _db
-    _dCL = _dR .* transpose(_RL) .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
-           transpose(_R) .* _dRL .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
-           transpose(_R) .* transpose(_RL) .* transpose(_CLa) .* _daL
-    J = J .- _dCL
+        # # --- not good ---
+        # println("$(size(_da))")
+        # println("$(size(_db))")
+        # println("_da: $(_da[1,:])")
+        # println("_db: $(_db[1,:])") #OK for now
+        # println("_daL: $(_daL[1,:])") #OK for now
+        # println("J: $(size(J))")
+        # println("J: $(J[1,:])") # OK
+
+        _Ca = cos.(αs)
+        _Sa = sin.(αs)
+        _Cb = cos.(βs)
+        _Sb = sin.(βs)
+        _CaL = cos.(_aL)
+        _SaL = sin.(_aL)
+        _CbL = cos.(_bL)
+        _SbL = sin.(_bL)
+        _Rn = sqrt.(_Ca .^ 2 .* _CbL .^ 2 .+ _Sa .^ 2 .* _Cb .^ 2)
+        _Rd = sqrt.(1.0 .- _Sa .^ 2 .* _Sb .^ 2)
+        _RLd = sqrt.(1.0 .- _SaL .^ 2 .* _SbL .^ 2)
+        _R = _Rn ./ _Rd
+        _RL = _CbL ./ _RLd
+        _dR = (_Sa .* _Ca .* (_Sb .^ 2 .* _Rn ./ (_Rd .^ 2) .+ (_Cb .^ 2 .- _CbL .^ 2) ./ _Rn) ./ _Rd) .* _da .+
+              ((_Sa .^ 2 .* _Sb .* _Cb .* _Rn ./ (_Rd .^ 2) .- (_Ca .^ 2 .* _SbL .* _CbL .+ _Sa .^ 2 .* _Sb .* _Cb) ./ _Rn) ./ _Rd) .* _db
+        _dRL = (_SaL .* _CaL .* _SbL .^ 2 .* _CbL ./ (_RLd .^ 3)) .* _daL .-
+               (_CaL .^ 2 .* _SbL ./ (_RLd .^ 3)) .* _db
+        _dCL = _dR .* transpose(_RL) .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
+               transpose(_R) .* _dRL .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
+               transpose(_R) .* transpose(_RL) .* transpose(_CLa) .* _daL
+        # println("dR:\n $((_dR[1,:]))") #OK
+        # println("dRL:\n $((_dRL[1,:]))") #OK
+        # println("dCL:\n $((_dCL[:,1]))") #OK
+        J = J .- _dCL
+        # println("J: $(J[1,:])") # OK
+        # exit()
+    elseif mode == "CS" # slow as hell
+        dh = 1e-100
+        ∂r∂G = zeros(DTYPE, length(Gi), length(Gi))
+
+        GiCS = complex(copy(Gi))
+        for ii in eachindex(Gi)
+            GiCS[ii] += 1im * dh
+            r_f = compute_LLresiduals(GiCS; solverParams=solverParams)
+            GiCS[ii] -= 1im * dh
+            ∂r∂G[:, ii] = imag(r_f) / dh
+        end
+        J = ∂r∂G
+    elseif mode == "FiDi"
+
+        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
+
+    else
+        println("Mode not implemented yet")
+    end
+
     return J
 end
 

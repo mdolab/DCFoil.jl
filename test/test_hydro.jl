@@ -8,7 +8,7 @@ using Printf
 
 include("../src/DCFoil.jl")
 using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine
-using Plots, Printf
+using Plots, Printf, Profile
 # ==============================================================================
 #                         Nodal hydrodynamic forces
 # ==============================================================================
@@ -922,12 +922,20 @@ function test_LL()
     sweep = deg2rad(1.0)
     rootChord = 1.0
     TR = 1.0
+    npt_wing = 99
+    npt_wing = 41
     options = Dict(
         "make_plot" => true,
     )
     # options = nothing
-    LLSystem, FlowCond, Airfoil, Airfoil_influences = LiftingLine.setup(Uinf, span, sweep, rootChord, TR; npt_wing=99, npt_airfoil=99, airfoil_xy=airfoilXY, airfoil_ctrl_xy=airfoilCtrlXY, options=options)
+    LLSystem, FlowCond, Airfoil, Airfoil_influences = LiftingLine.setup(Uinf, span, sweep, rootChord, TR; npt_wing=npt_wing, npt_airfoil=99, airfoil_xy=airfoilXY, airfoil_ctrl_xy=airfoilCtrlXY, options=options)
     LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLSystem.HydroProperties[1], Airfoil, Airfoil_influences)
+
+    Fdist = LLOutputs.Fdist
+    circDist = LLOutputs.Γdist
+    F = LLOutputs.F
+    println("Forces: $(F)")
+    println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
 end
 # ==============================================================================
 #                         Run some tests
