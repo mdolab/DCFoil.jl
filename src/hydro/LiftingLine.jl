@@ -50,7 +50,7 @@ struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:A
     wing_joint_xyz_eff::TH # Effective TV joint locations per control point
     local_sweeps::TA
     local_sweeps_eff::TM
-    local_sweep_ctrl::TA
+    local_sweeps_ctrl::TA
 end
 
 struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
@@ -86,6 +86,7 @@ struct LiftingLineNLParams
     """
     TV_influence
     LLSystem # LiftingLineMesh
+    LLHydro # LiftingLineHydro
     FlowCond # Flow conditions
     # Stuff for the 2D VPM solve
     Airfoil #
@@ -555,6 +556,12 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
                    influence_straightsegc +
                    influence_semiinfb
 
+
+    # p1 = plot(TV_influence[ZDIM, :, 1], label="")
+    # plot!(TV_influence[ZDIM, 1, :], label="")
+    # plot(p1, layout=(1, 1))
+    # savefig("test_influences.pdf")
+
     # ---------------------------
     #   Solve for circulation
     # ---------------------------
@@ -575,7 +582,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
     # --- Pack up parameters for the NL solve ---
-    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, FlowCond, Airfoil, Airfoil_influences)
+    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoil, Airfoil_influences)
 
     # --- Nonlinear solve for circulation distribution ---
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0; solverParams=LLNLParams)
@@ -586,7 +593,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     # This is the Biot--Savart law but nondimensional
     Forces = 2.0 * cross(Gjvji + uvecmat, LLMesh.sectionVectors) * Gconv * LLMesh.sectionAreas / LLMesh.SRef
     # Integrated = 2 Σ ( uvec + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-    IntegratedForces = 2.0 * sum(cross(Gjvji + uvecmat, LLMesh.zeta) *
+    IntegratedForces = 2.0 * sum(cross(Gjvji + uvecmat, LLMesh.sectionVectors) *
                                  Gconv * LLMesh.sectionAreas / LLMesh.SRef, dims=2)
 
     Γdist = Gconv * FlowCond.Uinfvec
@@ -644,9 +651,11 @@ function compute_LLresiduals(G; solverParams=nothing)
 
     # This is a (3 , npt, npt) × (npt,) multiplication
     # PYTHON: _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
+
     uix = TV_influence[XDIM, :, :] * G .+ FlowCond.uvec[XDIM]
     uiy = TV_influence[YDIM, :, :] * G .+ FlowCond.uvec[YDIM]
-    uiz = TV_influence[ZDIM, :, :] * G .+ FlowCond.uvec[ZDIM]
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    uiz = -TV_influence[ZDIM, :, :] * G .+ FlowCond.uvec[ZDIM]
     ui = cat(uix, uiy, uiz, dims=2)
     ui = permutedims(ui, [2, 1])
 
@@ -655,10 +664,8 @@ function compute_LLresiduals(G; solverParams=nothing)
     # _CL = self._lift_from_aero(*self._aero_properties, self.local_sweep_ctrl, self.Vinf * _Vi, self.Vinf)
     # else:
     # Actually solve VPM for each local velocity c
-    Ui = FlowCond.Uinfvec .* (ui) # dimensionalize the local velocities
-    # println("size Ui: $(size(Ui)) \n")
-    println("Ui:")
-    show(stdout, "text/plain", Ui)
+    Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
+
     c_l = [VPM.solve(Airfoil, Airfoil_influences, V_local)[1] for V_local in eachcol(Ui)] # remember to only grab CL out of VPM solve
 
     ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
@@ -674,21 +681,22 @@ function compute_LLresiduals(G; solverParams=nothing)
     # println(size(_CL))
     # println(size(_dF))
 
-    # Make plots
-    testvar = TV_influence[XDIM, :, 1]
-    p1 = plot(1:length(G), testvar, xlabel="Section", ylabel="Influence", yguidefontrotation=-90.0, ylims=(-1, 1))
-    p2 = plot(1:length(c_l), c_l, xlabel="Section", ylabel="cℓ", yguidefontrotation=-90.0, ylims=(-15.0, 1.0))
-    plot!(size=(200, 200))
-    # println("cl_i: $(c_l) \n")
-    p3 = plot(1:length(G), G * FlowCond.Uinf, xlabel="Section", ylabel="Γ", yguidefontrotation=-90.0, ylims=(0.0, 0.13))
-    # println("G: $(G) \n")
-    plot(p1, p2, p3, layout=(3, 1))
-    savefig("test_CL_Gamma.pdf")
+    # # Make plots OK
+    # testvar = TV_influence[XDIM, :, 1]
+    # p1 = plot(1:length(G), testvar, xlabel="Section", ylabel="Influence", yguidefontrotation=-90.0, ylims=(-1, 1))
+    # p2 = plot(1:length(c_l), c_l, xlabel="Section", ylabel="cℓ", yguidefontrotation=-90.0, ylims=(-15.0, 1.0))
+    # plot!(size=(200, 200))
+    # # println("cl_i: $(c_l) \n")
+    # p3 = plot(1:length(G), G * FlowCond.Uinf, xlabel="Section", ylabel="Γ", yguidefontrotation=-90.0, ylims=(0.0, 0.13))
+    # p4 = plot(1:length(G), dFimag, xlabel="Section", ylabel="dFimag", yguidefontrotation=-90.0, ylims=(0.0, 0.3))
+    # # println("G: $(G) \n")
+    # plot(p1, p2, p3,p4, layout=(4, 1))
+    # savefig("test_CL_Gamma.pdf")
 
     return dFimag - c_l
 end
 
-function compute_LLJacobian(LLHydro, FlowCond, LLSystem, Gi, TV_influence)
+function compute_LLJacobian(Gi; solverParams)
     """
     Compute the Jacobian of the nonlinear, nondimensional lifting line equation
 
@@ -702,61 +710,116 @@ function compute_LLJacobian(LLHydro, FlowCond, LLSystem, Gi, TV_influence)
         r(G) = Nondim LL eqn
 
     """
+
+    TV_influence = solverParams.TV_influence
+    LLSystem = solverParams.LLSystem
+    LLHydro = solverParams.LLHydro
+    # Airfoil = solverParams.Airfoil
+    # Airfoil_influences = solverParams.Airfoil_influences
+    FlowCond = solverParams.FlowCond
+    # ζi = LLSystem.sectionVectors
     vji = TV_influence
 
     # (u∞ + Σ Gj vji)
-    u = FlowCond.uvec .+ vji * Gi
-    ux, uy, uz = u
-    # zetaArr = repeat(reshape(LLSystem.zeta, 3, length(LLSystem.zeta), 1), 1, 1, length(LLSystem.zeta))
+    uix = vji[XDIM, :, :] * Gi .+ FlowCond.uvec[XDIM]
+    uiy = vji[YDIM, :, :] * Gi .+ FlowCond.uvec[YDIM]
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    uiz = -vji[ZDIM, :, :] * Gi .+ FlowCond.uvec[ZDIM]
 
-    uxy = cross.(u, LLSystem.zeta)
+    ui = cat(uix, uiy, uiz, dims=2)
+    ui = permutedims(ui, [2, 1])
+
+    ζ = LLSystem.sectionVectors
+    # 3d array of ζ
+    ζArr = repeat(reshape(ζ, size(ζ)..., 1), 1, 1, size(ζ, 2))
+    # println("size(ζ): $(size(ζ))")
+    # println("size(ui): $(size(ui))")
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    uxy = -cross.(eachcol(ui), eachcol(ζ))
+    uxy = hcat(uxy...) # now it's a (3, npt) matrix
     uxy_norm = sqrt.(uxy[XDIM, :] .^ 2 + uxy[YDIM, :] .^ 2 + uxy[ZDIM, :] .^ 2)
-    vxy = cross.(vji, LLSystem.zeta)
+
+    vxy = cross3D(vji, ζArr)
     # This is downwash contribution
-    J = (2.0 * (transpose(uxy[XDIM, :]) * vxy[XDIM, :, :] .+ transpose(uxy[YDIM, :]) * vxy[YDIM, :, :] + transpose(uxy[ZDIM, :]) * vxy[ZDIM, :, :])
-         * transpose(Gi)
-         /
-         transpose(uxy_norm)
-    )
-    J .+= 2.0 * diagm(uxy_norm)
-    _CLa, _aL0 = LLHydro.CLa, LLHydro.aL0
-    Λ = HydroLL.local_sweeps_ctrl
+    uxzdotvxz = uxy[XDIM, :] .* vxy[XDIM, :, :] .+ uxy[YDIM, :] .* vxy[YDIM, :, :] .+ uxy[ZDIM, :] .* vxy[ZDIM, :, :]
+    numerator = 2.0 * uxzdotvxz .* Gi
+    J = numerator ./ uxy_norm .+ 2.0 * diagm(uxy_norm)
+    # println("uxy:\n $(uxy[:, 1])")
+    # println("vxy $(vxy[XDIM, 1,:])") # OK
+    # println("vxy $(vxy[YDIM, 1,:])") # OK
+    # println("vxy $(vxy[ZDIM, 1,:])") # OK
+    # println("vxy $(vxy[XDIM, :, 1])")  # OK
+    # println("vxy $(vxy[YDIM, :, 1])") # OK
+    # println("vxy $(vxy[ZDIM, :, 1])") # OK
+    # println("uxzdotvxz: $(uxzdotvxz[1,:])") # OK
+    # println("numerator: $(size(numerator))")
+    # println("numerator: $(numerator[1,:])") # OK
+
+    _CLa, _aL0 = LLHydro.airfoil_CLa, LLHydro.airfoil_aL0
+    Λ = LLSystem.local_sweeps_ctrl
     _Cs = cos.(Λ)
     _Ss = sin.(Λ)
-    αs = atan_cs_safe.(uz, ux)
-    βs = atan_cs_safe.(uy, ux)
-    _aL = atan_cs_safe.(uz, ux * _Cs + uy * _Ss)
-    _bL = βs - Λ
-    _da = (transpose(ux) * vji[ZDIM, :, :] - transpose(uz) * vji[XDIM, :, :]) / (
-        transpose(ux) .^ 2 + transpose(uz) .^ 2)
-    _db = (transpose(ux) * vji[YDIM, :, :] - transpose(uy) * vji[XDIM, :, :]) / (
-        transpose(ux) .^ 2 + transpose(uy) .^ 2)
-    _daL = (
-        (transpose(ux) * transpose(_Cs) + transpose(uy) * transpose(_Ss)) * vji[ZDIM, :, :]
-        -
-        transpose(uz) * (vji[XDIM, :, :] * transpose(_Cs) + vji[YDIM, :, :] * transpose(_Ss))
-    ) / (transpose(ux) .^ 2 + (transpose(ux) * transpose(_Cs) + transpose(uy) * transpose(_Ss)) .^ 2)
-    _Ca = cos(αs)
-    _Sa = sin(αs)
-    _Cb = cos(βs)
-    _Sb = sin(βs)
-    _CaL = cos(_aL)
-    _SaL = sin(_aL)
-    _CbL = cos(_bL)
-    _SbL = sin(_bL)
-    _Rn = sqrt.(_Ca^2 * _CbL^2 + _Sa^2 * _Cb^2)
-    _Rd = sqrt(1.0 - _Sa^2 * _Sb^2)
-    _RLd = sqrt(1.0 - _SaL^2 * _SbL^2)
-    _R = _Rn / _Rd
-    _RL = _CbL / _RLd
-    _dR = transpose(_Sa * _Ca * (_Sb^2 * _Rn / (_Rd^2) + (_Cb^2 - _CbL^2) / _Rn) / _Rd) * _da +
-          transpose((_Sa^2 * _Sb * _Cb * _Rn / (_Rd^2) - (_Ca^2 * _SbL * _CbL + _Sa^2 * _Sb * _Cb) / _Rn) / _Rd) * _db
-    _dRL = transpose(_SaL * _CaL * _SbL^2 * _CbL / (_RLd^3)) * _daL -
-           transpose(_CaL^2 * _SbL / (_RLd^3)) * _db
-    _dCL = _dR * transpose(_RL) * transpose(_CLa) * (transpose(_aL) - transpose(_aL0))
-    +transpose(_R) * _dRL * tranpose(_CLa) * (transpose(_aL) - transpose(_aL0))
-    +transpose(_R) * transpose(_RL) * transpose(_CLa) * _daL
-    J -= _dCL
+    αs = atan_cs_safe.(uiz, uix)
+    βs = atan_cs_safe.(uiy, uix)
+    _aL = atan_cs_safe.(uiz, uix .* _Cs .+ uiy .* _Ss)
+    _bL = βs .- Λ
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    numerator = transpose(uix) .* (-vji[ZDIM, :, :]) .- transpose(uiz) .* vji[XDIM, :, :]
+    denominator = reshape(uix .^ 2 .+ uiz .^ 2, size(uix)..., 1)
+    _da = numerator ./ denominator
+    # println("numerator: $(numerator[1,:])") # OK
+    # println("denominator: $(size(denominator))") # OK
+    # println("denominator: $(denominator)") # OK
+
+    numerator = transpose(uix) * vji[YDIM, :, :] .- transpose(uiy) .* vji[XDIM, :, :]
+    denominator = reshape(uix .^ 2 + uiy .^ 2, size(uix)..., 1)
+    # println("numerator: $(numerator[1,:])")
+    # println("denominator: $(size(denominator))")
+    # println("denominator: $(denominator)")
+    _db = numerator ./ denominator
+
+    firstTerm = (transpose(uix) .* transpose(_Cs) .+ transpose(uiy) .* transpose(_Ss)) .* (-vji[ZDIM, :, :])
+    secondTerm = transpose(uiz) .* (vji[XDIM, :, :] .* transpose(_Cs) .+ vji[YDIM, :, :] .* transpose(_Ss))
+    denominator = reshape(uix .^ 2 .+ (uix .* _Cs .+ uiy .* _Ss) .^ 2, size(uix)..., 1)
+    println(size(denominator))
+    _daL = (firstTerm .- secondTerm) ./ denominator
+
+    # println("αs: $(αs)") # OK
+    # println("βs: $(βs)") # OK
+    # println("aL: $(_aL)") # OK
+    # println("bL: $(_bL)") # OK
+
+    # # --- not good ---
+    # println("$(size(_da))")
+    # println("$(size(_db))")
+    # println("_da: $(_da[1,:])")
+    # println("_db: $(_db[1,:])") #OK for now
+    # println("_daL: $(_daL[1,:])") #OK for now
+    # println("J: $(size(J))")
+    # TODO: PICKUP HERE
+    println("J: $(J[1,:])")
+
+    _Ca = cos.(αs)
+    _Sa = sin.(αs)
+    _Cb = cos.(βs)
+    _Sb = sin.(βs)
+    _CaL = cos.(_aL)
+    _SaL = sin.(_aL)
+    _CbL = cos.(_bL)
+    _SbL = sin.(_bL)
+    _Rn = sqrt.(_Ca .^ 2 .* _CbL .^ 2 .+ _Sa .^ 2 .* _Cb .^ 2)
+    _Rd = sqrt.(1.0 .- _Sa .^ 2 .* _Sb .^ 2)
+    _RLd = sqrt.(1.0 .- _SaL .^ 2 .* _SbL .^ 2)
+    _R = _Rn ./ _Rd
+    _RL = _CbL ./ _RLd
+    _dR = transpose(_Sa .* _Ca .* (_Sb .^ 2 .* _Rn ./ (_Rd .^ 2) .+ (_Cb .^ 2 .- _CbL .^ 2) ./ _Rn) ./ _Rd) .* _da .+
+          transpose((_Sa .^ 2 .* _Sb .* _Cb .* _Rn ./ (_Rd .^ 2) .- (_Ca .^ 2 .* _SbL .* _CbL .+ _Sa .^ 2 .* _Sb .* _Cb) ./ _Rn) ./ _Rd) .* _db
+    _dRL = transpose(_SaL .* _CaL .* _SbL .^ 2 .* _CbL ./ (_RLd .^ 3)) .* _daL .-
+           transpose(_CaL .^ 2 .* _SbL ./ (_RLd .^ 3)) .* _db
+    _dCL = _dR .* transpose(_RL) .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
+           transpose(_R) .* _dRL .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
+           transpose(_R) .* transpose(_RL) .* transpose(_CLa) .* _daL
+    J = J .- _dCL
     return J
 end
 
@@ -814,7 +877,6 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     # println("r1:\n $(r1[:,1,1])")
     # println("r1mag:\n $(r1mag[1,:])") # good
     # println("uinf:\n $(uinf[:,1,1])") # good
-    # TODO: PICKUP HERE
     # println("r1dotuinf:\n $(r1dotuinf[1,:])") # good
     # println("influence:\n $(influence[ZDIM,1,:])")
 
@@ -852,6 +914,7 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     influence : Array{Float64,3}
         The influence of vortex segment at the point, in three dimensions .
     """
+
     r1 = pt .- startpt
     r1mag = sqrt.(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     r2 = pt .- endpt
@@ -869,17 +932,6 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     d = (r1crossr2[XDIM, :, :] .^ 2 + r1crossr2[YDIM, :, :] .^ 2 + r1crossr2[ZDIM, :, :] .^ 2) ./ r1r2mag
     d = ifelse.(r1dotr1r2 .< 0.0, r1mag, d)
     d = ifelse.(r2dotr1r2 .< 0.0, r2mag, d)
-
-    # termx = r1crossr2[XDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
-    #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
-    # termy = r1crossr2[YDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
-    #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
-    # termz = r1crossr2[ZDIM, :, :] .* d .^ 2 / sqrt.(rc^4 .+ d .^ 4) /
-    #         (4π * r1mag .* r2mag * (r1mag .* r2mag + r1dotr2))
-    # secondterm = cat(termx, termy, termz, dims=3)
-    # secondterm = permutedims(secondterm, [3, 1, 2])
-
-    # influence = reshape(r1mag + r2mag, 1, size(r1mag)...) .* secondterm
 
     # Reshape d to have a singleton dimension for correct broadcasting
     d = reshape(d, 1, size(d)...)
