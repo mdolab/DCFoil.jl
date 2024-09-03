@@ -31,7 +31,6 @@ struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:A
     """
     Only geometry and mesh information
     """
-    # alphaGeo::TF
     nodePts::TM # LL node points
     collocationPts::TM # Control points
     npt_wing::TI # Number of wing points
@@ -71,11 +70,13 @@ struct FlowConditions{TF,TA<:AbstractVector{TF}}
     uvec::TA # Freestream velocity unit vector
     alpha::TF
     beta::TF
+    rhof::TF # Freestream density [kg/m^3]
 end
 
 struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     """
     Nondimensional outputs of interest
+    Redimensionalize with the reference area and velocity
     """
     Fdist::TM # Loads distribution vector
     Γdist::TA # Circulation distribution (Γᵢ) [m^2/s]
@@ -99,7 +100,7 @@ struct LiftingLineNLParams
 end
 
 function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
-    npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
+    npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0, airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
     Initialize and setup the lifting line model for one wing
 
@@ -125,10 +126,10 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ************************************************
     #     Airfoil hydro properties
     # ************************************************
-    if airfoilCoordFile != nothing
+    if !isnothing(airfoilCoordFile) && isnothing(airfoil_xy)
         println("Reading airfoil coordinates from file")
         airfoil_xy = read_airfoilFile(airfoilCoordFile)
-    else
+    elseif !isnothing(airfoil_xy)
         println("Using provided airfoil coordinates")
     end
     LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(sweepAng, airfoil_xy, airfoil_ctrl_xy)
@@ -156,15 +157,17 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     #   Y coords (span)
     # ---------------------------
     # --- Even spacing ---
-    # θ_bound = LinRange(-wingSpan * 0.5, wingSpan * 0.5, npt_wing * 2 + 1)
-    # --- Cosine spacing ---
-    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-    for (ii, θ) in enumerate(θ_bound[1:2:end])
-        wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    end
-    for (ii, θ) in enumerate(θ_bound[2:2:end])
-        wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    end
+    θ_bound = LinRange(-wingSpan * 0.5, wingSpan * 0.5, npt_wing * 2 + 1)
+    wing_xyz[YDIM, :] = θ_bound[1:2:end]
+    wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
+    # # --- Cosine spacing ---
+    # θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    # for (ii, θ) in enumerate(θ_bound[1:2:end])
+    #     wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+    # end
+    # for (ii, θ) in enumerate(θ_bound[2:2:end])
+    #     wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+    # end
 
     # ---------------------------
     #   X coords (chord dist)
@@ -272,7 +275,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas, aeroProperties,
         npt_airfoil, wingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
-    FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta)
+    FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof)
     return LLMesh, FlowCond, Airfoil, Airfoil_influences
 end
 

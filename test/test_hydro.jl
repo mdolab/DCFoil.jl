@@ -7,7 +7,7 @@ using Printf
 
 
 include("../src/DCFoil.jl")
-using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine
+using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO
 using Plots, Printf, Profile
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -917,28 +917,31 @@ function test_LL()
     airfoilXY = copy(transpose(hcat(airfoilX, airfoilY)))
     airfoilCtrlXY = copy(transpose(hcat(airfoilCtrlX, airfoilCtrlY)))
 
-    Uinf = [1.0, 0.0, 0.0]
+    Uinf = [1.0, 0.0, 0.1]
     span = 8.0
     sweep = deg2rad(1.0)
     rootChord = 1.0
     TR = 1.0
     npt_wing = 99
-    npt_wing = 41
+    npt_wing = 21
     options = Dict(
         "make_plot" => true,
     )
     # options = nothing
     LLSystem, FlowCond, Airfoil, Airfoil_influences = LiftingLine.setup(Uinf, span, sweep, rootChord, TR; npt_wing=npt_wing, npt_airfoil=99, airfoil_xy=airfoilXY, airfoil_ctrl_xy=airfoilCtrlXY, options=options)
-    LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLSystem.HydroProperties[1], Airfoil, Airfoil_influences)
+    @time LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLSystem.HydroProperties[1], Airfoil, Airfoil_influences)
 
     Fdist = LLOutputs.Fdist
     circDist = LLOutputs.Γdist
     F = LLOutputs.F
     println("Forces: $(F)")
     println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
+    return LLOutputs, FlowCond, LLSystem
 end
 # ==============================================================================
 #                         Run some tests
 # ==============================================================================
 # test_VPM()
-test_LL()
+LLOutputs, FlowCond, LLSystem = test_LL()
+TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
+TecplotIO.write_hydromesh(LLSystem, "./OUTPUT/")

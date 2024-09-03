@@ -15,10 +15,11 @@ using Printf
 # --- DCFoil modules ---
 using ..SolverRoutines: get_rotate3dMat
 using ..SolutionConstants: XDIM, YDIM, ZDIM
+using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
 
 function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::String, fname="mesh.dat")
     """
-    Top level routine to write the mesh file
+    Top level routine to write the structural mesh file
     """
 
     outfile = @sprintf("%s%s", outputDir, fname)
@@ -45,6 +46,22 @@ function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::St
     close(io)
 end
 
+function write_hydromesh(LLMesh, outputDir::String, fname="hydromesh.dat")
+    """
+    Write the lifting line mesh to a tecplot file
+    """
+    outfile = @sprintf("%s%s", outputDir, fname)
+    @printf("Writing hydro mesh file %s...\n", outfile)
+
+    io = open(outfile, "w")
+    write(io, "TITLE = \"Hydrodynamic Mesh Data\"\n")
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
+
+    write_LLmesh(io, LLMesh)
+
+    close(io)
+
+end
 
 function generate_naca4dig(toc)
     """
@@ -216,10 +233,12 @@ end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
-function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static";
+function write_deflections(
+    DVDict, STATICSOL, FEMESH, outputDir::String, basename="static";
     appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1
 )
     """
+    This function writes the structural output of the 1D stick solver to a tecplot file
     """
     fTractions = STATICSOL.fHydro
     deflections = STATICSOL.structStates
@@ -250,12 +269,12 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     # ---------------------------
     #   Values
     # ---------------------------
-    u = deflections[1:9:end]
-    v = deflections[2:9:end]
-    w = deflections[3:9:end]
-    phi = deflections[4:9:end]
-    theta = deflections[5:9:end]
-    psi = deflections[6:9:end]
+    u = deflections[UIND:NDOF:end]
+    v = deflections[VIND:NDOF:end]
+    w = deflections[WIND:NDOF:end]
+    phi = deflections[ΦIND:NDOF:end]
+    theta = deflections[ΘIND:NDOF:end]
+    psi = deflections[ΨIND:NDOF:end]
     # --- Write them ---
     for ii in 1:nNode
         nodeLoc = mesh[ii, :]
@@ -276,6 +295,112 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
 
     close(io)
+end
+
+function write_hydroLoads(
+    LLOutputs, FlowCond, LLMesh, outputDir::String, basename="hydroloads";
+)
+    """
+    Writes the hydrodynamic loads to a tecplot file
+    """
+    ϱ = FlowCond.rhof
+    U∞ = FlowCond.Uinf
+    dimTerm = 0.5 * ϱ * U∞^2 * LLMesh.SRef
+    fTractions = LLOutputs.Fdist #* dimTerm
+    mesh = transpose(copy(LLMesh.collocationPts))
+    nNode = length(mesh[:, 1])
+
+    @printf("Writing loads to %s_<>.dat\n", basename)
+
+    outfile = @sprintf("%s%s.dat", outputDir, basename)
+    io = open(outfile, "w")
+
+    # ************************************************
+    #     Header
+    # ************************************************
+    write(io, @sprintf("TITLE = \"STATIC LOADS Uinf = %.8f m/s\"\n", U∞))
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"fx\" \"fy\" \"fz\" \n")
+    write(io, "ZONE T = \"1D BEAM\" \n")
+    write(io, @sprintf("NODES = %d, ", nNode))
+    write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    # ************************************************
+    #     Write contents
+    # ************************************************
+    # ---------------------------
+    #   Values
+    # ---------------------------
+    fx = fTractions[UIND:3:end]
+    fy = fTractions[VIND:3:end]
+    fz = fTractions[WIND:3:end]
+    # --- Write them ---
+    for ii in 1:nNode
+        nodeLoc = mesh[ii, :]
+
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+            nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM], fx[ii], fy[ii], fz[ii])
+        write(io, stringData)
+    end
+    # ---------------------------
+    #   Connectivities
+    # ---------------------------
+    for ii in 1:nNode-1
+        write(io, @sprintf("%d\t%d\n", ii, ii + 1))
+    end
+
+
+
+    close(io)
+
+end
+
+function write_LLmesh(io, LLMesh)
+    """
+    Write lifting line outline
+    """
+
+    mesh = LLMesh.nodePts
+    nNodes = LLMesh.npt_wing + 1
+    localChords = LLMesh.localChords
+    # ************************************************
+    #     Leading edge
+    # ************************************************
+    write(io, "ZONE T = \"Leading Edges\" \n")
+    # write(io, @sprintf("NODES = %d,", nNodes))
+    # write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nNodes - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] - 0.25 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringData)
+    end
+
+
+    # ************************************************
+    #     Trailing edge
+    # ************************************************
+    write(io, "ZONE T = \"Trailing edges\" \n")
+    # write(io, @sprintf("NODES = %d,", nNodes))
+    # write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nNodes - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] + 0.75 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringData)
+    end
+
+    # ************************************************
+    #     Panel edges
+    # ************************************************
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        write(io, "ZONE T = \"Panel edge $(ii)\" \n")
+        write(io, "DATAPACKING = POINT\n")
+        stringDataLE = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] - 0.25 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        stringDataTE = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] + 0.75 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringDataLE)
+        write(io, stringDataTE)
+    end
 end
 
 function write_1Dfemmesh(io, FEMESH)
@@ -317,7 +442,7 @@ function write_1Dfemmesh(io, FEMESH)
         end
     end
 
-end # end write_mesh
+end
 
 function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode"; solverOptions=Dict("config" => "wing"))
     """
@@ -424,7 +549,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
             end
         end
     end
-end # end write_hydroelastic_mode
+end
 
 function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String; solverOptions=Dict("config" => "wing"))
     """
@@ -554,12 +679,15 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
 
         close(io)
     end
-end # end write_natural_mode
+end
 
 # ==============================================================================
 #                         Hydro Routines
 # ==============================================================================
 function write_strips(io, DVDict, FEMESH; config="wing", nNodeWing=10)
+    """
+    Write lifting line
+    """
     # ************************************************
     #     Header
     # ************************************************
