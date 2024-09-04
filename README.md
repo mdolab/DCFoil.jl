@@ -25,13 +25,14 @@ Pkg.add("DCFoil"); using DCFoil
 
 ### Get started as a developer
 
+Start your docker container if using MDOLab codes.
 You must be in this root directory. From the terminal you can type
 
 ```
 julia --project=.
 ```
 
-or in the Julia REPL, type
+and in the Julia REPL, type
 
 ```
 ] activate .
@@ -149,7 +150,7 @@ pyspline
 pygeo
 ```
 
-The MACH2DCFoil wrapper requires TODO:
+<!-- The MACH2DCFoil wrapper requires:
 ```
 pip install julia
 ```
@@ -157,7 +158,7 @@ to install the pyjulia package and then in a python prompt
 ```
 import julia
 julia.install("<your-version>") # if multiple versions of julia are installed
-```
+``` -->
 
 ### Tests
 
