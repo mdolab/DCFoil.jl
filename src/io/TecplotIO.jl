@@ -16,6 +16,7 @@ using Printf
 using ..SolverRoutines: get_rotate3dMat
 using ..SolutionConstants: XDIM, YDIM, ZDIM
 using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
+using ..Utilities: Utilities
 
 function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::String, fname="mesh.dat")
     """
@@ -63,24 +64,7 @@ function write_hydromesh(LLMesh, outputDir::String, fname="hydromesh.dat")
 
 end
 
-function generate_naca4dig(toc)
-    """
-    Simple naca 
-    """
-    # --- Thickness distribution naca 4dig equation---
-    C5 = 0.1015  # type I equation
-    x = range(0, 1, length=50)
 
-    # Thickness distribution (upper)
-    yt = 5 * toc * (0.2969 * x .^ 0.5 - 0.126 * x - 0.3516 * x .^ 2 + 0.2843 * x .^ 3 - C5 * x .^ 4)
-    lower_yt = -yt
-    # Make CCW
-    upper_yt = reverse(yt)
-    y_coords = vcat(upper_yt, lower_yt)
-    x_coords = vcat(reverse(x), x)
-    foil_coords = hcat(x_coords, y_coords)
-    return foil_coords
-end
 
 function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     """
@@ -126,7 +110,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
         )
     end
 
-    foilCoords = generate_naca4dig(DVDict["toc"][1])
+    foilCoords = Utilities.generate_naca4dig(DVDict["toc"][1])
     baserake = deg2rad(DVDict["alfa0"])
     rake = deg2rad(DVDict["rake"])
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
@@ -188,7 +172,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
 
         if appendageOptions["config"] == "t-foil"
 
-            foilCoords = generate_naca4dig(DVDict["toc_strut"][1])
+            foilCoords = Utilities.generate_naca4dig(DVDict["toc_strut"][1])
             for ii in appendageOptions["nNodes"]*2:(appendageOptions["nNodes"]*2+appendageOptions["nNodeStrut"]-2) # iterate over strut
                 spanLoc = mesh[ii, :]
                 localChord = DVDict["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]

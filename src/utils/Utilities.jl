@@ -8,6 +8,10 @@
 
 module Utilities
 
+# --- MACH framework codes ---
+using PyCall
+prefoil = pyimport("prefoil")
+
 using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex
 
@@ -80,5 +84,26 @@ function pack_funcsSens(funcsSens::Dict, funcKey, dvKey, dfdx)
 
     return funcsSens
 end
+
+
+function generate_naca4dig(toc)
+    """
+    Simple naca 
+    """
+    # --- Thickness distribution naca 4dig equation---
+    C5 = 0.1015  # type I equation
+    x = range(0, 1, length=50)
+
+    # Thickness distribution (upper)
+    yt = 5 * toc * (0.2969 * x .^ 0.5 - 0.126 * x - 0.3516 * x .^ 2 + 0.2843 * x .^ 3 - C5 * x .^ 4)
+    lower_yt = -yt
+    # Make CCW
+    upper_yt = reverse(yt)
+    y_coords = vcat(upper_yt, lower_yt)
+    x_coords = vcat(reverse(x), x)
+    foil_coords = hcat(x_coords, y_coords)
+    return foil_coords
+end
+
 
 end

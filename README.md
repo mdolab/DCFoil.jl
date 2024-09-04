@@ -11,7 +11,7 @@ Dynamic Composite Foil (DCFoil) in Julia
 
 ## Versions
 
-We test for `macOS-latest` and `Ubuntu-latest`.
+<!-- We test for `macOS-latest` and `Ubuntu-latest`. -->
 Check the Project.toml for version dependencies.
 
 ## Package
@@ -129,25 +129,25 @@ Chances are if there is a Pkg bug, it has to do with python, which actually is n
 
 #### Python dependencies from the MACH framework
 
-<!-- We use `PyCall` to use some modules from MACH, but this highly depends on what Python environment you are using. -->
-<!-- If you're building `PyCall` for the first time, it depends on the PYTHON environment variable so if you build with the wrong python, don't forget to do a clean uninstall before rebuilding.
+We use `PyCall` to use some modules from MACH, but this highly depends on what Python environment you are using.
+If you're building `PyCall` for the first time, it depends on the PYTHON environment variable so if you build with the wrong python, don't forget to do a clean uninstall before rebuilding.
 Once the package is built, the `venv` method of getting this to work requires
 ```
 ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 ```
-before the `using PyCall` import in the julia scripts, but I put this in the scripts anyways. -->
-<!-- I have only gotten the Conda.jl method to work which requires these runs
+before the `using PyCall` import in the julia scripts, but I put this in the scripts anyways.
+I have only gotten the Conda.jl method to work which requires these runs
 ```
 Conda.pip_interop(true, Conda.ROOTENV) # allow pip installation
 Conda.pip("install", ["<package-names>"], Conda.ROOTENV) # generic call to pip install a package
 ```
 and for package names, you can install any python package that supports pip installation.
-Unfortunately, you would have to reinstall all of MACH's modules if you do not use conda environment management. -->
-<!-- The list is:
+Unfortunately, you would have to reinstall all of MACH's modules if you do not use conda environment management.
+The list is:
 ```
 pyspline
 pygeo
-``` -->
+```
 
 The MACH2DCFoil wrapper requires TODO:
 ```
