@@ -47,7 +47,7 @@ function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::St
     close(io)
 end
 
-function write_hydromesh(LLMesh, outputDir::String, fname="hydromesh.dat")
+function write_hydromesh(LLMesh, uvec, outputDir::String, fname="hydromesh.dat")
     """
     Write the lifting line mesh to a tecplot file
     """
@@ -58,7 +58,7 @@ function write_hydromesh(LLMesh, outputDir::String, fname="hydromesh.dat")
     write(io, "TITLE = \"Hydrodynamic Mesh Data\"\n")
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
 
-    write_LLmesh(io, LLMesh)
+    write_LLmesh(io, LLMesh, uvec)
 
     close(io)
 
@@ -339,12 +339,14 @@ function write_hydroLoads(
 
 end
 
-function write_LLmesh(io, LLMesh)
+function write_LLmesh(io, LLMesh, uvec)
     """
     Write lifting line outline
+    Uinfvec is for TV joints
     """
 
     mesh = LLMesh.nodePts
+    jointPts = LLMesh.jointPts
     nNodes = LLMesh.npt_wing + 1
     localChords = LLMesh.localChords
     # ************************************************
@@ -384,6 +386,26 @@ function write_LLmesh(io, LLMesh)
         stringDataTE = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] + 0.75 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
         write(io, stringDataLE)
         write(io, stringDataTE)
+    end
+
+    # ************************************************
+    #     Trailing vortices
+    # ************************************************
+    distance = 1.5 * LLMesh.rootChord * uvec
+    println("Distance: ", distance)
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        jointLoc = jointPts[:, ii]
+        write(io, "ZONE T = \"Trailing vortex $(ii)\" \n")
+        write(io, "DATAPACKING = POINT\n")
+        stringDataA = @sprintf("%.16f\t%.16f\t%.16f\n",
+            nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
+        stringDataB = @sprintf("%.16f\t%.16f\t%.16f\n",
+            jointLoc[XDIM], jointLoc[YDIM], jointLoc[ZDIM])
+        stringDataC = @sprintf("%.16f\t%.16f\t%.16f\n",
+            jointLoc[XDIM] + distance[XDIM], jointLoc[YDIM] + distance[YDIM], jointLoc[ZDIM] + distance[ZDIM])
+        write(io, stringDataA)
+        write(io, stringDataB)
+        write(io, stringDataC)
     end
 end
 

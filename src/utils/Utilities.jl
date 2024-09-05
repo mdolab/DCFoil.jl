@@ -8,10 +8,6 @@
 
 module Utilities
 
-# --- MACH framework codes ---
-using PyCall
-prefoil = pyimport("prefoil")
-
 using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex
 

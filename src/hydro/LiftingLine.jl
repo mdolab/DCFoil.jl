@@ -33,6 +33,7 @@ struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:A
     """
     nodePts::TM # LL node points
     collocationPts::TM # Control points
+    jointPts::TM # TV joint points
     npt_wing::TI # Number of wing points
     localChords::TA # Local chord lengths [m]
     sectionVectors::TM # Nondimensional section vectors, "dζi" in paper
@@ -189,7 +190,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     ZArr = zeros(2, 2, 2)
     ZM = zeros(2, 2)
     ZA = zeros(2)
-    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, npt_wing, local_chords, zeros(2, 2), zeros(2), zeros(2), zeros(2),
+    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, copy(wing_ctrl_xyz), npt_wing, local_chords, zeros(2, 2), zeros(2), zeros(2), zeros(2),
         npt_airfoil, wingSpan, 0.0, 0.0, AR, rootChord, sweepAng, 0.0, ZArr, ZArr, ZA, ZM, ZA)
 
     # --- Locus of aerodynamic centers (LAC) ---
@@ -272,7 +273,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
 
     # Store all computed quantities here
-    LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas, aeroProperties,
+    LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas, aeroProperties,
         npt_airfoil, wingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
     FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof)
