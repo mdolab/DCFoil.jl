@@ -392,7 +392,7 @@ function write_LLmesh(io, LLMesh, uvec)
     #     Trailing vortices
     # ************************************************
     distance = 1.5 * LLMesh.rootChord * uvec
-    println("Distance: ", distance)
+    # println("Distance: ", distance)
     for (ii, nodeLoc) in enumerate(eachcol(mesh))
         jointLoc = jointPts[:, ii]
         write(io, "ZONE T = \"Trailing vortex $(ii)\" \n")

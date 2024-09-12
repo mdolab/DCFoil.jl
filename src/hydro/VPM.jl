@@ -48,6 +48,10 @@ function setup(xx, yy, control_xy, sweep=0.0)
 
     nodeCt = length(xx)
     vortex_xy = copy(transpose(hcat(xx .* cos(sweep), yy)))
+    # println("control_xy pre: $(control_xy[XDIM, :])\n")
+    control_xy[XDIM, :] .= copy(control_xy[XDIM, :]) .* cos(sweep) # change control points to sweep angle
+    # println("sweep: $(sweep)\n")
+    # println("control_xy post: $(control_xy[XDIM, :])\n")
 
     panelLengths = sqrt.(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
 
@@ -79,6 +83,9 @@ function setup(xx, yy, control_xy, sweep=0.0)
     Amat[end, 1] = 1.0
     Amat[end, end] = 1.0
 
+    # println("P11: $(P11[1,:])\n") #RIGHT
+    # println("A: $(Amat[1,:])\n") # RIGHT
+
     return AIRFOIL, Amat
 end
 
@@ -97,11 +104,20 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     alpha, Vinf = compute_sweepCorr(Airfoil.sweep, V)
 
-    RHS = zeros(typeof(Vinf),Airfoil.n)
+    RHS = zeros(typeof(Vinf), Airfoil.n)
     RHS[1:end-1] = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
                                                     .-
                                                     diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))
 
+    # println("alpha: ", alpha) #OK
+    # println("Vinf: ", Vinf) #OK
+    # println("vortexX: $(Airfoil.vortexXY[XDIM,:]) \n") # fine
+    # println("vortexY: $(Airfoil.vortexXY[YDIM,:]) \n") # fine
+    # println("diff Y: $(diff(Airfoil.vortexXY[YDIM, :])) \n") #OK
+    # println("diff X: $(diff(Airfoil.vortexXY[XDIM, :])) \n") #OK
+    # println("panelLengths: $(Airfoil.panelLengths) \n") # OK
+    # println("RHS: $(RHS)\n") #seems ok
+    # println("Amat: $(Amat[:,1])\n") # WRONG...WHY? PICKUP HERE
     # Airfoil surface vorticity strengths
     γi = Amat \ RHS
 
@@ -115,8 +131,12 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     # Total circulation for the airfoil
     Γi = sum(0.5 * (γi[1:end-1] .+ γi[2:end]) .* Airfoil.panelLengths)
-
     cℓ = 2.0 * Vinf * Γi / (chord * cos(Airfoil.sweep) * Vref^2)
+    # println("Γi: ", Γi) #Correct
+    # println("Vref: ", Vref) 
+    # println("chord: ", chord)
+    # println("sweep: ", Airfoil.sweep) #CORRECT
+    # println("cl: ", cℓ) # CORRECT
     cpDist = 1.0 .- (γi ./ Vref) .^ 2
     cm = -sum(
         (
@@ -163,7 +183,10 @@ function compute_panelMatrix(Airfoil)
     x1 = Airfoil.vortexXY[XDIM, 2:end]
     y1 = Airfoil.vortexXY[YDIM, 2:end]
 
-    l = Airfoil.panelLengths
+    # println("x1: $(x1)") # OK
+    # println("y1: $(y1)") # OK
+
+    ℓ = Airfoil.panelLengths
 
     # Code is slightly different from Reid 2020 b/c Julia is column-major
     mat1 = transpose(x1 .- xx) .* (xc .- transpose(xx))
@@ -175,9 +198,19 @@ function compute_panelMatrix(Airfoil)
     η = zeros(DTYPE, size(mat3))
     ξ = zeros(DTYPE, size(mat3))
     for ii in 1:size(mat3)[1]
-        ξ[ii, :] = (1 ./ l) .* (mat1[ii, :] .+ mat2[ii, :])
-        η[ii, :] = (1 ./ l) .* (mat3[ii, :] .+ mat4[ii, :])
+        ξ[ii, :] = (1 ./ ℓ) .* (mat1[ii, :] .+ mat2[ii, :])
+        η[ii, :] = (1 ./ ℓ) .* (mat3[ii, :] .+ mat4[ii, :])
     end
+    # println("xc: $(xc)\n") #WRONG...why?
+    # println("mat1: $(mat1[1,:])\n") . #WRONG
+    # println("mat2: $(mat2[1,:])\n") #OK
+    # println("mat3: $(mat3[1,:])\n") # WRONG
+    # println("mat4: $(mat4[1,:])\n") #OK
+    # println("panelLengths: $(ℓ)\n") # RIGHT
+    # println("xx: $(xx)\n") # RIGHT
+    # println("yy: $(yy)\n") # RIGHT
+    # println("ξ: $(ξ[1,:])\n") #wrong
+    # println("η: $(η[1,:])\n") #wrong
 
     # Matrix
     arg1 = zeros(DTYPE, size(η))
@@ -187,16 +220,16 @@ function compute_panelMatrix(Airfoil)
     numerator = zeros(DTYPE, size(η))
     denominator = zeros(DTYPE, size(η))
     for ii in 1:size(η)[1]
-        arg1[ii, :] = η[ii, :] .* l
-        arg2[ii, :] = η[ii, :] .^ 2 .+ ξ[ii, :] .^ 2 .- ξ[ii, :] .* l
+        arg1[ii, :] = η[ii, :] .* ℓ
+        arg2[ii, :] = η[ii, :] .^ 2 .+ ξ[ii, :] .^ 2 .- ξ[ii, :] .* ℓ
         numerator[ii, :] = η[ii, :] .^ 2 + ξ[ii, :] .^ 2
-        denominator[ii, :] = η[ii, :] .* η[ii, :] .+ (ξ[ii, :] .- l) .* (ξ[ii, :] .- l)
+        denominator[ii, :] = η[ii, :] .* η[ii, :] .+ (ξ[ii, :] .- ℓ) .* (ξ[ii, :] .- ℓ)
     end
     # Φ = tan⁻¹( ηl / (η² + (ξ - l)²))
     Φ = atan_cs_safe.(arg1, arg2)
     Ψ = 0.5 * log.(numerator ./ denominator)
     # Vector
-    constant = 2π .* l .^ 2
+    constant = 2π .* ℓ .^ 2
 
 
     # Vectors
@@ -212,15 +245,15 @@ function compute_panelMatrix(Airfoil)
 
     vec1 = zeros(DTYPE, size(η))
     for ii in 1:size(η)[1]
-        vec1[ii, :] = (l .- ξ[ii, :])
+        vec1[ii, :] = (ℓ .- ξ[ii, :])
         mat1[ii, :] = vec1[ii, :] .* Φ[ii, :]
         mat2[ii, :] = η[ii, :] .* Ψ[ii, :]
         P11_pre[ii, :] = mat1[ii, :] + mat2[ii, :]
         P12_pre[ii, :] = (ξ[ii, :] .* Φ[ii, :]) .- (η[ii, :] .* Ψ[ii, :])
 
 
-        P21_pre[ii, :] = η[ii, :] .* Φ[ii, :] .- (l .- ξ[ii, :]) .* Ψ[ii, :] .- l
-        P22_pre[ii, :] = -(η[ii, :] .* Φ[ii, :]) .- ξ[ii, :] .* Ψ[ii, :] .+ l
+        P21_pre[ii, :] = η[ii, :] .* Φ[ii, :] .- (ℓ .- ξ[ii, :]) .* Ψ[ii, :] .- ℓ
+        P22_pre[ii, :] = -(η[ii, :] .* Φ[ii, :]) .- ξ[ii, :] .* Ψ[ii, :] .+ ℓ
     end
     # P11_pre = (l .- ξ) .* Φ .+ η .* Ψ
     # P12_pre = (ξ .* Φ) .- (η .* Ψ)
@@ -260,6 +293,10 @@ function compute_sweepCorr(angle, V)
     sqrtSaSb = sqrt(1.0 - Sa * Sa * Sb * Sb)
     alphaCorr = atan_cs_safe(tan(alpha) * Cb, cos(angle - beta))
     VinfCorr = Vinf * sqrt(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / sqrtSaSb
+
+    # println("V",V)
+    # println("VinfCorr: ", VinfCorr)
+    # println("alpha: ", alpha)
     return alphaCorr, VinfCorr
 end
 

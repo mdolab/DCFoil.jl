@@ -4,9 +4,10 @@
 @Time    :   2023/12/25
 @Author  :   Galen Ng
 @Desc    :   Modern lifting line from Phillips and Snyder 2000, Reid 2020 appendix
-             The major weakness is the discontinuity in the locus of aerodynamic centers
-             for a highly swept wing at the root.
-             Reid 2020 overcame this using a blending function at the wing root
+             The major weakness is the discontinuity in the locus of aerodynamic centers (LAC)
+             for a highly swept wing at the root AND the mathematical requirement that the LAC 
+             be locally perpendicular to the trailing vortex (TV). Reid 2020 overcame this by
+             using a blending function at the wing root and a jointed TV
 """
 
 module LiftingLine
@@ -20,7 +21,7 @@ using FiniteDifferences
 # --- DCFoil modules ---
 using ..VPM: VPM
 using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..DCFoil: DTYPE
+using ..DCFoil: DTYPE, PREFOIL
 using ..SolverRoutines: SolverRoutines, compute_anglesFromVector, compute_vectorFromAngle, normalize_3Dvector, cross3D
 
 
@@ -39,7 +40,7 @@ struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:A
     sectionVectors::TM # Nondimensional section vectors, "dζi" in paper
     sectionLengths::TA # Section lengths
     sectionAreas::TA # Section areas
-    HydroProperties # Hydro properties at the cross sections
+    # HydroProperties # Hydro properties at the cross sections
     npt_airfoil::TI # Number of airfoil points
     span::TF # Span of one wing
     planformArea::TF
@@ -96,17 +97,20 @@ struct LiftingLineNLParams
     LLHydro # LiftingLineHydro
     FlowCond # Flow conditions
     # Stuff for the 2D VPM solve
-    Airfoil #
-    Airfoil_influences #
+    Airfoils #
+    AirfoilInfluences #
 end
 
 function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
-    npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0, airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
+    npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
+    airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
     Initialize and setup the lifting line model for one wing
 
     Inputs:
     -------
+    wingSpan : scalar
+        The span of the wing [m] (after sweep is applied, so this is not the structural span!)
     sweepAng : scalar
         The wing sweep angle in rad.
     blend : scalar , optional
@@ -127,13 +131,33 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ************************************************
     #     Airfoil hydro properties
     # ************************************************
-    if !isnothing(airfoilCoordFile) && isnothing(airfoil_xy)
-        println("Reading airfoil coordinates from file")
-        airfoil_xy = read_airfoilFile(airfoilCoordFile)
-    elseif !isnothing(airfoil_xy)
+    if !isnothing(airfoilCoordFile) && isnothing(airfoil_xy) && isnothing(airfoil_ctrl_xy)
+        println("Reading airfoil coordinates from $(airfoilCoordFile) and using MACH...")
+
+        rawCoords = PREFOIL.utils.readCoordFile(airfoilCoordFile)
+
+        Foil = PREFOIL.Airfoil(rawCoords)
+
+        Foil.normalizeChord()
+
+        airfoil_pts = Foil.getSampledPts(
+            nPts=npt_airfoil + 1, # one more to delete the TE knot
+            spacingFunc=PREFOIL.sampling.conical,
+            func_args=Dict("coeff" => 1),
+            TE_knot=false # weird stuff going on with a trailing knot
+        )
+
+        airfoil_ctrl_pts = (airfoil_pts[1:end-2, :] .+ airfoil_pts[2:end-1, :]) .* 0.5
+
+        # --- Transpose and reverse since PreFoil is different ---
+        airfoil_xy = reverse(transpose(airfoil_pts[1:end-1, :]), dims=2)
+        airfoil_ctrl_xy = reverse(transpose(airfoil_ctrl_pts), dims=2)
+
+    elseif !isnothing(airfoil_xy) && !isnothing(airfoil_ctrl_xy)
         println("Using provided airfoil coordinates")
     end
-    LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(sweepAng, airfoil_xy, airfoil_ctrl_xy)
+    # The initial hydro properties use zero sweep
+    LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(0.0, airfoil_xy, airfoil_ctrl_xy)
 
     # ************************************************
     #     Preproc stuff
@@ -157,18 +181,22 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ---------------------------
     #   Y coords (span)
     # ---------------------------
-    # --- Even spacing ---
-    θ_bound = LinRange(-wingSpan * 0.5, wingSpan * 0.5, npt_wing * 2 + 1)
-    wing_xyz[YDIM, :] = θ_bound[1:2:end]
-    wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
+    start = -wingSpan * 0.5
+    stop = wingSpan * 0.5
+    # # --- Even spacing ---
+    # θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
+    # wing_xyz[YDIM, :] = θ_bound[1:2:end]
+    # wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
     # # --- Cosine spacing ---
-    # θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-    # for (ii, θ) in enumerate(θ_bound[1:2:end])
-    #     wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    # end
-    # for (ii, θ) in enumerate(θ_bound[2:2:end])
-    #     wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    # end
+    # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
+    # println("θ_bound: $(θ_bound)")
+    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    for (ii, θ) in enumerate(θ_bound[1:2:end])
+        wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+    end
+    for (ii, θ) in enumerate(θ_bound[2:2:end])
+        wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+    end
 
     # ---------------------------
     #   X coords (chord dist)
@@ -190,7 +218,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     ZArr = zeros(2, 2, 2)
     ZM = zeros(2, 2)
     ZA = zeros(2)
-    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, copy(wing_ctrl_xyz), npt_wing, local_chords, zeros(2, 2), zeros(2), zeros(2), zeros(2),
+    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, copy(wing_ctrl_xyz), npt_wing, local_chords, zeros(2, 2), zeros(2), zeros(2),
         npt_airfoil, wingSpan, 0.0, 0.0, AR, rootChord, sweepAng, 0.0, ZArr, ZArr, ZA, ZM, ZA)
 
     # --- Locus of aerodynamic centers (LAC) ---
@@ -204,17 +232,18 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
         wing_ctrl_xyz[XDIM, ii] = xloc
     end
 
-    if (!isnothing(options)) && options["make_plot"]
-        println("Making plot")
-        plot(wing_xyz[YDIM, :], wing_xyz[XDIM, :], label="Wing LAC", marker=:circle)
-        plot!(wing_ctrl_xyz[YDIM, :], wing_ctrl_xyz[XDIM, :], label="Control LAC", marker=:cross)
-        plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .+ 0.75 * local_chords, label="Planform", linestyle=:solid, color=:black)
-        plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .- 0.25 * local_chords, linestyle=:solid, color=:black)
-        plot!(xlabel="Y", ylabel="X", title="Locus of Aerodynamic Centers")
-        xlims!(-4.0, 4.0)
-        ylims!(-1, 3)
-        savefig("LAC.pdf")
-    end
+    # if (!isnothing(options)) && options["make_plot"]
+    #     println("Making plot")
+    #     plot(wing_xyz[YDIM, :], wing_xyz[XDIM, :], label="Wing LAC", marker=:circle)
+    #     plot!(wing_ctrl_xyz[YDIM, :], wing_ctrl_xyz[XDIM, :], label="Control LAC", marker=:cross)
+    #     plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .+ 0.75 * local_chords, label="Planform", linestyle=:solid, color=:black)
+    #     plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .- 0.25 * local_chords, linestyle=:solid, color=:black)
+    #     plot!(xlabel="Y", ylabel="X", title="Locus of Aerodynamic Centers")
+    #     xlims!(-4.0, 4.0)
+    #     ylims!(-1, 3)
+    #     savefig("LAC.pdf")
+    # end
+
     # Need a mess of LAC's for each control point
     # println("wing_xyz:\n $(wing_xyz[YDIM,:])") # these are right
     # println("wing_ctrl_xyz:\n $(wing_ctrl_xyz[YDIM,:])") # these are right
@@ -248,10 +277,14 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     #   Aero section properties
     # ---------------------------
     # Where the 2D VPM comes into play
-    aeroProperties = Vector(undef, npt_wing)
+    Airfoils = Vector(undef, npt_wing)
+    AirfoilInfluences = Vector(undef, npt_wing)
     for (ii, sweep) in enumerate(localSweepsCtrl)
-        LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(sweep, airfoil_xy, airfoil_ctrl_xy)
-        aeroProperties[ii] = LLHydro
+        # Pass in copies because this routine was modifying the input
+        Airfoil, Airfoil_influences = VPM.setup(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep)
+        Airfoils[ii] = Airfoil
+        AirfoilInfluences[ii] = Airfoil_influences
+        # println("Airfoil control: $(airfoil_ctrl_xy[XDIM,:])")
     end
 
     # ---------------------------
@@ -273,11 +306,11 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
 
     # Store all computed quantities here
-    LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas, aeroProperties,
+    LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas,
         npt_airfoil, wingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
     FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof)
-    return LLMesh, FlowCond, Airfoil, Airfoil_influences
+    return LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences
 end
 
 function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
@@ -421,7 +454,6 @@ function compute_dLACds(LLMesh, LLHydro, y, c, ∂c∂y, Λ, span; model="kueche
                     ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
                     tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
 
-            # so this is wrong
             dx = tan(Λ) * sign.(y) .+
                  lamp * Λₖ .* c / (2π * K) .-
                  ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
@@ -494,7 +526,7 @@ function compute_dLACdseffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ,
     end
 end
 
-function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
+function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
     """
     Execute LL algorithm
     Inputs:
@@ -522,17 +554,17 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
     ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
-    # OK
+    # # OK
     # println("collocation X $(LLMesh.collocationPts[XDIM,:])")
     # println("collocation Y $(LLMesh.collocationPts[YDIM,:])")
     # println("collocation Z $(LLMesh.collocationPts[ZDIM,:])")
 
-    # OK
+    # # OK
     # println("ctrlpts x: $(ctrlPtMat[XDIM, :, 1])")
     # println("ctrlpts y: $(ctrlPtMat[YDIM, :, 1])")
     # println("ctrlpts z: $(ctrlPtMat[ZDIM, :, 1])")
 
-    # OK
+    # # OK
     # p1 = plot(1:LLMesh.npt_wing, P2[XDIM, :, 1], label="P2[XDIM, :, 1]")
     # plot!(1:LLMesh.npt_wing, P2[YDIM, 1, :], label="P2[YDIM, :, 1]")
     # plot!(1:LLMesh.npt_wing, P2[ZDIM, 1, :], label="P2[ZDIM, :, 1]")
@@ -552,11 +584,13 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
 
     # p1 = plot(-influence_semiinfa[ZDIM, :, 1], label="semiinfa")
-    # p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
-    # p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
-    # p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
+    # ylims!(-0.1, 0.1)
+    # # p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
+    # # p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
+    # # p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
     # p5 = plot(influence_semiinfb[ZDIM, :, 1], label="semiinfb")
-    # plot(p1, p2, p3, p4, p5, layout=(5, 1))
+    # ylims!(-0.1, 0.1)
+    # plot(p1, p5, layout=(2, 1))
     # savefig("test_influences.pdf")
 
     TV_influence = -influence_semiinfa +
@@ -579,21 +613,26 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     clα = LLHydro.airfoil_CLa
     αL0 = LLHydro.airfoil_aL0
     Λ = LLMesh.sweepAng
-    Ux, _, Uz = FlowCond.Uinfvec
+    # Ux, _, Uz = FlowCond.Uinfvec
+    ux, uy, uz = FlowCond.uvec
     span = LLMesh.span
     ctrl_pts = LLMesh.collocationPts
     ζi = LLMesh.sectionVectors
     dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-    # println("cla:", clα)
+    # println("cla:", clα) # GOOD
     # println("Uz: $(Uz)")
     # println("Ux: $(Ux)")
-    # println("αL0: $(αL0)")
+    # println("αL0: $(αL0)") # close enough
     # println(ctrl_pts[YDIM, :])
-    g0 = 0.5 * c_r * clα * cos(Λ) * (Uz / Ux - αL0) *
+    # println("Sweep: $(Λ)")
+    g0 = 0.5 * c_r * clα * cos(Λ) *
+         (uz / ux - αL0) *
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
+    # println("g0: $(g0)") # right
+
     # --- Pack up parameters for the NL solve ---
-    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoil, Airfoil_influences)
+    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 
     # --- Nonlinear solve for circulation distribution ---
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
@@ -601,6 +640,9 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
         # mode="FiDi"
         mode="CS" # faster than fidi
     )
+
+    # # WRONG
+    # println("Gconv: $(Gconv)")
 
     Gjvji = TV_influence .* reshape(Gconv, 1, size(Gconv)...)
     Gjvjix = TV_influence[XDIM, :, :] * Gconv
@@ -613,6 +655,10 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
 
     ui = Gjvji .+ u∞ # Local velocities (nondimensional)
 
+    # # THESE ARE WRONG
+    # println("ui 1: $(ui[1,:])")
+    # println("ui 2: $(ui[2,:])")
+    # println("ui 3: $(ui[3,:])")
 
     # This is the Biot--Savart law but nondimensional
     # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
@@ -637,7 +683,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
     end
 
     # --- Final outputs ---
-    ux, uy, uz = FlowCond.uvec
 
     CL = -IntegratedForces[XDIM] * uz +
          IntegratedForces[ZDIM] * ux / (ux^2 + uz^2)
@@ -649,6 +694,15 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoil, Airfoil_influences)
         IntegratedForces[ZDIM] * uz * uy +
         IntegratedForces[YDIM] * (uz^2 + ux^2)
     ) / sqrt(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
+
+    # p1 = plot(ctrl_pts[YDIM, :], NondimForces[ZDIM, :], label="Lift")
+    # ylims!(0.0, 8)
+    # p2 = plot(ctrl_pts[YDIM, :], NondimForces[XDIM, :], label="Induced")
+    # ylims!(-0.5, 0.0)
+    # p3 = plot(ctrl_pts[YDIM, :], Gconv, label="Circulation")
+    # ylims!(0.0, 0.08)
+    # plot(p1, p2, p3, layout=(3, 1), widen=true)
+    # savefig("test_Lift_Induced_Circ.pdf")
 
     LLResults = LiftingLineOutputs(NondimForces, Γdist, IntegratedForces, CL, CDi, CS)
 
@@ -676,10 +730,12 @@ function compute_LLresiduals(G; solverParams=nothing)
 
     TV_influence = solverParams.TV_influence
     LLSystem = solverParams.LLSystem
-    Airfoil = solverParams.Airfoil
-    Airfoil_influences = solverParams.Airfoil_influences
+    Airfoils = solverParams.Airfoils
+    AirfoilInfluences = solverParams.AirfoilInfluences
     FlowCond = solverParams.FlowCond
     ζi = LLSystem.sectionVectors
+
+    # println("TV: $(TV_influence[ZDIM, 1, :])") #CORRECT
 
     # This is a (3 , npt, npt) × (npt,) multiplication
     # PYTHON: _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
@@ -691,26 +747,32 @@ function compute_LLresiduals(G; solverParams=nothing)
     ui = cat(uix, uiy, uiz, dims=2)
     ui = permutedims(ui, [2, 1])
 
+    # println("uix: $(ui[XDIM,:])")
+    # println("uiy: $(ui[YDIM,:])")
+    # println("uiz: $(ui[ZDIM,:])") # GOOD
+
     # Do a curve fit on aero props
     # if self._aero_approx:
     # _CL = self._lift_from_aero(*self._aero_properties, self.local_sweep_ctrl, self.Vinf * _Vi, self.Vinf)
     # else:
     # Actually solve VPM for each local velocity c
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
+    # println("Ui: $(Ui)") # OK
 
     # TODO: accelerate this!!
-    c_l = [VPM.solve(Airfoil, Airfoil_influences, V_local)[1] for V_local in eachcol(Ui)] # remember to only grab CL out of VPM solve
+    c_l = [VPM.solve(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf)[1] for (ii, V_local) in enumerate(eachcol(Ui))] # remember to only grab CL out of VPM solve
 
     ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
     ui_cross_ζi = hcat(ui_cross_ζi...) # now it's a (3, npt) matrix
     ui_cross_ζi_mag = sqrt.(ui_cross_ζi[XDIM, :] .^ 2 + ui_cross_ζi[YDIM, :] .^ 2 + ui_cross_ζi[ZDIM, :] .^ 2)
 
     # println(size(ui_cross_ζi))
-    # println(size(ui_cross_ζi_mag))
-    # println(size(G))
+    # println("ucross: $(ui_cross_ζi_mag)") # good
+    # println("G: $(G)") # good
 
     dFimag = 2.0 * ui_cross_ζi_mag .* G
 
+    # println("dFimag: $(dFimag)")
     # println(size(_CL))
     # println(size(_dF))
 
@@ -719,12 +781,15 @@ function compute_LLresiduals(G; solverParams=nothing)
     # p1 = plot(1:length(G), testvar, xlabel="Section", ylabel="Influence", yguidefontrotation=-90.0, ylims=(-1, 1))
     # p2 = plot(1:length(c_l), c_l, xlabel="Section", ylabel="cℓ", yguidefontrotation=-90.0, ylims=(-15.0, 1.0))
     # plot!(size=(200, 200))
-    # # println("cl_i: $(c_l) \n")
-    # p3 = plot(1:length(G), G * FlowCond.Uinf, xlabel="Section", ylabel="Γ", yguidefontrotation=-90.0, ylims=(0.0, 0.13))
-    # p4 = plot(1:length(G), dFimag, xlabel="Section", ylabel="dFimag", yguidefontrotation=-90.0, ylims=(0.0, 0.3))
+    # println("cl_i: $(c_l) \n") # very wrong
+    # # println("G: $(G) \n") # GOOD
+    # # println(FlowCond.Uinf) # GOOD
+    # p3 = plot(1:length(G), G * FlowCond.Uinf, xlabel="Section", ylabel="Γ", yguidefontrotation=-90.0, ylims=(0.0, 5.0))
+    # p4 = plot(1:length(G), dFimag, xlabel="Section", ylabel="dF", yguidefontrotation=-90.0, ylims=(0.0, 0.4))
     # # println("G: $(G) \n")
-    # plot(p1, p2, p3,p4, layout=(4, 1))
+    # plot(p1, p2, p3, p4, layout=(4, 1))
     # savefig("test_CL_Gamma.pdf")
+    # # bug
 
     return dFimag - c_l
 end
@@ -790,7 +855,9 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         # println("numerator: $(size(numerator))")
         # println("numerator: $(numerator[1,:])") # OK
 
+        # TODO GN: I bet this is wrong
         _CLa, _aL0 = LLHydro.airfoil_CLa, LLHydro.airfoil_aL0
+
         Λ = LLSystem.local_sweeps_ctrl
         _Cs = cos.(Λ)
         _Ss = sin.(Λ)
@@ -1039,12 +1106,14 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
     V2 = compute_vectorFromAngle(angles[2], 0.0, 1.0)
     V3 = compute_vectorFromAngle(angles[3], 0.0, 1.0)
 
+    # println("airfoil x orig:", airfoil_xy_orig[XDIM, :])
+    # println("airfoil y orig:", airfoil_xy_orig[YDIM, :])
     airfoil_xy, airfoil_ctrl_xy = compute_scaledAndSweptAirfoilCoords(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
 
     # --- VPM of airfoil ---
     Airfoil, Airfoil_influences = VPM.setup(airfoil_xy[XDIM, :], airfoil_xy[YDIM, :], airfoil_ctrl_xy, 0.0) # setup with no sweep
-    # println("airfoil x:", airfoil_xy[XDIM, :])
-    # println("airfoil y:", airfoil_xy[YDIM, :])
+    # println("airfoil x:", airfoil_xy[XDIM, :]) #close enough
+    # println("airfoil y:", airfoil_xy[YDIM, :]) #close enough
     _, _, Γ1, _ = VPM.solve(Airfoil, Airfoil_influences, V1)
     _, _, Γ2, _ = VPM.solve(Airfoil, Airfoil_influences, V2)
     _, _, Γ3, _ = VPM.solve(Airfoil, Airfoil_influences, V3)
@@ -1057,9 +1126,9 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
                  (angles[1]^2 + angles[2]^2 + angles[3]^2) # this should not be 0.0
     # println("Angles: $(angles)") # correct
     # println("Vectors: $(V1) $(V2) $(V3)")
-    # println("Circulation values: $(Γairfoils) ")
-    # println("Γbar: $(Γbar)")
-    # println("Γa: $(airfoil_Γa)")
+    # println("Circulation values: $(Γairfoils) ") # close enough
+    # println("Γbar: $(Γbar)") # close enough
+    # println("Γa: $(airfoil_Γa)") #  close enough
 
     airfoil_aL0 = -Γbar / airfoil_Γa
     airfoil_CLa = 2.0 * airfoil_Γa / cos(Λ)

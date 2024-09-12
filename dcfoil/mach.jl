@@ -10,6 +10,6 @@
 
 using PyCall
 
-pyspline = pyimport("pyspline")
-pygeo = pyimport("pygeo")
-prefoil = pyimport("prefoil")
+PYSPLINE = pyimport("pyspline")
+PYGEO = pyimport("pygeo")
+PREFOIL = pyimport("prefoil")

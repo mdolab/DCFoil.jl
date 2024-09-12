@@ -23,6 +23,8 @@ const DTYPE = DblPrec # Cmplx
 # ==============================================================================
 for headerName in [
     # THE ORDER MATTERS
+    # --- MACH framework ---
+    "../dcfoil/mach",
     # --- Not used in this script but needed for submodules ---
     "constants/SolutionConstants", "constants/DesignConstants",
     "utils/Utilities", "utils/Interpolation",
