@@ -18,10 +18,11 @@ using Plots
 using LinearAlgebra
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
+using PyCall
 # --- DCFoil modules ---
 using ..VPM: VPM
 using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..DCFoil: DTYPE, PREFOIL
+using ..DCFoil: DTYPE
 using ..SolverRoutines: SolverRoutines, compute_anglesFromVector, compute_vectorFromAngle, normalize_3Dvector, cross3D
 
 
@@ -80,7 +81,7 @@ struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     Nondimensional outputs of interest
     Redimensionalize with the reference area and velocity
     """
-    Fdist::TM # Loads distribution vector
+    Fdist::TM # Loads distribution vector (TODO: redimensionalizing for spanwise loads requires local velocity)
     Γdist::TA # Circulation distribution (Γᵢ) [m^2/s]
     F::TA # Total integrated loads vector [Fx, Fy, Fz, Mx, My, Mz]
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
@@ -133,7 +134,9 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ************************************************
     if !isnothing(airfoilCoordFile) && isnothing(airfoil_xy) && isnothing(airfoil_ctrl_xy)
         println("Reading airfoil coordinates from $(airfoilCoordFile) and using MACH...")
-
+        
+        PREFOIL = pyimport("prefoil")
+        
         rawCoords = PREFOIL.utils.readCoordFile(airfoilCoordFile)
 
         Foil = PREFOIL.Airfoil(rawCoords)
@@ -676,6 +679,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
 
     Γdist = Gconv * FlowCond.Uinf # dimensionalize the circulation distribution
     # Forces = NondimForces .* LLMesh.SRef * 0.5 * ϱ * FlowCond.Uinf^2 # dimensionalize the forces
+    # println(Γdist)
 
     # --- Vortex core viscous correction ---
     if LLMesh.rc != 0

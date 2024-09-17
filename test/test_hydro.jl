@@ -876,6 +876,9 @@ function test_LL()
 end
 
 function test_45degwingLL()
+
+
+    referenceCL = [0.0016496729653562032, 0.14341157629455348, 0.2852589091604507, 0.42593046097276493, 0.5648584898305323, 0.7014970094315793]
     airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
 
     airfoilX = [1.00000000e+00, 9.98993338e-01, 9.95977406e-01, 9.90964349e-01,
@@ -995,23 +998,28 @@ function test_45degwingLL()
     TR = 1.0
     npt_wing = 40
     npt_airfoil = 99
-
+    answers = []
     for alpha in deg2rad.(angles)
         Uvec = [cos(alpha), 0.0, sin(alpha)] * Uinf
         LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, span, sweepAng, rootChord, TR;
             npt_wing=npt_wing, npt_airfoil,
-            airfoilCoordFile=airfoilCoordFile,
-            # airfoil_ctrl_xy=airfoilCtrlXY,
-            # airfoil_xy=airfoilXY,
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
         )
         @time LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLHydro, Airfoils, AirfoilInfluences)
         F = LLOutputs.F
         # println("Forces: $(F)")
         # println("Spanwise cl: $(LLOutputs.Fdist[3,:])")
-        println("alpha: $(rad2deg(alpha))")
-        println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
+        # println("alpha: $(rad2deg(alpha))")
+        # println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
+        push!(answers, LLOutputs.CL)
     end
-    return LLOutputs, FlowCond, LLSystem
+
+    println(answers)
+    normError = norm(answers .- referenceCL)
+    return normError
+    # return LLOutputs, FlowCond, LLSystem
 end
 # ==============================================================================
 #                         Run some tests
@@ -1019,6 +1027,6 @@ end
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
 
-LLOutputs, FlowCond, LLSystem = test_45degwingLL()
-TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
-TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")
+# LLOutputs, FlowCond, LLSystem = test_45degwingLL()
+# TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
+# TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")
