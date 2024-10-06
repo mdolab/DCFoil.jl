@@ -495,7 +495,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
 
-    println("f_n = ", sqrt.(omegaSquared) / (2 * pi))
+    println("f_n = ", .√(omegaSquared) / (2 * pi))
 
     return rel_err
 end
@@ -645,7 +645,7 @@ end
 # q1, K, M, F, omegaSquared, modeShapes = test_FiniteElementIso3D()
 # println("tip deflection = ", q1[end-3], " m")
 # println("tip rotation about y axis = ", q1[end-1], " rad")
-# natFreqs = sqrt.(Complex.(omegaSquared)) / (2 * pi)
+# natFreqs = .√(Complex.(omegaSquared)) / (2 * pi)
 # println("Natural frequencies = ", real.(natFreqs), " Hz")
 
 function test_FiniteElementBend()
@@ -868,7 +868,7 @@ function test_FEBT3()
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
 
-    # println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+    # println("f_n = ", .√(omegaSquared)/(2*pi))
 
     return rel_err
 end
@@ -1011,7 +1011,7 @@ function test_FECOMP2()
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 6)
 
-    println("f_n = ", sqrt.(omegaSquared) / (2 * pi))
+    println("f_n = ", .√(omegaSquared) / (2 * pi))
 
     return rel_err
 end

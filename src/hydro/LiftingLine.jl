@@ -13,7 +13,7 @@
 module LiftingLine
 
 # --- PACKAGES ---
-using FLOWMath: abs_cs_safe, atan_cs_safe
+using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 using Plots
 using LinearAlgebra
 using AbstractDifferentiation: AbstractDifferentiation as AD
@@ -37,7 +37,8 @@ struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:A
     collocationPts::TM # Control points
     jointPts::TM # TV joint points
     npt_wing::TI # Number of wing points
-    localChords::TA # Local chord lengths [m]
+    localChords::TA # Local chord lengths of the panel edges [m]
+    localChordsCtrl::TA # Local chord lengths of the control points [m]
     sectionVectors::TM # Nondimensional section vectors, "dζi" in paper
     sectionLengths::TA # Section lengths
     sectionAreas::TA # Section areas
@@ -67,22 +68,23 @@ struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
     airfoil_ctrl_xy::TM # Airfoil control points
 end
 
-struct FlowConditions{TF,TA<:AbstractVector{TF}}
+struct FlowConditions{TF,TC,TA<:AbstractVector{TC}}
     Uinfvec::TA # Freestream velocity [m/s] [U, V, W]
-    Uinf::TF # Freestream velocity magnitude [m/s]
+    Uinf::TC # Freestream velocity magnitude [m/s]
     uvec::TA # Freestream velocity unit vector
-    alpha::TF
+    alpha::TC # Angle of attack [rad]
     beta::TF
     rhof::TF # Freestream density [kg/m^3]
 end
 
 struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     """
-    Nondimensional outputs of interest
+    Nondimensional and dimensional outputs of interest
     Redimensionalize with the reference area and velocity
     """
-    Fdist::TM # Loads distribution vector (TODO: redimensionalizing for spanwise loads requires local velocity)
+    Fdist::TM # Loads distribution vector (Dimensional) [N]
     Γdist::TA # Circulation distribution (Γᵢ) [m^2/s]
+    cla::TA # Spanwise lift slopes [1/rad]
     F::TA # Total integrated loads vector [Fx, Fy, Fz, Mx, My, Mz]
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
     CDi::TF # Induced drag coefficient (aligned w/ freestream)
@@ -134,9 +136,9 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ************************************************
     if !isnothing(airfoilCoordFile) && isnothing(airfoil_xy) && isnothing(airfoil_ctrl_xy)
         println("Reading airfoil coordinates from $(airfoilCoordFile) and using MACH...")
-        
+
         PREFOIL = pyimport("prefoil")
-        
+
         rawCoords = PREFOIL.utils.readCoordFile(airfoilCoordFile)
 
         Foil = PREFOIL.Airfoil(rawCoords)
@@ -221,7 +223,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     ZArr = zeros(2, 2, 2)
     ZM = zeros(2, 2)
     ZA = zeros(2)
-    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, copy(wing_ctrl_xyz), npt_wing, local_chords, zeros(2, 2), zeros(2), zeros(2),
+    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, copy(wing_ctrl_xyz), npt_wing, local_chords, local_chords_ctrl, zeros(2, 2), zeros(2), zeros(2),
         npt_airfoil, wingSpan, 0.0, 0.0, AR, rootChord, sweepAng, 0.0, ZArr, ZArr, ZA, ZM, ZA)
 
     # --- Locus of aerodynamic centers (LAC) ---
@@ -271,7 +273,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # --- Other section properties ---
     sectionVectors = wing_xyz[:, 1:end-1] - wing_xyz[:, 2:end] # dℓᵢ
 
-    sectionLengths = sqrt.(sectionVectors[XDIM, :] .^ 2 + sectionVectors[YDIM, :] .^ 2 + sectionVectors[ZDIM, :] .^ 2) # ℓᵢ
+    sectionLengths = .√(sectionVectors[XDIM, :] .^ 2 + sectionVectors[YDIM, :] .^ 2 + sectionVectors[ZDIM, :] .^ 2) # ℓᵢ
     sectionAreas = 0.5 * (local_chords[1:end-1] + local_chords[2:end]) .* abs_cs_safe.(wing_xyz[YDIM, 1:end-1] - wing_xyz[YDIM, 2:end]) # dAᵢ
 
     ζ = sectionVectors ./ reshape(sectionAreas, 1, length(sectionAreas)) # Normalized section vectors, [3, npt_wing]
@@ -309,7 +311,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
 
     # Store all computed quantities here
-    LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, ζ, sectionLengths, sectionAreas,
+    LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, local_chords_ctrl, ζ, sectionLengths, sectionAreas,
         npt_airfoil, wingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
     FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof)
@@ -343,9 +345,9 @@ function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
             fs = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
         else
             tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
-            lam = sqrt.(1.0 .+ (tanl .* y) .^ 2) .-
+            lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
                   tanl .* abs_cs_safe.(y) .-
-                  sqrt.(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
+                  .√(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
                   tanl .* (0.5 * span .- abs_cs_safe.(y))
 
             fs = 0.25 * cr .+
@@ -447,14 +449,14 @@ function compute_dLACds(LLMesh, LLHydro, y, c, ∂c∂y, Λ, span; model="kueche
             dx = -∂c∂y * (1.0 - 1.0 / K) * 0.25
         else
             tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
-            lam = sqrt.(1.0 .+ (tanl .* y) .^ 2) .-
+            lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
                   tanl .* abs_cs_safe.(y) .-
-                  sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
+                  .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
                   tanl .* (span / 2.0 .- abs_cs_safe.(y))
 
-            lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ sqrt.(1.0 .+ (tanl .* y) .^ 2) -
+            lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ .√(1.0 .+ (tanl .* y) .^ 2) -
                     tanl .* (sign.(y) .* c .- abs_cs_safe.(y) .* ∂c∂y) ./ c +
-                    ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ sqrt.(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
+                    ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
                     tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
 
             dx = tan(Λ) * sign.(y) .+
@@ -537,17 +539,29 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
     LiftingSystem : LiftingLineSystem
         Lifting line system struct with all necessary parameters
 
+    LLHydro : LiftingLineHydro
+        Section properties at the root airfoil
     Returns:
     --------
     LLResults : LiftingLineResults
         Lifting line results struct with all necessary parameters
     """
 
+    Δα = 1e-100
+    ∂α = FlowCond.alpha + Δα * 1im
+    ∂Γi∂α = zeros(DTYPE, LLMesh.npt_wing)
+    ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+    ∂Uinf = norm_cs_safe(∂Uinfvec)
+    ∂uvec = ∂Uinfvec / FlowCond.Uinf
+    ∂FlowCond = FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof)
+
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
     uinf = reshape(FlowCond.uvec, 3, 1, 1)
     uinfMat = repeat(uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
+    ∂uinf = reshape(∂FlowCond.uvec, 3, 1, 1)
+    ∂uinfMat = repeat(∂uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
     P1 = LLMesh.wing_joint_xyz_eff[:, :, 2:end]
     P2 = LLMesh.wing_xyz_eff[:, :, 2:end]
@@ -596,11 +610,20 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
     # plot(p1, p5, layout=(2, 1))
     # savefig("test_influences.pdf")
 
+    ∂influence_semiinfa = compute_straightSemiinfinite(P1, ∂uinfMat, ctrlPtMat, LLMesh.rc)
+    ∂influence_semiinfb = compute_straightSemiinfinite(P4, ∂uinfMat, ctrlPtMat, LLMesh.rc)
+
     TV_influence = -influence_semiinfa +
                    influence_straightsega +
                    influence_straightsegb +
                    influence_straightsegc +
                    influence_semiinfb
+
+    ∂TV_influence = -∂influence_semiinfa +
+                    influence_straightsega +
+                    influence_straightsegb +
+                    influence_straightsegc +
+                    ∂influence_semiinfb
 
 
     # p1 = plot(TV_influence[ZDIM, :, 1], label="")
@@ -611,13 +634,14 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
     # ---------------------------
     #   Solve for circulation
     # ---------------------------
-    # First guess
+    # First guess using root properties
     c_r = LLMesh.rootChord
     clα = LLHydro.airfoil_CLa
     αL0 = LLHydro.airfoil_aL0
     Λ = LLMesh.sweepAng
     # Ux, _, Uz = FlowCond.Uinfvec
     ux, uy, uz = FlowCond.uvec
+    ∂ux, ∂uy, ∂uz = ∂FlowCond.uvec
     span = LLMesh.span
     ctrl_pts = LLMesh.collocationPts
     ζi = LLMesh.sectionVectors
@@ -636,18 +660,23 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
 
     # --- Pack up parameters for the NL solve ---
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     # --- Nonlinear solve for circulation distribution ---
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
-        solverParams=LLNLParams, is_verbose=true,
+        solverParams=LLNLParams, is_verbose=false,
         # mode="FiDi"
+        mode="CS" # faster than fidi
+        # mode="Analytic"
+    )
+    ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
+        solverParams=∂LLNLParams, is_verbose=false,
         mode="CS" # faster than fidi
     )
 
-    # # WRONG
-    # println("Gconv: $(Gconv)")
-
-    Gjvji = TV_influence .* reshape(Gconv, 1, size(Gconv)...)
+    Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
+    ∂Gi = reshape(∂Gconv, 1, size(∂Gconv)...) # now it's a (1, npt) matrix
+    Gjvji = TV_influence .* Gi
     Gjvjix = TV_influence[XDIM, :, :] * Gconv
     Gjvjiy = TV_influence[YDIM, :, :] * Gconv
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
@@ -658,19 +687,11 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
 
     ui = Gjvji .+ u∞ # Local velocities (nondimensional)
 
-    # # THESE ARE WRONG
-    # println("ui 1: $(ui[1,:])")
-    # println("ui 2: $(ui[2,:])")
-    # println("ui 3: $(ui[3,:])")
-
     # This is the Biot--Savart law but nondimensional
     # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
     uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
     uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-    Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-    # println(size(uicrossζi))
-    # println(size(dAi))
     coeff = 2.0 / LLMesh.SRef
     NondimForces = coeff * (uicrossζi .* Gi) .* dAi
 
@@ -681,13 +702,28 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
     # Forces = NondimForces .* LLMesh.SRef * 0.5 * ϱ * FlowCond.Uinf^2 # dimensionalize the forces
     # println(Γdist)
 
+    # --- Dimensional forces ---
+    Γi = Gi * FlowCond.Uinf
+    Γjvji = TV_influence .* Γi
+    Γjvjix = TV_influence[XDIM, :, :] * Γdist
+    Γjvjiy = TV_influence[YDIM, :, :] * Γdist
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    Γjvjiz = -TV_influence[ZDIM, :, :] * Γdist
+    Γjvji = cat(Γjvjix, Γjvjiy, Γjvjiz, dims=2)
+    Γjvji = permutedims(Γjvji, [2, 1])
+    U∞ = repeat(reshape(FlowCond.Uinfvec, 3, 1), 1, LLMesh.npt_wing)
+
+    Ui = Γjvji .+ U∞ # Local velocities
+    Uicrossdli = -cross.(eachcol(Ui), eachcol(ζi))
+    Uicrossdli = hcat(Uicrossdli...) # now it's a (3, npt) matrix
+    DimForces = FlowCond.rhof * (Uicrossdli .* Γi) .* dAi
+
     # --- Vortex core viscous correction ---
     if LLMesh.rc != 0
         println("Vortex core viscous correction not implemented yet")
     end
 
     # --- Final outputs ---
-
     CL = -IntegratedForces[XDIM] * uz +
          IntegratedForces[ZDIM] * ux / (ux^2 + uz^2)
     CDi = IntegratedForces[XDIM] * ux +
@@ -697,7 +733,12 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
         -IntegratedForces[XDIM] * ux * uy -
         IntegratedForces[ZDIM] * uz * uy +
         IntegratedForces[YDIM] * (uz^2 + ux^2)
-    ) / sqrt(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
+    ) / √(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
+
+    ∂G∂α = imag(∂Gconv) / Δα
+    ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
+
+    println("clavec: $(∂cl∂α)")
 
     # p1 = plot(ctrl_pts[YDIM, :], NondimForces[ZDIM, :], label="Lift")
     # ylims!(0.0, 8)
@@ -708,7 +749,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
     # plot(p1, p2, p3, layout=(3, 1), widen=true)
     # savefig("test_Lift_Induced_Circ.pdf")
 
-    LLResults = LiftingLineOutputs(NondimForces, Γdist, IntegratedForces, CL, CDi, CS)
+    LLResults = LiftingLineOutputs(DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS)
 
     return LLResults
 end
@@ -768,7 +809,7 @@ function compute_LLresiduals(G; solverParams=nothing)
 
     ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
     ui_cross_ζi = hcat(ui_cross_ζi...) # now it's a (3, npt) matrix
-    ui_cross_ζi_mag = sqrt.(ui_cross_ζi[XDIM, :] .^ 2 + ui_cross_ζi[YDIM, :] .^ 2 + ui_cross_ζi[ZDIM, :] .^ 2)
+    ui_cross_ζi_mag = .√(ui_cross_ζi[XDIM, :] .^ 2 + ui_cross_ζi[YDIM, :] .^ 2 + ui_cross_ζi[ZDIM, :] .^ 2)
 
     # println(size(ui_cross_ζi))
     # println("ucross: $(ui_cross_ζi_mag)") # good
@@ -841,7 +882,7 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
         uxy = -cross.(eachcol(ui), eachcol(ζ))
         uxy = hcat(uxy...) # now it's a (3, npt) matrix
-        uxy_norm = sqrt.(uxy[XDIM, :] .^ 2 + uxy[YDIM, :] .^ 2 + uxy[ZDIM, :] .^ 2)
+        uxy_norm = .√(uxy[XDIM, :] .^ 2 + uxy[YDIM, :] .^ 2 + uxy[ZDIM, :] .^ 2)
 
         vxy = cross3D(vji, ζArr)
         # This is downwash contribution
@@ -912,9 +953,9 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         _SaL = sin.(_aL)
         _CbL = cos.(_bL)
         _SbL = sin.(_bL)
-        _Rn = sqrt.(_Ca .^ 2 .* _CbL .^ 2 .+ _Sa .^ 2 .* _Cb .^ 2)
-        _Rd = sqrt.(1.0 .- _Sa .^ 2 .* _Sb .^ 2)
-        _RLd = sqrt.(1.0 .- _SaL .^ 2 .* _SbL .^ 2)
+        _Rn = .√(_Ca .^ 2 .* _CbL .^ 2 .+ _Sa .^ 2 .* _Cb .^ 2)
+        _Rd = .√(1.0 .- _Sa .^ 2 .* _Sb .^ 2)
+        _RLd = .√(1.0 .- _SaL .^ 2 .* _SbL .^ 2)
         _R = _Rn ./ _Rd
         _RL = _CbL ./ _RLd
         _dR = (_Sa .* _Ca .* (_Sb .^ 2 .* _Rn ./ (_Rd .^ 2) .+ (_Cb .^ 2 .- _CbL .^ 2) ./ _Rn) ./ _Rd) .* _da .+
@@ -976,7 +1017,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
 
 
     r1 = pt .- startpt
-    r1mag = sqrt.(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
+    r1mag = .√(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     uinf = endvec
 
     r1dotuinf = r1[XDIM, :, :] .* uinf[XDIM, :, :] .+ r1[YDIM, :, :] .* uinf[YDIM, :, :] .+ r1[ZDIM, :, :] .* uinf[ZDIM, :, :]
@@ -984,13 +1025,13 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     r1crossuinf = cross3D(r1, uinf)
     uinfcrossr1 = cross3D(uinf, r1)
 
-    d = sqrt.(r1crossuinf[XDIM, :, :] .^ 2 + r1crossuinf[YDIM, :, :] .^ 2 + r1crossuinf[ZDIM, :, :] .^ 2)
-    d = ifelse.(r1dotuinf .< 0.0, r1mag, d)
+    d = .√(r1crossuinf[XDIM, :, :] .^ 2 + r1crossuinf[YDIM, :, :] .^ 2 + r1crossuinf[ZDIM, :, :] .^ 2)
+    d = ifelse.(real(r1dotuinf) .< 0.0, r1mag, d)
 
     # Reshape d to have a singleton dimension for correct broadcasting
     d = reshape(d, 1, size(d)...)
 
-    numerator = uinfcrossr1 .* (d .^ 2 ./ sqrt.(rc^4 .+ d .^ 4))
+    numerator = uinfcrossr1 .* (d .^ 2 ./ .√(rc^4 .+ d .^ 4))
 
     denominator = (4π * r1mag .* (r1mag .- r1dotuinf))
     denominator = reshape(denominator, 1, size(denominator)...)
@@ -1047,12 +1088,12 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     """
 
     r1 = pt .- startpt
-    r1mag = sqrt.(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
+    r1mag = .√(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     r2 = pt .- endpt
-    r2mag = sqrt.(r2[XDIM, :, :] .^ 2 + r2[YDIM, :, :] .^ 2 + r2[ZDIM, :, :] .^ 2)
+    r2mag = .√(r2[XDIM, :, :] .^ 2 + r2[YDIM, :, :] .^ 2 + r2[ZDIM, :, :] .^ 2)
     r1r2 = r1 .- r2
 
-    r1r2mag = sqrt.(r1r2[XDIM, :, :] .^ 2 + r1r2[YDIM, :, :] .^ 2 + r1r2[ZDIM, :, :] .^ 2)
+    r1r2mag = .√(r1r2[XDIM, :, :] .^ 2 + r1r2[YDIM, :, :] .^ 2 + r1r2[ZDIM, :, :] .^ 2)
 
     r1dotr2 = r1[XDIM, :, :] .* r2[XDIM, :, :] + r1[YDIM, :, :] .* r2[YDIM, :, :] + r1[ZDIM, :, :] .* r2[ZDIM, :, :]
     r1dotr1r2 = r1[XDIM, :, :] .* r1r2[XDIM, :, :] + r1[YDIM, :, :] .* r1r2[YDIM, :, :] + r1[ZDIM, :, :] .* r1r2[ZDIM, :, :]
@@ -1068,7 +1109,7 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     d = reshape(d, 1, size(d)...)
 
     influence = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
-    influence = influence .* (d .^ 2) ./ sqrt.(rc^4 .+ d .^ 4)
+    influence = influence .* (d .^ 2) ./ .√(rc^4 .+ d .^ 4)
     denominator = (4π * r1mag .* r2mag .* (r1mag .* r2mag .+ r1dotr2))
 
     # Reshape the denominator to have the same dimensions as the influence    

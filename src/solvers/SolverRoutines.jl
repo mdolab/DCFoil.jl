@@ -662,7 +662,7 @@ function cross3D(arr1, arr2)
     @assert size(arr1, 1) == 3
     @assert size(arr2, 1) == 3
     M, N = size(arr1, 2), size(arr1, 3)
-    arr1crossarr2 = zeros(3, M, N)
+    arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
     for jj in 1:M
         for kk in 1:N
             arr1crossarr2[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
@@ -865,7 +865,7 @@ function compute_anglesFromVector(V)
     V1 = V[XDIM]
     V2 = V[YDIM]
     V3 = V[ZDIM]
-    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), sqrt(V1^2 + V2^2 + V3^2)
+    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), √(V1^2 + V2^2 + V3^2)
 end
 
 function compute_vectorFromAngle(alpha, beta, Uinf)
@@ -891,10 +891,10 @@ function compute_vectorFromAngle(alpha, beta, Uinf)
     sina = sin(alpha)
     cosb = cos(beta)
     sinb = sin(beta)
-    sqrtsinasinb = sqrt(1.0 - sina^2 * sinb^2)
+    √sinasinb = √(1.0 - sina^2 * sinb^2)
 
-    # OLD WAY return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sqrtsinasinb
-    return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sqrtsinasinb
+    # OLD WAY return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / √sinasinb
+    return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / √sinasinb
 end
 
 
@@ -911,7 +911,7 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     # This line breaks when the vector is straight up and down
     # TODO: there is probably a better angle parametrization like Rodrigues or quaternions!
     if abs_cs_safe(real(dR1)) < MEPSLARGE && abs_cs_safe(real(dR2)) < MEPSLARGE # beam is straight up and down
-        rxyz_div = 1.0 / sqrt(dR1^2 + dR2^2 + dR3^2)
+        rxyz_div = 1.0 / √(dR1^2 + dR2^2 + dR3^2)
         ca = dR1 * rxyz_div
         cb = dR2 * rxyz_div
         cc = dR3 * rxyz_div
@@ -920,7 +920,7 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
         T = T2 * T1
     else
         # beta is the angle above the xy plane
-        rxy_div = 1 / sqrt(dR1^2 + dR2^2) # length of projection onto xy plane
+        rxy_div = 1 / √(dR1^2 + dR2^2) # length of projection onto xy plane
         calpha = dR1 * rxy_div
         salpha = dR2 * rxy_div
         cbeta = 1 / rxy_div / l
@@ -1057,7 +1057,7 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
 end
 
 function normalize_3Dvector(r)
-    rhat = r ./ sqrt(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
+    rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
     return rhat
 end
 

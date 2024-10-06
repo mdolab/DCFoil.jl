@@ -184,7 +184,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
-        elemLength = sqrt(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
+        elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, elemType)
         Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
     end
@@ -240,7 +240,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
         bulbInertia = 900 #[kg-m²]
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
-        elemLength = sqrt(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
+        elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, elemType)
         globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, elemType)
     end
@@ -269,7 +269,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     # ---------------------------
     # --- Dry solve ---
     omegaSquared, structModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms, nModes)
-    structNatFreqs = sqrt.(omegaSquared) / (2π)
+    structNatFreqs = .√(omegaSquared) / (2π)
     println("+-------------------------------------+")
     println("| Structural natural frequencies [Hz]:")
     println("+-------------------------------------+")
@@ -285,7 +285,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, size(globalMs)[1], Λ, 0.1, 0.1, elemType; appendageOptions=appendageOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
-    wetNatFreqs = sqrt.(wetOmegaSquared) / (2π)
+    wetNatFreqs = .√(wetOmegaSquared) / (2π)
     println("| Wetted natural frequencies [Hz]:    |")
     println("+-------------------------------------+")
     ctr = 1
@@ -415,11 +415,11 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     # ---------------------------
     # S3 for mode
     # Norm of each eigenvector for old array is a sum over rows
-    normOld = sqrt.(sum(old_r .^ 2 + old_i .^ 2, dims=1))
+    normOld = .√(sum(old_r .^ 2 + old_i .^ 2, dims=1))
 
     # S4 for mode
     # Norm of each eigenvector for new array
-    normNew = sqrt.(sum(new_r .^ 2 + new_i .^ 2, dims=1))
+    normNew = .√(sum(new_r .^ 2 + new_i .^ 2, dims=1))
 
     # Old and new eigen vectors
     old = old_r + 1im * old_i
@@ -840,7 +840,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             # --- Check if eigenvalue jump is too big ---
             # If the jump is too big, we back up
             # We do this by scaling the 'p' to the true eigenvalue
-            eigScale = sqrt(dynPTmp / flowHistory_z[nFlow-1, 3]) # This is a velocity scale
+            eigScale = √(dynPTmp / flowHistory_z[nFlow-1, 3]) # This is a velocity scale
 
 
             # Compute difference between old and new modes
@@ -851,7 +851,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             #     tmp_z[ii] = tmp[ii]
             # end
             tmp_z[:] = tmp
-            tmp_z[1:nCorr] = sqrt.(inner)
+            tmp_z[1:nCorr] = .√(inner)
             tmp = copy(tmp_z)
 
             maxVal = maximum(tmp[1:nCorr])
@@ -943,7 +943,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         if is_failed # backup dynamic pressure
 
             dynPTmp = (dynPTmp - flowHistory_z[nFlow-1, 3]) * 0.5 + flowHistory_z[nFlow-1, 3]
-            U∞ = sqrt(2 * dynPTmp / flowHistory_z[nFlow-1, 2])
+            U∞ = √(2 * dynPTmp / flowHistory_z[nFlow-1, 2])
             println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp, " Pa and new U∞: ", U∞, " m/s")
 
         else # Store solution
@@ -1022,7 +1022,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             if !(isnothing(ΔdynP))
                 dynPTmp += ΔdynP
                 # Determine flow speed
-                U∞ = sqrt(2 * dynPTmp / FOIL.ρ_f)
+                U∞ = √(2 * dynPTmp / FOIL.ρ_f)
             elseif !(isnothing(Δu))
                 U∞ += Δu
                 # Determine dynamic pressure
@@ -1294,7 +1294,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     # Modal fluid added mass matrix (Cf and Kf handled in loop)
     Mf = Qr' * Mff * Qr
     omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
-    Δk = minimum(sqrt.(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
+    Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
 
     # ************************************************
     #     Perform iterations on k values
@@ -1365,7 +1365,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
             R_aa_i = R_aa_i_tmp[:, idxs]
 
             # --- If too big of jump, back up on 'k' ---
-            tmp_p_diff = sqrt.((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
+            tmp_p_diff = .√((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
             p_diff = maximum(real(tmp_p_diff))
             if (p_diff > p_diff_max)
                 failed = true

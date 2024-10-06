@@ -53,7 +53,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
     # println("sweep: $(sweep)\n")
     # println("control_xy post: $(control_xy[XDIM, :])\n")
 
-    panelLengths = sqrt.(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
+    panelLengths = .√(diff(vortex_xy[XDIM, :]) .^ 2 .+ diff(vortex_xy[YDIM, :]) .^ 2)
 
     AIRFOIL = AirfoilMesh(vortex_xy, control_xy, panelLengths, nodeCt, sweep)
 
@@ -290,9 +290,9 @@ function compute_sweepCorr(angle, V)
     Sa = sin(alpha)
     Cb = cos(beta)
     Sb = sin(beta)
-    sqrtSaSb = sqrt(1.0 - Sa * Sa * Sb * Sb)
+    √SaSb = √(1.0 - Sa * Sa * Sb * Sb)
     alphaCorr = atan_cs_safe(tan(alpha) * Cb, cos(angle - beta))
-    VinfCorr = Vinf * sqrt(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / sqrtSaSb
+    VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / √SaSb
 
     # println("V",V)
     # println("VinfCorr: ", VinfCorr)

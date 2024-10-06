@@ -89,6 +89,7 @@ I wrote the custom rule with the help of the Julia slack channel.
 * Don't use `ForwardDiff` because it cannot do matrix operations and I haven't figured out the chain rules.
 It also doesn't fit with the data types
 * Unicode characters are nice for readability of math-heavy code, but do not use them for interface-level code
+* `hypot()` function for calculating the L2 norm is slower than typing it out
 
 #### AD Packages
 

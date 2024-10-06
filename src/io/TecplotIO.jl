@@ -525,12 +525,12 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
                     psi_r = [0; R_eigs_r[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
                     psi_i = [0; R_eigs_i[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
                     for ii in 1:size(mesh)[dim]
-                        u[ii] = sqrt(u_r[ii]^2 + u_i[ii]^2)
-                        v[ii] = sqrt(v_r[ii]^2 + v_i[ii]^2)
-                        w[ii] = sqrt(w_r[ii]^2 + w_i[ii]^2)
-                        phi[ii] = sqrt(phi_r[ii]^2 + phi_i[ii]^2)
-                        theta[ii] = sqrt(theta_r[ii]^2 + theta_i[ii]^2)
-                        psi[ii] = sqrt(psi_r[ii]^2 + psi_i[ii]^2)
+                        u[ii] = √(u_r[ii]^2 + u_i[ii]^2)
+                        v[ii] = √(v_r[ii]^2 + v_i[ii]^2)
+                        w[ii] = √(w_r[ii]^2 + w_i[ii]^2)
+                        phi[ii] = √(phi_r[ii]^2 + phi_i[ii]^2)
+                        theta[ii] = √(theta_r[ii]^2 + theta_i[ii]^2)
+                        psi[ii] = √(psi_r[ii]^2 + psi_i[ii]^2)
                     end
                 end
                 # --- Write them ---

@@ -69,11 +69,11 @@ function test_damping()
     """
     # --- Reference value ---
     # These were obtained from hand calcs
-    ref_sol = 625 * sqrt(2) * vec([
+    ref_sol = 625 * √(2) * vec([
                   2π -1.5*π
                   0.5*π 0.125*π
               ])
-    sweepref_sol = 625 * sqrt(2) * vec([
+    sweepref_sol = 625 * √(2) * vec([
                        π 0.0
                        0.0 π/32
                    ])
@@ -296,16 +296,16 @@ function test_dwWave()
 
     cl = clalfa * alfa0
     ξ = pcRatio * chordRefM
-    Fnc = Uinf / sqrt(GRAV * chordRefM)
-    Fnh = Uinf / sqrt(GRAV * depth)
+    Fnc = Uinf / √(GRAV * chordRefM)
+    Fnh = Uinf / √(GRAV * depth)
 
     alphavsXi = []
     # for ξ in ξRange
     FncRange = []
     for U in URange
 
-        Fnc = U / sqrt(GRAV * chordRefM)
-        Fnh = U / sqrt(GRAV * depth)
+        Fnc = U / √(GRAV * chordRefM)
+        Fnh = U / √(GRAV * depth)
 
         alpha = DCFoil.HydroStrip.compute_wavePatternDWAng(cl, chordVec, Fnc, Fnh, ξ)
 
@@ -1027,6 +1027,6 @@ end
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
 
-# LLOutputs, FlowCond, LLSystem = test_45degwingLL()
+LLOutputs, FlowCond, LLSystem = test_45degwingLL()
 # TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
 # TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")

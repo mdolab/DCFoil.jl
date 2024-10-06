@@ -275,12 +275,13 @@ function compute_glauert_circ(
 
     if debug
         println("Plotting debug hydro")
-        layout = @layout [a b c]
+        layout = @layout [a b ;c d]
         p1 = plot(y, γ ./ (4 * U∞ * semispan), label="γ(y)/2Us", xlabel="y", ylabel="γ(y)", title="Spanwise distribution")
         p2 = plot(y, wy ./ U∞, label="w(y)/Uinf", ylabel="w(y)/Uinf", linecolor=:red)
         p3 = plot(y, cl, label="cl(y)", ylabel="cl(y)", linecolor=:green, ylim=(-1.0, 1.0))
-        plot(p1, p2, p3, layout=layout)
-        savefig("debug_spanwise_distribution.png")
+        p4 = plot(y, cl_α, label="cl_α(y)", ylabel="cl_α(y)", linecolor=:blue)
+        plot(p1, p2, p3, p4, layout=layout)
+        savefig("DebugOutput/debug_spanwise_distribution.png")
     end
 
     return reverse(cl_α), Fx_ind, CDi
@@ -312,8 +313,8 @@ function correct_downwash(
     αiWake = compute_wakeDWAng(sWing, cRefWing, CLMain, ℓᵣ)
 
     # --- Compute the wave pattern effect ---
-    Fnc = Uinf / (sqrt(GRAV * chordMMean))
-    Fnh = Uinf / (sqrt(GRAV * depth))
+    Fnc = Uinf / (√(GRAV * chordMMean))
+    Fnh = Uinf / (√(GRAV * depth))
     αiWave = compute_wavePatternDWAng(CLMain, chordMMean, Fnc, Fnh, ℓᵣ)
 
     # --- Correct the downwash ---
@@ -343,14 +344,14 @@ function compute_wakeDWAng(sWing, cRefWing, CLWing, ℓᵣ)
 
     l_div_s = ℓᵣ / sWing
     # THIS IS WRONG
-    kappa = 1 + 1 / (sqrt(1 + (l_div_s)^2)) * (1 / (π * l_div_s) + 1)
+    kappa = 1 + 1 / (√(1 + (l_div_s)^2)) * (1 / (π * l_div_s) + 1)
     kappa = 2.0
     # println("k is", k)
-    k = 1 / sqrt(1 + (l_div_s)^2)
+    k = 1 / √(1 + (l_div_s)^2)
 
     Ek = SpecialFunctions.ellipe(k^2)
 
-    kappa = 1 + 2 / π * Ek / sqrt(1 - k^2)
+    kappa = 1 + 2 / π * Ek / √(1 - k^2)
 
     ε = kappa * CLWing / (π * ARwing)
 
@@ -413,11 +414,11 @@ function use_free_surface(γ, α₀, U∞, chordVec, h)
         γ_FS modified vortex strength using the high-speed, free-surface BC
     """
 
-    Fnh = U∞ / (sqrt(9.81 * h))
+    Fnh = U∞ / (√(9.81 * h))
     # Find limiting case
-    if real(Fnh) < real(10 / sqrt(h / mean(chordVec)))
-        println("Violating high-speed free-surface BC with Fnh*sqrt(h/c) of")
-        println(Fnh * sqrt(h / mean(chordVec)))
+    if real(Fnh) < real(10 / √(h / mean(chordVec)))
+        println("Violating high-speed free-surface BC with Fnh*√(h/c) of")
+        println(Fnh * √(h / mean(chordVec)))
         println("Fnh: $(Fnh)")
     end
 
@@ -530,7 +531,7 @@ function compute_AICs(
             nVec = stripVecs[inode, :]
 
             # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
-            lᵉ = sqrt(nVec[XDIM]^2 + nVec[YDIM]^2 + nVec[ZDIM]^2) # length of elem
+            lᵉ = √(nVec[XDIM]^2 + nVec[YDIM]^2 + nVec[ZDIM]^2) # length of elem
             Δy = lᵉ
             # If we have end point nodes, we need to divide the length by 2
             if appendageOptions["config"] == "wing"

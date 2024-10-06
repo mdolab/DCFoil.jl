@@ -470,7 +470,7 @@ function populate_matrices!(
         dR1 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
         dR2 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
         dR3 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
-        lᵉ = sqrt(dR1^2 + dR2^2 + dR3^2) # length of elem
+        lᵉ = √(dR1^2 + dR2^2 + dR3^2) # length of elem
         nVec = [dR1, dR2, dR3] / lᵉ # normalize
         if elemIdx <= nElemWing
             EIₛ = FOIL.EIₛ[elemIdx]
@@ -827,7 +827,7 @@ function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
     # Solve [K]{x} = λ[M]{x} where λ = ω²
     eVals, eVecs = SolverRoutines.compute_eigsolve(K, M, nEig)
 
-    naturalFreqs = sqrt.(eVals) / (2π)
+    naturalFreqs = .√(eVals) / (2π)
 
     return naturalFreqs, eVecs
 end

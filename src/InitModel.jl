@@ -58,6 +58,7 @@ function init_static(
     useFS=solverOptions["use_freeSurface"],
     rho=solverOptions["rhof"],
     config=foilOptions["config"],
+    debug=solverOptions["debug"]
   )
 
   # ---------------------------

@@ -132,13 +132,13 @@ function do_newton_raphson(
                 println("Failed to converge. res norm is NaN")
                 break
             end
-            if resNorm < tol
+            if real(resNorm) < tol
                 println("+--------------------------------------------")
                 println("Converged in ", ii, " iterations")
                 break
             elseif ii == maxIters
                 println("+--------------------------------------------")
-                println("Failed to converge. res norm is", resNorm)
+                println("Failed to converge. res norm is $(resNorm)")
                 println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
             end
         end
