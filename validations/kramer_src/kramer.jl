@@ -60,7 +60,7 @@ DVDict = Dict(
     "s" => 0.2438, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459*ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     "s_strut" => 0.4, # from Yingqian
     # --- Strut vars ---
@@ -69,7 +69,7 @@ DVDict = Dict(
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 

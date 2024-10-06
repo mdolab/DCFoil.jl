@@ -531,7 +531,7 @@ function compute_dLACdseffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ,
     end
 end
 
-function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
+function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=false)
     """
     Execute LL algorithm
     Inputs:
@@ -547,9 +547,12 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
         Lifting line results struct with all necessary parameters
     """
 
-    Δα = 1e-100
-    ∂α = FlowCond.alpha + Δα * 1im
-    ∂Γi∂α = zeros(DTYPE, LLMesh.npt_wing)
+    # Δα = 1e-100
+    # ∂α = FlowCond.alpha + Δα * 1im # Perturbation for complex step
+    Δα = 1e-3
+    ∂α = FlowCond.alpha + Δα # FD
+    # ∂Γi∂α = zeros(DTYPE, LLMesh.npt_wing)
+
     ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
     ∂Uinf = norm_cs_safe(∂Uinfvec)
     ∂uvec = ∂Uinfvec / FlowCond.Uinf
@@ -664,13 +667,15 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
 
     # --- Nonlinear solve for circulation distribution ---
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
-        solverParams=LLNLParams, is_verbose=false,
+        solverParams=LLNLParams, is_verbose=is_verbose,
         # mode="FiDi"
         mode="CS" # faster than fidi
         # mode="Analytic"
     )
+    println("Secondary solve for lift slope")
     ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
-        solverParams=∂LLNLParams, is_verbose=false,
+        solverParams=∂LLNLParams, is_verbose=is_verbose,
+        #  is_cmplx=true,
         mode="CS" # faster than fidi
     )
 
@@ -735,10 +740,16 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
         IntegratedForces[YDIM] * (uz^2 + ux^2)
     ) / √(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
 
-    ∂G∂α = imag(∂Gconv) / Δα
+    # --- Compute the lift curve slope ---
+    # ∂G∂α = imag(∂Gconv) / Δα # CS
+    ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
     ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
 
-    println("clavec: $(∂cl∂α)")
+    # TODO: PICKUP HERE
+    # println("clavec: $(∂cl∂α)")
+
+    p1 = plot(LLMesh.collocationPts[YDIM, :], ∂cl∂α, label="Lift curve slope")
+    savefig("test_clα.pdf")
 
     # p1 = plot(ctrl_pts[YDIM, :], NondimForces[ZDIM, :], label="Lift")
     # ylims!(0.0, 8)

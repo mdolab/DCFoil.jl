@@ -290,9 +290,9 @@ function compute_sweepCorr(angle, V)
     Sa = sin(alpha)
     Cb = cos(beta)
     Sb = sin(beta)
-    √SaSb = √(1.0 - Sa * Sa * Sb * Sb)
+    SaSb = √(1.0 - Sa * Sa * Sb * Sb)
     alphaCorr = atan_cs_safe(tan(alpha) * Cb, cos(angle - beta))
-    VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / √SaSb
+    VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / SaSb
 
     # println("V",V)
     # println("VinfCorr: ", VinfCorr)

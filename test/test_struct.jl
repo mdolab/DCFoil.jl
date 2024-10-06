@@ -514,7 +514,7 @@ function test_FiniteElementIso3D()
         "s" => 10, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
         "theta_f" => deg2rad(0.0), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
         # --- Strut vars ---
@@ -523,7 +523,7 @@ function test_FiniteElementIso3D()
         "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
         "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
         "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
         "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
     )
     solverOptions = Dict(
@@ -586,7 +586,7 @@ function test_FiniteElementIso3D()
     elemType = "BEAM3D"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
@@ -661,7 +661,7 @@ function test_FiniteElementBend()
         "s" => 10, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
         "theta_f" => deg2rad(0.0), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
     )
@@ -725,7 +725,7 @@ function test_FiniteElementBend()
     elemType = "bend"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
@@ -795,7 +795,7 @@ function test_FEBT3()
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
-        "x_αb" => zeros(nNodes), # static imbalance [m]
+        "x_ab" => zeros(nNodes), # static imbalance [m]
         "theta_f" => 0 * π / 180, # fiber angle global [rad]
     )
     solverOptions = Dict(
@@ -816,7 +816,7 @@ function test_FEBT3()
     elemType = "BT3"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
@@ -891,7 +891,7 @@ function test_FECOMP2()
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
-        "x_αb" => zeros(nNodes), # static imbalance [m]
+        "x_ab" => zeros(nNodes), # static imbalance [m]
         "theta_f" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
         "rake" => 0.0,
@@ -901,7 +901,7 @@ function test_FECOMP2()
         "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
         "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
         "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
         "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
     )
     wingOptions = Dict(
@@ -915,6 +915,7 @@ function test_FECOMP2()
         "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "run_body" => false,
+        "debug" => false,
     )
 
 
@@ -935,7 +936,7 @@ function test_FECOMP2()
     elemType = "COMP2"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; appendageOptions=wingOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], zeros(2, 2))
@@ -980,11 +981,19 @@ function test_FECOMP2()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    # There some weird data type bug here so we need to copy the matrices
+    globalK = zeros(Float64, size(globalKs_work))
+    globalM = zeros(Float64, size(globalMs_work))
+    globalF = zeros(Float64, size(globalF_work))
+    globalK .= globalKs_work
+    globalM .= globalMs_work
+    globalF .= globalF_work
     FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, "torque")
     u = copy(globalF)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
     # writedlm("DebugK-COMP2.csv", K,",")
     # writedlm("DebugF-COMP2.csv", F,",")
 
@@ -1037,7 +1046,7 @@ function test_fullwing(DVDict, solverOptions)
     elemType = "COMP2"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)

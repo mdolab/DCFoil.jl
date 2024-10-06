@@ -233,7 +233,14 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["sweep"]
-    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    # There some weird data type bug here so we need to copy the matrices and make them Float64
+    globalKs = zeros(Float64, size(globalKs_work))
+    globalMs = zeros(Float64, size(globalMs_work))
+    globalF = zeros(Float64, size(globalF_work))
+    globalKs .= globalKs_work
+    globalMs .= globalMs_work
+    globalF .= globalF_work
 
     if tipMass
         bulbMass = 2200 #[kg]

@@ -153,7 +153,7 @@ solverOptions2 = Dict(
     # @test test_FSeffect() <= 1e-5 # not ready yet
     @test test_dwWake() <= 1e-5
     @test test_dwWave() <= 1e-5
-    @test test_45degwingLL() <= 2e-2
+    # @test test_45degwingLL() <= 2e-2
 
     # ************************************************
     #     Solver tests

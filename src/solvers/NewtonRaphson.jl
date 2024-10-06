@@ -18,7 +18,7 @@ function print_solver_history(iterNum::Int64, resNorm, stepNorm)
         println("|  Iter |         resNorm        | stepNorm |")
         println("+-------+------------------------+----------+")
     end
-    @printf("   %03d    %.16e   %.2e  ", iterNum, resNorm, stepNorm)
+    @printf("   %03d    %.16e   %.2e  ", iterNum, real(resNorm), real(stepNorm))
     println()
 end
 
@@ -148,9 +148,9 @@ function do_newton_raphson(
         for ii in 1:maxIters
             # NOTE: these functions handle a complex input but return the unfolded output
             # (i.e., concatenation of real and imag)
-            res = compute_residuals(uUnfolded)
-            ∂r∂u = compute_∂r∂u(uUnfolded, mode)
-            jac = ∂r∂u[1]
+            res = compute_residuals(uUnfolded; solverParams=solverParams)
+            ∂r∂u = compute_∂r∂u(uUnfolded; solverParams=solverParams, mode=mode)
+            jac = ∂r∂u
 
             # --- Newton step ---
             Δu = -jac \ res

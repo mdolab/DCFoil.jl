@@ -990,7 +990,7 @@ function test_45degwingLL()
     Uinf = 50.0
     angles = [0.01, 2.1, 4.2, 6.3, 8.4, 10.5]
     # angles = [4.2]
-    # alpha = deg2rad(4.2)
+    alpha = deg2rad(4.2)
 
     rootChord = 20.0 * 0.0254 # 20 inches
     span = 5 * rootChord
@@ -1000,6 +1000,7 @@ function test_45degwingLL()
     npt_airfoil = 99
     answers = []
     for alpha in deg2rad.(angles)
+        println("alpha: $(rad2deg(alpha))")
         Uvec = [cos(alpha), 0.0, sin(alpha)] * Uinf
         LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, span, sweepAng, rootChord, TR;
             npt_wing=npt_wing, npt_airfoil,
@@ -1011,7 +1012,6 @@ function test_45degwingLL()
         F = LLOutputs.F
         # println("Forces: $(F)")
         # println("Spanwise cl: $(LLOutputs.Fdist[3,:])")
-        # println("alpha: $(rad2deg(alpha))")
         # println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
         push!(answers, LLOutputs.CL)
     end
@@ -1027,6 +1027,6 @@ end
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
 
-LLOutputs, FlowCond, LLSystem = test_45degwingLL()
+# test_45degwingLL()
 # TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
 # TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")
