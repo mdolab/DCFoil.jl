@@ -26,7 +26,6 @@ def setup(args, comm, files: dict):
     DVGeo.addChild(DVGeo_foil)
     nRefAxPts_global = DVGeo.addRefAxis("global", xFraction=1.0, alignIndex="k")
 
-    # --- Design variables for DVgeometry ---
     # ==============================================================================
     #                         DVS
     # ==============================================================================
@@ -241,6 +240,7 @@ def setup(args, comm, files: dict):
     #   Span
     # ---------------------------
     if "b" in args.geovar_foil:
+
         def span(val, geo):
             C = geo.extractCoef("wing")
             s = geo.extractS("wing")
@@ -249,7 +249,7 @@ def setup(args, comm, files: dict):
             geo.restoreCoef(C, "wing")
 
         DVGeo.addGlobalDV(dvName="span", value=0.0, func=span, lower=-10.0, upper=20.0, scale=0.1)
-    
+
     # def airfoilThickness(val, geo):
     #     # Set airfoil thickness values
     #     for i in range(nSpanwise):

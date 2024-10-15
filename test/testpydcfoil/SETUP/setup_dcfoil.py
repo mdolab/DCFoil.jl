@@ -11,7 +11,7 @@ import numpy as np
 from dcfoil import DCFOIL  # make sure to pip install this code
 
 
-def setup(args, comm, files):
+def setup(args, comm, files, evalFuncs):
     nNodes = 3
     nNodesStrut = 3
     mainFoilOptions = {
@@ -29,6 +29,7 @@ def setup(args, comm, files):
         #   I/O
         # ---------------------------
         "name": "test",
+        "gridFile": files["gridFile"],
         "debug": False,
         "writeTecplotSolution": True,
         "outputDir": "./OUTPUT/",
@@ -68,6 +69,7 @@ def setup(args, comm, files):
         "maxQIter": 100,  # that didn't fix the slow run time...
         "rhoKS": 80.0,
     }
+    
     DVDict = {  # THIS IS BASED OFF OF THE MOTH RUDDER
         "alfa0": 6.0,  # initial angle of attack [deg]
         "sweep": np.deg2rad(0.0),  # sweep angle [rad]
@@ -89,25 +91,12 @@ def setup(args, comm, files):
         "x_ab_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
         "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
     }
-    evalFuncs = [
-        "wtip",
-        "psitip",
-        "cl",
-        "cmy",
-        "lift",
-        "moment",
-        "cdi",
-        "cdj",
-        "cdpr",
-        "cds",
-        # "ksflutter",
-    ]
 
     debug = True
 
     # --- Instantiate it ---
     STICKSolver = DCFOIL(DVDictList=[DVDict], evalFuncs=evalFuncs, options=solverOptions, debug=debug)
 
-    
+    STICKSolver.addMesh(solverOptions["gridFile"])
 
     return STICKSolver

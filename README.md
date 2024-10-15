@@ -20,6 +20,10 @@ The code can be added with
 ```
 Pkg.add("DCFoil"); using DCFoil
 ```
+Alternatively, use this code as a Python package with
+```
+pip install -e .
+```
 
 ## Developers Notes
 
@@ -67,18 +71,14 @@ Please use this coding convention:
 
 ### Data types
 
-Only use **parametric** types for structs.
-Concrete types in function arguments do not usually make the code faster; 
-they only restrict usage (unless it is on purpose for multiple dispatch).
-However, you should declare the struct type argument in function signatures
-The DTYPE constant in the code `RealOrComplex` should be used when structs are not used in the function
+Only use **parametric** types for structs. Concrete types in function arguments do not usually make the code faster; they only restrict usage (unless it is on purpose for multiple dispatch). However, you should declare the struct type argument in function signatures. The `DTYPE` constant in the code `RealOrComplex` should be used when structs are not used in the function
 https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
 
 ### Derivatives
 
-#### Adding new cost functions or design variables
+#### Adding new cost functions
 
-* For the given solver you're adding the DV or cost func to, check its `<solver-name>.evalFuncsSens()`
+* For the given solver you're adding the cost func to, check its `<solver-name>.evalFuncsSens()`
 
 #### Try not to do this
 
@@ -103,8 +103,7 @@ It also doesn't fit with the data types
 
 ### DCFoil as a package
 
-The Project.toml means this is a Julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```
-However, in development mode, just go into julia for this directory and type ```] dev .```.
+The ```Project.toml``` means this is a Julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```. However, in development mode, just go into julia for this directory and type ```] dev .```.
 
 ### Package Dependencies
 
@@ -133,21 +132,31 @@ Chances are if there is a Pkg bug, it has to do with python, which actually is n
 
 We use `PyCall` to use some modules from MACH, but this highly depends on what Python environment you are using.
 If you're building `PyCall` for the first time, it depends on the PYTHON environment variable so if you build with the wrong python, don't forget to do a clean uninstall before rebuilding.
-Once the package is built, the `venv` method of getting this to work requires
+Once the package is built, the `venv` method of getting this to work requires running this in the Julia REPL
 ```
 ENV["PYCALL_JL_RUNTIME_PYTHON"] = Sys.which("python")
 ```
 before the `using PyCall` import in the julia scripts, but I put this in the scripts anyways.
-I have only gotten the Conda.jl method to work which requires these runs
+
+For a Linux / Docker workflow (preferred), it is as simple as running
+```
+import julia
+julia.install()
+```
+in the Python REPL. You need to do this everytime you update Julia
+
+<!-- On MacOS, I have only gotten the Conda.jl method to work which requires these runs
 ```
 Conda.pip_interop(true, Conda.ROOTENV) # allow pip installation
 Conda.pip("install", ["<package-names>"], Conda.ROOTENV) # generic call to pip install a package
 ```
-and for package names, you can install any python package that supports pip installation.
-Unfortunately, you would have to reinstall all of MACH's modules if you do not use conda environment management.
-The list is:
+and for package names, you can install any python package that supports pip installation. -->
+
+The list of dependencies is:
 ```
+baseclasses
 pyspline
+prefoil
 pygeo
 ```
 
@@ -170,5 +179,15 @@ run_tests.jl
 
 ## Citation
 
-TODO: paper links
-For more, see the formal documentation <> and journal paper
+For more, see the [journal paper](https://doi.org/10.1016/j.compstruct.2024.118367). Please cite this article when using DCFoil in your research or curricula.
+
+Ng, Galen W., Eirikur Jonsson, Sicheng He, and Joaquim RRA Martins. "Dynamic hydroelasticity of composite appendages with reverse-mode algorithmic differentiation." Composite Structures 346 (2024): 118367.
+
+```
+@Article{Ng2024,
+    author      = {Galen W. Ng and Eirikur Jonsson and Sicheng He and Joaquim R.R.A. Martins},
+    title       = {Dynamic hydroelasticity of composite appendages with reverse-mode algorithmic differentiation},
+    doi         = {10.1016/j.compstruct.2024.118367},
+    journal     = {Composite Structures},
+    year        = {2024}}
+```

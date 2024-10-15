@@ -41,7 +41,7 @@ for headerName in [
     # --- Used in this script ---
     "InitModel", "struct/FEMMethods",
     "solvers/DCFoilSolution",
-    "io/TecplotIO",
+    "io/TecplotIO", "io/MeshIO",
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
     # include("./solvers/SolveBodyDynamics.jl")
     "CostFunctions",
@@ -97,7 +97,7 @@ function init_model(DVDictList, evalFuncsList; solverOptions)
     global costFuncsDict = Dict()
 
     # ---------------------------
-    #   Mesh generation
+    #   Component structs
     # ---------------------------
     global FOILList = []
     global STRUTList = []
@@ -109,33 +109,43 @@ function init_model(DVDictList, evalFuncsList; solverOptions)
         push!(STRUTList, STRUT)
     end
     global HULL = HULL
-
-    structMeshList, elemConnList = FEMMethods.make_fullMesh(DVDictList, solverOptions)
-    global FEMESHLIST = []
-    for iComp in eachindex(structMeshList)
-        DVDict = DVDictList[iComp]
-        structMesh = structMeshList[iComp]
-        elemConn = elemConnList[iComp]
-        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
-
-        push!(FEMESHLIST, FEMESH)
-    end
-
-    # --- Write mesh to tecplot for later visualization ---
-    for iComp in eachindex(structMeshList)
-        DVDict = DVDictList[iComp]
-        TecplotIO.write_mesh(DVDict, FEMESHLIST, solverOptions, outputDir, @sprintf("mesh_comp%03d.dat", iComp))
-    end
-    if solverOptions["debug"]
+    
+    # ---------------------------
+    #   Mesh generation/loading
+    # ---------------------------
+    if isnothing(solverOptions["gridFile"])
+        structMeshList, elemConnList = FEMMethods.make_fullMesh(DVDictList, solverOptions)
+        global FEMESHLIST = []
         for iComp in eachindex(structMeshList)
+            DVDict = DVDictList[iComp]
+            structMesh = structMeshList[iComp]
             elemConn = elemConnList[iComp]
-            open(outputDir * @sprintf("elemConn-comp%03d.txt", iComp), "w") do io
-                for iElem in eachindex(elemConn[:, 1])
-                    write(io, @sprintf("%03d\t%03d\n", elemConn[iElem, 1], elemConn[iElem, 2]))
+            FEMESH = FEMMethods.StructMesh(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
+
+            push!(FEMESHLIST, FEMESH)
+        end
+
+        # --- Write mesh to tecplot for later visualization ---
+        for iComp in eachindex(structMeshList)
+            DVDict = DVDictList[iComp]
+            TecplotIO.write_mesh(DVDict, FEMESHLIST, solverOptions, outputDir, @sprintf("mesh_comp%03d.dat", iComp))
+        end
+        if solverOptions["debug"]
+            for iComp in eachindex(structMeshList)
+                elemConn = elemConnList[iComp]
+                open(outputDir * @sprintf("elemConn-comp%03d.txt", iComp), "w") do io
+                    for iElem in eachindex(elemConn[:, 1])
+                        write(io, @sprintf("%03d\t%03d\n", elemConn[iElem, 1], elemConn[iElem, 2]))
+                    end
                 end
             end
         end
+    else
+        GridStruct = MeshIO.add_mesh(solverOptions["gridFile"])
+
+
     end
+
 
     # ************************************************
     #     Finally, print out a warning

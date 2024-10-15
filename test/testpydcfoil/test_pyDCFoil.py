@@ -56,11 +56,11 @@ if __name__ == "__main__":
     files = {}
     files["gridFile"] = ""
     filesSETUP = {
-    "adflow": "SETUP/setup_adflow.py",
-    "constants": "SETUP/setup_constants.py",
-    "dvgeo": "SETUP/setup_dvgeo.py",
-    "warping": "SETUP/setup_warp.py",
-}
+        "adflow": "SETUP/setup_adflow.py",
+        "constants": "SETUP/setup_constants.py",
+        "dvgeo": "SETUP/setup_dvgeo.py",
+        "warping": "SETUP/setup_warp.py",
+    }
 
     # ************************************************
     #     Geometric design variables
@@ -70,7 +70,21 @@ if __name__ == "__main__":
     # ************************************************
     #     Create dynamic beam solver
     # ************************************************
-    STICKSolver = setup_dcfoil.setup(args, comm, files)
+    evalFuncs = [
+        "wtip",
+        "psitip",
+        "cl",
+        "cmy",
+        "lift",
+        "moment",
+        "cdi",
+        "cdj",
+        "cdpr",
+        "cds",
+        # "ksflutter",
+    ]
+    STICKSolver = setup_dcfoil.setup(args, comm, files, evalFuncs)
+    STICKSolver.setDVGeo(DVGeo)
 
     # ************************************************
     #     Functions
@@ -79,20 +93,16 @@ if __name__ == "__main__":
         # FLUTTER FUNCS AT SPEED ENVELOPE BOUND ('flutterFuncs(x)' instead?)
         funcs = {}
 
-        # Update design variables
-        DVDict["c"] = x["chord"]
-        DVDict["theta_f"] = x["fiberangle"].item()
-        STICKSolver.setDesignVars(DVDict)
+        # Set design variables
+        ap.setDesignVars(x)
+        DVGeo.setDesignVars(x)
 
         # --- Solve ---
-        STICKSolver.solve()
+        STICKSolver(ap)
 
         # --- Grab cost funcs ---
-        funcs = STICKSolver.evalFunctions(funcs, evalFuncs=evalFuncs)
+        funcs = STICKSolver.evalFunctions(ap, funcs, evalFuncs=evalFuncs)
 
-        # --- Set objective ---
-        funcs["obj"] = 0
-        # funcs["obj"] = funcs["ksflutter"]
         for iapp in STICKSolver.solverOptions["appendageList"]:
             compName = iapp["compName"]
             funcs["obj"] += (
@@ -102,28 +112,17 @@ if __name__ == "__main__":
                 + funcs[f"cds-{compName}"]
             )
 
-        print("These are the funcs: ")
-        pp(funcs)
+        if comm.rank == 0:
+            print("These are the funcs: ")
+            pp(funcs)
 
-        return funcs
-
-    def flutterFuncs(x):
         return funcs
 
     def cruiseFuncsSens(x, funcs):
         funcsSens = {}
 
-        # Update design variables
-        DVDict["c"] = x["chord"]
-        DVDict["theta_f"] = x["fiberangle"].item()
-        STICKSolver.setDesignVars(DVDict)
-
         # --- Solve sensitivity ---
-        funcsSens = STICKSolver.evalFunctionsSens(funcsSens, evalFuncs=evalFuncs)
-
-        print("all funcsSens:")
-        pp(funcsSens)
-        print("", flush=True)
+        funcsSens = STICKSolver.evalFunctionsSens(ap, funcsSens, evalFuncs=evalFuncs)
 
         return funcsSens
 
