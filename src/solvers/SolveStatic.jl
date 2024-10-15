@@ -329,18 +329,29 @@ function compute_funcs(
     if "cdi" in evalFuncsList || "fxi" in evalFuncsList
         wingTwist = theta[1:appendageOptions["nNodes"]]
 
-        _, Fxi, CDi = HydroStrip.compute_glauert_circ(
+        _, F, CDi = HydroStrip.compute_hydroLLProperties(
             DVDict["s"],
             WING.chord,
             deg2rad(DVDict["alfa0"]),
-            solverOptions["Uinf"], appendageOptions["nNodes"];
-            h=DVDict["depth0"],
-            useFS=solverOptions["use_freeSurface"],
-            rho=solverOptions["rhof"],
-            twist=wingTwist,
-            debug=solverOptions["debug"],
-            config=appendageOptions["config"],
+            0.0, # rake
+            0.0,# sweep
+            0.0,# depth
+            ;
+            solverOptions=solverOptions
         )
+        Fxi = F[XDIM]
+        # _, Fxi, CDi = HydroStrip.compute_glauert_circ(
+        #     DVDict["s"],
+        #     WING.chord,
+        #     deg2rad(DVDict["alfa0"]),
+        #     solverOptions["Uinf"];
+        #     h=DVDict["depth0"],
+        #     useFS=solverOptions["use_freeSurface"],
+        #     rho=solverOptions["rhof"],
+        #     twist=wingTwist,
+        #     debug=solverOptions["debug"],
+        #     config=appendageOptions["config"],
+        # )
 
         if "cdi" in evalFuncsList
             costFuncs["cdi"] = CDi

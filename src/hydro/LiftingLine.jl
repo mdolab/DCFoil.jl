@@ -745,11 +745,10 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
     ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
 
-    # TODO: PICKUP HERE
     # println("clavec: $(∂cl∂α)")
 
-    p1 = plot(LLMesh.collocationPts[YDIM, :], ∂cl∂α, label="Lift curve slope")
-    savefig("test_clα.pdf")
+    # p1 = plot(LLMesh.collocationPts[YDIM, :], ∂cl∂α, label="Lift curve slope")
+    # savefig("test_clα.pdf")
 
     # p1 = plot(ctrl_pts[YDIM, :], NondimForces[ZDIM, :], label="Lift")
     # ylims!(0.0, 8)

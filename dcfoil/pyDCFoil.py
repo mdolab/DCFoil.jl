@@ -40,7 +40,7 @@ class DCFOILWarning(object):
 
 
 class DCFOIL:
-    def __init__(self, DVDictList:list, evalFuncs, options=None, debug=False):
+    def __init__(self, DVDictList: list, evalFuncs, options=None, debug=False):
         """
         Create the flutter solver class
 
@@ -68,7 +68,7 @@ class DCFOIL:
         # TODO LINK: https://julialang.github.io/PackageCompiler.jl/stable/libs.html#libraries
         try:
             if debug:
-                # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME. 
+                # THIS PART RUNS KINDA SLOWLY THE VERY FIRST TIME.
                 # It will be faster when the package is in the registry (else statement)
                 # Pull from local directory
                 repoDir = Path(__file__).parent.parent
@@ -129,6 +129,9 @@ class DCFOIL:
         #     print("| %-30s: %10.3f sec" % ("Total Init Time", initTime - startInitTime))
         #     print("+--------------------------------------------------+")
 
+    # ==============================================================================
+    #                         Internal functions
+    # ==============================================================================
     @staticmethod
     def _getDefaultOptions():
         defaultOptions = {
@@ -169,7 +172,29 @@ class DCFOIL:
             "rhoKS": 80.0,
         }
         return defaultOptions
+    
+    def _getObjectivesAndDVs(self):
+        """
+        All possible objectives and design variables
+        """
+        iDV = OrderedDict()
+        # iDV["theta"] = self.DCFoil.
 
+        dcfoilCostFunctions = {
+            "ksflutter": self.dcfoil,
+            "wtip": self.dcfoil,
+            "psitip": self.dcfoil,
+            "cl": self.dcfoil,
+            "cmy": self.dcfoil,
+            "lift": self.dcfoil,
+            "moment": self.dcfoil,
+        }
+
+        return iDV, dcfoilCostFunctions
+    
+    # ==============================================================================
+    #                         Main functions
+    # ==============================================================================
     def solve(self):
         """
         Solve foil problem
@@ -260,7 +285,9 @@ class DCFOIL:
         if evalFuncs is None:
             evalFuncs = sorted(self.evalFuncs)
 
-        costFuncsSens = self.DCFoil.evalFuncsSens(self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions, mode="ADJOINT")
+        costFuncsSens = self.DCFoil.evalFuncsSens(
+            self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions, mode="ADJOINT"
+        )
         self.costFuncsSens = costFuncsSens
 
         # if self.getOption("printTiming") and self.comm.rank == 0:
@@ -305,21 +332,10 @@ class DCFOIL:
 
         self.DVDict = DVs
 
-    def _getObjectivesAndDVs(self):
+    def setDVGeo(self, geo):
         """
-        All possible objectives and design variables
+        Adds DVGeo object to the solver
         """
-        iDV = OrderedDict()
-        # iDV["theta"] = self.DCFoil.
+        self.DVGeo = geo
 
-        dcfoilCostFunctions = {
-            "ksflutter": self.dcfoil,
-            "wtip": self.dcfoil,
-            "psitip": self.dcfoil,
-            "cl": self.dcfoil,
-            "cmy": self.dcfoil,
-            "lift": self.dcfoil,
-            "moment": self.dcfoil,
-        }
-
-        return iDV, dcfoilCostFunctions
+    def setProblem(self, aeroProblem):

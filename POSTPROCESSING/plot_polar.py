@@ -51,9 +51,7 @@ from helperPlotFuncs import (
 #                         Command line arguments
 # ==============================================================================
 parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--cases", type=str, default=[], nargs="+", help="Full case folder names in order"
-)
+parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
 parser.add_argument("--output", type=str, default=None)
 parser.add_argument("--is_paper", action="store_true", default=False)
 args = parser.parse_args()
@@ -246,13 +244,9 @@ if __name__ == "__main__":
         caseFSDirs = []
         if args.cases is not None:
             for alpha in alphas:
-                caseDirs.append(
-                    dataDir + args.cases[0] + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
-                )
+                caseDirs.append(dataDir + args.cases[0] + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}")
                 caseFSDirs.append(
-                    dataDir
-                    + args.cases[0].replace("t-foil", "t-foil-fs")
-                    + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
+                    dataDir + args.cases[0].replace("t-foil", "t-foil-fs") + f"/f{fiberang:.1f}_w0.0_alfa{alpha:.2f}"
                 )
         else:
             raise ValueError("Please specify a case to run postprocessing on")
@@ -318,11 +312,7 @@ if __name__ == "__main__":
     caseFSDirs = []
     for alpha in alphas:
         caseDirs.append(dataDir + args.cases[1] + f"/f0.0_w0.0_alfa{alpha:.2f}")
-        caseFSDirs.append(
-            dataDir
-            + args.cases[1].replace("t-foil", "t-foil-fs")
-            + f"/f0.0_w0.0_alfa{alpha:.2f}"
-        )
+        caseFSDirs.append(dataDir + args.cases[1].replace("t-foil", "t-foil-fs") + f"/f0.0_w0.0_alfa{alpha:.2f}")
 
     AlfaList = []
     CLDict["rigid"] = []
@@ -344,12 +334,7 @@ if __name__ == "__main__":
             print("No funcs.json file found...")
 
         CLDict["rigid"].append(funcs[f"cl-{compName}"])
-        CD = (
-            funcs[f"cdi-{compName}"]
-            + funcs[f"cds-{compName}"]
-            + funcs[f"cdpr-{compName}"]
-            + funcs[f"cdj-{compName}"]
-        )
+        CD = funcs[f"cdi-{compName}"] + funcs[f"cds-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cdj-{compName}"]
         CDDict["rigid"].append(CD)
 
     CLFSDict["rigid"] = []
@@ -372,12 +357,7 @@ if __name__ == "__main__":
             print("No funcs.json file found...")
 
         CLFSDict["rigid"].append(funcs[f"cl-{compName}"])
-        CD = (
-            funcs[f"cdi-{compName}"]
-            + funcs[f"cds-{compName}"]
-            + funcs[f"cdpr-{compName}"]
-            + funcs[f"cdj-{compName}"]
-        )
+        CD = funcs[f"cdi-{compName}"] + funcs[f"cds-{compName}"] + funcs[f"cdpr-{compName}"] + funcs[f"cdj-{compName}"]
         CDFSDict["rigid"].append(CD)
 
     # ************************************************
@@ -387,9 +367,7 @@ if __name__ == "__main__":
     dosave = not not fname
 
     # Create figure object
-    fig, axes = plt.subplots(
-        nrows=1, ncols=3, constrained_layout=True, figsize=(20, 4.5)
-    )
+    fig, axes = plt.subplots(nrows=1, ncols=3, constrained_layout=True, figsize=(20, 4.5))
 
     for ii, fiberang in enumerate(fiberangles):
         axes[0].plot(
@@ -472,9 +450,7 @@ if __name__ == "__main__":
     axes[2].set_xlabel("$\\alpha_r$ [$^{\\circ}$]")
     axes[2].set_ylabel("$C_D$", rotation="horizontal", ha="right", va="center")
 
-    axes[0].legend(
-        fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1
-    )
+    axes[0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
     axes[0].set_xlabel("$C_D$")
     axes[0].set_ylabel("$C_L$", rotation="horizontal", ha="right", va="center")

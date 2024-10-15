@@ -82,7 +82,7 @@ end
 function test_interp()
     """Test the my linear interpolation"""
     mesh = collect(0:0.1:2)
-    yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
+    yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0)
     xq = 0.5
 
     derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
@@ -253,7 +253,7 @@ function test_theodorsenDeriv()
     # ---------------------------
     #   Test glauert lift distribution
     # ---------------------------
-    cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
+    cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0)
     pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
     plot!(title="lift slope")
 

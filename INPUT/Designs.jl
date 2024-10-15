@@ -258,3 +258,68 @@ DVDictMain = Dict(
     "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
+
+# ==============================================================================
+#                         AM RUDDER T-FOIL
+# ==============================================================================
+DVDict = Dict(
+    "alfa0" => 0.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "c" => ".dat", # chord length [m]
+    "s" => 1.0, # semispan [m]
+    "ab" => ".dat", # dist from midchord to EA [m]
+    "toc" => ".dat", # thickness-to-chord ratio (mean)
+    "x_ab" => ".dat", # static imbalance [m]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
+    # --- Strut vars ---
+    "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
+    "rake" => 0.0, # rake angle about top of strut [deg]
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 2.8, # strut span [m]
+    "c_strut" => ".dat", # chord length [m]
+    "toc_strut" => ".dat", # thickness-to-chord ratio (mean)
+    "ab_strut" => ".dat", # dist from midchord to EA [m]
+    "x_ab_strut" => ".dat", # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
+)
+solverOptions = Dict(
+    # --- I/O ---
+    "name" => "R3E6",
+    "debug" => false,
+    "writeTecplotSolution" => true,
+    # ---------------------------
+    #   General appendage options
+    # ---------------------------
+    "appendageList" => appendageList,
+    "gravityVector" => [0.0, 0.0, -9.81],
+    # ---------------------------
+    #   Flow
+    # ---------------------------
+    "Uinf" => 18.0, # free stream velocity [m/s]
+    # "Uinf" => 11.0, # free stream velocity [m/s]
+    "rhof" => 1025.0, # fluid density [kg/m³]
+    # "use_nlll" => false, # use non-linear lifting line code
+    "use_nlll" => true, # use non-linear lifting line code
+    "use_freeSurface" => true,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    "use_dwCorrection" => true,
+    # ---------------------------
+    #   Solver modes
+    # ---------------------------
+    # --- Static solve ---
+    "run_static" => run_static,
+    "res_jacobian" => "CS",
+    # --- Forced solve ---
+    "run_forced" => run_forced,
+    "fSweep" => fSweep,
+    "tipForceMag" => tipForceMag,
+    # --- p-k (Eigen) solve ---
+    "run_modal" => run_modal,
+    "run_flutter" => run_flutter,
+    "nModes" => nModes,
+    "uRange" => uRange,
+    "maxQIter" => 100, # that didn't fix the slow run time...
+    "rhoKS" => 100.0,
+)

@@ -292,7 +292,12 @@ function test_dwWave()
     URange = LinRange(0.5, 10, 1000)
     chordRefM = sum(chordVec) / nNodes
 
-    clalfa, _, _ = DCFoil.HydroStrip.compute_glauert_circ(semispan, chordVec, alfa0, Uinf, nNodes)
+    solverOptions = Dict(
+        "Uinf" => Uinf,
+    )
+
+    clalfa, _, _ = DCFoil.HydroStrip.compute_hydroLLProperties(semispan * 2, chordVec, alfa0, 0.0, 0.0, 0.0; solverOptions)
+    # clalfa, _, _ = DCFoil.HydroStrip.compute_glauert_circ(semispan, chordVec, alfa0, Uinf)
 
     cl = clalfa * alfa0
     ξ = pcRatio * chordRefM
@@ -350,7 +355,12 @@ function test_dwWake()
         2.0 2.06
     ]
 
-    clalfa, _, _ = DCFoil.HydroStrip.compute_glauert_circ(semispan, chordVec, alfa0, Uinf, nNodes)
+    solverOptions = Dict(
+        "Uinf" => Uinf,
+    )
+
+    clalfa, _, _ = DCFoil.HydroStrip.compute_hydroLLProperties(semispan * 2, chordVec, alfa0, 0.0, 0.0, 0.0; solverOptions)
+    # clalfa, _, _ = DCFoil.HydroStrip.compute_glauert_circ(semispan, chordVec, alfa0, Uinf)
 
     cl = clalfa * alfa0
     CL = 0.35
@@ -993,7 +1003,7 @@ function test_45degwingLL()
     alpha = deg2rad(4.2)
 
     rootChord = 20.0 * 0.0254 # 20 inches
-    span = 5 * rootChord
+    span = 5 * rootChord # this is an aerodynamic span
     sweepAng = deg2rad(45)
     TR = 1.0
     npt_wing = 40
@@ -1003,7 +1013,7 @@ function test_45degwingLL()
         println("alpha: $(rad2deg(alpha))")
         Uvec = [cos(alpha), 0.0, sin(alpha)] * Uinf
         LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, span, sweepAng, rootChord, TR;
-            npt_wing=npt_wing, npt_airfoil,
+            npt_wing=npt_wing, npt_airfoil=npt_airfoil,
             # airfoilCoordFile=airfoilCoordFile,
             airfoil_ctrl_xy=airfoilCtrlXY,
             airfoil_xy=airfoilXY,

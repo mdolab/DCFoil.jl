@@ -3,7 +3,7 @@ module BeamProperties
 @File    :   BeamProperties.jl
 @Time    :   2024/01/30
 @Author  :   Galen Ng
-@Desc    :   Module for computing sectional properties of composite beams
+@Desc    :   Module for computing sectional properties of composite beams or reading from FEM file
 """
 
 using Zygote
@@ -152,7 +152,7 @@ end
 
 function compute_beam(nNodes::Int64,
     chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f,
-    constitutive::String
+    constitutive::String; solverOptions=nothing
 )
     EIₛ = zeros(RealOrComplex, nNodes)
     Kₛ = zeros(RealOrComplex, nNodes)

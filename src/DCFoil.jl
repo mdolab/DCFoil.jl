@@ -34,8 +34,9 @@ for headerName in [
     "solvers/NewtonRaphson",
     "solvers/EigenvalueProblem",
     "solvers/SolverRoutines",
-    "hydro/HydroStrip",
     "hydro/VPM", "hydro/LiftingLine", # General LL code
+    "hydro/GlauertLL", # Glauert LL code
+    "hydro/HydroStrip",
     "adrules/CustomRules",
     # --- Used in this script ---
     "InitModel", "struct/FEMMethods",
@@ -377,6 +378,7 @@ function set_defaultOptions!(solverOptions)
         "use_cavitation",
         "use_ventilation",
         "use_dwCorrection",
+        "use_nlll",
         # ************************************************
         #     Hull properties
         # ************************************************
@@ -414,6 +416,7 @@ function set_defaultOptions!(solverOptions)
         false,
         false,
         false,
+        false, # use_nlll
         # ************************************************
         #     Hull properties
         # ************************************************

@@ -3,7 +3,7 @@
 # @File    :   HydroStrip.jl
 # @Time    :   2022/05/18
 # @Author  :   Galen Ng
-# @Desc    :   Contains hydrodynamic routines
+# @Desc    :   Contains hydrodynamic routines and interfaces to other codes
 
 module HydroStrip
 
@@ -25,6 +25,8 @@ using FLOWMath: norm_cs_safe
 # --- DCFoil modules ---
 using ..SolverRoutines
 using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
+using ..GlauertLL: GlauertLL
+using ..LiftingLine: LiftingLine
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..DCFoil: RealOrComplex, DTYPE
@@ -143,148 +145,168 @@ function compute_cmdROM(k, hcRatio, Fnc)
 end
 
 # ==============================================================================
-#                         Lift forces
+#                         Hydro forces
 # ==============================================================================
-function compute_glauert_circ(
-    semispan, chordVec, α₀, U∞, nNodes;
-    h=nothing, useFS=false, rho=1000, twist=nothing, debug=false, config="wing"
-)
+function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0; solverOptions)
     """
-    Glauert's solution for the lift slope on a 3D hydrofoil
+    Wrapper function to the hydrodynamic lifting line properties
+    In this case, α is the angle by which the flow velocity vector is rotated, not the geometry
 
-    The coordinate system is
-
-    clamped root                         free tip
-    `+-----------------------------------------+  (x=0 @ LE)
-    `|                                         |
-    `|               +-->y                     |
-    `|               |                         |
-    `|             x v                         |
-    `+-----------------------------------------+
-    `
-    (y=0 @ root)
-
-    where z is out of the page (thickness dir.)
-    inputs:
-        α₀: float, angle of attack [rad]
-
-    returns:
-        cl_α : array, shape (nNodes,)
-            sectional lift slopes for a 3D wing [rad⁻¹] starting from the root
-            sometimes denoted in literature as 'a₀'
-        Fx_ind : float
-            induced drag force
-        CDi : float
-            induced drag coefficient
-
-    NOTE:
-    We use keyword arguments (denoted by the ';' to be more explicit)
-    THIS CODE DOES NOT WORK WITH ZERO ALPHA
-
-    This follows the formulation in
-    'Principles of Naval Architecture Series (PNA) - Propulsion 2010'
-    by Justin Kerwin & Jacques Hadler
+    Outputs
+    -------
+    cla: vector
+        Lift slope wrt angle of attack (rad^-1) for each spanwise station
     """
 
-    nNodes = length(chordVec)
+    if solverOptions["use_nlll"]
+        println("Using NLLL")
 
-    ỹ = π / 2 * (LinRange(1, nNodes, nNodes) / nNodes) # parametrized y-coordinate (0, π/2) NOTE: in PNA, ỹ is from 0 to π for the full span
-    y = -semispan * cos.(ỹ) # the physical coordinate (y) is only calculated to the root (-semispan, 0)
-    # ---------------------------
-    #   PLANFORM SHAPES: rectangular is outdated
-    # ---------------------------
-    # --- Actual chord ---
-    chordₚ = chordVec
-    # This does exhibit the correct tapering behavior where the vorticity increases outboard for more tapered geometry.
-    # # --- Nearly "Elliptical" planform if the chordVec is all ones ---
-    # chordₚ = chordVec .* sin.(ỹ) # parametrized chord goes from 0 to the original chord value from tip to root...corresponds to amount of downwash w(y)?
+        # Hard-coded NACA0012
+        airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
+        airfoilX = [1.00000000e+00, 9.98993338e-01, 9.95977406e-01, 9.90964349e-01,
+            9.83974351e-01, 9.75035559e-01, 9.64183967e-01, 9.51463269e-01,
+            9.36924689e-01, 9.20626766e-01, 9.02635129e-01, 8.83022222e-01,
+            8.61867019e-01, 8.39254706e-01, 8.15276334e-01, 7.90028455e-01,
+            7.63612734e-01, 7.36135537e-01, 7.07707507e-01, 6.78443111e-01,
+            6.48460188e-01, 6.17879468e-01, 5.86824089e-01, 5.55419100e-01,
+            5.23790958e-01, 4.92067018e-01, 4.60375022e-01, 4.28842581e-01,
+            3.97596666e-01, 3.66763093e-01, 3.36466018e-01, 3.06827437e-01,
+            2.77966694e-01, 2.50000000e-01, 2.23039968e-01, 1.97195156e-01,
+            1.72569633e-01, 1.49262556e-01, 1.27367775e-01, 1.06973453e-01,
+            8.81617093e-02, 7.10082934e-02, 5.55822757e-02, 4.19457713e-02,
+            3.01536896e-02, 2.02535132e-02, 1.22851066e-02, 6.28055566e-03,
+            2.26403871e-03, 2.51728808e-04, 2.51728808e-04, 2.26403871e-03,
+            6.28055566e-03, 1.22851066e-02, 2.02535132e-02, 3.01536896e-02,
+            4.19457713e-02, 5.55822757e-02, 7.10082934e-02, 8.81617093e-02,
+            1.06973453e-01, 1.27367775e-01, 1.49262556e-01, 1.72569633e-01,
+            1.97195156e-01, 2.23039968e-01, 2.50000000e-01, 2.77966694e-01,
+            3.06827437e-01, 3.36466018e-01, 3.66763093e-01, 3.97596666e-01,
+            4.28842581e-01, 4.60375022e-01, 4.92067018e-01, 5.23790958e-01,
+            5.55419100e-01, 5.86824089e-01, 6.17879468e-01, 6.48460188e-01,
+            6.78443111e-01, 7.07707507e-01, 7.36135537e-01, 7.63612734e-01,
+            7.90028455e-01, 8.15276334e-01, 8.39254706e-01, 8.61867019e-01,
+            8.83022222e-01, 9.02635129e-01, 9.20626766e-01, 9.36924689e-01,
+            9.51463269e-01, 9.64183967e-01, 9.75035559e-01, 9.83974351e-01,
+            9.90964349e-01, 9.95977406e-01, 9.98993338e-01, 1.00000000e+00]
 
-    # --- Geometric twist effect ---
-    if twist != nothing
-        # First parametrize the twist as a function of ytilde
-        xnew = cos.(ỹ) # cosine spacing
-        xlin = LinRange(0.0, 1.0, nNodes) # linear spacing
-        ftheta = SolverRoutines.do_linear_interp(xlin, twist, xnew)
-        α₀ = α₀ .+ ftheta
+        airfoilY = [1.33226763e-17, -1.41200438e-04, -5.63343432e-04, -1.26208774e-03,
+            -2.23030811e-03, -3.45825298e-03, -4.93375074e-03, -6.64245132e-03,
+            -8.56808791e-03, -1.06927428e-02, -1.29971013e-02, -1.54606806e-02,
+            -1.80620201e-02, -2.07788284e-02, -2.35880799e-02, -2.64660655e-02,
+            -2.93884006e-02, -3.23300020e-02, -3.52650469e-02, -3.81669313e-02,
+            -4.10082448e-02, -4.37607812e-02, -4.63956016e-02, -4.88831639e-02,
+            -5.11935307e-02, -5.32966591e-02, -5.51627743e-02, -5.67628192e-02,
+            -5.80689678e-02, -5.90551853e-02, -5.96978089e-02, -5.99761253e-02,
+            -5.98729133e-02, -5.93749219e-02, -5.84732545e-02, -5.71636340e-02,
+            -5.54465251e-02, -5.33271006e-02, -5.08150416e-02, -4.79241724e-02,
+            -4.46719377e-02, -4.10787401e-02, -3.71671601e-02, -3.29610920e-02,
+            -2.84848303e-02, -2.37621474e-02, -1.88154040e-02, -1.36647314e-02,
+            -8.32732576e-03, -2.81688492e-03, 2.81688492e-03, 8.32732576e-03,
+            1.36647314e-02, 1.88154040e-02, 2.37621474e-02, 2.84848303e-02,
+            3.29610920e-02, 3.71671601e-02, 4.10787401e-02, 4.46719377e-02,
+            4.79241724e-02, 5.08150416e-02, 5.33271006e-02, 5.54465251e-02,
+            5.71636340e-02, 5.84732545e-02, 5.93749219e-02, 5.98729133e-02,
+            5.99761253e-02, 5.96978089e-02, 5.90551853e-02, 5.80689678e-02,
+            5.67628192e-02, 5.51627743e-02, 5.32966591e-02, 5.11935307e-02,
+            4.88831639e-02, 4.63956016e-02, 4.37607812e-02, 4.10082448e-02,
+            3.81669313e-02, 3.52650469e-02, 3.23300020e-02, 2.93884006e-02,
+            2.64660655e-02, 2.35880799e-02, 2.07788284e-02, 1.80620201e-02,
+            1.54606806e-02, 1.29971013e-02, 1.06927428e-02, 8.56808791e-03,
+            6.64245132e-03, 4.93375074e-03, 3.45825298e-03, 2.23030811e-03,
+            1.26208774e-03, 5.63343432e-04, 1.41200438e-04, -1.33226763e-17]
+        airfoilCtrlX = [9.99496669e-01, 9.97485372e-01, 9.93470878e-01, 9.87469350e-01,
+            9.79504955e-01, 9.69609763e-01, 9.57823618e-01, 9.44193979e-01,
+            9.28775727e-01, 9.11630948e-01, 8.92828675e-01, 8.72444620e-01,
+            8.50560862e-01, 8.27265520e-01, 8.02652394e-01, 7.76820594e-01,
+            7.49874136e-01, 7.21921522e-01, 6.93075309e-01, 6.63451649e-01,
+            6.33169828e-01, 6.02351778e-01, 5.71121594e-01, 5.39605029e-01,
+            5.07928988e-01, 4.76221020e-01, 4.44608801e-01, 4.13219623e-01,
+            3.82179880e-01, 3.51614556e-01, 3.21646728e-01, 2.92397065e-01,
+            2.63983347e-01, 2.36519984e-01, 2.10117562e-01, 1.84882395e-01,
+            1.60916095e-01, 1.38315166e-01, 1.17170614e-01, 9.75675810e-02,
+            7.95850013e-02, 6.32952845e-02, 4.87640235e-02, 3.60497304e-02,
+            2.52036014e-02, 1.62693099e-02, 9.28283111e-03, 4.27229719e-03,
+            1.25788376e-03, 2.51728808e-04, 1.25788376e-03, 4.27229719e-03,
+            9.28283111e-03, 1.62693099e-02, 2.52036014e-02, 3.60497304e-02,
+            4.87640235e-02, 6.32952845e-02, 7.95850013e-02, 9.75675810e-02,
+            1.17170614e-01, 1.38315166e-01, 1.60916095e-01, 1.84882395e-01,
+            2.10117562e-01, 2.36519984e-01, 2.63983347e-01, 2.92397065e-01,
+            3.21646728e-01, 3.51614556e-01, 3.82179880e-01, 4.13219623e-01,
+            4.44608801e-01, 4.76221020e-01, 5.07928988e-01, 5.39605029e-01,
+            5.71121594e-01, 6.02351778e-01, 6.33169828e-01, 6.63451649e-01,
+            6.93075309e-01, 7.21921522e-01, 7.49874136e-01, 7.76820594e-01,
+            8.02652394e-01, 8.27265520e-01, 8.50560862e-01, 8.72444620e-01,
+            8.92828675e-01, 9.11630948e-01, 9.28775727e-01, 9.44193979e-01,
+            9.57823618e-01, 9.69609763e-01, 9.79504955e-01, 9.87469350e-01,
+            9.93470878e-01, 9.97485372e-01, 9.99496669e-01]
+        airfoilCtrlY = [-7.06002188e-05, -3.52271935e-04, -9.12715585e-04, -1.74619792e-03,
+            -2.84428054e-03, -4.19600186e-03, -5.78810103e-03, -7.60526962e-03,
+            -9.63041534e-03, -1.18449221e-02, -1.42288910e-02, -1.67613504e-02,
+            -1.94204243e-02, -2.21834542e-02, -2.50270727e-02, -2.79272331e-02,
+            -3.08592013e-02, -3.37975244e-02, -3.67159891e-02, -3.95875880e-02,
+            -4.23845130e-02, -4.50781914e-02, -4.76393828e-02, -5.00383473e-02,
+            -5.22450949e-02, -5.42297167e-02, -5.59627967e-02, -5.74158935e-02,
+            -5.85620766e-02, -5.93764971e-02, -5.98369671e-02, -5.99245193e-02,
+            -5.96239176e-02, -5.89240882e-02, -5.78184443e-02, -5.63050796e-02,
+            -5.43868129e-02, -5.20710711e-02, -4.93696070e-02, -4.62980550e-02,
+            -4.28753389e-02, -3.91229501e-02, -3.50641261e-02, -3.07229612e-02,
+            -2.61234889e-02, -2.12887757e-02, -1.62400677e-02, -1.09960286e-02,
+            -5.57210534e-03, 0.00000000e+00, 5.57210534e-03, 1.09960286e-02,
+            1.62400677e-02, 2.12887757e-02, 2.61234889e-02, 3.07229612e-02,
+            3.50641261e-02, 3.91229501e-02, 4.28753389e-02, 4.62980550e-02,
+            4.93696070e-02, 5.20710711e-02, 5.43868129e-02, 5.63050796e-02,
+            5.78184443e-02, 5.89240882e-02, 5.96239176e-02, 5.99245193e-02,
+            5.98369671e-02, 5.93764971e-02, 5.85620766e-02, 5.74158935e-02,
+            5.59627967e-02, 5.42297167e-02, 5.22450949e-02, 5.00383473e-02,
+            4.76393828e-02, 4.50781914e-02, 4.23845130e-02, 3.95875880e-02,
+            3.67159891e-02, 3.37975244e-02, 3.08592013e-02, 2.79272331e-02,
+            2.50270727e-02, 2.21834542e-02, 1.94204243e-02, 1.67613504e-02,
+            1.42288910e-02, 1.18449221e-02, 9.63041534e-03, 7.60526962e-03,
+            5.78810103e-03, 4.19600186e-03, 2.84428054e-03, 1.74619792e-03,
+            9.12715585e-04, 3.52271935e-04, 7.06002188e-05]
+
+        airfoilXY = copy(transpose(hcat(airfoilX, airfoilY)))
+        airfoilCtrlXY = copy(transpose(hcat(airfoilCtrlX, airfoilCtrlY)))
+
+        npt_wing = 40
+        npt_airfoil = 99
+
+        rootChord = chordVec[1]
+        TR = chordVec[end] / rootChord
+
+        Uvec = [cos(α₀), 0.0, sin(α₀)] * solverOptions["Uinf"]
+
+        # --- Structural span is not the same as aero span ---
+        aeroSpan = span * cos(sweepAng)
+
+
+        # TODO DEBUG THIS INTEGRATION INTO THE WORKFLOW INTERPOLATION STUFF
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, aeroSpan, sweepAng, rootChord, TR;
+            npt_wing=npt_wing,
+            npt_airfoil=npt_airfoil,
+            rhof=solverOptions["rhof"],
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
+        )
+        LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLHydro, Airfoils, AirfoilInfluences)
+
+        Fdist = LLOutputs.Fdist
+        F = LLOutputs.F
+        cla = LLOutputs.cla
+        CDi = LLOutputs.CDi
     else
-        α₀ = ones(nNodes) * α₀
-    end
-    n = (1:1:nNodes) * 2 - ones(nNodes) # node numbers x2 (node multipliers in the Fourier series)
-
-    mu = π / 4 * (chordₚ / semispan)
-    b = mu .* α₀ .* sin.(ỹ) # RHS vector
-
-    # Matrix
-    ỹn = ỹ .* n' # outer product of ỹ and n, matrix of [0, π/2]*node multipliers
-
-    sinỹ_mat = repeat(sin.(ỹ), outer=[1, nNodes]) # parametrized square matrix where the columns go from 0 to 1
-    chord_ratio_mat = mu .* n' # outer product of [0,...,tip chord-semispan ratio] and [1:2:nNodes*2-1] so the columns are the chord-span ratio vector times node multipliers with π/4 in front
-
-    chord11 = sin.(ỹn) .* (chord_ratio_mat + sinỹ_mat) # matrix-matrix multiplication to get the [A] matrix
-
-    # --- Solve for the Fourier coefficients in Glauert's Fourier series ---
-    ã = chord11 \ b # a_n
-
-    γ = 4 * U∞ * semispan .* (sin.(ỹn) * ã) # span-wise distribution of free vortex strength (Γ(y) in textbook)
-    if config == "t-foil"
-        γ = vcat(copy(γ[1:end-1]), 0.0)
-        # println("Zeroing out the root vortex strength")
+        cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α₀ + rake), solverOptions["Uinf"];
+            h=depth0,
+            useFS=solverOptions["use_freeSurface"],
+            rho=solverOptions["rhof"],
+            # config=foilOptions["config"], # legacy option
+            debug=solverOptions["debug"]
+        )
+        F = [Fxind, 0.0, 0.0, 0.0, 0.0, 0.0]
     end
 
-    if useFS
-        # ChainRulesCore.ignore_derivatives() do
-        #     println("Using free surface")
-        # end
-        γ_FS = use_free_surface(γ, α₀, U∞, chordVec, h)
-        γ = γ_FS
-    end
-
-
-    cl = (2 * γ) ./ (U∞ * chordVec) # sectional lift coefficient cl(y) = cl_α*α
-    clα = cl ./ (α₀ .+ 1e-12) # sectional lift slope clα but on parametric domain; use safe check on α=0
-
-    # --- Interpolate lift slopes onto domain ---
-    # dl = semispan / (nNodes - 1)
-    xq = LinRange(-semispan, 0.0, nNodes)
-
-    cℓ = SolverRoutines.do_linear_interp(y, cl, xq)
-    cl_α = SolverRoutines.do_linear_interp(y, clα, xq)
-    # If this is fully ventilated, can divide the slope by 4
-
-    # if solverOptions["config"] == "t-foil"
-    #     cl_α[end] = 0.0
-    #     println("Zeroing out the root vortex strength")
-    # end
-
-    # ************************************************
-    #     Lift-induced drag computation
-    # ************************************************
-    downwashDistribution = -U∞ * (sin.(ỹn) * (n .* ã)) ./ sin.(ỹ)
-    wy = SolverRoutines.do_linear_interp(y, downwashDistribution, xq)
-
-    Fx_ind = 0.0
-    dy = semispan / (nNodes)
-    spanwiseVorticity = SolverRoutines.do_linear_interp(y, γ, xq)
-
-    for ii in 1:nNodes
-        Fx_ind += -rho * spanwiseVorticity[ii] * wy[ii] * dy
-    end
-
-    # Assumes half wing drag
-    CDi = Fx_ind / (0.5 * rho * U∞^2 * semispan * mean(chordVec))
-
-    if debug
-        println("Plotting debug hydro")
-        layout = @layout [a b ;c d]
-        p1 = plot(y, γ ./ (4 * U∞ * semispan), label="γ(y)/2Us", xlabel="y", ylabel="γ(y)", title="Spanwise distribution")
-        p2 = plot(y, wy ./ U∞, label="w(y)/Uinf", ylabel="w(y)/Uinf", linecolor=:red)
-        p3 = plot(y, cl, label="cl(y)", ylabel="cl(y)", linecolor=:green, ylim=(-1.0, 1.0))
-        p4 = plot(y, cl_α, label="cl_α(y)", ylabel="cl_α(y)", linecolor=:blue)
-        plot(p1, p2, p3, p4, layout=layout)
-        savefig("DebugOutput/debug_spanwise_distribution.png")
-    end
-
-    return reverse(cl_α), Fx_ind, CDi
+    return cla, F, CDi
 end
 
 function correct_downwash(
@@ -396,43 +418,6 @@ function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
 
     a0 = ((π / 2) * (Lc_c^3) - 2 * (Lc_c^2) + 4.5 * Lc_c + 1) / ((Lc_c^3) - (Lc_c^2) + 0.75 * Lc_c + 1 / (2π))
     return a0
-end
-
-function use_free_surface(γ, α₀, U∞, chordVec, h)
-    """
-    Modify hydro loads based on the free-surface condition that is Fn independent
-
-    Inputs
-    ------
-        γ spanwise vortex strength m^2/s
-        NOTE: with the current form, this is the negative of what some textbooks do so for example
-        Typically L = - ρ U int( Γ(y))dy
-        but Kerwin and Hadler do
-        C_L = 2Γ/(Uc)
-    Returns:
-    --------
-        γ_FS modified vortex strength using the high-speed, free-surface BC
-    """
-
-    Fnh = U∞ / (√(9.81 * h))
-    # Find limiting case
-    if real(Fnh) < real(10 / √(h / mean(chordVec)))
-        println("Violating high-speed free-surface BC with Fnh*√(h/c) of")
-        println(Fnh * √(h / mean(chordVec)))
-        println("Fnh: $(Fnh)")
-    end
-
-    # Circulation with no FS effect
-    γ_2DnoFS = -(U∞ * chordVec) .* (π * α₀)
-
-    # Circulation with high-speed FS effect
-    correctionVector = (1.0 .+ 16.0 .* (h ./ chordVec) .^ 2) ./ (2.0 .+ 16.0 .* (h ./ chordVec) .^ 2)
-    γ_2DFS = -(U∞ * chordVec) .* (π * α₀) .* correctionVector
-
-    # Corrected circulation
-    γ_FS = γ .+ γ_2DnoFS .- γ_2DFS
-
-    return γ_FS
 end
 
 # ==============================================================================

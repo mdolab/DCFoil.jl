@@ -54,56 +54,31 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # ************************************************
 #     Setup solver options
 # ************************************************
+# TODO: PICKUP HERE MAKE IT SO DCFOIL WORKS WITH LE AND TE LINES AND THICKNESS DATA
 DVDictRudder = Dict(
-    "alfa0" => 2.0, # initial angle of attack [deg] (base rake)
+    "alfa0" => 0.0, # initial angle of attack [deg]
     "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
-    # "c" => 0.14 * ones(nNodes), # chord length [m]
-    "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
-    "s" => 0.333, # semispan [m]
-    "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (mean)
-    "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
+    "c" => ".dat", # chord length [m]
+    "s" => 1.0, # semispan [m]
+    "ab" => ".dat", # dist from midchord to EA [m]
+    "toc" => ".dat", # thickness-to-chord ratio (mean)
+    "x_ab" => ".dat", # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
-    "depth0" => 0.5, # submerged depth of strut [m] # from Yingqian
+    "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0, # rake angle about top of strut [deg]
     "beta" => 0.0, # yaw angle wrt flow [deg]
-    "s_strut" => 1.0, # [m]
-    "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
-    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
-    "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
+    "s_strut" => 2.8, # strut span [m]
+    "c_strut" => ".dat", # chord length [m]
+    "toc_strut" => ".dat", # thickness-to-chord ratio (mean)
+    "ab_strut" => ".dat", # dist from midchord to EA [m]
+    "x_ab_strut" => ".dat", # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 
-# ************************************************
-#     Main T-foil (aka daggerboard)
-# ************************************************
-# Dimensions are from Day 2019
-DVDictMain = Dict(
-    "alfa0" => 2.0, # initial angle of attack [deg] (base rake)
-    "sweep" => deg2rad(0.0), # sweep angle [rad]
-    "zeta" => 0.04, # modal damping ratio at first 2 modes
-    "c" => collect(LinRange(0.125, 0.045, nNodes)), # chord length [m]
-    "s" => 0.494, # semispan [m]
-    "ab" => 0.0 * ones(Float64, nNodes), # dist from midchord to EA [m]
-    "toc" => 0.128 * ones(Float64, nNodes), # thickness-to-chord ratio (max from paper)
-    "x_ab" => 0.0 * ones(Float64, nNodes), # static imbalance [m]
-    "theta_f" => deg2rad(-15), # fiber angle global [rad]
-    # --- Strut vars ---
-    "rake" => 0.0, # rake angle about top of strut [deg]
-    "depth0" => 0.5, # submerged depth of strut [m] # from Yingqian
-    "beta" => 0.0, # yaw angle wrt flow [deg]
-    "s_strut" => 1.0, # from Yingqian
-    "c_strut" => 0.11 * ones(nNodesStrut), # chord length [m]
-    "toc_strut" => 0.145 * ones(nNodesStrut), # thickness-to-chord ratio (max from paper)
-    "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
-    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
-)
-DVDictList = [DVDictMain, DVDictRudder]
+DVDictList = [DVDictRudder]
 
 rudderOptions = Dict(
     "compName" => "rudder",
@@ -114,20 +89,16 @@ rudderOptions = Dict(
     "xMount" => 3.355,
     "material" => "cfrp", # preselect from material library
     "strut_material" => "cfrp",
+    # "path_to_props" => "./INPUT/1DPROPS", # path to 1D properties
+    "path_to_props" => nothing,
 )
 
-wingOptions = copy(rudderOptions)
-wingOptions["compName"] = "main"
-wingOptions["xMount"] = 1.012
-appendageList = [wingOptions, rudderOptions]
+appendageList = [rudderOptions]
 
 solverOptions = Dict(
-    # ---------------------------
-    #   I/O
-    # ---------------------------
-    # "name" => "akcabay-swept",
-    "name" => "t-foil",
-    "debug" => debug,
+    # --- I/O ---
+    "name" => "R3E6",
+    "debug" => false,
     "writeTecplotSolution" => true,
     # ---------------------------
     #   General appendage options
@@ -140,6 +111,7 @@ solverOptions = Dict(
     "Uinf" => 18.0, # free stream velocity [m/s]
     # "Uinf" => 11.0, # free stream velocity [m/s]
     "rhof" => 1025.0, # fluid density [kg/m³]
+    "use_nlll" => true, # use non-linear lifting line code
     "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,
