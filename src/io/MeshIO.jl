@@ -10,6 +10,7 @@
 
 module MeshIO
 
+NSKIP = 1 # Number of lines to skip in the mesh file
 
 struct Grid{TF,TI}
     """
@@ -39,8 +40,18 @@ function add_mesh(gridFile)
 end
 
 function read_dcf(gridFile)
+    """
+    Read the mesh file in the *.DCF format
+    The component mesh should be in the format:
+    <component-name>
+    LE
+    <x y z>
+    TE
+    <x y z>
 
-    nSkip = 1
+    Make sure that these points go in the direction you want the composite fiber angles to be along
+    """
+
     f = open(gridFile, "r")
 
     # --- Read the file ---
@@ -55,7 +66,7 @@ function read_dcf(gridFile)
     LEctr = 1
     TEctr = 1
     for (ii, line) in enumerate(eachline(f))
-        if ii > nSkip
+        if ii > NSKIP
 
             # --- Boolean checking ---
             if occursin("TE", uppercase(line))
@@ -72,23 +83,23 @@ function read_dcf(gridFile)
             # Add to data structs
             if isLE
                 push!(LEMesh, [parse(Float64, x) for x in split(line, " ")])
-                
-                if LEctr > nSkip + 1
-                    push!(LEConn, [LEctr - 1, LEctr])
+
+                if LEctr > NSKIP + 1
+                    push!(LEConn, [LEctr - 2, LEctr - 1])
                 end
                 LEctr += 1
             elseif isTE
                 # TEMesh = hcat(TEMesh, [parse(Float64, x) for x in split(line, " ")])
-                
+
                 push!(TEMesh, [parse(Float64, x) for x in split(line, " ")])
 
-                if TEctr > nSkip + 1
+                if TEctr > NSKIP + 1
                     # TEConn = hcat(TEConn, [TEctr - 1, TEctr])
-                    push!(TEConn, [TEctr - 1, TEctr])
+                    push!(TEConn, [TEctr - 2, TEctr - 1])
                 end
                 TEctr += 1
             end
-            
+
         end
     end
     # Turn data structs into matrices

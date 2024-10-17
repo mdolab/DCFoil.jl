@@ -29,6 +29,7 @@ import numpy as np
 # ==============================================================================
 from baseclasses import AeroProblem
 from pygeo import DVGeometry
+
 # from pyspline.utils import (
 #     openTecplot,
 #     writeTecplot1D,
@@ -47,9 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="OUTPUT")
     parser.add_argument("--animate", default=False, action="store_true")
     parser.add_argument("--deriv", default=False, action="store_true")
-    parser.add_argument(
-        "--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat"
-    )
+    parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
     parser.add_argument(
         "--geovar",
         type=str,
@@ -66,7 +65,7 @@ if __name__ == "__main__":
     print(30 * "-", flush=True)
 
     files = {}
-    files["gridFile"] = f"{args.input}/{args.foil}_mesh.dcf"
+    files["gridFile"] = f"{args.input}/{args.foil}_foil_mesh.dcf"
     files["FFDFile"] = f"{args.input}/{args.foil}_ffd.xyz"
 
     outputDir = f"{args.output}/embedding/"
@@ -95,7 +94,7 @@ if __name__ == "__main__":
         TSuthDim=temp,
     )
 
-    STICKSolver = setup_dcfoil.setup(args, None, files, evalFuncs)
+    STICKSolver, solverOptions = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir)
 
     # ==============================================================================
     #                         DVGeometry setup
@@ -141,7 +140,7 @@ if __name__ == "__main__":
                 #     geo.rot_y["c4_v1"].coef[ii + nSkip] = val[ii]
 
         DVGeo.addGlobalDV(
-            "foil_twist",
+            "twist",
             value=np.zeros(nTwist),
             func=twist_roty_func,
             # func=twist_rottheta_func,
@@ -293,19 +292,19 @@ if __name__ == "__main__":
 
         nSkip = 4
 
-        def chords(val, geo):
-            # Set all the global chord values
-            for ii in range(nSkip, nRefAxPts):
-                geo.scale["global"].coef[ii] = val[ii - nSkip]
+        # def chords(val, geo):
+        #     # Set all the global chord values
+        #     for ii in range(nSkip, nRefAxPts):
+        #         geo.scale["global"].coef[ii] = val[ii - nSkip]
 
-        DVGeo.addGlobalDV(
-            "chord",
-            value=np.ones(nRefAxPts - nSkip) * 0.1,
-            func=chords,
-            lower=0.01,
-            upper=0.2,
-            scale=1.0,
-        )
+        # DVGeo.addGlobalDV(
+        #     "chord",
+        #     value=np.ones(nRefAxPts - nSkip) * 0.1,
+        #     func=chords,
+        #     lower=0.01,
+        #     upper=0.2,
+        #     scale=1.0,
+        # )
 
         def taper(val, geo):
             s = geo.extractS("global")
@@ -315,10 +314,10 @@ if __name__ == "__main__":
 
         DVGeo.addGlobalDV(
             "taper",
-            value=[0.1, 0.1],
+            value=np.ones(2) * 1.0,
             func=taper,
-            lower=[0.01, 0.01],
-            upper=[0.2, 0.2],
+            lower=[0.1, 0.1],
+            upper=[1.5, 1.5],
             scale=1.0,
         )
 
@@ -331,12 +330,10 @@ if __name__ == "__main__":
             C = geo.extractCoef("global")
             s = geo.extractS("global")
             for ii in range(1, nRefAxPts):
-                C[ii, 2] += val * s[ii]
+                C[ii, 1] += val * s[ii]
             geo.restoreCoef(C, "global")
 
-        DVGeo.addGlobalDV(
-            dvName="span", value=0.0, func=span, lower=-10.0, upper=20.0, scale=0.1
-        )
+        DVGeo.addGlobalDV(dvName="span", value=0.0, func=span, lower=-10.0, upper=20.0, scale=0.1)
 
     # ************************************************
     #     Double check the embedding
@@ -346,7 +343,9 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         Set it for solver
     # ==============================================================================
+    # STICKSolver.setDVGeo(DVGeo, debug=True)
     STICKSolver.setDVGeo(DVGeo)
+    STICKSolver.addMesh(solverOptions["gridFile"])
 
     # ==============================================================================
     #                         Do deformations
@@ -370,43 +369,46 @@ if __name__ == "__main__":
             # if comm.rank == 0:
             Path(dirName).mkdir(exist_ok=True, parents=True)
             STICKSolver.setOption("outputDir", dirName)
-            n_twist = 40  # number of increments
+            n_twist = 20  # number of increments
 
-            wave = np.sin(np.linspace(0, 2 * np.pi, n_twist)) * 15.0
+            mag = 15.0
+            wave = mag * np.sin(np.linspace(0, 2 * np.pi, n_twist))
 
             i_frame = 0
             ap.callCounter = 0
 
-            twist_vals = np.array(
-                [
-                    [00.0, 30.0, 30.0, 30.0, 30.0, 30.0],
-                    [30.0, 0.0, -30.0, 0.0, 30.0, 30.0],
-                    [0.0, 10.0, -30.0, 0.0, 30.0, 30.0],
-                    [10.0, 0.0, -30.0, 0.0, 30.0, 30.0],
-                    [-30.0, 0.0, 30.0, 0.0, -30.0, 30.0],
-                    # [0.0, 30.0],
-                    # [10.0, 30.0],
-                    # [20.0, 30.0],
-                ]
-            )
+            # twist_vals = np.array(
+            #     [
+            #         [00.0, 30.0, 30.0, 30.0, 30.0, 30.0],
+            #         [30.0, 0.0, -30.0, 0.0, 30.0, 30.0],
+            #         [0.0, 10.0, -30.0, 0.0, 30.0, 30.0],
+            #         [10.0, 0.0, -30.0, 0.0, 30.0, 30.0],
+            #         [-30.0, 0.0, 30.0, 0.0, -30.0, 30.0],
+            #         # [0.0, 30.0],
+            #         # [10.0, 30.0],
+            #         # [20.0, 30.0],
+            #     ]
+            # )
+            for ii in range(1, nTwist):
 
+                # for ind, val in enumerate(twist_vals):
+                for val in wave:
 
-            for ind, val in enumerate(twist_vals):
+                    print(val)
+                    dvDict = DVGeo.getValues()
+                    dvDict["twist"][ii] = val
+                    DVGeo.setDesignVars(dvDict)
 
-                print(ind, val)
-                dvDict = DVGeo.getValues()
-                dvDict["twist"] = val
-                DVGeo.setDesignVars(dvDict)
+                    # ap.name = "twist"
+                    STICKSolver.setAeroProblem(ap)
+                    STICKSolver.writeSolution(number=i_frame, baseName="twist")
 
-                # ap.name = "twist"
-                STICKSolver.setAeroProblem(ap)
-                STICKSolver.writeSolution(number=i_frame, baseName="twist")
+                    # Write deformed FFD
+                    DVGeo.writeTecplot(f"{dirName}/twist_{i_frame:03d}_ffd.dat")
+                    DVGeo.writeRefAxes(f"{dirName}/twist_{i_frame:03d}_axes")
 
-                # Write deformed FFD
-                DVGeo.writeTecplot(f"{dirName}/twist_{i_frame:03d}_ffd.dat")
-                DVGeo.writeRefAxes(f"{dirName}/twist_{i_frame:03d}_axes")
+                    i_frame += 1
 
-                i_frame += 1
             DVGeo.setDesignVars(dvDict_base)
 
         # ---------------------------
@@ -420,12 +422,14 @@ if __name__ == "__main__":
             STICKSolver.setOption("outputDir", dirName)
 
             n_span = 60
-            wave = np.sin(np.linspace(0, 2 * np.pi, n_span)) * 0.4
+            wave = np.sin(np.linspace(0, np.pi, n_span)) * 0.1
 
             i_frame = 0
             # loop over wave
             for ind, val in enumerate(wave):
+
                 print(ind, val)
+
                 dvDict = DVGeo.getValues()
                 dvDict["span"] = val
                 DVGeo.setDesignVars(dvDict)
@@ -450,9 +454,9 @@ if __name__ == "__main__":
             print("+", 20 * "-", "Demo sweep", 20 * "-", "+")
             Path(dirName).mkdir(exist_ok=True, parents=True)
 
-            STICKSolver.setOption("outputDirectory", dirName)
+            STICKSolver.setOption("outputDir", dirName)
 
-            n_sweep = 60
+            n_sweep = 30
             mag = 30.0
             wave = mag * np.sin(np.linspace(0, 2 * np.pi, n_sweep))
 
@@ -499,7 +503,7 @@ if __name__ == "__main__":
             STICKSolver.setOption("outputDirectory", dirName)
 
             n_taper = 60
-            wave = np.sin(np.linspace(0, 2 * np.pi, n_taper)) * 0.6
+            wave = np.sin(np.linspace(0, 2 * np.pi, n_taper)) * 0.5 + 1.0
 
             i_frame = 0
             # loop over wave
@@ -519,3 +523,100 @@ if __name__ == "__main__":
 
                 i_frame += 1
             DVGeo.setDesignVars(dvDict_base)
+
+        # ---------------------------
+        #   All vars
+        # ---------------------------
+        if "t" and "r" and "w" and "p" in args.geovar:
+            dirName = f"{outputDir}/demo_all/"
+            print("+", 20 * "-", "Demo all", 20 * "-", "+")
+            Path(dirName).mkdir(exist_ok=True, parents=True)
+
+            STICKSolver.setOption("outputDir", dirName)
+
+            n_all = 20
+            wave = np.sin(np.linspace(0, 2 * np.pi, n_all))
+
+            taper_mag = 0.5
+            twist_mag = 15.0
+            sweep_mag = 30.0
+            span_mag = 0.1
+
+            i_frame = 0
+
+            # --- TAPER ---
+            for ind, val in enumerate(wave):
+                print(ind, val)
+                dvDict = DVGeo.getValues()
+                dvDict["taper"][-1] = val * taper_mag + 1.0
+                DVGeo.setDesignVars(dvDict)
+
+                STICKSolver.setAeroProblem(ap)
+                STICKSolver.writeSolution(number=i_frame, baseName="all")
+
+                # Write deformed FFD
+                DVGeo.writeTecplot(f"{dirName}/all_{i_frame:03d}_ffd.dat")
+                DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
+
+                i_frame += 1
+            DVGeo.setDesignVars(dvDict_base)
+
+            # --- TWIST ---
+            for ii in range(1, nTwist):
+                for ind, val in enumerate(wave):
+                    print(ind, val)
+                    dvDict = DVGeo.getValues()
+                    dvDict["twist"][ii] = val * twist_mag
+                    DVGeo.setDesignVars(dvDict)
+
+                    STICKSolver.setAeroProblem(ap)
+                    STICKSolver.writeSolution(number=i_frame, baseName="all")
+
+                    # Write deformed FFD
+                    DVGeo.writeTecplot(f"{dirName}/all_{i_frame:03d}_ffd.dat")
+                    DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
+
+                    i_frame += 1
+
+            DVGeo.setDesignVars(dvDict_base)
+
+            # --- SWEEP ---
+            for ind, val in enumerate(wave):
+                print(ind, val)
+                dvDict = DVGeo.getValues()
+                dvDict["sweep"] = val * sweep_mag
+                DVGeo.setDesignVars(dvDict)
+
+                STICKSolver.setAeroProblem(ap)
+                STICKSolver.writeSolution(number=i_frame, baseName="all")
+
+                # Write deformed FFD
+                DVGeo.writeTecplot(f"{dirName}/all_{i_frame:03d}_ffd.dat")
+                DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
+
+                i_frame += 1
+
+            DVGeo.setDesignVars(dvDict_base)
+
+            # --- SPAN ---
+            wave = np.sin(np.linspace(0, np.pi, n_all))
+            for ind, val in enumerate(wave):
+                print(ind, val)
+                dvDict = DVGeo.getValues()
+                dvDict["span"] = val * span_mag
+                DVGeo.setDesignVars(dvDict)
+
+                STICKSolver.setAeroProblem(ap)
+                STICKSolver.writeSolution(number=i_frame, baseName="all")
+
+                # Write deformed FFD
+                DVGeo.writeTecplot(f"{dirName}/all_{i_frame:03d}_ffd.dat")
+                DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
+
+                i_frame += 1
+
+            DVGeo.setDesignVars(dvDict_base)
+
+    if args.deriv:
+        # Test derivatives!
+        print("Testing derivatives...")

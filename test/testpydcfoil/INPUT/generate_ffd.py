@@ -39,7 +39,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
     parser.add_argument("--semispan", type=float, default=0.333, help="semispan [m]")
-    parser.add_argument("--chord", type=float, default=0.140, help="Chord [m]")
+    parser.add_argument("--rootChord", type=float, default=0.140, help="Root chord [m]")
+    parser.add_argument("--tipChord", type=float, default=0.095, help="Tip chord [m]")
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -50,7 +51,6 @@ if __name__ == "__main__":
     print(30 * "-", flush=True)
 
     SPAN = args.semispan
-    CHORD = args.chord
 
     # ************************************************
     #     Parent FFD
@@ -66,14 +66,17 @@ if __name__ == "__main__":
     ymargin = 3e-3
     xmargin = 3e-3
 
+    s_dist = np.linspace(0.0, SPAN, n_span)
+    c_dist = np.linspace(args.rootChord, args.tipChord, n_span)
+
     # --- Loop to populate ---
     for jj in range(n_span):
-        s_dist = np.linspace(0, SPAN, n_span)[jj]
+        s_frac = s_dist[jj]
         for ii in range(n_chord):
-            c_dist = np.linspace(-CHORD * 0.5, CHORD * 0.5, n_chord)[ii]
+            c_frac = np.linspace(-c_dist[jj] * 0.5, c_dist[jj] * 0.5, n_chord)[ii]
 
-            lower = np.array([c_dist, s_dist, -zmargin])
-            upper = np.array([c_dist, s_dist, zmargin])
+            lower = np.array([c_frac, s_frac, -zmargin])
+            upper = np.array([c_frac, s_frac, zmargin])
 
             if jj == 0:
                 lower[1] -= ymargin

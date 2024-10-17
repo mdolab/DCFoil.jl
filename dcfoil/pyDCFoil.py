@@ -92,6 +92,8 @@ class DCFOIL:
         self.TEcoords = None
         self.LEconn = None
         self.TEconn = None
+
+        self.debugDVGeo = False
         # ************************************************
         #     Set options, DVs info
         # ************************************************
@@ -216,7 +218,7 @@ class DCFOIL:
     # ==============================================================================
     #                         Main functions
     # ==============================================================================
-    def addMesh(self, gridFile:str):
+    def addMesh(self, gridFile):
         """
         Add component to mesh
 
@@ -225,7 +227,6 @@ class DCFOIL:
 
         Grid = self.DCFoil.MeshIO.add_mesh(gridFile)
         LE_X, LE_conn, TE_X, TE_conn = Grid.LEMesh.T, Grid.LEConn.T, Grid.TEMesh.T, Grid.TEConn.T
-
 
         if self.LEcoords is None:
             # Set mesh and connectivity
@@ -242,6 +243,18 @@ class DCFOIL:
 
         # set new number of collocation nodes
         self.nnodes = self.LEcoords.shape[0]
+
+        self.X = np.vstack((self.LEcoords, self.TEcoords))
+
+        if self.debugDVGeo:
+            print(20 * "-")
+            print(f"Read mesh from {gridFile}")
+            print(20 * "-")
+            print(f"LE coords:\n{self.LEcoords}")
+            print(f"LE conn:\n{self.LEconn}")
+            print(f"TE coords:\n{self.TEcoords}")
+            print(f"TE conn:\n{self.TEconn}")
+            print(f"all coords:\n{self.X}")
 
     def solve(self):
         """
@@ -400,7 +413,7 @@ class DCFOIL:
         #     print("| %-30s: %10.3f sec" % ("Complete Sensitivity Time", finalEvalSensTime - startEvalSensTime))
         #     print("+--------------------------------------------------+")
 
-        return costFuncsSens
+        return funcsSens
 
     def evalFFDSens(self):
         """
@@ -423,10 +436,21 @@ class DCFOIL:
             self.dIdx_geo_total[key] = dIdx_aero[key]
 
     def writeSolution(self, number, baseName):
-        """TODO"""
+        """
+        TODO
+        """
 
         # self.DCFoil.write
-        pass
+
+        # if self.debugDVGeo:
+        print("Writing curves to tecplot...")
+        from pyspline.utils import writeTecplot1D, openTecplot, closeTecplot
+
+        outDir = self.solverOptions["outputDir"]
+        f = openTecplot(f"{outDir}/{baseName}_{number:03d}.dat", 3)
+        writeTecplot1D(f, "LE", self.LEcoords)
+        writeTecplot1D(f, "TE", self.TEcoords)
+        closeTecplot(f)
 
     def setDesignVars(self, DVs):
         """
@@ -440,19 +464,19 @@ class DCFOIL:
 
         self.DVDict = DVs
 
-    def setDVGeo(self, geo):
+    def setDVGeo(self, geo, debug=False):
         """
         Adds DVGeo object to the solver
         """
         self.DVGeo = geo
+        self.debugDVGeo = debug
 
     def setAeroProblem(self, aeroProblem):
         """
         Sets the aeroProblem object
-        Based on Eirikur's DLM4PY code
         """
 
-        # Add the point-set name of the aero mesh coords embedded in the ffd
+        # Add the point-set name of the mesh coords embedded in the ffd
         ptSetName = f"dcfoil_{aeroProblem.name}_coords"
 
         # Now check if we have an DVGeo object to deal with:
@@ -460,15 +484,18 @@ class DCFOIL:
 
             # DVGeo appeared and we have not embedded points!
             if not ptSetName in self.DVGeo.points:
-                self.DVGeo.addPointSet(self.LEcoords, ptSetName)
+                self.DVGeo.addPointSet(self.X, ptSetName)
                 aeroProblem.ptSetName = ptSetName
 
             # Check if our point-set is up to date:
             if not self.DVGeo.pointSetUpToDate(ptSetName):
-                self.LEcoords = self.DVGeo.update(ptSetName, config=aeroProblem.name)
-
-        # update the aero mesh that the transfer object has
-        # self.transfer.setAeroSurfaceNodes(np.ravel(self.X))
+                self.X = self.DVGeo.update(ptSetName, config=aeroProblem.name)
+                self.LEcoords = self.X[: self.nnodes]
+                self.TEcoords = self.X[self.nnodes :]
+                if self.debugDVGeo:
+                    # TODO: something here is wrong with the embedding
+                    print(f"Updated point set {ptSetName}")
+                    print(f"LE coords:\n{self.LEcoords}")
 
         # Set the aeroproblem data
         self._setAeroProblemData(aeroProblem)
