@@ -16,22 +16,77 @@ struct Grid{TF,TI}
     """
     Struct to hold the top-level grid data for the program
     """
-    LEMesh::AbstractMatrix{TF} # Mesh for the LE; 2D array of (x,y,z) coordinates
-    LEConn::Matrix{TI} # Connectivity for the LE mesh; 
+    LEMesh::AbstractMatrix{TF} # Mesh for the LE; 2D (3 x npts) array of (x,y,z) coordinates
+    nodeConn::Matrix{TI} # Connectivity for the LE mesh; 
     TEMesh::AbstractMatrix{TF}
-    TEConn::Matrix{TI}
+end
+
+function add_meshfiles(gridFiles, options)
+
+    # Define so they're not stuck in local scope
+    nNodes = 0
+    LEMesh = nothing
+    TEMesh = nothing
+    nodeConn = nothing
+    for (ii, gridFile) in enumerate(gridFiles)
+
+        meshGrid = add_mesh(gridFile)
+
+        if ii == 1 # first mesh
+            nNodes = size(meshGrid.LEMesh)[2]
+            nodeConn = meshGrid.nodeConn
+            LEMesh = meshGrid.LEMesh
+            TEMesh = meshGrid.TEMesh
+
+        else # append to the existing mesh
+
+            if options["junction-first"] # the first node is the junction
+                println("Junction first")
+
+                modifiedConn = meshGrid.nodeConn .+ nNodes .- 1
+                modifiedConn[1, 1] = 1
+
+                nodeConn = hcat(nodeConn, modifiedConn)
+
+                # Remove the first node from the LE mesh
+                LEMesh = hcat(LEMesh, meshGrid.LEMesh[:, 2:end])
+                TEMesh = hcat(TEMesh, meshGrid.TEMesh[:, 2:end])
+            else
+                error("Not implemented yet")
+            end
+
+            # New shape
+            nNodes = size(LEMesh)[2]
+        end
+
+
+        println("-"^50)
+        println("Added mesh file: $gridFile with $(size(meshGrid.LEMesh)[2]) nodes")
+        # println("Total nodes: $nNodes")
+        # println("LEMesh: $(size(LEMesh))")
+        # for (ii, node) in enumerate(eachcol(LEMesh))
+        #     println("Node: $(node)")
+        # end
+        # println("Node connectivity: $(size(nodeConn))")
+        # for (ii, conn) in enumerate(eachcol(nodeConn))
+        #     println("$(conn)")
+        # end
+
+    end
+
+    return GridStruct
 end
 
 function add_mesh(gridFile)
     """
-    Read the mesh file and add it to the grid struct
+    Read a single mesh file and add it to the grid struct
     """
 
     if occursin(".dcf", gridFile)
-        LEMesh, LEConn, TEMesh, TEConn = read_dcf(gridFile)
-        println(LEMesh)
 
-        GridStruct = Grid(LEMesh, LEConn, TEMesh, TEConn)
+        LEMesh, nodeConn, TEMesh = read_dcf(gridFile)
+
+        GridStruct = Grid(LEMesh, nodeConn, TEMesh)
     else
         error("File type not supported for mesh")
     end
@@ -57,9 +112,8 @@ function read_dcf(gridFile)
     # --- Read the file ---
     # Loop through the file and read the data
     LEMesh = []
-    LEConn = []
+    nodeConn = []
     TEMesh = []
-    TEConn = []
 
     isLE = false
     isTE = false
@@ -84,31 +138,28 @@ function read_dcf(gridFile)
             if isLE
                 push!(LEMesh, [parse(Float64, x) for x in split(line, " ")])
 
-                if LEctr > NSKIP + 1
-                    push!(LEConn, [LEctr - 2, LEctr - 1])
+                if LEctr > NSKIP
+                    push!(nodeConn, [LEctr - 1, LEctr])
                 end
+
                 LEctr += 1
+
             elseif isTE
-                # TEMesh = hcat(TEMesh, [parse(Float64, x) for x in split(line, " ")])
 
                 push!(TEMesh, [parse(Float64, x) for x in split(line, " ")])
 
-                if TEctr > NSKIP + 1
-                    # TEConn = hcat(TEConn, [TEctr - 1, TEctr])
-                    push!(TEConn, [TEctr - 2, TEctr - 1])
-                end
                 TEctr += 1
+
             end
 
         end
     end
     # Turn data structs into matrices
     LEMesh = hcat(LEMesh...)
-    LEConn = hcat(LEConn...)
+    nodeConn = hcat(nodeConn...)
     TEMesh = hcat(TEMesh...)
-    TEConn = hcat(TEConn...)
 
-    return LEMesh, LEConn, TEMesh, TEConn
+    return LEMesh, nodeConn, TEMesh
 
 end
 

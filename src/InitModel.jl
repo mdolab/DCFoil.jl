@@ -190,4 +190,64 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
   return WingModel, StrutModel, HullModel
 end
 
+function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+
+  fRange = solverOptions["fRange"]
+  uRange = solverOptions["uRange"]
+
+
+  midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+  if !isnothing(appendageOptions["path_to_geom_props"])
+    print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+
+    α₀ = appendageParams["alfa0"]
+    sweepAng = appendageParams["sweep"]
+    rake = appendageParams["rake"]
+    span = appendageParams["s"] * 2
+    zeta = appendageParams["zeta"]
+    theta_f = appendageParams["theta_f"]
+    beta = appendageParams["beta"]
+    s_strut = appendageParams["s_strut"]
+    c_strut = appendageParams["c_strut"]
+    theta_f_strut = appendageParams["theta_f_strut"]
+    depth0 = appendageParams["depth0"]
+
+    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+  else
+    α₀ = appendageParams["alfa0"]
+    sweepAng = appendageParams["sweep"]
+    rake = appendageParams["rake"]
+    span = appendageParams["s"] * 2
+    toc = appendageParams["toc"]
+    ab = appendageParams["ab"]
+    x_ab = appendageParams["x_ab"]
+    zeta = appendageParams["zeta"]
+    theta_f = appendageParams["theta_f"]
+    beta = appendageParams["beta"]
+    s_strut = appendageParams["s_strut"]
+    c_strut = appendageParams["c_strut"]
+    toc_strut = appendageParams["toc_strut"]
+    ab_strut = appendageParams["ab_strut"]
+    x_ab_strut = appendageParams["x_ab_strut"]
+    theta_f_strut = appendageParams["theta_f_strut"]
+    depth0 = appendageParams["depth0"]
+  end
+
+
+  WingModel, StrutModel = init_dynamic(α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
+
+  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, appendageParams, appendageOptions)
+  FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+
+
+  if solverOptions["run_body"]
+    HullModel = init_hull(solverOptions)
+  else
+    HullModel = nothing
+  end
+
+  return WingModel, StrutModel, HullModel, FEMESH
+end
+
 end # end module

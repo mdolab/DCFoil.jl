@@ -21,16 +21,16 @@ using ..SolutionConstants: XDIM, YDIM, ZDIM
 using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
 using ..Utilities: Utilities
 
-function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::String, fname="mesh.dat")
+function write_structmesh(FEMESHLIST, solverOptions::Dict, outputDir::String, fname="structmesh.dat")
     """
     Top level routine to write the structural mesh file
     """
 
     outfile = @sprintf("%s%s", outputDir, fname)
-    @printf("Writing mesh file %s...\n", outfile)
+    @printf("Writing struct mesh file %s...\n", outfile)
 
     io = open(outfile, "w")
-    write(io, "TITLE = \"Mesh Data\"\n")
+    write(io, "TITLE = \"Structural Mesh Data\"\n")
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
 
     for icomp in eachindex(FEMESHLIST)
