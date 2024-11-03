@@ -12,6 +12,7 @@ module DCFoil
 # ==============================================================================
 using JSON
 using Printf
+using Debugger
 # using PrecompileTools: @setup_workload, @compile_workload, @recompile_invalidations
 
 # Set the default data type
@@ -22,7 +23,7 @@ const DTYPE = DblPrec # Cmplx
 #                         HEADER FILES
 # ==============================================================================
 for headerName in [
-    # THE ORDER MATTERS
+    # NOTE: THE ORDER MATTERS
     # --- MACH framework ---
     # "../dcfoil/mach",
     # --- Not used in this script but needed for submodules ---
@@ -34,12 +35,14 @@ for headerName in [
     "solvers/NewtonRaphson",
     "solvers/EigenvalueProblem",
     "solvers/SolverRoutines",
+    "utils/Preprocessing",
     "hydro/VPM", "hydro/LiftingLine", # General LL code
     "hydro/GlauertLL", # Glauert LL code
     "hydro/HydroStrip",
     "adrules/CustomRules",
     # --- Used in this script ---
-    "InitModel", "struct/FEMMethods",
+    "struct/FEMMethods",
+    "InitModel",
     "solvers/DCFoilSolution",
     "io/TecplotIO", "io/MeshIO",
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
@@ -65,16 +68,17 @@ using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs, allCos
 # --- Public functions ---
 export init_model, run_model, evalFuncs, evalFuncsSens
 
-function init_model(DVDictList, evalFuncsList; solverOptions)
+
+function setup_model(DVDictList, evalFuncsList; solverOptions)
     """
-    Things that need to be done before running the model.
+    Code to make mesh and other things if you're not starting from coordinates
     Global vars are used in run_model
     """
     # ---------------------------
     #   Default options
     # ---------------------------
     set_defaultOptions!(solverOptions)
-    global outputDir = solverOptions["outputDir"]
+    outputDir = solverOptions["outputDir"]
 
     # ---------------------------
     #   Write DVs and options
@@ -92,11 +96,6 @@ function init_model(DVDictList, evalFuncsList; solverOptions)
     end
 
     # ---------------------------
-    #   Cost functions
-    # ---------------------------
-    global costFuncsDict = Dict()
-
-    # ---------------------------
     #   Component structs
     # ---------------------------
     global FOILList = []
@@ -104,48 +103,87 @@ function init_model(DVDictList, evalFuncsList; solverOptions)
     for iComp in eachindex(DVDictList)
         DVDict = DVDictList[iComp]
         appendageOptions = solverOptions["appendageList"][iComp]
-        FOIL, STRUT, HULL = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
+        FOIL, STRUT, HULL = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
         push!(FOILList, FOIL)
         push!(STRUTList, STRUT)
     end
     global HULL = HULL
-    
+
     # ---------------------------
     #   Mesh generation/loading
     # ---------------------------
     if isnothing(solverOptions["gridFile"])
         structMeshList, elemConnList = FEMMethods.make_fullMesh(DVDictList, solverOptions)
-        global FEMESHLIST = []
+        global FEMESHList = []
         for iComp in eachindex(structMeshList)
             DVDict = DVDictList[iComp]
             structMesh = structMeshList[iComp]
             elemConn = elemConnList[iComp]
             FEMESH = FEMMethods.StructMesh(structMesh, elemConn, DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
 
-            push!(FEMESHLIST, FEMESH)
+            push!(FEMESHList, FEMESH)
         end
 
-        # --- Write mesh to tecplot for later visualization ---
-        for iComp in eachindex(structMeshList)
-            DVDict = DVDictList[iComp]
-            TecplotIO.write_mesh(DVDict, FEMESHLIST, solverOptions, outputDir, @sprintf("mesh_comp%03d.dat", iComp))
-        end
-        if solverOptions["debug"]
-            for iComp in eachindex(structMeshList)
-                elemConn = elemConnList[iComp]
-                open(outputDir * @sprintf("elemConn-comp%03d.txt", iComp), "w") do io
-                    for iElem in eachindex(elemConn[:, 1])
-                        write(io, @sprintf("%03d\t%03d\n", elemConn[iElem, 1], elemConn[iElem, 2]))
-                    end
-                end
-            end
-        end
     else
         GridStruct = MeshIO.add_mesh(solverOptions["gridFile"])
+        LECoords, nodeConn, TECoords = GridStruct.LECoords, GridStruct.nodeConn, GridStruct.TECoords
+        return LECoords, nodeConn, TECoords
+    end
 
+end
+
+function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParamsList)
+    """
+    Things that need to be done before running the model.
+    Global vars are used in run_model
+    """
+    # ---------------------------
+    #   Default options
+    # ---------------------------
+    set_defaultOptions!(solverOptions)
+    global outputDir = solverOptions["outputDir"]
+
+    # ---------------------------
+    #   Write options
+    # ---------------------------
+    stringData = JSON.json(solverOptions)
+    open(outputDir * "solverOptions.json", "w") do io
+        write(io, stringData)
+    end
+
+
+    # ---------------------------
+    #   Component structs
+    # ---------------------------
+    global FOILList = []
+    global STRUTList = []
+    if !isnothing(solverOptions["gridFile"])
+        global FEMESHList = []
+    end
+
+    for iComp in eachindex(appendageParamsList)
+        DVDict = appendageParamsList[iComp]
+        appendageOptions = solverOptions["appendageList"][iComp]
+        if isnothing(solverOptions["gridFile"])
+            FOIL, STRUT, HULL = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
+        else
+            FOIL, STRUT, HULL, FEMESH, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
+            push!(FEMESHList, FEMESH)
+
+            # println("mesh here",FEMESH.mesh)
+
+            TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
+        end
+
+        push!(FOILList, FOIL)
+        push!(STRUTList, STRUT)
 
     end
 
+    # --- Write mesh to tecplot for later visualization ---
+    TecplotIO.write_structmesh(FEMESHList, solverOptions, outputDir)
+
+    global HULL = HULL
 
     # ************************************************
     #     Finally, print out a warning
@@ -155,7 +193,7 @@ function init_model(DVDictList, evalFuncsList; solverOptions)
     println("+-----------------------------------------------------------+")
 end
 
-function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
+function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Dict(), appendageParamsList)
     """
     This call runs DCFoil in three possible solver modes.
     Output is then a dictionary with possibly three keys at most.
@@ -180,7 +218,7 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
     println("+-------------------------------------+")
     println("|  Running DCFoil with appendages:    |")
     println("+-------------------------------------+")
-    for iComp in eachindex(DVDictList)
+    for iComp in eachindex(appendageParamsList)
         appendageOptions = solverOptions["appendageList"][iComp]
         println(@sprintf("| Component %03d: ", iComp), appendageOptions["compName"])
     end
@@ -200,21 +238,25 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
             println("|  Running static solve for ", appendageOptions["compName"])
             println("+--------------------------------------------------------+")
 
-            FEMESH = FEMESHLIST[iComp]
-            DVDict = DVDictList[iComp]
+            FEMESH = FEMESHList[iComp]
+            DVDict = appendageParamsList[iComp]
 
             # STATSOL = SolveStatic.solve(FEMESH, DVDict, solverOptions, appendageOptions)
-            @time STATSOL = SolveStatic.get_sol(DVDictList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
+            if isnothing(solverOptions["gridFile"])
+                @time STATSOL = SolveStatic.compute_solFromDVDict(appendageParamsList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
+            else
+                @time STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
+            end
             if solverOptions["writeTecplotSolution"]
                 SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
             end
             push!(STATSOLLIST, STATSOL)
 
             # --- Need to compute main hydrofoil CL ---
-            if iComp == 1 && solverOptions["use_dwCorrection"]
+            if iComp == 1 && solverOptions["use_dwCorrection"] && !solverOptions["use_nlll"]
                 DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
                 CLMain = SolveStatic.evalFuncs("cl", STATSOL.structStates, STATSOL, DVVec, DVLengths;
-                    appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=0.0)
+                    appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=appendageParamsList, CLMain=0.0)
             end
         end
         SOLDICT["STATIC"] = STATSOLLIST
@@ -223,7 +265,7 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
     if length(solverOptions["appendageList"]) > 1
         println("Dynamic solver does not work for multiple components")
     elseif length(solverOptions["appendageList"]) == 1
-        FEMESH = FEMESHLIST[1]
+        FEMESH = FEMESHList[1]
         appendageOptions = solverOptions["appendageList"][1]
         # ==============================================================================
         #                         Forced vibration solution
@@ -243,7 +285,7 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
         end
 
         if solverOptions["run_flutter"]
-            DVDict = DVDictList[1]
+            DVDict = appendageParamsList[1]
             @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
             if solverOptions["writeTecplotSolution"]
                 SolveFlutter.write_tecplot(DVDict, FLUTTERSOL, structMesh, outputDir; solverOptions=solverOptions)
@@ -257,7 +299,7 @@ function run_model(DVDictList, evalFuncsList; solverOptions=Dict())
     # # ==============================================================================
     # # if true, the above solver modes still matter as to which analyses happen!
     # if solverOptions["run_body"]
-    #    BODYSTATSOL, APPENDAGESTATSOLLIST = SolveBodyDynamics.solve_trim(DVDictList, FEMESHLIST, HULL, solverOptions, 2)
+    #    BODYSTATSOL, APPENDAGESTATSOLLIST = SolveBodyDynamics.solve_trim(DVDictList, FEMESHList, HULL, solverOptions, 2)
     # end
 
     return SOLDICT
@@ -266,7 +308,7 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
+function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions=Dict())
     """
     Common interface to compute cost functions
 
@@ -277,6 +319,7 @@ function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
     """
     x = 0.0 # dummy
     evalFuncsDict = Dict()
+    LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 
 
     if solverOptions["run_static"]
@@ -289,14 +332,18 @@ function evalFuncs(SOLDICT, DVDictList, evalFuncsList, solverOptions=Dict())
             STATSOL = STATSOLLIST[iComp]
             DVDict = DVDictList[iComp]
             compName = appendageOptions["compName"]
-            DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
+
+            # DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+            # staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
+            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, LECoords, TECoords, nodeConn, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
+
             for key in keys(staticFuncs)
                 newKey = @sprintf("%s-%s", key, compName)
                 evalFuncsDict[newKey] = staticFuncs[key]
             end
+
             # --- Need to compute main hydrofoil CL ---
-            if iComp == 1 && solverOptions["use_dwCorrection"]
+            if iComp == 1 && solverOptions["use_dwCorrection"] && !solverOptions["use_nlll"]
                 try
                     CLMain = staticFuncs["cl"]
                 catch
@@ -352,7 +399,7 @@ function evalFuncsSens(
     if solverOptions["run_static"]
         STATSOLLIST = SOLDICT["STATIC"]
         evalFuncsSensStat = [key for key in evalFuncsSensList if key in staticCostFuncs]
-        @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHLIST, solverOptions;
+        @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHList, solverOptions;
             mode=mode, CLMain=CLMain)
         costFuncsSensDict = costFuncsSensList
     end
@@ -379,6 +426,7 @@ function set_defaultOptions!(solverOptions)
         "outputDir",
         "debug",
         "writeTecplotSolution",
+        "gridFile",
         # ************************************************
         #     Flow
         # ************************************************
@@ -417,6 +465,7 @@ function set_defaultOptions!(solverOptions)
         "./OUTPUT/",
         false,
         false,
+        nothing,
         # ************************************************
         #     Flow
         # ************************************************

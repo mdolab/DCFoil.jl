@@ -29,7 +29,7 @@ using ..DCFoil: RealOrComplex, DTYPE
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..SolverRoutines
 using ..BeamProperties
-using ..DesignConstants: DynamicFoil
+using ..DesignConstants: DynamicFoil, CONFIGS
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 
 struct StructMesh{TF,TC,TI}
@@ -455,9 +455,9 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function assemble(StructMesh, abVec, x_αbVec,
+function assemble(StructMesh, x_αbVec,
     FOIL, elemType="bend-twist", constitutive="isotropic";
-    config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
+    config="wing", STRUT=nothing, x_αb_strut=nothing, verbose=true
 )
     """
     Generic function to assemble the global mass and stiffness matrices
@@ -476,6 +476,7 @@ function assemble(StructMesh, abVec, x_αbVec,
     qLocal = zeros(NDOF * 2)
 
     abVec = FOIL.ab
+    ab_strut = STRUT.ab
     # x_αbVec = StructMesh.x_αb
     # --- Initialize matrices ---
     nElem = size(StructMesh.elemConn)[1]

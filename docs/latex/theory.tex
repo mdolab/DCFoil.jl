@@ -105,7 +105,7 @@ DCFoil is a program for the dynamic analysis and design optimization of composit
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
     \includegraphics[width=1.0\linewidth,clip,trim={0cm 0cm 0cm 10cm}]{keel-dcfoil.pdf}
-    \includegraphics[width=0.5\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dcfoilkeelfrontview.pdf}
+    % \includegraphics[width=0.5\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dcfoilkeelfrontview.pdf}
     \caption{\label{fig:keel-dcfoil}
         DCFoil modeling approach for an appendage
     }
@@ -1024,6 +1024,10 @@ The residual Jacobian is
 \mbf{K}_{ss} - \mbf{K}_{f}
 \ee
 
+First, the \texttt{DCFoil.init\_model()} routine initializes the structural mesh and hydrodynamic mesh from leading and trailing edge coordinates.
+If there are multiple lifting surfaces, there are multiple structural meshes.
+There is only one hydrodynamic mesh though because flow needs to be solved globally.
+
 \subsection{Derivative computation}
 % 
 Now suppose that we want the derivative of several cost functions $\mbf{f}(\mbf{x,u}_s)$, like lift or drag force.
@@ -1741,14 +1745,24 @@ An example is Algorithm~\ref{alg:ConceptualRAD}.
 % \usepackage{algorithm2e}
 \RestyleAlgo{ruled}
 \begin{algorithm}[htb!]
-    \caption{\label{alg:ConceptualRAD} Basic reverse rule in Julia ChainRulesCore}
+    \caption{\label{alg:ConceptualRAD} Basic reverse rule in Julia ChainRulesCore for some function $f(x)$}
+    \DontPrintSemicolon
     function ChainRulesCore.rrule(::typeof($f(x)$), $x$)\\
-    \quad Evaluate $y = f(x)$ (Primal)\\
-    \quad function $\mcal{B}(\bar{y})$\\
-    \quad \quad Code up $\bar{x}= \bar{y} \dd{y}{x}$ (Ex. $\cos(x) \bar{y} $ if $f(x)=\sin(x)$)\\
-    \quad return $\bar{x}$\\
+    \quad $y = f(x)$ \tcp*{This is the primal}
+    \quad function $\mcal{B}(\bar{y})$\;
+    \quad \quad Code to compute $\bar{x}= \bar{y} \dd{y}{x}$ \tcp*{Ex. $\bar{x} =\bar{y} \cos(x)  $ for $f(x)=\sin(x)$}
+    \quad return [\texttt{NoTangent()}, $\bar{x}$] \tcp*{Function signature matches inputs to the ChainRulesCore.rrule}
     return $y$, $\mcal{B}()$
 \end{algorithm}
+The \texttt{NoTangent()} tells us that if one perturbs the matching primal, the primal will error.
+For example, perturbing the number of increments $N$ of a \texttt{LinRange()} errors the code because you cannot have a non-integer input (like $N+0.1$).
+In contrast, the \texttt{ZeroTangent()} means that changing the matching primal results in no change in the behavior of the primal;
+it is preferred to directly returning 0 or \texttt{zeros(n)} for efficiency.
+
+A \texttt{@thunk} is a delayed computation.
+Use thunk to wrap the computation, not the variable!
+The docs say that in the future, thunks should not be needed because they put stress on the compiler.
+
 
 Now that you understand the conceptual level, this is a more applied example for the eigenvalue derivative routine.
 \begin{algorithm}[htb!]

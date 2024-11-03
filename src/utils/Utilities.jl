@@ -101,14 +101,4 @@ function generate_naca4dig(toc)
     return foil_coords
 end
 
-function get_1DPropertiesFromFile(fname)
-    """
-    Get beam geometric and structural properties from file
-    The file needs to be in the format:
-    <varname>
-    <values>
-    """
-end
-
-
 end

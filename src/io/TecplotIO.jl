@@ -392,6 +392,16 @@ function write_LLmesh(io, LLMesh, uvec)
     end
 
     # ************************************************
+    #     Locus of aerodynamic centers
+    # ************************************************
+    write(io, "ZONE T = \"Aerodynamic centers\" \n")
+    write(io, "DATAPACKING = POINT\n")
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringData)
+    end
+
+    # ************************************************
     #     Trailing vortices
     # ************************************************
     distance = 1.5 * LLMesh.rootChord * uvec
@@ -418,12 +428,14 @@ function write_1Dfemmesh(io, FEMESH)
     """
 
     mesh = FEMESH.mesh
-    nNodes = length(mesh[:, 1])
-    nElem = length(FEMESH.elemConn[:, 1])
+    nNodes = size(mesh)[1]
+    elemConn = FEMESH.elemConn
+    nElem = size(elemConn)[1]
+    # println("elemConn: ", elemConn)
     # ************************************************
     #     Header
     # ************************************************
-    write(io, "ZONE T = \"Mesh\"\n")
+    write(io, "ZONE T = \"Beam Mesh\"\n")
     write(io, @sprintf("NODES = %d,", nNodes))
     write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nElem))
     write(io, "DATAPACKING = POINT\n")

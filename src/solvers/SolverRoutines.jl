@@ -31,7 +31,7 @@ using ..DCFoil: RealOrComplex, DTYPE
 #                         Solver routines
 # ==============================================================================
 function converge_resNonlinear(compute_residuals, compute_∂r∂u, u0::Vector, x0List=nothing;
-    maxIters=200, tol=1e-6, is_verbose=false,
+    maxIters=50, tol=1e-6, is_verbose=false,
     solverParams=nothing,
     appendageOptions=Dict(),
     solverOptions=Dict(),
@@ -94,6 +94,7 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
     rakeRad = deg2rad(DVDict["rake"])
     betaRad = deg2rad(DVDict["beta"])
     nDOF = BeamElement.NDOF
+
     # Get flow angles of attack in "local" beam coords first
     #TODO: pretwist will change this
     if elemType == "BT2"
@@ -133,8 +134,11 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
             staticOffset_strut = transMatL2G * staticOffset_strut
 
             staticOffset_junctionNode = staticOffset_wing
+
         elseif appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "wing"
+
             staticOffset_junctionNode = staticOffset_wing
+
         end
     else
         angleDefault = 0.0

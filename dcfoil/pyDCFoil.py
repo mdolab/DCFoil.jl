@@ -90,10 +90,12 @@ class DCFOIL:
         # Coordinates of the stick mesh
         self.LEcoords = None
         self.TEcoords = None
-        self.LEconn = None
+        self.nodeConn = None
         self.TEconn = None
 
         self.debugDVGeo = False
+
+        self.callCounter = 0
         # ************************************************
         #     Set options, DVs info
         # ************************************************
@@ -225,35 +227,43 @@ class DCFOIL:
         shape: (n_nodes, 3)
         """
 
+        # ************************************************
+        #     Add meshes one by one
+        # ************************************************
         Grid = self.DCFoil.MeshIO.add_mesh(gridFile)
-        LE_X, LE_conn, TE_X, TE_conn = Grid.LEMesh.T, Grid.LEConn.T, Grid.TEMesh.T, Grid.TEConn.T
 
+        # ************************************************
+        #     Or do all at once
+        # ************************************************
+        if len(gridFile) > 1:
+            Grid = self.DCFoil.MeshIO.add_meshfiles(gridFile)
+
+        LE_X, node_conn, TE_X = Grid.LEMesh.T, Grid.nodeConn.T, Grid.TEMesh.T
         if self.LEcoords is None:
             # Set mesh and connectivity
             self.LEcoords = LE_X
-            self.LEconn = LE_conn
+            self.nodeConn = node_conn
             self.TEcoords = TE_X
-            self.TEconn = TE_conn
         else:
             # Append to existing mesh
             self.LEcoords = np.vstack((self.LEcoords, LE_X))
-            self.conn = np.vstack((self.LEconn, LE_conn + self.nnodes))
+            self.conn = np.vstack((self.nodeConn, node_conn + self.nnodes))
             self.TEcoords = np.vstack((self.TEcoords, TE_X))
-            self.conn = np.vstack((self.TEconn, TE_conn + self.nnodes))
+        
 
         # set new number of collocation nodes
         self.nnodes = self.LEcoords.shape[0]
 
         self.X = np.vstack((self.LEcoords, self.TEcoords))
+        # pyGeo should preserve this order
 
         if self.debugDVGeo:
             print(20 * "-")
             print(f"Read mesh from {gridFile}")
             print(20 * "-")
             print(f"LE coords:\n{self.LEcoords}")
-            print(f"LE conn:\n{self.LEconn}")
             print(f"TE coords:\n{self.TEcoords}")
-            print(f"TE conn:\n{self.TEconn}")
+            print(f"Node conn:\n{self.nodeConn}")
             print(f"all coords:\n{self.X}")
 
     def solve(self):
@@ -263,12 +273,17 @@ class DCFOIL:
 
         DVDictList = self.DVDictList
         evalFuncs = self.evalFuncs
+        
+        LECoords = self.LEcoords
+        LEConn = self.nodeConn
+        TECoords = self.TEcoords
+        TEConn = self.TEconn
 
         solverOptions = self.solverOptions
 
         breakpoint()
-        # TODO: WHY IS THERE A BUG HERE
-        self.DCFoil.init_model(DVDictList, evalFuncs, solverOptions=solverOptions)
+
+        self.DCFoil.init_model(LECoords, LEConn, TECoords, TEConn, solverOptions=solverOptions)
         SOLDICT = self.DCFoil.run_model(DVDictList, evalFuncs, solverOptions=solverOptions)
 
         self.SOLDICT = SOLDICT
@@ -490,10 +505,12 @@ class DCFOIL:
             # Check if our point-set is up to date:
             if not self.DVGeo.pointSetUpToDate(ptSetName):
                 self.X = self.DVGeo.update(ptSetName, config=aeroProblem.name)
+                
+                # Update the coordinates in the LEcoords
                 self.LEcoords = self.X[: self.nnodes]
                 self.TEcoords = self.X[self.nnodes :]
+                
                 if self.debugDVGeo:
-                    # TODO: something here is wrong with the embedding
                     print(f"Updated point set {ptSetName}")
                     print(f"LE coords:\n{self.LEcoords}")
 
@@ -506,7 +523,7 @@ class DCFOIL:
     def __call__(self, aeroProblem):
 
         self.setAeroProblem(aeroProblem)
-        self.curAP.callCounter += 1
+        self.callCounter += 1
 
         self.solve()
 

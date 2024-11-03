@@ -5,11 +5,12 @@
 # @Desc    :   Main executable for running DCFoil
 
 using Printf, Dates, Profile
+using Debugger: @run
 
 
 # This is the way to import it manually in dev mode
 include("src/DCFoil.jl")
-using .DCFoil
+using .DCFoil: RealOrComplex
 # Import static package
 # using DCFoil
 
@@ -40,7 +41,7 @@ debug = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 5 # spatial nodes
+nNodes = 10 # spatial nodes
 nNodesStrut = 5 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
@@ -54,51 +55,79 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # ************************************************
 #     Setup solver options
 # ************************************************
-# TODO: PICKUP HERE MAKE IT SO DCFOIL WORKS WITH LE AND TE LINES AND THICKNESS DATA
-DVDictRudder = Dict(
-    "alfa0" => 0.0, # initial angle of attack [deg]
+# AC Rudder
+# paramsRudder = Dict(
+#     "alfa0" => 0.0, # initial angle of attack [deg]
+#     "sweep" => deg2rad(0.0), # sweep angle [rad]
+#     "zeta" => 0.04, # modal damping ratio at first 2 modes
+#     "c" => ".dat", # chord length [m]
+#     "s" => 1.0, # semispan [m]
+#     "ab" => ".dat", # dist from midchord to EA [m]
+#     "toc" => ".dat", # thickness-to-chord ratio (mean)
+#     "x_ab" => ".dat", # static imbalance [m]
+#     "theta_f" => deg2rad(0), # fiber angle global [rad]
+#     # --- Strut vars ---
+#     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
+#     "rake" => 0.0, # rake angle about top of strut [deg]
+#     "beta" => 0.0, # yaw angle wrt flow [deg]
+#     "s_strut" => 2.8, # strut span [m]
+#     "c_strut" => ".dat", # chord length [m]
+#     "toc_strut" => ".dat", # thickness-to-chord ratio (mean)
+#     "ab_strut" => ".dat", # dist from midchord to EA [m]
+#     "x_ab_strut" => ".dat", # static imbalance [m]
+#     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
+# )
+paramsRudder = Dict(
+    "alfa0" => 2.0, # initial angle of attack [deg] (angle of flow vector)
     "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
-    "c" => ".dat", # chord length [m]
-    "s" => 1.0, # semispan [m]
-    "ab" => ".dat", # dist from midchord to EA [m]
-    "toc" => ".dat", # thickness-to-chord ratio (mean)
-    "x_ab" => ".dat", # static imbalance [m]
+    # "c" => 0.14 * ones(nNodes), # chord length [m]
+    "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
+    "s" => 0.333, # semispan [m]
+    "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
+    "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
+    "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0, # rake angle about top of strut [deg]
     "beta" => 0.0, # yaw angle wrt flow [deg]
-    "s_strut" => 2.8, # strut span [m]
-    "c_strut" => ".dat", # chord length [m]
-    "toc_strut" => ".dat", # thickness-to-chord ratio (mean)
-    "ab_strut" => ".dat", # dist from midchord to EA [m]
-    "x_ab_strut" => ".dat", # static imbalance [m]
+    "s_strut" => 1.0, # [m]
+    "c_strut" => 0.14 * collect(LinRange(1.0, 1.0, nNodesStrut)), # chord length [m]
+    "toc_strut" => 0.095 * ones(RealOrComplex, nNodesStrut), # thickness-to-chord ratio (mean)
+    "ab_strut" => 0.0 * ones(RealOrComplex, nNodesStrut), # dist from midchord to EA [m]
+    "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
-
-DVDictList = [DVDictRudder]
+paramsList = [paramsRudder]
 
 rudderOptions = Dict(
     "compName" => "rudder",
-    "config" => "t-foil",
+    # "config" => "t-foil",
+    "config" => "full-wing",
     "nNodes" => nNodes,
     "nNodeStrut" => nNodesStrut,
     # "use_tipMass" => false,
     "xMount" => 3.355,
     "material" => "cfrp", # preselect from material library
     "strut_material" => "cfrp",
-    # "path_to_props" => "./INPUT/1DPROPS", # path to 1D properties
-    "path_to_props" => nothing,
+    # "path_to_struct_props" => "./INPUT/1DPROPS/", # path to 1D properties
+    "path_to_geom_props" => "./INPUT/1DPROPS/",
+    "path_to_struct_props" => nothing,
+    "path_to_geom_props" => nothing,
 )
 
 appendageList = [rudderOptions]
 
 solverOptions = Dict(
-    # --- I/O ---
-    "name" => "R3E6",
+    # ---------------------------
+    #   I/O
+    # ---------------------------
+    # "name" => "R3E6",
+    "name" => "mothrudder",
     "debug" => false,
+    "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
     "writeTecplotSolution" => true,
     # ---------------------------
     #   General appendage options
@@ -112,19 +141,22 @@ solverOptions = Dict(
     # "Uinf" => 11.0, # free stream velocity [m/s]
     "rhof" => 1025.0, # fluid density [kg/m³]
     "use_nlll" => true, # use non-linear lifting line code
-    "use_freeSurface" => true,
+    # "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,
-    "use_dwCorrection" => true,
+    # "use_dwCorrection" => true,
     # ---------------------------
     #   Solver modes
     # ---------------------------
     # --- Static solve ---
     "run_static" => run_static,
-    "res_jacobian" => "CS",
+    # "res_jacobian" => "CS",
+    "res_jacobian" => "analytic",
+    # "res_jacobian" => "RAD",
     # --- Forced solve ---
     "run_forced" => run_forced,
-    "fSweep" => fSweep,
+    "fRange" => [fSweep[1], fSweep[end]], # forcing frequency sweep [Hz]
+    "df" => 0.1, # frequency step size
     "tipForceMag" => tipForceMag,
     # --- p-k (Eigen) solve ---
     "run_modal" => run_modal,
@@ -149,9 +181,9 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
     solverOptions["name"],
-    wingOptions["material"],
-    rad2deg(DVDictList[1]["theta_f"]),
-    rad2deg(DVDictList[1]["sweep"]))
+    rudderOptions["material"],
+    rad2deg(paramsList[1]["theta_f"]),
+    rad2deg(paramsList[1]["sweep"]))
 mkpath(outputDir)
 
 solverOptions["outputDir"] = outputDir
@@ -159,7 +191,10 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.init_model(DVDictList, evalFuncs; solverOptions=solverOptions)
-SOLDICT = DCFoil.run_model(DVDictList, evalFuncs; solverOptions=solverOptions)
-costFuncs = DCFoil.evalFuncs(SOLDICT, DVDictList, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, DVDictList, evalFuncs, solverOptions; mode="ADJOINT")
+# GridStruct = DCFoil.MeshIO.add_mesh(solverOptions["gridFile"])
+GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
+costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, evalFuncs, solverOptions; mode="ADJOINT")

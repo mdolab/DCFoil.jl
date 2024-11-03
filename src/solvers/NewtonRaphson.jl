@@ -23,7 +23,7 @@ function print_solver_history(iterNum::Int64, resNorm, stepNorm)
 end
 
 function do_newton_raphson(
-    compute_residuals, compute_∂r∂u, u0::Vector, DVDictList=nothing;
+    compute_residuals, compute_∂r∂u, u0::Vector, WorkingListOfParams=nothing;
     maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false,
     appendageOptions=Dict(),
     solverOptions=Dict(),
@@ -58,18 +58,28 @@ function do_newton_raphson(
         Solve for complex roots
     """
 
-    # --- Initialize output ---
-    if !isnothing(DVDictList)
-        DVDict = DVDictList[iComp]
-        x0, DVLengths = Utilities.unpack_dvdict(DVDict)
-        res = compute_residuals(
-            u0, x0, DVLengths;
-            appendageOptions=appendageOptions,
-            solverOptions=solverOptions,
-            iComp=iComp,
-            CLMain=CLMain,
-            DVDictList=DVDictList,
-        )
+    # ************************************************
+    #     Initialize output
+    # ************************************************
+    if !isnothing(WorkingListOfParams)
+
+        if solverOptions["use_nlll"]
+            appendageParamsList = WorkingListOfParams[3+iComp:end]
+            xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+
+            res = compute_residuals(u0, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        else
+            DVDict = WorkingListOfParams[iComp]
+            x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+            res = compute_residuals(
+                u0, x0, DVLengths;
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                iComp=iComp,
+                CLMain=CLMain,
+                DVDictList=WorkingListOfParams,
+            )
+        end
     else
         res = compute_residuals(u0; solverParams=solverParams)
     end
@@ -98,19 +108,18 @@ function do_newton_raphson(
                     res = compute_residuals(u, x0, DVLengths;
                         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
                     ∂r∂u = compute_∂r∂u(u, mode;
-                    DVDictList=DVDictList,
-                    solverParams=solverParams,
-                    appendageOptions=appendageOptions,
-                    solverOptions=solverOptions,
-                    iComp=iComp,
-                    CLMain=CLMain,
-                )
+                        DVDictList=WorkingListOfParams,
+                        solverParams=solverParams,
+                        appendageOptions=appendageOptions,
+                        solverOptions=solverOptions,
+                        iComp=iComp,
+                        CLMain=CLMain,
+                    )
+                end
             else
                 res = compute_residuals(u; solverParams=solverParams)
                 ∂r∂u = compute_∂r∂u(u; solverParams=solverParams, mode=mode)
             end
-
-
 
             jac = zeros(typeof(u[1]), length(u), length(u))
             jac = ∂r∂u
@@ -121,8 +130,13 @@ function do_newton_raphson(
             # show(stdout, "text/plain", jac)
             Δu = -jac \ res
 
+            # println("u before: ", u[end-9:end])
+            # println("Newton step Δu: ", Δu[end-9:end])
+
             # --- Update ---
             u = u + Δu
+            # println("u after: ", u[end-9:end])
+            # println("res: ", res[end-9:end])
 
             resNorm = norm_cs_safe(res, 2)
 
@@ -144,8 +158,10 @@ function do_newton_raphson(
                 break
             end
             if real(resNorm) < tol
-                println("+--------------------------------------------")
-                println("Converged in ", ii, " iterations")
+                if is_verbose
+                    println("+--------------------------------------------")
+                    println("Converged in ", ii, " iterations")
+                end
                 break
             elseif ii == maxIters
                 println("+--------------------------------------------")

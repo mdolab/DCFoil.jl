@@ -508,7 +508,7 @@ function compute_AICs(
 
     # Spline to get lift slope in the right spots if using nonlinear LL
     clαVec = FOIL.clα
-    
+
 
     if STRUT != nothing
         strutclαVec = STRUT.clα

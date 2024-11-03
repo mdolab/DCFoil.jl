@@ -13,7 +13,6 @@ struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """
     DO NOT STORE DVS HERE
     Foil object with key properties for the system solution
-    This is a mutable struct, so it can be modified during the solution process
     Half-wing data
     """
     mₛ::TA # structural mass vector [kg/m]
@@ -96,5 +95,13 @@ const SORTEDDVS::Vector{String} = [
     "theta_f"
     "theta_f_strut"
 ]
+
+# All possible configurations for a hydrofoil
+const CONFIGS::Vector{String} =
+    [
+        "wing",
+        "full-wing",
+        "t-foil",
+    ]
 
 end # end module

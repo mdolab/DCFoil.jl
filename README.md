@@ -84,10 +84,10 @@ https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
 
 * NOTE: as of February 24, 2024, `LinRange` is actually better and improves the flutter prediction accuracy. 
 I wrote the custom rule with the help of the Julia slack channel.
-<!-- `LinRange()` because it isn't easily differentiated. Do something like `collect((start:step:end))`  -->
+* Careful of mutating operations because Julia is pass by reference! Use `copy()`
 * Mutating arrays that require the `Zygote.Buffer` data type. It is SUPER slow.
 * Don't use `ForwardDiff` because it cannot do matrix operations and I haven't figured out the chain rules.
-It also doesn't fit with the data types
+It also doesn't fit with the data types.
 * Unicode characters are nice for readability of math-heavy code, but do not use them for interface-level code
 * `hypot()` function for calculating the L2 norm is slower than typing it out
 
@@ -176,6 +176,11 @@ Under the `./test/` directory, run
 ```
 run_tests.jl
 ```
+
+### Debugging code
+Use `@enter` from the `Debugger.jl` to step into functions and `@bp` to put breakpoints.
+Wrap certain code in `@run` to put the execution in debug mode to get the breakpoints.
+You can also use `@show`, `@debug` commands for pesky bugs.
 
 ## Citation
 

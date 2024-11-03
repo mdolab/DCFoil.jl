@@ -11,21 +11,23 @@ module InitModel
 
 # --- PACKAGES ---
 using Zygote
+using Debugger
 
 # --- DCFoil modules ---
 using ..DCFoil: RealOrComplex
 using ..HydroStrip: HydroStrip
 using ..BeamProperties: BeamProperties
-using ..DesignConstants: DesignConstants, SORTEDDVS
+using ..DesignConstants: DesignConstants, SORTEDDVS, CONFIGS
 using ..MaterialLibrary: MaterialLibrary
 using ..HullLibrary: HullLibrary
-using ..Utilities: get_1DPropertiesFromFile
+using ..Preprocessing: Preprocessing
+using ..FEMMethods: FEMMethods
 
 function init_static(
-  α₀, sweepAng, rake, span, chord, toc, ab, x_ab, zeta, theta_f,
+  α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f,
   beta, span_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut,
   depth0,
-  foilOptions::Dict, solverOptions::Dict
+  appendageOptions::Dict, solverOptions::Dict
 )
   """
   Initialize a static hydrofoil model
@@ -40,22 +42,28 @@ function init_static(
   # ---------------------------
   #   Geometry
   # ---------------------------
-  eb = 0.25 * chord .+ ab
-  t = toc .* chord
+  eb::Vector{RealOrComplex} = 0.25 * chordLengths .+ ab
+  t = toc .* chordLengths
 
   # ---------------------------
   #   Structure
   # ---------------------------
-  ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(foilOptions["material"])
+  ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(appendageOptions["material"])
 
   # --- Compute the structural properties for the foil ---
-  nNodes = foilOptions["nNodes"]
+  nNodes = appendageOptions["nNodes"]
 
-  EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
+  if !isnothing(appendageOptions["path_to_struct_props"])
+    println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = Preprocessing.get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
+  else
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
+  end
+
   # ---------------------------
   #   Hydrodynamics
   # ---------------------------
-  clα, _, _ = HydroStrip.compute_hydroLLProperties(span, chord, α₀, rake, sweepAng, depth0; solverOptions=solverOptions)
+  clα, _, _, LLSystem, FlowCond = HydroStrip.compute_hydroLLProperties(span, chordLengths, α₀, rake, sweepAng, depth0; solverOptions=solverOptions, appendageOptions=appendageOptions)
   # clα, _, _ = HydroStrip.compute_glauert_circ(span, chord, deg2rad(α₀ + rake), solverOptions["Uinf"];
   #   h=depth0,
   #   useFS=solverOptions["use_freeSurface"],
@@ -68,15 +76,15 @@ function init_static(
   #   Build final model
   # ---------------------------
   wingModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["Uinf"], zeta,
-    clα, eb, ab, chord, solverOptions["rhof"], foilOptions["nNodes"], constitutive)
+    clα, eb, ab, chordLengths, solverOptions["rhof"], appendageOptions["nNodes"], constitutive)
 
   # ************************************************
   #     Strut properties
   # ************************************************
-  if foilOptions["config"] == "t-foil" && !solverOptions["use_nlll"]
+  if appendageOptions["config"] == "t-foil" && !solverOptions["use_nlll"]
     # Do it again using the strut properties
-    nNodesStrut = foilOptions["nNodeStrut"]
-    ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(foilOptions["strut_material"])
+    nNodesStrut = appendageOptions["nNodeStrut"]
+    ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(appendageOptions["strut_material"])
     t_strut = toc_strut .* c_strut
     eb_strut = 0.25 * c_strut .+ ab_strut
 
@@ -92,17 +100,17 @@ function init_static(
     #   Build final model
     # ---------------------------
     strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, solverOptions["Uinf"], zeta,
-      clα, eb_strut, ab_strut, c_strut, solverOptions["rhof"], foilOptions["nNodeStrut"], constitutive)
+      clα, eb_strut, ab_strut, c_strut, solverOptions["rhof"], appendageOptions["nNodeStrut"], constitutive)
 
-  elseif foilOptions["config"] == "wing" || foilOptions["config"] == "full-wing"
+  elseif appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
     strutModel = nothing
-  else
-    error("Unsupported config: ", foilOptions["config"])
+  elseif !(appendageOptions["config"] in CONFIGS)
+    error("Unsupported config: ", appendageOptions["config"])
   end
 
   # appendageSystem = wingModel
 
-  return wingModel, strutModel
+  return wingModel, strutModel, LLSystem, FlowCond
 
 end
 
@@ -112,16 +120,14 @@ function init_dynamic(α₀, sweepAng, rake, span, c, toc, ab, x_ab, ζ, theta_f
   """
   Perform much of the same initializations as init_static() except with other features
   """
-  # statModel = init_static(DVDict, solverOptions)
-  statWingModel, statStrutModel = init_static(α₀, sweepAng, rake, span, c, toc, ab, x_ab, ζ, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, foilOptions, solverOptions)
+  statWingModel, statStrutModel, LLSystem, FlowCond = init_static(α₀, sweepAng, rake, span, c, toc, ab, x_ab, ζ, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, foilOptions, solverOptions)
 
-  # model = DesignConstants.DynamicFoil(staticModel.c, staticModel.t, staticModel.s, staticModel.ab, staticModel.eb, staticModel.x_ab, staticModel.mₛ, staticModel.Iₛ, staticModel.EIₛ, staticModel.GJₛ, staticModel.Kₛ, staticModel.Sₛ, staticModel.α₀, staticModel.U∞, staticModel.Λ, staticModel.g, staticModel.clα, staticModel.ρ_f, staticModel.nNodes, staticModel.constitutive, fRange, uRange)
   WingModel = DesignConstants.DynamicFoil(
     statWingModel.mₛ, statWingModel.Iₛ, statWingModel.EIₛ, statWingModel.EIIPₛ, statWingModel.GJₛ, statWingModel.Kₛ, statWingModel.Sₛ, statWingModel.EAₛ, statWingModel.U∞, statWingModel.ζ,
     statWingModel.clα, statWingModel.eb, statWingModel.ab, statWingModel.chord, statWingModel.ρ_f, statWingModel.nNodes, statWingModel.constitutive,
     fRange, uRange
   )
-  if statStrutModel == nothing
+  if isnothing(statStrutModel)
     StrutModel = nothing
   else
     StrutModel = DesignConstants.DynamicFoil(
@@ -130,7 +136,7 @@ function init_dynamic(α₀, sweepAng, rake, span, c, toc, ab, x_ab, ζ, theta_f
     )
   end
 
-  return WingModel, StrutModel
+  return WingModel, StrutModel, LLSystem, FlowCond
 end
 
 function init_hull(solverOptions::Dict)
@@ -142,7 +148,7 @@ function init_hull(solverOptions::Dict)
   return HullModel
 end
 
-function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
+function init_modelFromDVDict(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
   """
   This is a wrapper for init_dynamic() that unpacks a DV dictionary
   """
@@ -152,19 +158,33 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
   # ************************************************
   # NOTE: this is not all DVs!
 
-  # --- Check if beam properties come from file or params ---
-  if !isnothing(appendageOptions["path_to_props"])
-    # TODO: PICKUP HERE
-    Utilities.get_1DPropertiesFromFile(appendageOptions["path_to_props"])
-  else
+  if !isnothing(appendageOptions["path_to_geom_props"])
     α₀ = DVDict["alfa0"]
     sweepAng = DVDict["sweep"]
     rake = DVDict["rake"]
     span = DVDict["s"] * 2
     c = DVDict["c"]
-    toc = DVDict["toc"]
-    ab = DVDict["ab"]
-    x_ab = DVDict["x_ab"]
+    zeta = DVDict["zeta"]
+    theta_f = DVDict["theta_f"]
+    beta = DVDict["beta"]
+    s_strut = DVDict["s_strut"]
+    c_strut = DVDict["c_strut"]
+    theta_f_strut = DVDict["theta_f_strut"]
+    depth0 = DVDict["depth0"]
+
+    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+  else
+    α₀ = DVDict["alfa0"]
+    sweepAng = DVDict["sweep"]
+    rake = DVDict["rake"]
+    span = DVDict["s"] * 2
+    c::Vector{RealOrComplex} = DVDict["c"]
+    toc::Vector{RealOrComplex} = DVDict["toc"]
+    ab::Vector{RealOrComplex} = DVDict["ab"]
+    x_ab::Vector{RealOrComplex} = DVDict["x_ab"]
+    # toc = DVDict["toc"]
+    # ab = DVDict["ab"]
+    # x_ab = DVDict["x_ab"]
     zeta = DVDict["zeta"]
     theta_f = DVDict["theta_f"]
     beta = DVDict["beta"]
@@ -176,7 +196,6 @@ function init_model_wrapper(DVDict::Dict, solverOptions::Dict, appendageOptions:
     theta_f_strut = DVDict["theta_f_strut"]
     depth0 = DVDict["depth0"]
   end
-
 
   WingModel, StrutModel = init_dynamic(α₀, sweepAng, rake, span, c, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
@@ -219,9 +238,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     sweepAng = appendageParams["sweep"]
     rake = appendageParams["rake"]
     span = appendageParams["s"] * 2
-    toc = appendageParams["toc"]
-    ab = appendageParams["ab"]
-    x_ab = appendageParams["x_ab"]
+    toc::Vector{RealOrComplex} = appendageParams["toc"]
+    ab::Vector{RealOrComplex} = appendageParams["ab"]
+    x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     beta = appendageParams["beta"]
@@ -235,9 +254,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   end
 
 
-  WingModel, StrutModel = init_dynamic(α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
+  WingModel, StrutModel, LLSystem, FlowCond = init_dynamic(α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
-  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, appendageParams, appendageOptions)
+  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
   FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
 
 
@@ -247,7 +266,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     HullModel = nothing
   end
 
-  return WingModel, StrutModel, HullModel, FEMESH
+  return WingModel, StrutModel, HullModel, FEMESH, LLSystem, FlowCond
 end
 
 end # end module

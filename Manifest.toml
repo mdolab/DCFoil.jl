@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.0"
+julia_version = "1.11.1"
 manifest_format = "2.0"
-project_hash = "d1efcc91802c643516139e716ee1be03bff8dc14"
+project_hash = "c1d0111adc61e0b9c56c20b6cc2d3fd78c50df13"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -207,6 +207,11 @@ git-tree-sha1 = "439e35b0b36e2e5881738abc8857bd92ad6ff9a8"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.6.3"
 
+[[deps.Crayons]]
+git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
+uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
+version = "4.1.1"
+
 [[deps.DataAPI]]
 git-tree-sha1 = "abe83f3a2f1b857aac70ef8b269080af17764bbe"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
@@ -233,6 +238,12 @@ deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "fc173b380865f70627d7dd1190dc2fce6cc105af"
 uuid = "ee1fde0b-3d02-5ea6-8484-8dfef6360eab"
 version = "1.14.10+0"
+
+[[deps.Debugger]]
+deps = ["CodeTracking", "Crayons", "Highlights", "InteractiveUtils", "JuliaInterpreter", "Markdown", "REPL"]
+git-tree-sha1 = "35e6b5a354449f0fbd504d7f9248870b060f177e"
+uuid = "31a5f54b-26ea-5ae9-a837-f05ce5417438"
+version = "0.7.10"
 
 [[deps.DelimitedFiles]]
 deps = ["Mmap"]
@@ -504,6 +515,12 @@ git-tree-sha1 = "401e4f3f30f43af2c8478fc008da50096ea5240f"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "8.3.1+0"
 
+[[deps.Highlights]]
+deps = ["DocStringExtensions", "InteractiveUtils", "REPL"]
+git-tree-sha1 = "9e13b8d8b1367d9692a90ea4711b4278e4755c32"
+uuid = "eafb193a-b7ab-5a9e-9068-77385905fa72"
+version = "0.5.3"
+
 [[deps.IOCapture]]
 deps = ["Logging", "Random"]
 git-tree-sha1 = "b6d6bfdd7ce25b0f9b2f6b3dd56b2673a66c8770"
@@ -747,12 +764,6 @@ deps = ["Dates", "Logging"]
 git-tree-sha1 = "c1dd6d7978c12545b4179fb6153b9250c96b0075"
 uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
 version = "1.0.3"
-
-[[deps.LoweredCodeUtils]]
-deps = ["JuliaInterpreter"]
-git-tree-sha1 = "96d2a4a668f5c098fb8a26ce7da53cde3e462a80"
-uuid = "6f1432cf-f94c-5a45-995e-cdbf5db27b0b"
-version = "3.0.3"
 
 [[deps.MacroTools]]
 deps = ["Markdown", "Random"]
@@ -1041,12 +1052,6 @@ deps = ["UUIDs"]
 git-tree-sha1 = "838a3a4188e2ded87a4f9f184b4b0d78a1e91cb7"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.0"
-
-[[deps.Revise]]
-deps = ["CodeTracking", "Distributed", "FileWatching", "JuliaInterpreter", "LibGit2", "LoweredCodeUtils", "OrderedCollections", "REPL", "Requires", "UUIDs", "Unicode"]
-git-tree-sha1 = "2d4e5de3ac1c348fd39ddf8adbef82aa56b65576"
-uuid = "295af30f-e4ad-537b-8983-00126c2a3abe"
-version = "3.6.1"
 
 [[deps.Richardson]]
 deps = ["LinearAlgebra"]

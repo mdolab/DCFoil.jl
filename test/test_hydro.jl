@@ -140,6 +140,21 @@ function test_mass()
     return rel_err
 end
 
+function test_pFactor()
+
+    p_i = []
+    depth = 1.0
+    chordLocal = 0.1
+    for hLocal in LinRange(0, 1, 100)
+        push!(p_i, HydroStrip.compute_pFactor(depth, chordLocal, hLocal))
+    end
+
+    # plot(LinRange(0, 1, 100), p_i, xlabel="h/c", ylabel="p_i", title="p_i vs h/c")
+    # savefig("test_pFactor.pdf")
+    println(vec(p_i))
+end
+
+test_pFactor()
 # ==============================================================================
 #                         Larger scale tests
 # ==============================================================================
@@ -458,7 +473,7 @@ function test_AICs()
         "rhoKS" => 100.0,
     )
 
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     elemType = "BT2"
     # elemType = "COMP2"
