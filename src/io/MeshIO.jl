@@ -73,6 +73,7 @@ function add_meshfiles(gridFiles, options)
         # end
 
     end
+    GridStruct = Grid(LEMesh, nodeConn, TEMesh)
 
     return GridStruct
 end

@@ -113,7 +113,7 @@ function test_hydroderiv(DVDict, solverOptions)
         DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions
     )
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, theta_f, zeros(2, 2))
-    globalKs, _, _ = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
+    globalKs, _, _ = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, "BT2", "orthotropic")
 
     dim = size(globalKs, 1) # big problem
     ω = 0.1

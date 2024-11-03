@@ -5,9 +5,10 @@ Test to verify that the static solve works without failing
 using Printf
 using LinearAlgebra
 using Dates
+using Debugger: @run
 
 include("../src/DCFoil.jl")
-using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, SolveFlutter, SolveForced, SolveStatic
+using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, SolveFlutter, SolveForced, SolveStatic, RealOrComplex
 
 # ==============================================================================
 #                         Test Static Solver
@@ -28,18 +29,41 @@ function test_SolveStaticRigid()
     #     DV Dictionaries (see INPUT directory)
     # ************************************************
     nNodes = nNodess[1] # spatial nodes
+    nNodesStrut = 5
     # --- Foil from Deniz Akcabay's 2020 paper ---
     DVDict = Dict(
         "alfa0" => 6.0, # initial angle of attack [deg]
         "sweep" => deg2rad(0.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
+        "c" => 0.1 * ones(RealOrComplex, nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio
+        "x_ab" => 0.0 * ones(RealOrComplex, nNodes), # static imbalance [m]
         "theta_f" => deg2rad(15), # fiber angle global [rad]
-        "s_strut" => 0.4, # from Yingqian
+        # --- Strut vars ---
+        "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
+        "rake" => 0.0, # rake angle about top of strut [deg]
+        "beta" => 0.0, # yaw angle wrt flow [deg]
+        "s_strut" => 1.0, # [m]
+        "c_strut" => 0.14 * collect(LinRange(1.0, 1.0, nNodesStrut)), # chord length [m]
+        "toc_strut" => 0.095 * ones(RealOrComplex, nNodesStrut), # thickness-to-chord ratio (mean)
+        "ab_strut" => 0.0 * ones(RealOrComplex, nNodesStrut), # dist from midchord to EA [m]
+        "x_ab_strut" => 0.0 * ones(RealOrComplex, nNodesStrut), # static imbalance [m]
+        "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
+    )
+
+    appendageOptions = Dict(
+        "compName" => "wing",
+        "config" => "wing",
+        "nNodes" => nNodes, # number of nodes on foil half wing
+        "nNodeStrut" => 10, # nodes on strut
+        "use_tipMass" => false,
+        "material" => "rigid", # preselect from material library
+        "rotation" => 0.0, # deg
+        "xMount" => 0.0, # x-coordinate of the mount [m]
+        "path_to_struct_props" => nothing,
+        "path_to_geom_props" => nothing,
     )
     solverOptions = Dict(
         "rhof" => 1000.0, # fluid density [kg/m³]
@@ -49,13 +73,7 @@ function test_SolveStaticRigid()
         "debug" => false,
         "outputDir" => "test_out/",
         # --- General solver options ---
-        "config" => "wing",
-        # "config" => "t-foil",
-        "nNodes" => nNodes, # number of nodes on foil half wing
-        "nNodeStrut" => 10, # nodes on strut
-        "use_tipMass" => false,
-        "material" => "rigid", # preselect from material library
-        "rotation" => 0.0, # deg
+        "appendageList" => [appendageOptions],
         # --------------------------------
         #   Flow
         # --------------------------------
@@ -72,7 +90,6 @@ function test_SolveStaticRigid()
         "run_flutter" => false,
         "nModes" => 5,
         "uRange" => nothing,
-        "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
 
@@ -92,11 +109,14 @@ function test_SolveStaticRigid()
     for nNodes in nNodess
         # --- Resize some stuff ---
         solverOptions["nNodes"] = nNodes
-        DVDict["c"] = 0.1 * ones(nNodes)
-        DVDict["ab"] = 0 * ones(nNodes)
-        DVDict["x_ab"] = 0 * ones(nNodes)
+        DVDict["c"] = 0.1 * ones(RealOrComplex, nNodes)
+        DVDict["ab"] = 0.0 * ones(RealOrComplex, nNodes)
+        DVDict["x_ab"] = 0.0 * ones(RealOrComplex, nNodes)
 
-        DCFoil.run_model(DVDict, evalFuncs; solverOptions)
+        DCFoil.setup_model([DVDict], evalFuncs; solverOptions=solverOptions)
+        DCFoil.init_model(zeros(10,10), zeros(10,10), zeros(10,10); solverOptions=solverOptions, appendageParamsList=[DVDict])
+        DCFoil.run_model(zeros(10,10), zeros(10,10), zeros(10,10), evalFuncs; solverOptions=solverOptions, appendageParamsList=[DVDict])
+        # DCFoil.run_model(DVDict, evalFuncs; solverOptions)
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
         tipTwistData[meshlvl] = costFuncs["psitip"]
@@ -136,7 +156,7 @@ function test_SolveStaticRigid()
 
 end # test_SolveStaticRigid
 
-# test_SolveStaticRigid()
+test_SolveStaticRigid()
 
 function test_SolveStaticIso()
     """
@@ -372,7 +392,7 @@ function test_modal(DVDict, solverOptions)
     # --- Mesh ---
     DCFoil.set_defaultOptions!(solverOptions)
     appendageOptions = solverOptions["appendageList"][1]
-    FOIL = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
+    FOIL = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 1.0, zeros(2, 2))

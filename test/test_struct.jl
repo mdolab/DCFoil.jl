@@ -356,7 +356,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
@@ -371,7 +371,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, theta_f, zeros(2, 2))
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
     u = copy(globalF)
 
@@ -390,7 +390,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_ab"]
 
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -406,7 +406,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
     x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -431,7 +431,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -571,7 +571,7 @@ function test_FiniteElementIso3D()
         "maxQIter" => 100, # that didn't fix the slow run time...
         "rhoKS" => 100.0,
     )
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
@@ -710,7 +710,7 @@ function test_FiniteElementBend()
         "maxQIter" => 100, # that didn't fix the slow run time...
         "rhoKS" => 100.0,
     )
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
@@ -804,7 +804,7 @@ function test_FEBT3()
         "Uinf" => 5.0, # free stream velocity [m/s]
         "rhof" => 1000.0, # fluid density [kg/m³]
     )
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -924,7 +924,7 @@ function test_FECOMP2()
 
     axisDefault = "z"
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions, wingOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions, wingOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -940,7 +940,7 @@ function test_FECOMP2()
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], zeros(2, 2))
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
     # T = T1
     T = I(3)
@@ -981,7 +981,7 @@ function test_FECOMP2()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     # There some weird data type bug here so we need to copy the matrices
     globalK = zeros(Float64, size(globalKs_work))
     globalM = zeros(Float64, size(globalMs_work))
@@ -1034,7 +1034,7 @@ function test_fullwing(DVDict, solverOptions)
 
     axisDefault = "z"
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive

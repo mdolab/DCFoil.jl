@@ -39,6 +39,34 @@ from pygeo import DVGeometry
 # )
 from SETUP import setup_dcfoil
 
+
+# ==============================================================================
+#                         FUNCTIONS
+# ==============================================================================
+def check_derivs(dvDict, funcSensAD, funcSensFD, dh):
+    # now loop over the values and compare...
+    for xs in dvDict:
+        try:
+            err = np.array(funcSensAD[xs].squeeze()) - np.array(funcSensFD[xs])
+            print("Error:")
+            print(err)
+        except Exception:
+            print(f"AD deriv for {xs} is", funcSensAD[xs])
+            print(f"FD deriv for {xs} is", funcSensFD[xs])
+            err = np.array(funcSensAD[xs]) - np.array(funcSensFD[xs])
+            print("Error:")
+            print(err)
+            continue
+
+        print(f"The FD step was {dh:.2e}")
+
+        # get the L2 norm of error
+        print("L2   error norm for DV %s is: " % xs, np.linalg.norm(err))
+
+        # get the L_inf norm
+        print("Linf error norm for DV %s is: " % xs, np.linalg.norm(err, ord=np.inf))
+
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -618,5 +646,61 @@ if __name__ == "__main__":
             DVGeo.setDesignVars(dvDict_base)
 
     if args.deriv:
-        # Test derivatives!
         print("Testing derivatives...")
+
+        evalFunc = "cl"
+
+        DH = 1e-6
+
+        funcSensAdj = {}
+        funcSensFD = {}
+
+        funcs = {}
+        funcsFD = {}
+
+        DVGeo.setDesignVars(dvDict)
+        ap.setDesignVars(dvDict)
+
+        # Solve
+        STICKSolver(ap)
+        # Analytic sensitivities
+        STICKSolver.evalFunctions(ap, funcs, evalFuncs=evalFunc)
+        STICKSolver.evalFunctionsSens(ap, funcSensAdj, evalFuncs=evalFunc)
+
+        # ---------------------------
+        #   Finite difference
+        # ---------------------------
+        if "w" in args.geovar:
+
+            dvDict = DVGeo.getValues()
+            dvDict["sweep"] += DH
+            DVGeo.setDesignVars(dvDict)
+            ap.setDesignVars(dvDict)
+
+            STICKSolver(ap)
+            STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFunc)
+
+            dvDict["sweep"] -= DH
+            DVGeo.setDesignVars(dvDict)
+            ap.setDesignVars(dvDict)
+
+            funcSensFD["sweep"] = np.divide(funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH)
+
+        if "t" in args.geovar:
+            funcSensFD["twist"] = np.zeros(nTwist)
+
+            dvDict = DVGeo.getValues()
+            dvDict["twist"] += np.ones(nTwist) * DH
+            DVGeo.setDesignVars(dvDict)
+            ap.setDesignVars(dvDict)
+
+            STICKSolver(ap)
+            STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFunc)
+
+            dvDict["twist"] -= np.ones(nTwist) * DH
+            DVGeo.setDesignVars(dvDict)
+            ap.setDesignVars(dvDict)
+
+            funcSensFD["twist"] = np.divide(
+                funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], [DH] * nTwist
+            )

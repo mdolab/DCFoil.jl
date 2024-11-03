@@ -48,7 +48,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     outputDir = solverOptions["outputDir"]
     fRange = solverOptions["fRange"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions; fRange=fRange)
+    global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions; fRange=fRange)
 
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
@@ -69,7 +69,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     zeta = DVDict["zeta"]
     structMesh = FEMESH.mesh
     elemConn = FEMESH.elemConn
-    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
     #   Apply BC blanking

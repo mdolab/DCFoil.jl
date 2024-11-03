@@ -48,7 +48,7 @@ function forces()
         VTSTAR = VA[M] / TANBC[M] + UTSTAR[M]
         VASTAR = VA[M] + UASTAR[M]
         VSTRSQ = VTSTAR^2 + VASTAR^2
-        VSTAR = sqrt(VSTRSQ)
+        VSTAR = √(VSTRSQ)
         if (CD_LD == 1) # Interpret CD as viscous drag coefficient, Cd
             DVISC = (VSTRSQ * CHORD[M] * CD[M]) / (2 * pi)
         else # Interpret CD as the lift/drag ratio L/D

@@ -158,7 +158,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
     # ************************************************
     #     FEM assembly
     # ************************************************
-    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
     # ---------------------------
     #   Apply BC blanking
@@ -213,7 +213,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     tipMass = appendageOptions["use_tipMass"]
     debug = solverOptions["debug"]
     # --- Initialize the model ---
-    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions)
+    global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -233,7 +233,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     Λ = DVDict["sweep"]
-    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     # There some weird data type bug here so we need to copy the matrices and make them Float64
     globalKs = zeros(Float64, size(globalKs_work))
     globalMs = zeros(Float64, size(globalMs_work))
