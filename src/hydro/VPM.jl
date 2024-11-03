@@ -117,7 +117,7 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
     # println("diff X: $(diff(Airfoil.vortexXY[XDIM, :])) \n") #OK
     # println("panelLengths: $(Airfoil.panelLengths) \n") # OK
     # println("RHS: $(RHS)\n") #seems ok
-    # println("Amat: $(Amat[:,1])\n") # WRONG...WHY? PICKUP HERE
+    # println("Amat: $(Amat[:,1])\n")
     # Airfoil surface vorticity strengths
     γi = Amat \ RHS
 

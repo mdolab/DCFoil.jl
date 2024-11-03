@@ -104,7 +104,9 @@ struct LiftingLineNLParams
     AirfoilInfluences #
 end
 
-function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
+function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
+    # , midchords # need to compute mesh based on midchord locations!!
+    ;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -158,8 +160,8 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
         airfoil_xy = reverse(transpose(airfoil_pts[1:end-1, :]), dims=2)
         airfoil_ctrl_xy = reverse(transpose(airfoil_ctrl_pts), dims=2)
 
-    elseif !isnothing(airfoil_xy) && !isnothing(airfoil_ctrl_xy)
-        println("Using provided airfoil coordinates")
+    # elseif !isnothing(airfoil_xy) && !isnothing(airfoil_ctrl_xy)
+    #     println("Using provided airfoil coordinates")
     end
     # The initial hydro properties use zero sweep
     LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(0.0, airfoil_xy, airfoil_ctrl_xy)
@@ -177,6 +179,8 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     SRef = rootChord * wingSpan * (1 + taperRatio) * 0.5
     AR = wingSpan^2 / SRef
 
+    translation = options["translation"] # [m] translation of the wing
+
     # ************************************************
     #     Make wing coordinates
     # ************************************************
@@ -188,20 +192,22 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     # ---------------------------
     start = -wingSpan * 0.5
     stop = wingSpan * 0.5
-    # # --- Even spacing ---
-    # θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
-    # wing_xyz[YDIM, :] = θ_bound[1:2:end]
-    # wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
+
+    # --- Even spacing ---
+    θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
+    wing_xyz[YDIM, :] = θ_bound[1:2:end]
+    wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
+
     # # --- Cosine spacing ---
-    # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
-    # println("θ_bound: $(θ_bound)")
-    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-    for (ii, θ) in enumerate(θ_bound[1:2:end])
-        wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    end
-    for (ii, θ) in enumerate(θ_bound[2:2:end])
-        wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    end
+    # # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
+    # # println("θ_bound: $(θ_bound)")
+    # θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    # for (ii, θ) in enumerate(θ_bound[1:2:end])
+    #     wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+    # end
+    # for (ii, θ) in enumerate(θ_bound[2:2:end])
+    #     wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+    # end
 
     # ---------------------------
     #   X coords (chord dist)
@@ -231,10 +237,14 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
     LAC = compute_LAC(LLSystem, LLHydro, wing_xyz[YDIM, :], local_chords, rootChord, sweepAng, wingSpan)
     for (ii, xloc) in enumerate(LAC)
         wing_xyz[XDIM, ii] = xloc
+        # Apply translation wrt midchords
+        wing_xyz[:, ii] .+= translation - 0.25 * vec([local_chords[ii]+rootChord, 0.0, 0.0])
     end
     LAC_ctrl = compute_LAC(LLSystem, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
     for (ii, xloc) in enumerate(LAC_ctrl)
         wing_ctrl_xyz[XDIM, ii] = xloc
+        # Apply translation wrt midchords
+        wing_ctrl_xyz[:, ii] .+= translation - 0.25 * vec([local_chords_ctrl[ii]+rootChord, 0.0, 0.0])
     end
 
     # if (!isnothing(options)) && options["make_plot"]
@@ -309,6 +319,8 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio;
 
     # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
+
+    # println("local sweep values [deg]: $(rad2deg.(localSweeps))")
 
     # Store all computed quantities here
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, local_chords_ctrl, ζ, sectionLengths, sectionAreas,
@@ -672,7 +684,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
         mode="CS" # faster than fidi
         # mode="Analytic"
     )
-    println("Secondary solve for lift slope")
+    # println("Secondary solve for lift slope")
     ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
         solverParams=∂LLNLParams, is_verbose=is_verbose,
         #  is_cmplx=true,

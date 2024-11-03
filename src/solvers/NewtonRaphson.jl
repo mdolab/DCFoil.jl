@@ -82,11 +82,22 @@ function do_newton_raphson(
     if !is_cmplx
         u = u0
         for ii in 1:maxIters
-            if !isnothing(DVDictList)
-                x0, DVLengths = Utilities.unpack_dvdict(DVDict)
-                res = compute_residuals(u, x0, DVLengths;
-                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
-                ∂r∂u = compute_∂r∂u(u, mode;
+            if !isnothing(WorkingListOfParams)
+                if solverOptions["use_nlll"]
+                    appendageParamsList = WorkingListOfParams[3+iComp:end]
+                    xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+
+                    res = compute_residuals(u, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+                    ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
+                     appendageParamsList=appendageParamsList, 
+                     solverParams=solverParams,
+                     appendageOptions=appendageOptions, solverOptions=solverOptions)
+                else
+
+                    x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+                    res = compute_residuals(u, x0, DVLengths;
+                        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
+                    ∂r∂u = compute_∂r∂u(u, mode;
                     DVDictList=DVDictList,
                     solverParams=solverParams,
                     appendageOptions=appendageOptions,

@@ -21,6 +21,7 @@ using Printf, DelimitedFiles
 using Plots
 using FLOWMath: norm_cs_safe
 # using SparseArrays
+using Debugger
 
 # --- DCFoil modules ---
 using ..SolverRoutines
@@ -30,6 +31,7 @@ using ..LiftingLine: LiftingLine
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..DCFoil: RealOrComplex, DTYPE
+using ..DesignConstants: CONFIGS
 
 # ==============================================================================
 #                         Free surface effects
@@ -144,10 +146,29 @@ function compute_cmdROM(k, hcRatio, Fnc)
     return CForce
 end
 
+function compute_pFactor(chordLocal, hLocal)
+    """
+    Compute the infinite frequency correction factor 'p' for the added mass near a free surface.
+    Based on empirical corrections from Besch and Liu 1971
+    """
+
+    ARi = (hLocal) / chordLocal
+
+    # if hLocal > 0.5 * h
+    #     println("The local depth is greater than half the total depth and the correction factor should depend on the foil configuration...")
+
+    # p_i = 1.0 # for struts of T-foils
+    # else
+    p_i = ARi / √(1 + ARi^2)
+    # end
+
+
+    return p_i
+end
 # ==============================================================================
 #                         Hydro forces
 # ==============================================================================
-function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0; solverOptions)
+function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0; solverOptions, appendageOptions)
     """
     Wrapper function to the hydrodynamic lifting line properties
     In this case, α is the angle by which the flow velocity vector is rotated, not the geometry
@@ -159,7 +180,10 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
     """
 
     if solverOptions["use_nlll"]
-        println("Using NLLL")
+        if appendageOptions["config"] == "wing"
+            println("WARNING: NL LL is only for symmetric wings")
+        end
+        # println("Using nonlinear lifting line")
 
         # Hard-coded NACA0012
         airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
@@ -274,13 +298,17 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
         rootChord = chordVec[1]
         TR = chordVec[end] / rootChord
 
-        Uvec = [cos(α₀), 0.0, sin(α₀)] * solverOptions["Uinf"]
+        # println("aoa: $(α₀)")
+        Uvec = [cos(deg2rad(α₀)), 0.0, sin(deg2rad(α₀))] * solverOptions["Uinf"]
 
         # --- Structural span is not the same as aero span ---
         aeroSpan = span * cos(sweepAng)
 
+        options = Dict(
+            "translation" => vec([appendageOptions["xMount"], 0, 0]), # of the midchord
+            "debug" => true,
+        )
 
-        # TODO DEBUG THIS INTEGRATION INTO THE WORKFLOW INTERPOLATION STUFF
         LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, aeroSpan, sweepAng, rootChord, TR;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
@@ -288,6 +316,7 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
             # airfoilCoordFile=airfoilCoordFile,
             airfoil_ctrl_xy=airfoilCtrlXY,
             airfoil_xy=airfoilXY,
+            options=options,
         )
         LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLHydro, Airfoils, AirfoilInfluences)
 
@@ -295,6 +324,7 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
         F = LLOutputs.F
         cla = LLOutputs.cla
         CDi = LLOutputs.CDi
+
     else
         cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α₀ + rake), solverOptions["Uinf"];
             h=depth0,
@@ -304,9 +334,11 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
             debug=solverOptions["debug"]
         )
         F = [Fxind, 0.0, 0.0, 0.0, 0.0, 0.0]
+        LLSystem = nothing
+        FlowCond = nothing
     end
 
-    return cla, F, CDi
+    return cla, F, CDi, LLSystem, FlowCond
 end
 
 function correct_downwash(
@@ -425,7 +457,8 @@ end
 # ==============================================================================
 function compute_AICs(
     AEROMESH, FOIL, dim, Λ, U∞, ω, elemType="BT2";
-    appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing
+    appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
+    use_nlll=false, LLSystem=nothing
 )
     """
     Compute the AIC matrix for a given aeroMesh using LHS convention
@@ -472,7 +505,10 @@ function compute_AICs(
     chordVec = FOIL.chord
     abVec = FOIL.ab
     ebVec = FOIL.eb
+
+    # Spline to get lift slope in the right spots if using nonlinear LL
     clαVec = FOIL.clα
+    
 
     if STRUT != nothing
         strutclαVec = STRUT.clα
@@ -494,94 +530,121 @@ function compute_AICs(
     # ---------------------------
     #   Loop over strips (nodes)
     # ---------------------------
-    if ndims(aeroMesh) == 2
-        # for yⁿ in aeroMesh[:, YDIM]
-        stripVecs = get_strip_vecs(AEROMESH, appendageOptions)
-        junctionNodeX = aeroMesh[1, :]
+    stripVecs = get_strip_vecs(AEROMESH, appendageOptions)
+    junctionNodeX = aeroMesh[1, :]
 
-        for inode in eachindex(aeroMesh[:, 1]) # loop aero strips (located at FEM nodes)
-            # @inbounds begin
-            # --- compute strip quantities ---
-            XN = aeroMesh[inode, :]
-            # TODO: redo y^n as a parametric coordinate along lifting surface
-            yⁿ = XN[YDIM]
-            zⁿ = XN[ZDIM]
+    # for inode in eachindex(aeroMesh[:, 1]) # loop aero strips (located at FEM nodes)
+    for (inode, XN) in enumerate(eachrow(aeroMesh)) # loop aero strips (located at FEM nodes)
+        # @inbounds begin
+        # --- compute strip quantities ---
+        # XN = aeroMesh[inode, :]
+        yⁿ = XN[YDIM]
+        zⁿ = XN[ZDIM]
+        # println(XN)
 
-            Δy = 0.0
-            # if inode < FOIL.nNodes
-            #     nVec = (aeroMesh[inode+1, :] - aeroMesh[inode, :])
-            # else
-            #     nVec = (aeroMesh[inode, :] - aeroMesh[inode-1, :])
-            # end
-            nVec = stripVecs[inode, :]
 
-            # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
-            lᵉ = √(nVec[XDIM]^2 + nVec[YDIM]^2 + nVec[ZDIM]^2) # length of elem
-            Δy = lᵉ
-            # If we have end point nodes, we need to divide the length by 2
-            if appendageOptions["config"] == "wing"
-                if inode == 1 || inode == FOIL.nNodes
-                    Δy = 0.5 * lᵉ
-                end
-            elseif appendageOptions["config"] == "full-wing"
-                if inode == 1 || inode == FOIL.nNodes || (inode == nElemWing * 2 + 1)
-                    Δy = 0.5 * lᵉ
-                end
-            elseif appendageOptions["config"] == "t-foil"
-                if inode == 1 || inode == FOIL.nNodes || (inode == nElemWing * 2 + 1) || (inode == nElemWing * 2 + nElemStrut + 1)
-                    Δy = 0.5 * lᵉ
-                end
-            else
-                error("Invalid configuration")
+        nVec = stripVecs[inode, :]
+
+        # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
+        lᵉ = √(nVec[XDIM]^2 + nVec[YDIM]^2 + nVec[ZDIM]^2) # length of elem
+        Δy = lᵉ
+
+        # If we have end point nodes, we need to divide the strip width by 2
+        if appendageOptions["config"] == "wing"
+            if inode == 1 || inode == FOIL.nNodes
+                Δy = 0.5 * lᵉ
             end
+        elseif appendageOptions["config"] == "full-wing"
+            if inode == 1 || inode == FOIL.nNodes || (inode == nElemWing * 2 + 1)
+                Δy = 0.5 * lᵉ
+            end
+        elseif appendageOptions["config"] == "t-foil"
+            if inode == 1 || inode == FOIL.nNodes || (inode == nElemWing * 2 + 1) || (inode == nElemWing * 2 + nElemStrut + 1)
+                Δy = 0.5 * lᵉ
+            end
+        elseif !(appendageOptions["config"] in CONFIGS)
+            error("Invalid configuration")
+        end
 
-            nVec = nVec / lᵉ # normalize
-            dR1 = nVec[XDIM]
-            dR2 = nVec[YDIM]
-            dR3 = nVec[ZDIM]
+        nVec = nVec / lᵉ # normalize
+        dR1 = nVec[XDIM]
+        dR2 = nVec[YDIM]
+        dR3 = nVec[ZDIM]
 
-            # --- Linearly interpolate values based on y loc ---
-            # THis chunk of code is super hacky based on assuming wing and t-foil strut order
-            if inode <= FOIL.nNodes
-                xDom = aeroMesh[1:FOIL.nNodes, YDIM]
-                clα = SolverRoutines.do_linear_interp(xDom, clαVec, yⁿ)
-                c = SolverRoutines.do_linear_interp(xDom, chordVec, yⁿ)
-                ab = SolverRoutines.do_linear_interp(xDom, abVec, yⁿ)
-                eb = SolverRoutines.do_linear_interp(xDom, ebVec, yⁿ)
+        # --- Linearly interpolate values based on y loc ---
+        # THis chunk of code is super hacky based on assuming wing and t-foil strut order
+        @bp
+        if use_nlll # TODO: FIX LATER TO BE GENERAL
+            xeval = LLSystem.collocationPts[YDIM, :]
+            clα = SolverRoutines.do_linear_interp(xeval, FOIL.clα, yⁿ)
+            sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
+            if inode <= FOIL.nNodes # STBD WING
+                c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, yⁿ)
+                ab = SolverRoutines.do_linear_interp(sDomFoil, abVec, yⁿ)
+                eb = SolverRoutines.do_linear_interp(sDomFoil, ebVec, yⁿ)
+            else
+                if appendageOptions["config"] in ["t-foil", "full-wing"]
+                    if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
+                        # Put negative sign on the linear interp routine bc there is a bug!
+                        sDomFoil = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
+
+                        c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, -yⁿ)
+                        ab = SolverRoutines.do_linear_interp(sDomFoil, abVec, -yⁿ)
+                        eb = SolverRoutines.do_linear_interp(sDomFoil, ebVec, -yⁿ)
+                        # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
+                        dR1 = -dR1
+                        dR2 = -dR2
+                        dR3 = -dR3
+                    else # strut section
+                        sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
+                        c = SolverRoutines.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
+                        ab = SolverRoutines.do_linear_interp(sDomFoil, strutabVec, zⁿ)
+                        eb = SolverRoutines.do_linear_interp(sDomFoil, strutebVec, zⁿ)
+                    end
+                end
+            end
+            # println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f",eb), "\tyn: $(yⁿ)")
+        else
+            if inode <= FOIL.nNodes # STBD WING
+                sDom = aeroMesh[1:FOIL.nNodes, YDIM]
+                clα = SolverRoutines.do_linear_interp(sDom, clαVec, yⁿ)
+                c = SolverRoutines.do_linear_interp(sDom, chordVec, yⁿ)
+                ab = SolverRoutines.do_linear_interp(sDom, abVec, yⁿ)
+                eb = SolverRoutines.do_linear_interp(sDom, ebVec, yⁿ)
             else
                 if appendageOptions["config"] == "t-foil"
                     if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
                         # Put negative sign on the linear interp routine bc there is a bug!
-                        xDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
+                        sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
                         yⁿ = -1 * yⁿ
 
-                        clα = SolverRoutines.do_linear_interp(xDom, clαVec, yⁿ)
-                        c = SolverRoutines.do_linear_interp(xDom, chordVec, yⁿ)
-                        ab = SolverRoutines.do_linear_interp(xDom, abVec, yⁿ)
-                        eb = SolverRoutines.do_linear_interp(xDom, ebVec, yⁿ)
+                        clα = SolverRoutines.do_linear_interp(sDom, clαVec, yⁿ)
+                        c = SolverRoutines.do_linear_interp(sDom, chordVec, yⁿ)
+                        ab = SolverRoutines.do_linear_interp(sDom, abVec, yⁿ)
+                        eb = SolverRoutines.do_linear_interp(sDom, ebVec, yⁿ)
                         # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
                         dR1 = -dR1
                         dR2 = -dR2
                         dR3 = -dR3
                         # println("I'm a port wing strip")
                     else
-                        xDom = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-                        clα = SolverRoutines.do_linear_interp(xDom, strutclαVec, zⁿ)
-                        c = SolverRoutines.do_linear_interp(xDom, strutChordVec, zⁿ)
-                        ab = SolverRoutines.do_linear_interp(xDom, strutabVec, zⁿ)
-                        eb = SolverRoutines.do_linear_interp(xDom, strutebVec, zⁿ)
+                        sDom = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
+                        clα = SolverRoutines.do_linear_interp(sDom, strutclαVec, zⁿ)
+                        c = SolverRoutines.do_linear_interp(sDom, strutChordVec, zⁿ)
+                        ab = SolverRoutines.do_linear_interp(sDom, strutabVec, zⁿ)
+                        eb = SolverRoutines.do_linear_interp(sDom, strutebVec, zⁿ)
                         # println("I'm a strut strip")
                     end
                 elseif appendageOptions["config"] == "full-wing"
                     if inode <= nElemWing * 2 + 1
                         # Put negative sign on the linear interp routine bc there is a bug!
-                        xDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
+                        sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
                         yⁿ = -1 * yⁿ
 
-                        clα = SolverRoutines.do_linear_interp(xDom, clαVec, yⁿ)
-                        c = SolverRoutines.do_linear_interp(xDom, chordVec, yⁿ)
-                        ab = SolverRoutines.do_linear_interp(xDom, abVec, yⁿ)
-                        eb = SolverRoutines.do_linear_interp(xDom, ebVec, yⁿ)
+                        clα = SolverRoutines.do_linear_interp(sDom, clαVec, yⁿ)
+                        c = SolverRoutines.do_linear_interp(sDom, chordVec, yⁿ)
+                        ab = SolverRoutines.do_linear_interp(sDom, abVec, yⁿ)
+                        eb = SolverRoutines.do_linear_interp(sDom, ebVec, yⁿ)
                         # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
                         dR1 = -dR1
                         dR2 = -dR2
@@ -589,122 +652,122 @@ function compute_AICs(
                     end
                 end
             end
-            b = 0.5 * c # semichord for more readable code
-
-            # --- Precomputes ---
-            clambda = cos(Λ)
-            slambda = sin(Λ)
-            k = ω * b / (U∞ * clambda) # local reduced frequency
-            # Do Theodorsen computation once for efficiency
-            if abs(ω) <= MEPSLARGE
-                Ck = 1.0
-            else
-                CKVec = compute_theodorsen(k)
-                Ck = CKVec[1] + 1im * CKVec[2]
-            end
-
-            K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
-            C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
-            M_f = compute_node_mass(b, ab, FOIL.ρ_f)
-
-            # --- Compute Compute local AIC matrix for this element ---
-            if elemType == "bend-twist"
-                println("These aerodynamics are all wrong BTW...")
-                KLocal = -1 * [
-                    0.00000000 0.0 K_f[1, 2] # Lift
-                    0.00000000 0.0 0.00000000
-                    0.00000000 0.0 K_f[2, 2] # Pitching moment
-                ]
-            elseif elemType == "BT2"
-                KLocal = [
-                    0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
-                    0.0 0.0 0.0 0.0
-                    0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
-                    0.0 0.0 0.0 0.0
-                ]
-                CLocal = [
-                    C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
-                    0.0 0.0 0.0 0.0
-                    C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
-                    0.0 0.0 0.0 0.0
-                ]
-                MLocal = [
-                    M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
-                    0.0 0.0 0.0 0.0
-                    M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
-                    0.0 0.0 0.0 0.0
-                ]
-            elseif elemType == "COMP2"
-                # # NOTE: Done in local aero coordinates which matches the local beam coordinates
-                KLocal = [
-                    # u v   w         phi       theta     psi phi'     theta'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
-                    0.0 0.0 0.0000000 K_f[1, 2] K̂_f[1, 1] 0.0 K̂_f[1, 2] 0.0 0.0  # w
-                    0.0 0.0 0.0000000 K_f[2, 2] K̂_f[2, 1] 0.0 K̂_f[2, 2] 0.0 0.0 # phi
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # phi'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi'
-                ]
-                CLocal = [
-                    # u v   w         phi       theta     psi phi'     theta'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
-                    0.0 0.0 C_f[1, 1] C_f[1, 2] Ĉ_f[1, 1] 0.0 Ĉ_f[1, 2] 0.0 0.0  # w
-                    0.0 0.0 C_f[2, 1] C_f[2, 2] Ĉ_f[2, 1] 0.0 Ĉ_f[2, 2] 0.0 0.0 # phi
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # phi'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi'
-                ]
-                MLocal = [
-                    # u v   w         phi       theta     psi phi'     theta'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # u
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # v
-                    0.0 0.0 M_f[1, 1] M_f[1, 2] 0.0000000 0.0 0.0 0.0000000 0.0 # w
-                    0.0 0.0 M_f[2, 1] M_f[2, 2] 0.0000000 0.0 0.0 0.0000000 0.0 # phi
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta'
-                    0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi'
-                ]
-            else
-                println("nothing else works")
-            end
-
-            # ---------------------------
-            #   Transformation of AIC
-            # ---------------------------
-            # Aerodynamics need to happen in global reference frame
-            Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType)
-            # DOUBLE CHECK IF THIS TRANSFORMATION IS CORRECT FOR PORT WING
-            # I think yes
-            KLocal = Γ'[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
-            CLocal = Γ'[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
-            MLocal = Γ'[1:NDOF, 1:NDOF] * MLocal * Γ[1:NDOF, 1:NDOF]
-
-            GDOFIdx::Int64 = NDOF * (inode - 1) + 1
-
-            # Add local AIC to global AIC and remember to multiply by strip width to get the right result
-            globalKf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(KLocal) * Δy
-            globalKf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(KLocal) * Δy
-            globalCf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(CLocal) * Δy
-            globalCf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(CLocal) * Δy
-            globalMf_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = MLocal * Δy
-
-            # Add rectangle to planform area
-            if inode <= FOIL.nNodes
-                planformArea += c * Δy
-                # else
-                # println("Not adding planform area for strut or mirrored wing")
-            end
-            # inode += 1 # increment strip counter
-            # end # inbounds
         end
+        b = 0.5 * c # semichord for more readable code
+
+        # --- Precomputes ---
+        clambda = cos(Λ)
+        slambda = sin(Λ)
+        k = ω * b / (U∞ * clambda) # local reduced frequency
+        # Do Theodorsen computation once for efficiency
+        if abs(ω) <= MEPSLARGE
+            Ck = 1.0
+        else
+            CKVec = compute_theodorsen(k)
+            Ck = CKVec[1] + 1im * CKVec[2]
+        end
+
+        K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
+        C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
+        M_f = compute_node_mass(b, ab, FOIL.ρ_f)
+
+        # --- Compute Compute local AIC matrix for this element ---
+        if elemType == "bend-twist"
+            println("These aerodynamics are all wrong BTW...")
+            KLocal = -1 * [
+                0.00000000 0.0 K_f[1, 2] # Lift
+                0.00000000 0.0 0.00000000
+                0.00000000 0.0 K_f[2, 2] # Pitching moment
+            ]
+        elseif elemType == "BT2"
+            KLocal = [
+                0.0 K̂_f[1, 1] K_f[1, 2] K̂_f[1, 2]  # Lift
+                0.0 0.0 0.0 0.0
+                0.0 K̂_f[2, 1] K_f[2, 2] K̂_f[2, 2] # Pitching moment
+                0.0 0.0 0.0 0.0
+            ]
+            CLocal = [
+                C_f[1, 1] Ĉ_f[1, 1] C_f[1, 2] Ĉ_f[1, 2]  # Lift
+                0.0 0.0 0.0 0.0
+                C_f[2, 1] Ĉ_f[2, 1] C_f[2, 2] Ĉ_f[2, 2] # Pitching moment
+                0.0 0.0 0.0 0.0
+            ]
+            MLocal = [
+                M_f[1, 1] 0.0 M_f[1, 2] 0.0  # Lift
+                0.0 0.0 0.0 0.0
+                M_f[2, 1] 0.0 M_f[2, 2] 0.0 # Pitching moment
+                0.0 0.0 0.0 0.0
+            ]
+        elseif elemType == "COMP2"
+            # # NOTE: Done in local aero coordinates which matches the local beam coordinates
+            KLocal = [
+                # u v   w         phi       theta     psi phi'     theta'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
+                0.0 0.0 0.0000000 K_f[1, 2] K̂_f[1, 1] 0.0 K̂_f[1, 2] 0.0 0.0  # w
+                0.0 0.0 0.0000000 K_f[2, 2] K̂_f[2, 1] 0.0 K̂_f[2, 2] 0.0 0.0 # phi
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # phi'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi'
+            ]
+            CLocal = [
+                # u v   w         phi       theta     psi phi'     theta'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # u
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # v
+                0.0 0.0 C_f[1, 1] C_f[1, 2] Ĉ_f[1, 1] 0.0 Ĉ_f[1, 2] 0.0 0.0  # w
+                0.0 0.0 C_f[2, 1] C_f[2, 2] Ĉ_f[2, 1] 0.0 Ĉ_f[2, 2] 0.0 0.0 # phi
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # phi'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # theta'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0000000 0.0 0.0 # psi'
+            ]
+            MLocal = [
+                # u v   w         phi       theta     psi phi'     theta'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # u
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # v
+                0.0 0.0 M_f[1, 1] M_f[1, 2] 0.0000000 0.0 0.0 0.0000000 0.0 # w
+                0.0 0.0 M_f[2, 1] M_f[2, 2] 0.0000000 0.0 0.0 0.0000000 0.0 # phi
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # phi'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # theta'
+                0.0 0.0 0.0000000 0.0000000 0.0000000 0.0 0.0 0.0000000 0.0 # psi'
+            ]
+        else
+            println("nothing else works")
+        end
+
+        # ---------------------------
+        #   Transformation of AIC
+        # ---------------------------
+        # Aerodynamics need to happen in global reference frame
+        Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType)
+        # DOUBLE CHECK IF THIS TRANSFORMATION IS CORRECT FOR PORT WING
+        # I think yes
+        KLocal = Γ'[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
+        CLocal = Γ'[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
+        MLocal = Γ'[1:NDOF, 1:NDOF] * MLocal * Γ[1:NDOF, 1:NDOF]
+
+        GDOFIdx::Int64 = NDOF * (inode - 1) + 1
+
+        # Add local AIC to global AIC and remember to multiply by strip width to get the right result
+        globalKf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(KLocal) * Δy
+        globalKf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(KLocal) * Δy
+        globalCf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(CLocal) * Δy
+        globalCf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(CLocal) * Δy
+        globalMf_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = MLocal * Δy
+
+        # Add rectangle to planform area
+        if inode <= FOIL.nNodes
+            planformArea += c * Δy
+            # else
+            # println("Not adding planform area for strut or mirrored wing")
+        end
+        # inode += 1 # increment strip counter
+        # end # inbounds
     end
 
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
@@ -714,6 +777,9 @@ function get_strip_vecs(
     AEROMESH, solverOptions
 )
     """
+
+    Compute the spanwise tangent vectors for each strip
+
     Parameters
     ----------
     aeroMesh: array
@@ -840,21 +906,25 @@ function integrate_hydroLoads(
     ForceVector = zeros(DTYPE, length(foilTotalStates))
     ForceVector_z = Zygote.Buffer(zeros(DTYPE, length(foilTotalStates)))
     ForceVector_z[:] = ForceVector
+
     # Only compute forces not at the blanked BC node
-    F = -(fullAIC[1:end.∉[dofBlank], 1:end.∉[dofBlank]] * (foilTotalStates[1:end.∉[dofBlank]]))
+    Kff = fullAIC[1:end.∉[dofBlank], 1:end.∉[dofBlank]]
+    utot = foilTotalStates[1:end.∉[dofBlank]]
+    F = -Kff * utot
     ForceVector_z[1:length(foilTotalStates).∉[dofBlank]] = F
     ForceVector = copy(ForceVector_z)
 
     nDOF = BeamElement.NDOF
+
     if elemType == "bend-twist"
         My = ForceVector[nDOF:nDOF:end]
     elseif elemType == "BT2"
         My = ForceVector[3:nDOF:end]
         Lift = ForceVector[1:nDOF:end]
     elseif elemType == "COMP2"
-        My = ForceVector[4:nDOF:end]
-        Fz = ForceVector[3:nDOF:end]
-        Fy = ForceVector[2:nDOF:end]
+        My = ForceVector[3+YDIM:nDOF:end]
+        Fz = ForceVector[ZDIM:nDOF:end]
+        Fy = ForceVector[YDIM:nDOF:end]
     else
         error("Invalid element type")
     end
@@ -890,6 +960,7 @@ function integrate_hydroLoads(
     for secMom in My
         AbsTotalMoment += abs(secMom)
     end
+    @bp
 
     return ForceVector, AbsTotalLift, AbsTotalMoment
 end

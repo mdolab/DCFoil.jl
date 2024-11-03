@@ -82,6 +82,76 @@ function make_fullMesh(DVDictList, solverOptions)
 
 end
 
+function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+    """
+
+    Replaces make_componentMesh()
+
+    midchords: Location of midchords from the grid file
+    nodeConn: Connectivity of the midchords from the grid file
+
+    """
+    config = appendageOptions["config"]
+    semispan = appendageParams["s"]
+    nElemWing = appendageOptions["nNodes"] - 1
+    nElemTot = nothing
+    if config == "wing"
+        nElemTot = nElemWing
+    elseif config == "full-wing"
+        nElemTot = 2 * nElemWing
+    end
+    nNodeTot = nElemTot + 1
+    nNodeWing = nElemWing + 1
+
+
+    mesh = zeros(RealOrComplex, nNodeTot, 3)
+    elemConn = []
+
+    # --- Spline quantities ---
+    s_loc_q = LinRange(0.0, semispan, nNodeTot)
+    if config == "full-wing"
+        dx = semispan / nElemWing
+        s_loc_q = vcat(LinRange(0, semispan, nNodeWing), LinRange(-dx, -semispan, nNodeWing - 1))
+    elseif !(config in CONFIGS)
+        error("Invalid configuration")
+    end
+
+    # Find where node connectivivity jumps and has index of 1
+    junctionIdxs = findall(x -> x == 1, nodeConn)
+
+    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
+    # print("s_loc: ", s_loc)
+
+
+    midchordXLocs = SolverRoutines.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
+    midchordYLocs = SolverRoutines.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
+    midchordZLocs = SolverRoutines.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
+
+    mesh[:, XDIM] = midchordXLocs
+    mesh[:, YDIM] = midchordYLocs
+    mesh[:, ZDIM] = midchordZLocs
+
+    # --- Element connectivity ---
+    for ee in 1:nElemWing
+        push!(elemConn, [ee; ee + 1])
+    end
+    elemConn = copy(transpose(hcat(elemConn...)))
+
+    # println("span loc query", s_loc_q)
+    # for coord in eachrow(mesh)
+    #     println(coord)
+    # end
+    if config == "full-wing"
+        modifiedConn = elemConn .+ nNodeWing .- 1
+        modifiedConn[1, 1] = 1
+        elemConn = vcat(elemConn, modifiedConn)
+    end
+
+    # println("elemConn: ", elemConn)
+    return mesh, elemConn
+
+end
+
 function make_componentMesh(
     nElem::Int64, span;
     config="wing", rake=0.000, nElStrut=0, spanStrut=0.0
