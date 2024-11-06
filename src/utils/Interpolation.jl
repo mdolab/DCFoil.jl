@@ -9,9 +9,10 @@
 module Interpolation
 
 using Zygote
+using ChainRulesCore
 using ..DCFoil: DTYPE
 
-function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
+function lagrangeArrInterp(xj, yj, m::Int64, n::Int64, d::Int64, x)
     """
     Interpolate/extrapolate polynomials of order 'd-1'
     Providing 'd' points of array of size m x n, we obtain inter/extrapolant order 'd-1'
@@ -19,8 +20,8 @@ function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
 
     Inputs
     ------
-        x0 - input array size(d) (domain)
-        y0 - input array y0(x0) size(m,n,d) (values)
+        xj - input array size(d) (domain)
+        yj - input array yj(xj) size(m,n,d) (values)
         m, n  - size of array
         d - number of points to use for interpolation
         x  - the location we want to inter/extrapolate at - scalar
@@ -30,33 +31,43 @@ function lagrangeArrInterp(x0, y0, m::Int64, n::Int64, d::Int64, x)
     """
 
     # 2 dimensional array interpolation
-    y = zeros(DTYPE, m, n)
+    y = zeros(m, n)
 
     # @simd for ii in 1:d
-    @inbounds @fastmath begin
-        for ii in 1:d
-            L = 1.0
-            for jj in 1:d
-                if jj != ii
-                    L *= (x - x0[jj]) / (x0[ii] - x0[jj])
-                end
-            end
-            y += y0[:, :, ii] .* L
+    # @inbounds @fastmath begin
+    #     for ii in 1:d
+    #         L = 1.0
+    #         for jj in 1:d
+    #             if jj != ii
+    #                 L *= (x - xj[jj]) /
+    #                      (xj[ii] - xj[jj])
+    #             end
+    #         end
+    #         y += yj[:, :, ii] .* L # matrix version so we don't use Lagrange interp
+    #     end
+    # end
+
+    # Maybe do this for diff
+    for ii in 1:m
+        for jj in 1:n
+            yvals = yj[ii, jj, :]
+            y[ii, jj] = lagrangeInterp(xj, yvals, d, x)
         end
     end
 
     return y
 end
 
-function lagrangeInterp(x0, y0, n, x)
+
+function lagrangeInterp(xj, yj, n, x)
     """
     Interpolate/extrapolate polynomial of order 'm'
     Providing 'n' points gives us inter/extrapolant of order m = n-1
 
     Inputs
     ------
-        x0 - input vector
-        y0 - input vector y0(x0)
+        xj - input vector
+        yj - input vector of points yj(xj)
         n  - size of array
         x  - the location we want to inter/extrapolate at
     Outputs
@@ -70,14 +81,116 @@ function lagrangeInterp(x0, y0, n, x)
         for kk in 1:n
             if kk != ii
                 # This is the lagrange polynomial
-                L *= (x - x0[kk]) / (x0[ii] - x0[kk])
+                L *= (x - xj[kk]) / (xj[ii] - xj[kk])
             end
         end
-        y += y0[ii] * L
+        y += yj[ii] * L
     end
 
     return y
 end
+
+
+function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
+    """
+    Derivative of lagrangeInterp
+    """
+
+    y = lagrangeInterp(xj, yj, n, x)
+
+    function lagrangeInterp_pullback(ȳ)
+        """
+        Pullback for lagrangeArrInterp
+
+        ȳ - the seed for the pullback
+        """
+
+        # 2 dimensional array interpolation
+        dydxj = zeros(size(xj))
+        dydyj = zeros(size(yj))
+
+        # y = 0.0
+        dydx = 0.0
+        for jj in 1:n # loop over points
+            L = 1.0 # Lagrange weight
+
+            dxj = 0.0 # derivative of Lagrange weight wrt xj[jj]
+            dx = 0.0 # derivative of Lagrange weight wrt x
+
+            for ii in 1:n
+                if ii != jj
+                    # This is the lagrange polynomial
+                    L *= (x - xj[ii]) /
+                         (xj[jj] - xj[ii])
+
+
+                    # --- Sub level product for the dldxj ---
+                    ldxj = 1.0
+                    for mm in 1:n
+                        if mm != jj && mm != ii
+                            ldxj *= (x - xj[mm]) /
+                                    (xj[jj] - xj[mm])
+                        end
+                    end
+
+                    dxj += (xj[ii] - x) /
+                           (xj[jj] - xj[ii])^2 * ldxj
+
+                    dx += 1.0 / (x - xj[ii])
+                end
+            end
+            # y += yj[jj] * L
+
+            dydx += yj[jj] * L * dx
+            dydyj[jj] = L
+
+            # println("yj:", yj[jj], " lj: ", L, " dxj: ", dxj)
+            dydxj[jj] = yj[jj] * dxj
+        end
+
+        # --- Vector-matrix products should happen here ---
+        x0b = ȳ .* dydxj # not correct... but it does not get used in the flutter code!
+        x0b = NoTangent() # TODO: this is incorrect but will work for now
+        y0b = ȳ .* dydyj # Correct
+        xb = ȳ .* dydx # Correct
+
+        return (NoTangent(), x0b, y0b, NoTangent(), xb)
+    end
+
+
+    return y, lagrangeInterp_pullback
+
+end
+
+# 2024/11/05 Kind of working but weird outputs
+# # # Testing lagrange derivatives
+# # using ChainRulesTestUtils
+# # test_rrule(lagrangeInterp, rand(3), rand(3), 3, 0.5)
+# # lagrangeInterp(0:0.1:1, 1:0.1:2, 3, 0.5)
+
+# using AbstractDifferentiation: AbstractDifferentiation as AD
+# using Zygote, FiniteDifferences, ForwardDiff, ReverseDiff
+
+# backend = AD.FiniteDifferencesBackend()
+# # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
+# # # # AD.gradient(backend, x -> lagrangeInterp(x, 1:0.1:2, 3, 0.5), collect(0:0.2:1.0))
+# # # dfdxfd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+
+# xj = 0:0.2:1
+# yj = cat(repeat([1 2 3; 2 3 4; 1 1 1], 1, 1, length(xj) ÷ 2), repeat([1 1 1; 2 3 4; 2 2 1], 1, 1, length(xj) ÷ 2), dims=3)
+# dfdxfd = AD.gradient(backend, x -> lagrangeArrInterp(xj, yj, 3, 3, length(xj), x), 0.75)
+# dfdyjfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, x, 3, 3, length(xj), 0.5), yj)
+
+# backend = AD.ForwardDiffBackend()
+# # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
+# # dfdxjfwd = AD.gradient(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
+# # dfdxfwd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+
+
+# backend = AD.ZygoteBackend()
+# AD.jacobian(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.5)
+# # # dfdxjrad = AD.jacobian(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
+# dfdxrad = AD.jacobian(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
 
 function abs_smooth(x, Δx)
     """

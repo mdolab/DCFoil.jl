@@ -1706,41 +1706,66 @@ The overall data flow in the program is in \Cref{fig:DataFlow}.
     \centering
     % reference: trim={<left> <lower> <right> <upper>}
     %   \includesvg[width=\linewidth]{dataFlow.drawio}
-    \includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dataFlow.png}
+    \includegraphics[width=0.5\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dataFlow.png}
     \caption{\label{fig:DataFlow}Data flow in the program.}
 \end{figure}
 Appendage setup is through dictionaries.
 
 \section{Writing derivative routines}
 % 
-The forward and reverse mode AD logic from \citet{Martins2022} is
-\ben
-\dd{v_i}{v_j} = \dot{v}_i = \sum_{k=j}^{i-1}\pp{v_i}{v_k} \underbrace{\dot{v}_k}_{\dd{v_k}{v_j}}
-\\
-\dd{v_i}{v_j} = \bar{v}_j = \sum_{k=j+1}^{i}{\pp{v_k}{v_j}} \underbrace{\bar{v}_k}_{\dd{v_i}{v_k}}
-\een
-where the goal is the LHS (alternative notation $\dd{y}{x}$) over a massive length of code.
+Our goal is computing the derivative (alternative notation $\diff{y}/\diff{x}$) over a massive length of code.
+The forward and reverse mode AD logic is important to understand.
+Forward mode is
+\beq
+ \dd{v_i}{v_j} = \dot{v}_i = \sum_{k=j}^{i-1}\pp{v_i}{v_k} \underbrace{\dot{v}_k}_{\diff{v_k}/\diff{v_j}}
+ .
+\eeq
+% The summation term is filling out columns of the Jacobian matrix.
+
+In contrast, the reverse mode is
+\beq
+ \dd{v_i}{v_j} = \bar{v}_j = \sum_{k=j+1}^{i}{\pp{v_k}{v_j}} \underbrace{\bar{v}_k}_{\diff{v_i}/\diff{v_k}}
+.
+ \eeq
+% where we fill out rows of the Jacobian matrix.
+
+Now consider a composite function $\vec{f}: \mbb{R} \rightarrow \mbb{R}^n, \vec{f}_n \circ \vec{f}_{n-1} \circ \dots \circ \vec{f}_1(x)$ with $n$ steps.
+The derivative of the composite function is
+\beq
+\dd{\vec{f}}{x} = \pp{\vec{f}_n}{\vec{f}_{n-1}} \pp{\vec{f}_{n-1}}{\vec{f}_{n-2}} \dots 
+\underbrace{\pp{\vec{f}_2}{\vec{f}_1} \pp{\vec{f}_1}{x}}_{\leftarrow matvec}
+\eeq
+where the right to left multiplication is a \textbf{matrix-vector product} done for each $x$.
+In reverse mode, we want the gradient of a single function $g: \mbb{R}^n \rightarrow \mbb{R}, g(\vec{x}) = g_n \circ \vec{g}_{n-1}\circ \dots \circ \vec{g}_1(\vec{x})$ with the vector of $x$'s.
+\beq
+\dd{g}{\vec{x}}
+=
+\underbrace{\pp{g_n}{\vec{g}_{n-1}} \pp{\vec{g}_{n-1}}{\vec{g}_{n-2}}}_{vecmat \rightarrow}
+ \dots  \pp{\vec{g}_1}{\vec{x}}
+\eeq
+\textbf{Now we have a row vector times matrices} from left to right.
 
 The reverse AD routines are in Julia syntax.
 Consider the primal function somewhere in the chain of code
 \ben
 y = f(x)
 \een
-with a Jacobian matrix $dy/dx$.
-The vector-Jacobian product computed by $\mcal{B}$ is
+with a Jacobian matrix $\diff y/\diff x$.
+The vector-Jacobian (vector-matrix) product computed by $\mcal{B}$ is
 \ben
-\pp{a}{x} =
+\underbrace{\pp{a}{x}}_{\bar{x}} =
 \underbrace{\pp{a}{y}}_{\bar{y}}
-\underbrace{\dd{y}{x}}_{\tn{Jacobian }}
+\underbrace{\dd{y}{x}}_{\tn{Jacobian matrix}}
 = \mcal{B}({\bar{y}})
 \een
-where $\bar{y}$ is called the \emph{cotangent} vector and $a$ is some known quantity at this stage of the chain rule.
-The analog in forward mode are the tangent vector and pushforward function.
+where $\bar{y}$ is called the \emph{cotangent} vector and $a$ is some known input at this stage of the chain rule.
+The analog in forward mode are the tangent vector $\dot{y}$ and pushforward function.
+The downside of reverse AD is that if the composite function has $n$ steps, the reverse mode requires $\BigO(n)$ allocations in memory (or $\BigO(n^2)$ computations to recalculate).
 
 The \texttt{pullback} functionality in AD packages typically returns two things: the evaluated point $f(x)$ (also called primal) and the pullback function $\mcal{B}(\bar{y})$
 There are situations in which one has a manual implementation they want the {AD} package to bypass, for example, matrix operations.
 
-We write manual rules through \texttt{ChainRules.jl}.
+We write manual rules through \texttt{ChainRulesCore.jl}.
 An example is Algorithm~\ref{alg:ConceptualRAD}.
 % \usepackage{algorithm2e}
 \RestyleAlgo{ruled}
@@ -1750,10 +1775,11 @@ An example is Algorithm~\ref{alg:ConceptualRAD}.
     function ChainRulesCore.rrule(::typeof($f(x)$), $x$)\\
     \quad $y = f(x)$ \tcp*{This is the primal}
     \quad function $\mcal{B}(\bar{y})$\;
-    \quad \quad Code to compute $\bar{x}= \bar{y} \dd{y}{x}$ \tcp*{Ex. $\bar{x} =\bar{y} \cos(x)  $ for $f(x)=\sin(x)$}
+    \quad \quad Code to compute the vector-matrix product $\bar{x}= \bar{y} \dd{y}{x}$ \tcp*{Ex. $\bar{x} =\bar{y} \cos(x)  $ for $f(x)=\sin(x)$}
     \quad return [\texttt{NoTangent()}, $\bar{x}$] \tcp*{Function signature matches inputs to the ChainRulesCore.rrule}
     return $y$, $\mcal{B}()$
 \end{algorithm}
+
 The \texttt{NoTangent()} tells us that if one perturbs the matching primal, the primal will error.
 For example, perturbing the number of increments $N$ of a \texttt{LinRange()} errors the code because you cannot have a non-integer input (like $N+0.1$).
 In contrast, the \texttt{ZeroTangent()} means that changing the matching primal results in no change in the behavior of the primal;
@@ -1763,7 +1789,6 @@ A \texttt{@thunk} is a delayed computation.
 Use thunk to wrap the computation, not the variable!
 The docs say that in the future, thunks should not be needed because they put stress on the compiler.
 
-
 Now that you understand the conceptual level, this is a more applied example for the eigenvalue derivative routine.
 \begin{algorithm}[htb!]
     \caption{\label{alg:EigenRAD} Reverse rule for eigenvalue problem}
@@ -1771,6 +1796,39 @@ Now that you understand the conceptual level, this is a more applied example for
     \quad $\lambda_n, \phi_n = \tn{eigvals}(A)$ \\
     return
 \end{algorithm}
+
+The Lagrange interpolating polynomial at some point $x$ for a scalar function is
+\beq
+L(x) = \sum_{j=0}^{k} y_j \ell_j(x)
+\eeq
+where $y_j$ are data points at $x_j$ locations (there are $k+1$ points in total!), and $\ell_j(x)$ are the Lagrange basis functions.
+The Lagrange basis functions are
+\beq
+\ell_j(x) = \prod_{\substack{m=0 \\ m \neq j}}^{k} \frac{x-x_m}{x_j-x_m}
+\eeq
+To do the reverse AD of the Lagrange interpolation, we need a few derivatives, namely
+\ben
+\dd{L(x)}{x},
+\qquad
+\dd{L(x)}{x_j},
+\qquad
+\dd{L(x)}{y_j},
+\een
+The first two are row vectors and the last is a scalar.
+The derivatives are\footnote{see Wiki for derivation simplification}
+\beq
+\dd{L(x)}{x} &= \sum_{j=0}^{k} y_j \dd{\ell_j(x)}{x} 
+= 
+\sum_{j=0}^{k} y_j { \ell_j(x) \sum_{\substack{i=0\\i\neq j}}^{k} \frac{1}{x - x_i}}
+\\
+\dd{L(x)}{x_j} &=  y_j \dd{\ell_j(x)}{x_j} = 
+ y_j \sum_{\substack{i=0 \\ i \neq j}}^{k} \left[ 
+    \frac{x_i - x}{(x_j-x_i)^2} \prod_{\substack{m=0 \\m\neq (i,j)}}^{k} \frac{x-x_m}{x_j-x_m}
+    \right]
+\\
+\dd{L(x)}{y_j} &=  \ell_j(x)
+\eeq
+The derivative with respect to $x_j$ has not been debugged.
 
 % \cite{Garg2015,Garg2015a,Garg2016,Garg2017a,Garg2017b,Garg2019a}
 % \cite{Liao2019a,Liao2019b,Liao2020a,Liao2020b,Liao2021,Liao2021a,Liao2022,Liao2023}
