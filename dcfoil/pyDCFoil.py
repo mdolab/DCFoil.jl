@@ -249,7 +249,6 @@ class DCFOIL:
             self.LEcoords = np.vstack((self.LEcoords, LE_X))
             self.conn = np.vstack((self.nodeConn, node_conn + self.nnodes))
             self.TEcoords = np.vstack((self.TEcoords, TE_X))
-        
 
         # set new number of collocation nodes
         self.nnodes = self.LEcoords.shape[0]
@@ -273,7 +272,7 @@ class DCFOIL:
 
         DVDictList = self.DVDictList
         evalFuncs = self.evalFuncs
-        
+
         LECoords = self.LEcoords
         LEConn = self.nodeConn
         TECoords = self.TEcoords
@@ -505,11 +504,11 @@ class DCFOIL:
             # Check if our point-set is up to date:
             if not self.DVGeo.pointSetUpToDate(ptSetName):
                 self.X = self.DVGeo.update(ptSetName, config=aeroProblem.name)
-                
+
                 # Update the coordinates in the LEcoords
                 self.LEcoords = self.X[: self.nnodes]
                 self.TEcoords = self.X[self.nnodes :]
-                
+
                 if self.debugDVGeo:
                     print(f"Updated point set {ptSetName}")
                     print(f"LE coords:\n{self.LEcoords}")

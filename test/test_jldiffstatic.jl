@@ -130,6 +130,19 @@ evalFunc = "moment"
 evalFunc = "lift"
 
 
+# --- Some coordinate test vals ---
+LECoords = zeros(3, nNodes)
+TECoords = zeros(3, nNodes)
+nodeConn = zeros(Int64, 2, nNodes - 1)
+for ii in 1:nNodes
+    LECoords[:, ii] = [0.0, -0.50, 0.0]
+    TECoords[:, ii] = [0.0, 0.5, 0.0]
+    if ii < nNodes
+        nodeConn[:, ii] = [ii, ii + 1]
+    end
+end
+u_test = zeros(nNodes*9)
+SOLVERPARAMS = DCFoil.SolutionConstants.DCFoilSolverParams(Kmattest,MMattest,Cmattest,"COMP2", AICmattest,mode,1.0,[1,2,3,4,5,6,7,8,9],)
 
 # ==============================================================================
 #                         STATIC DERIV TESTS
@@ -139,7 +152,7 @@ funcVal = 0.0
 # ************************************************
 #     Setup test values
 # ************************************************
-DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=[DVDict])
 _, _, SOLVERPARAMS = DCFoil.SolveStatic.setup_problem([DVDict], wingOptions, solverOptions)
 SOL = DCFoil.run_model([DVDict], evalFuncs; solverOptions=solverOptions)
 u_test = SOL["STATIC"][1].structStates
@@ -148,14 +161,14 @@ u_test = SOL["STATIC"][1].structStates
 #     Check ∂r∂x
 # ************************************************
 # 2024-07-25 OK
-# prpx_fidi = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
-#     mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
+prpx_fidi = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict, LECoords, TECoords, nodeConn;
+    mode="FiDi", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
-# prpx_cs = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
-#     mode="CS", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
+prpx_cs = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+    mode="CS", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
-# prpx_rad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
-#     mode="RAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
+prpx_rad = DCFoil.SolveStatic.compute_∂r∂x(u_test, DVDict;
+    mode="RAD", SOLVERPARAMS=SOLVERPARAMS, appendageOptions=wingOptions, solverOptions=solverOptions, DVDictList=[DVDict])
 
 
 # # ************************************************

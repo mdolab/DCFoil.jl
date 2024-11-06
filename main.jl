@@ -127,7 +127,8 @@ solverOptions = Dict(
     # "name" => "R3E6",
     "name" => "mothrudder",
     "debug" => false,
-    "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
+    # "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
+    "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf"], #, "./INPUT/mothrudder_foil_strut_mesh.dcf"],
     "writeTecplotSolution" => true,
     # ---------------------------
     #   General appendage options
@@ -191,7 +192,7 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-# TODO: PICKUP HERE ADDING IN THE STRUT
+# TODO: PICKUP HERE ADDING IN THE STRUT/ getting derivs working to do an optimization
 GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)

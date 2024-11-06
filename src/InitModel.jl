@@ -53,7 +53,7 @@ function init_static(
   # --- Compute the structural properties for the foil ---
   nNodes = appendageOptions["nNodes"]
 
-  if !isnothing(appendageOptions["path_to_struct_props"])
+  if haskey(appendageOptions, "path_to_struct_props") && !isnothing(appendageOptions["path_to_struct_props"])
     println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
     EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = Preprocessing.get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
   else
@@ -158,7 +158,7 @@ function init_modelFromDVDict(DVDict::Dict, solverOptions::Dict, appendageOption
   # ************************************************
   # NOTE: this is not all DVs!
 
-  if !isnothing(appendageOptions["path_to_geom_props"])
+  if haskey(appendageOptions, "path_to_geom_props")
     α₀ = DVDict["alfa0"]
     sweepAng = DVDict["sweep"]
     rake = DVDict["rake"]
@@ -217,7 +217,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-  if !isnothing(appendageOptions["path_to_geom_props"])
+  if haskey(appendageOptions,"path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
     print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
     α₀ = appendageParams["alfa0"]

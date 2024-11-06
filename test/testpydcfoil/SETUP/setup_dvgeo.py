@@ -15,16 +15,9 @@ def setup(args, comm, files: dict):
     # ======================================================================
     #         File setup
     # ======================================================================
-    # rst Create DVGeometry objects
-    FFDFile_global = files["ffdFile0"]
-    DVGeo = DVGeometry(FFDFile_global)
-    DVGeo_foil = DVGeometry(files["ffdFile1"], child=True)  # Child DVGeometry
+    DVGeo = DVGeometry(files["FFDFile"], kmax=4)
 
-    # rst Create reference axis
-    nRefAxPts_foil = DVGeo_foil.addRefAxis("foil", xFraction=0.25, alignIndex="k")
-
-    DVGeo.addChild(DVGeo_foil)
-    nRefAxPts_global = DVGeo.addRefAxis("global", xFraction=1.0, alignIndex="k")
+    nRefAxPts = DVGeo.addRefAxis("global", xFraction=0.5, alignIndex="j")
 
     # ==============================================================================
     #                         DVS
@@ -32,9 +25,12 @@ def setup(args, comm, files: dict):
     # ---------------------------
     #   TWIST
     # ---------------------------
-    if "t" in args.geovar_foil:
-        if comm.rank == 0:
-            print(f"{nTwist} foil twist vars", flush=True)
+    if "t" in args.geovar:
+        # if comm.rank == 0:
+        nTwist = nRefAxPts
+        print(f"{nTwist} foil twist vars", flush=True)
+
+        twistAxis = "global"
 
         def twist_rottheta_func(val, geo):
             """
@@ -45,21 +41,22 @@ def setup(args, comm, files: dict):
             for ii in range(nTwist):
                 geo.rot_theta["c4_v0"].coef[ii + n_skip] = val[ii]
 
-                if args.config in ["full", "fs"]:
-                    geo.rot_theta["c4_v1"].coef[ii + n_skip] = val[ii]
+                # if args.config in ["full", "fs"]:
+                #     geo.rot_theta["c4_v1"].coef[ii + n_skip] = val[ii]
 
         def twist_roty_func(val, geo):
             """
             val array has length of semi-span FFDs only. It's mirrored to the full config
             """
+            nSkip = 0
             for ii in range(nTwist):
-                geo.rot_y["c4_v0"].coef[ii + n_skip] = val[ii]
+                geo.rot_y[twistAxis].coef[ii + nSkip] = val[ii]
 
-                if args.config in ["full", "fs"]:
-                    geo.rot_y["c4_v1"].coef[ii + n_skip] = val[ii]
+                # if args.config in ["full", "fs"]:
+                #     geo.rot_y["c4_v1"].coef[ii + nSkip] = val[ii]
 
-        DVGeoFoil.addGlobalDV(
-            "foil_twist",
+        DVGeo.addGlobalDV(
+            "twist",
             value=np.zeros(nTwist),
             func=twist_roty_func,
             # func=twist_rottheta_func,
@@ -71,13 +68,14 @@ def setup(args, comm, files: dict):
     # ---------------------------
     #   SWEEP
     # ---------------------------
-    if "w" in args.geovar_foil:
+    if "w" in args.geovar:
         # Determine the number of sections that have sweep control
-        nSweep = nRefAxPts1
+        nSweep = nRefAxPts
+        sweepAxis = "global"
 
         def sweep_rot_func(val, geo):
             # the extractCoef method gets the unperturbed ref axis control points
-            C = geo.extractCoef("c4_v0")
+            C = geo.extractCoef(sweepAxis)
             C_orig = C.copy()
             # we will sweep the wing about the first point in the ref axis
             sweep_ref_pt = C_orig[0, :]
@@ -95,35 +93,35 @@ def setup(args, comm, files: dict):
 
             # modify the control points of the ref axis
             # by applying a rotation about the first point in the x-z plane
-            for ii in range(nRefAxPts1):
+            for ii in range(nSweep):
                 # get the vector from each ref axis point to the wing root
                 vec = C[ii, :] - sweep_ref_pt
                 # need to now rotate this by the sweep angle and add back the wing root loc
                 C[ii, :] = sweep_ref_pt + rot_mtx @ vec
 
             # use the restoreCoef method to put the control points back in the right place
-            geo.restoreCoef(C, "c4_v0")
+            geo.restoreCoef(C, sweepAxis)
 
-            if args.config in ["full", "fs"]:
-                C2 = geo.extractCoef("c4_v1")
-                C_orig = C2.copy()
-                # we will sweep the wing about the first point in the ref axis
-                sweep_ref_pt = C_orig[0, :]
+            # if args.config in ["full", "fs"]:
+            #     C2 = geo.extractCoef("c4_v1")
+            #     C_orig = C2.copy()
+            #     # we will sweep the wing about the first point in the ref axis
+            #     sweep_ref_pt = C_orig[0, :]
 
-                theta = val[0] * np.pi / 180
-                cc = np.cos(theta)
-                ss = np.sin(theta)
+            #     theta = val[0] * np.pi / 180
+            #     cc = np.cos(theta)
+            #     ss = np.sin(theta)
 
-                for ii in range(nRefAxPts2):
-                    # get the vector from each ref axis point to the wing root
-                    vec = C2[ii, :] - sweep_ref_pt
-                    # need to now rotate this by the sweep angle and add back the wing root loc
-                    C2[ii, :] = sweep_ref_pt + rot_mtx @ vec
+            #     for ii in range(nRefAxPts2):
+            #         # get the vector from each ref axis point to the wing root
+            #         vec = C2[ii, :] - sweep_ref_pt
+            #         # need to now rotate this by the sweep angle and add back the wing root loc
+            #         C2[ii, :] = sweep_ref_pt + rot_mtx @ vec
 
-                # use the restoreCoef method to put the control points back in the right place
-                geo.restoreCoef(C2, "c4_v1")
+            #     # use the restoreCoef method to put the control points back in the right place
+            #     geo.restoreCoef(C2, "c4_v1")
 
-        DVGeoFoil.addGlobalDV(
+        DVGeo.addGlobalDV(
             dvName="sweep",
             value=0.0,
             func=sweep_rot_func,
@@ -135,12 +133,13 @@ def setup(args, comm, files: dict):
     # ---------------------------
     #   DIHEDRAL
     # ---------------------------
-    if "d" in args.geovar_foil:
-        nDihedral = nRefAxPts1
+    if "d" in args.geovar:
+        nDihedral = nRefAxPts
+        dihedralAxis = "global"
 
         def dihedral_rot_func(val, geo):
             # the extractCoef method gets the unperturbed ref axis control points
-            C = geo.extractCoef("c4_v0")
+            C = geo.extractCoef(dihedralAxis)
             C_orig = C.copy()
             # we will sweep the wing about the first point in the ref axis
             sweep_ref_pt = C_orig[0, :]
@@ -158,42 +157,42 @@ def setup(args, comm, files: dict):
 
             # modify the control points of the ref axis
             # by applying a rotation about the first point in the x-z plane
-            for ii in range(nRefAxPts1):
+            for ii in range(nDihedral):
                 # get the vector from each ref axis point to the wing root
                 vec = C[ii, :] - sweep_ref_pt
                 # need to now rotate this by the sweep angle and add back the wing root loc
                 C[ii, :] = sweep_ref_pt + rot_mtx @ vec
             # use the restoreCoef method to put the control points back in the right place
-            geo.restoreCoef(C, "c4_v0")
+            geo.restoreCoef(C, dihedralAxis)
 
-            if args.config in ["full", "fs"]:
-                C2 = geo.extractCoef("c4_v1")
-                C_orig = C2.copy()
-                # we will sweep the wing about the first point in the ref axis
-                sweep_ref_pt = C_orig[0, :]
+            # if args.config in ["full", "fs"]:
+            #     C2 = geo.extractCoef("c4_v1")
+            #     C_orig = C2.copy()
+            #     # we will sweep the wing about the first point in the ref axis
+            #     sweep_ref_pt = C_orig[0, :]
 
-                theta = val[0] * np.pi / 180
-                cc = np.cos(theta)
-                ss = np.sin(theta)
-                rot_mtx = np.array(  # rotation matrix about the z-axis
-                    [
-                        [1, 0.0, 0.0],
-                        [0.0, cc, -ss],
-                        [0.0, ss, cc],
-                    ]
-                )
+            #     theta = val[0] * np.pi / 180
+            #     cc = np.cos(theta)
+            #     ss = np.sin(theta)
+            #     rot_mtx = np.array(  # rotation matrix about the z-axis
+            #         [
+            #             [1, 0.0, 0.0],
+            #             [0.0, cc, -ss],
+            #             [0.0, ss, cc],
+            #         ]
+            #     )
 
-                # modify the control points of the ref axis
-                # by applying a rotation about the first point in the x-z plane
-                for ii in range(nRefAxPts2):
-                    # get the vector from each ref axis point to the wing root
-                    vec = C2[ii, :] - sweep_ref_pt
-                    # need to now rotate this by the sweep angle and add back the wing root loc
-                    C2[ii, :] = sweep_ref_pt + rot_mtx @ vec
-                # use the restoreCoef method to put the control points back in the right place
-                geo.restoreCoef(C2, "c4_v1")
+            #     # modify the control points of the ref axis
+            #     # by applying a rotation about the first point in the x-z plane
+            #     for ii in range(nRefAxPts2):
+            #         # get the vector from each ref axis point to the wing root
+            #         vec = C2[ii, :] - sweep_ref_pt
+            #         # need to now rotate this by the sweep angle and add back the wing root loc
+            #         C2[ii, :] = sweep_ref_pt + rot_mtx @ vec
+            #     # use the restoreCoef method to put the control points back in the right place
+            #     geo.restoreCoef(C2, "c4_v1")
 
-        DVGeoFoil.addGlobalDV(
+        DVGeo.addGlobalDV(
             dvName="dihedral",
             value=0.0,
             func=dihedral_rot_func,
@@ -205,48 +204,50 @@ def setup(args, comm, files: dict):
     # ---------------------------
     #   CHORD
     # ---------------------------
-    if "r" in args.geovar_foil:
+    if "r" in args.geovar:
 
-        def chords(val, geo):
-            # Set all the global chord values
-            for i in range(4, nRefAxPts_global):
-                geo.scale["global"].coef[i] = val[i - 4]
+        nSkip = 4
 
-        DVGeo.addGlobalDV(
-            "chord",
-            value=np.ones(nRefAxPts_global - 4) * 0.1,
-            func=chords,
-            lower=0.01,
-            upper=0.2,
-            scale=1.0,
-        )
+        # def chords(val, geo):
+        #     # Set all the global chord values
+        #     for ii in range(nSkip, nRefAxPts):
+        #         geo.scale["global"].coef[ii] = val[ii - nSkip]
+
+        # DVGeo.addGlobalDV(
+        #     "chord",
+        #     value=np.ones(nRefAxPts - nSkip) * 0.1,
+        #     func=chords,
+        #     lower=0.01,
+        #     upper=0.2,
+        #     scale=1.0,
+        # )
 
         def taper(val, geo):
-            s = geo.extractS("wing")
+            s = geo.extractS("global")
             slope = (val[1] - val[0]) / (s[-1] - s[0])
-            for i in range(nRefAxPts):
-                geo.scale_x["wing"].coef[i] = slope * (s[i] - s[0]) + val[0]
+            for ii in range(nRefAxPts):
+                geo.scale_x["global"].coef[ii] = slope * (s[ii] - s[0]) + val[0]
 
         DVGeo.addGlobalDV(
             "taper",
-            value=[0.1, 0.1],
+            value=np.ones(2) * 1.0,
             func=taper,
-            lower=[0.01, 0.01],
-            upper=[0.2, 0.2],
+            lower=[0.1, 0.1],
+            upper=[1.5, 1.5],
             scale=1.0,
         )
 
     # ---------------------------
     #   Span
     # ---------------------------
-    if "b" in args.geovar_foil:
+    if "p" in args.geovar:
 
         def span(val, geo):
-            C = geo.extractCoef("wing")
-            s = geo.extractS("wing")
-            for i in range(1, nRefAxPts):
-                C[i, 2] += val * s[i]
-            geo.restoreCoef(C, "wing")
+            C = geo.extractCoef("global")
+            s = geo.extractS("global")
+            for ii in range(1, nRefAxPts):
+                C[ii, 1] += val * s[ii]
+            geo.restoreCoef(C, "global")
 
         DVGeo.addGlobalDV(dvName="span", value=0.0, func=span, lower=-10.0, upper=20.0, scale=0.1)
 

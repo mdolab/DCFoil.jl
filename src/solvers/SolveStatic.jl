@@ -63,9 +63,10 @@ function solveFromDVs(
     outputDir = solverOptions["outputDir"]
 
     # Initial guess on unknown deflections (excluding BC nodes)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, elemType;
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
-    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], fTractions[1:end.∉[SOLVERPARAMS.dofBlank]])
+    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
 
     if lowercase(solverOptions["res_jacobian"]) == "cs"
         mode = "CS"
@@ -86,17 +87,17 @@ function solveFromDVs(
         CLMain=CLMain,
     )
     # qSol = q # just use pre-solve solution
-    uSol, _ = FEMMethods.put_BC_back(qSol, SOLVERPARAMS.elemType; appendageOptions=appendageOptions)
+    uSol, _ = FEMMethods.put_BC_back(qSol, elemType; appendageOptions=appendageOptions)
 
     # --- Get hydroLoads again on solution ---
     # _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(uSol), structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; 
     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, SOLVERPARAMS.elemType;
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
 
 
-    write_sol(uSol, fHydro, SOLVERPARAMS.elemType, outputDir)
+    write_sol(uSol, fHydro, elemType, outputDir)
 
     STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro, FEMESH, SOLVERPARAMS, FOIL, STRUT)
 
@@ -117,9 +118,10 @@ function solveFromCoords(
     outputDir = solverOptions["outputDir"]
 
     # Initial guess on unknown deflections (excluding BC nodes)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, elemType;
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
-    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]], fTractions[1:end.∉[SOLVERPARAMS.dofBlank]])
+    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
 
     if lowercase(solverOptions["res_jacobian"]) == "cs"
         mode = "CS"
@@ -143,17 +145,17 @@ function solveFromCoords(
         CLMain=CLMain,
     )
     # qSol = q # just use pre-solve solution
-    uSol, _ = FEMMethods.put_BC_back(qSol, SOLVERPARAMS.elemType; appendageOptions=appendageOptions)
+    uSol, _ = FEMMethods.put_BC_back(qSol, elemType; appendageOptions=appendageOptions)
 
     # --- Get hydroLoads again on solution ---
     # _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(uSol), structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; 
     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], SOLVERPARAMS.dofBlank, SOLVERPARAMS.downwashAngles, SOLVERPARAMS.elemType;
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
 
 
-    write_sol(uSol, fHydro, SOLVERPARAMS.elemType, outputDir)
+    write_sol(uSol, fHydro, elemType, outputDir)
 
     STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro, FEMESH, SOLVERPARAMS, FOIL, STRUT)
 
@@ -189,7 +191,7 @@ function setup_problemFromDVDict(
     DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
     derivMode = "RAD"
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, elemType, AIC, derivMode, planformArea, DOFBlankingList, alphaCorrection)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, DOFBlankingList, alphaCorrection)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH
 end
@@ -222,7 +224,7 @@ function setup_problemFromCoords(
     DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
     derivMode = "RAD"
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, elemType, AIC, derivMode, planformArea, DOFBlankingList, alphaCorrection)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, DOFBlankingList, alphaCorrection)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH
 end
@@ -323,8 +325,8 @@ function evalFuncs(
     Given {u} and the forces, compute the cost functions
     """
 
-    costFuncs = compute_funcs(evalFuncsList, states, SOL, LECoords, TECoords, nodeConn, DVDict; 
-    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
+    costFuncs = compute_funcs(evalFuncsList, states, SOL, LECoords, TECoords, nodeConn, DVDict;
+        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
 
 
     return costFuncs
@@ -338,8 +340,8 @@ function evalFuncs(
     Allow this to work for a single cost function too
     """
 
-    costFuncs = compute_funcs([evalFuncs], states, SOL, LECoords, TECoords, nodeConn, DVDict; 
-    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
+    costFuncs = compute_funcs([evalFuncs], states, SOL, LECoords, TECoords, nodeConn, DVDict;
+        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
 
     return costFuncs[evalFuncs]
 end
@@ -367,9 +369,10 @@ function compute_funcs(
 
     # WING, STRUT, constants, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
     WING, STRUT, constants, FEMESH = setup_problemFromCoords(LECoords, nodeConn, TECoords, DVDict, appendageOptions, solverOptions)
-    
+
     # solverOptions["debug"] = false
-    forces, _, _ = HydroStrip.integrate_hydroLoads(states, constants.AICmat, α₀, rake, constants.dofBlank, constants.downwashAngles, constants.elemType;
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    forces, _, _ = HydroStrip.integrate_hydroLoads(states, constants.AICmat, α₀, rake, DOFBlankingList, constants.downwashAngles, elemType;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     meanChord = mean(WING.chord)
 
@@ -647,7 +650,8 @@ function evalFuncsSens(
             STATSOL = STATSOLLIST[iComp]
             solverParams = STATSOL.SOLVERPARAMS
             appendageOptions = solverOptions["appendageList"][iComp]
-            u = STATSOL.structStates[1:end.∉[solverParams.dofBlank]]
+            DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+            u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
             @time ∂r∂x = compute_∂r∂x(STATSOL.structStates, DVDict;
                 # mode="FiDi", 
@@ -682,7 +686,7 @@ function evalFuncsSens(
                 ∂f∂uT = transpose(∂f∂u)
                 # println(size(∂f∂uT)) # should be (n_u x n_f) a column vector!
                 psiVec = compute_adjointVec(∂r∂u, ∂f∂uT;
-                    solverParams=solverParams)
+                    solverParams=solverParams, appendageOptions=appendageOptions)
 
                 # --- Compute total sensitivities ---
                 # funcsSens[costFunc] = ∂f∂x - transpose(psiMat) * ∂r∂x
@@ -706,7 +710,8 @@ function evalFuncsSens(
             STATSOL = STATSOLLIST[iComp]
             solverParams = STATSOL.SOLVERPARAMS
             appendageOptions = solverOptions["appendageList"][iComp]
-            u = STATSOL.structStates[1:end.∉[solverParams.dofBlank]]
+            DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+            u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
             @time ∂r∂x = compute_∂r∂x(
                 STATSOL.structStates, DVDict;
@@ -738,7 +743,7 @@ function evalFuncsSens(
 
                 # --- Compute total sensitivities ---
                 # funcsSens[costFunc] = ∂f∂x - ∂f∂u * [ϕ]
-                dfdx = ∂f∂x - (∂f∂u[:, 1:end.∉[solverParams.dofBlank]] * phiMat)
+                dfdx = ∂f∂x - (∂f∂u[:, 1:end.∉[DOFBlankingList]] * phiMat)
                 giDV = 1
                 for (iiDV, dvkey) in enumerate(SORTEDDVS)
                     ndv = DVLengths[iiDV]
@@ -877,7 +882,7 @@ function compute_∂f∂u(
 end
 
 function compute_∂r∂x(
-    allStructStates, DVDict::Dict;
+    allStructStates, DVDict::Dict, LECoords, TECoords, nodeConn;
     mode="FiDi", SOLVERPARAMS=nothing, appendageOptions=nothing,
     solverOptions=nothing, iComp=1, CLMain=0.0, DVDictList=[]
 )
@@ -886,9 +891,13 @@ function compute_∂r∂x(
     """
 
     println("Computing ∂r∂x...")
-    u = allStructStates[1:end.∉[SOLVERPARAMS.dofBlank]]
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    u = allStructStates[1:end.∉[DOFBlankingList]]
     DVDictList[iComp] = DVDict
     DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+    LECoordsVec, mm, nn = Utilities.unpack_coords(LECoords)
+    TECoordsVec, _, _ = Utilities.unpack_coords(TECoords)
+
     if uppercase(mode) == "FIDI" # Finite difference
 
         # This is the manual FD
@@ -920,23 +929,38 @@ function compute_∂r∂x(
 
     elseif uppercase(mode) == "CS" # works but slow (4 sec)
         dh = 1e-100
-        ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
-
         println("step size: ", dh)
 
+        # ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
+        ∂r∂x = zeros(DTYPE, length(u), length(LECoordsVec) + length(TECoordsVec))
+
+
+
         # create a complex copy of the design variables
-        DVVecCS = complex(copy(DVVec))
-        for ii in eachindex(DVVec)
-            DVVecCS[ii] += 1im * dh
-            r_f = compute_residualsFromDV(
-                u, DVVecCS, DVLengths;
+        # DVVecCS = complex(copy(DVVec))
+        LECoordsVecCS = complex(copy(LECoordsVec))
+        TECoordsVecCS = complex(copy(TECoordsVec))
+        # for ii in eachindex(DVVec)
+        for ii in eachindex(LECoordsVec)
+            # DVVecCS[ii] += 1im * dh
+            LECoordsVecCS[ii] += 1im * dh
+            # r_f = compute_residualsFromDV(
+            #     u, DVVecCS, DVLengths;
+            #     appendageOptions=appendageOptions,
+            #     solverOptions=solverOptions,
+            #     iComp=iComp,
+            #     CLMain=CLMain,
+            #     DVDictList=DVDictList,
+            # )
+            LECoordsWork = Utilities.repack_coords(LECoordsVecCS, mm, nn)
+            r_f = compute_residualsFromCoords(
+                u, LECoordsWork, TECoordsWork, nodeConn, DVDictList;
                 appendageOptions=appendageOptions,
                 solverOptions=solverOptions,
                 iComp=iComp,
-                CLMain=CLMain,
-                DVDictList=DVDictList,
             )
-            DVVecCS[ii] -= 1im * dh
+            # DVVecCS[ii] -= 1im * dh
+            LECoordsCS[ii] -= 1im * dh
 
             ∂r∂x[:, ii] = imag((r_f)) / dh
         end
@@ -1033,8 +1057,9 @@ function compute_∂r∂uFromDV(
         # NOTE Kf = AIC matrix
         # where AIC * states = forces on RHS (external)
         # _, _, solverParams = setup_problem(DVDict, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
-        ∂r∂u::Matrix{DTYPE} = solverParams.Kmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
-        +solverParams.AICmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
+        DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+        ∂r∂u::Matrix{DTYPE} = solverParams.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+        +solverParams.AICmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
         # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
         # converge to the same solution as the RAD, which only takes 2 NL iterations.
     else
@@ -1112,8 +1137,9 @@ function compute_∂r∂uFromCoords(
         # NOTE Kf = AIC matrix
         # where AIC * states = forces on RHS (external)
         # _, _, solverParams = setup_problem(DVDict, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
-        ∂r∂u_struct = solverParams.Kmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
-        ∂r∂u_fluid = solverParams.AICmat[1:end.∉[solverParams.dofBlank], 1:end.∉[solverParams.dofBlank]]
+        DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+        ∂r∂u_struct = solverParams.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+        ∂r∂u_fluid = solverParams.AICmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
         ∂r∂u::Matrix{DTYPE} = ∂r∂u_struct + ∂r∂u_fluid
         # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
         # converge to the same solution as the RAD, which only takes 2 NL iterations.
@@ -1174,11 +1200,12 @@ function compute_residualsFromDV(
 
     # --- Outputs ---
     F = -SOLVERPARAMS.AICmat * foilTotalStates
-    FOut = F[1:end.∉[SOLVERPARAMS.dofBlank]]
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    FOut = F[1:end.∉[DOFBlankingList]]
 
 
     # --- Stack them ---
-    resVec = SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]] * structStates - FOut
+    resVec = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] * structStates - FOut
 
     return resVec
 end
@@ -1220,11 +1247,12 @@ function compute_residualsFromCoords(
 
     # --- Outputs ---
     F = -SOLVERPARAMS.AICmat * foilTotalStates
-    FOut = F[1:end.∉[SOLVERPARAMS.dofBlank]]
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    FOut = F[1:end.∉[DOFBlankingList]]
 
 
     # --- Stack them ---
-    Felastic = SOLVERPARAMS.Kmat[1:end.∉[SOLVERPARAMS.dofBlank], 1:end.∉[SOLVERPARAMS.dofBlank]] * structStates
+    Felastic = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] * structStates
     resVec = Felastic - FOut
 
 
@@ -1248,14 +1276,15 @@ function compute_directMatrix(
     return ϕ
 end
 
-function compute_adjointVec(∂r∂u, ∂f∂uT; solverParams=nothing)
+function compute_adjointVec(∂r∂u, ∂f∂uT; solverParams=nothing, appendageOptions=nothing)
     """
     Computes adjoint vector
     If ∂f∂uT is a vector, it might be the same as passing in ∂f∂u
     """
 
     println("WARNING: REMOVING CLAMPED NODE CONTRIBUTION (There's no hydro force at the clamped node...)")
-    ∂f∂uT = ∂f∂uT[1:end.∉[solverParams.dofBlank]]
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
+    ∂f∂uT = ∂f∂uT[1:end.∉[DOFBlankingList]]
     ψ = transpose(∂r∂u) \ ∂f∂uT
 
     return ψ

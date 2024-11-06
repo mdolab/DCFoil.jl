@@ -28,8 +28,9 @@ import numpy as np
 # import niceplots
 from pprint import pprint as pp
 from pyoptsparse import Optimization, OPT, History
-from SETUP import setup_dcfoil, setup_dvgeo
+from SETUP import setup_dcfoil, setup_dvgeo, setup_opt
 from mpi4py import MPI
+from baseclasses import AeroProblem
 
 comm = MPI.COMM_WORLD
 # ==============================================================================
@@ -37,8 +38,22 @@ comm = MPI.COMM_WORLD
 # ==============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, default="INPUT")
+    parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
+    parser.add_argument(
+        "--geovar",
+        type=str,
+        default="trwpd",
+        help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
+    )
     parser.add_argument(
         "--optimizer", "-o", help="type of optimizer", choices=["SLSQP", "SNOPT"], type=str, default="SNOPT"
+    )
+    parser.add_argument(
+        "--task",
+        help="Check end of script for task type",
+        type=str,
+        default="run",
     )
     args = parser.parse_args()
 
@@ -51,10 +66,15 @@ if __name__ == "__main__":
         print(30 * "-", flush=True)
 
     # ************************************************
-    #     Input Files
+    #     Input Files/ IO
     # ************************************************
+    outputDir = "./pyDCFoilOUTPUT/"
+    Path(outputDir).mkdir(parents=True, exist_ok=True)
+
     files = {}
-    files["gridFile"] = ""
+    files["gridFile"] = f"{args.input}/{args.foil}_foil_mesh.dcf"
+    files["FFDFile"] = f"{args.input}/{args.foil}_ffd.xyz"
+    
     filesSETUP = {
         "adflow": "SETUP/setup_adflow.py",
         "constants": "SETUP/setup_constants.py",
@@ -70,6 +90,30 @@ if __name__ == "__main__":
     # ************************************************
     #     Create dynamic beam solver
     # ************************************************
+    # ==============================================================================
+    #                         DCFoil setup
+    # ==============================================================================
+    V = 10 * 1.9438
+    rho = 1025.0
+    temp = 288.15
+    mu = 1.22e-3  # dynamic viscosity [kg/m/s]
+
+    evalFuncs = ["cl"]
+
+    ap = AeroProblem(
+        name="dcfoil",
+        alpha=0.0,
+        V=V,
+        rho=rho,
+        T=temp,
+        areaRef=1.0,
+        chordRef=1.0,
+        xRef=0.25,
+        evalFuncs=evalFuncs,
+        muSuthDim=mu,
+        TSuthDim=temp,
+    )
+
     evalFuncs = [
         "wtip",
         "psitip",
@@ -77,14 +121,12 @@ if __name__ == "__main__":
         "cmy",
         "lift",
         "moment",
-        "cdi",
-        "cdj",
-        "cdpr",
-        "cds",
-        # "ksflutter",
+        "cd",
+        "ksflutter",
     ]
-    STICKSolver = setup_dcfoil.setup(args, comm, files, evalFuncs)
+    STICKSolver, solverOptions = setup_dcfoil.setup(args, comm, files, evalFuncs, outputDir)
     STICKSolver.setDVGeo(DVGeo)
+    STICKSolver.addMesh(solverOptions["gridFile"])
 
     # ************************************************
     #     Functions
@@ -126,14 +168,14 @@ if __name__ == "__main__":
 
         return funcsSens
 
-    # def objCon(funcs): # this part is only for multipoint
+    def objCon(funcs):  # this part is only needed for multipoint
 
-    #     funcs["obj"] = funcs["ksflutter"]
+        funcs["obj"] = funcs["ksflutter"]
 
-    #     if printOK:
-    #         print("funcs in obj: ", funcs)
+        if printOK:
+            print("funcs in obj: ", funcs)
 
-    #     return funcs
+        return funcs
 
     # ************************************************
     #     Setup optimizer
@@ -142,54 +184,47 @@ if __name__ == "__main__":
 
     optProb.addObj("obj")
 
-    # ---------------------------
-    #   DVs
-    # ---------------------------
-    optProb.addVarGroup(
-        name="chord",
-        nVars=nNodes,
-        varType="c",
-        value=DVDict["c"],
-        lower=0.01,
-        upper=0.2,
-    )
-    # optProb.addVarGroup(name="ab", nVars=nNodes,varType="c", value=DVDict["ab"], lower=-0.1, upper=0.1)
-    optProb.addVarGroup(
-        name="fiberangle",
-        nVars=1,
-        varType="c",
-        value=DVDict["theta_f"],
-        lower=-np.deg2rad(-45),
-        upper=np.deg2rad(45),
-        scale=1.0,
-    )
-
     optProb.printSparsity()
 
-    outputDir = "./pyDCFoilOUTPUT/"
-    Path(outputDir).mkdir(parents=True, exist_ok=True)
-    if args.optimizer == "SLSQP":
-        optOptions = {
-            "IFILE": "SLSQP.out",
-        }
-    elif args.optimizer == "SNOPT":
-        optOptions = {
-            "Major feasibility tolerance": 1e-4,
-            "Major optimality tolerance": 1e-4,
-            "Difference interval": 1e-4,
-            "Hessian full memory": None,
-            "Function precision": 1e-8,
-            "Print file": os.path.join(outputDir, "SNOPT_print.out"),
-            "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
-            "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
-            # "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
-            # "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (nonlinear problem)
-            # "Major Step Limit": 5e-3,
-            # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
-        }
+    opt, optOptions = setup_opt.setup(args, outputDir)
 
-    opt = OPT(args.optimizer, options=optOptions)
+    # ==============================================================================
+    #                         TASKS
+    # ==============================================================================
+    # ---------------------------
+    #   OPTIMIZATION
+    # ---------------------------
+    if args.task == "opt":
+        sol = opt(optProb, sens=cruiseFuncsSens, storeHistory=f"{outputDir}/opt.hst")
 
-    sol = opt(optProb, sens=cruiseFuncsSens, storeHistory=f"{outputDir}/opt.hst")
+        print(sol)
+        print(f"final DVs:\n")
+        print(sol.xStar)
 
-    # print(sol)
+    # ---------------------------
+    #   ANALYSIS
+    # ---------------------------
+    if args.task in ["run", "opt"]:
+
+        if args.task == "run":
+            x_init = DVGeo.getValues()
+            run_dvs = x_init
+        if args.task == "opt":
+            run_dvs = sol.xStar
+
+        funcs = cruiseFuncs(run_dvs)
+
+        # --- Pretty print output ---
+        CLtxt = funcs[f"{ap.name}_cl"]
+        CDtxt = funcs[f"{ap.name}_cd"]
+        KSFluttertxt = funcs[f"{ap.name}_ksflutter"]
+        table = [["CL", CLtxt], ["CD", CDtxt], ["KSFlutter", KSFluttertxt]]
+        try:
+            from tabulate import tabulate
+
+            print(tabulate(table))
+        except Exception:
+            import warnings
+
+            warnings.warn("tabulate not installed")
+            print(table)
