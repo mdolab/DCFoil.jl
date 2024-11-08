@@ -64,7 +64,12 @@ function do_newton_raphson(
     if !isnothing(WorkingListOfParams)
 
         if solverOptions["use_nlll"]
-            appendageParamsList = WorkingListOfParams[3+iComp:end]
+            if length(WorkingListOfParams) == 4
+                appendageParamsList = WorkingListOfParams[3+iComp]
+            else
+                appendageParamsList = WorkingListOfParams[3+iComp:end]
+            end
+            
             xLE, nodeConn, xTE = WorkingListOfParams[1:3]
 
             res = compute_residuals(u0, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -94,7 +99,12 @@ function do_newton_raphson(
         for ii in 1:maxIters
             if !isnothing(WorkingListOfParams)
                 if solverOptions["use_nlll"]
-                    appendageParamsList = WorkingListOfParams[3+iComp:end]
+                    if length(WorkingListOfParams) == 4
+                        appendageParamsList = WorkingListOfParams[3+iComp]
+                    else
+                        appendageParamsList = WorkingListOfParams[3+iComp:end]
+                    end
+                    
                     xLE, nodeConn, xTE = WorkingListOfParams[1:3]
 
                     res = compute_residuals(u, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)

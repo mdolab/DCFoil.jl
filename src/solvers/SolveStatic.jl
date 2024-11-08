@@ -191,7 +191,7 @@ function setup_problemFromDVDict(
     DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
     derivMode = "RAD"
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, DOFBlankingList, alphaCorrection)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, alphaCorrection)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH
 end
@@ -224,7 +224,7 @@ function setup_problemFromCoords(
     DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
     derivMode = "RAD"
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, DOFBlankingList, alphaCorrection)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, alphaCorrection)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH
 end
@@ -317,38 +317,22 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(
-    evalFuncsList::Vector{String}, states::Vector, SOL::StaticSolution, LECoords, TECoords, nodeConn, DVDict;
+function get_evalFunc(
+    evalFunc::String, states::Vector, SOL::StaticSolution, LECoords, TECoords, nodeConn, DVDict;
     appendageOptions=nothing, solverOptions=nothing, DVDictList=[], iComp=1, CLMain=0.0
 )
     """
-    Given {u} and the forces, compute the cost functions
+    Works for a single cost function
     """
 
-    costFuncs = compute_funcs(evalFuncsList, states, SOL, LECoords, TECoords, nodeConn, DVDict;
+    costFuncs = compute_funcs(evalFunc, states, SOL, LECoords, TECoords, nodeConn, DVDict;
         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
 
-
-    return costFuncs
-end
-
-function evalFuncs(
-    evalFuncs::String, states::Vector, SOL::StaticSolution, LECoords, TECoords, nodeConn, DVDict;
-    appendageOptions=nothing, solverOptions=nothing, DVDictList=[], iComp=1, CLMain=0.0
-)
-    """
-    Allow this to work for a single cost function too
-    """
-
-    costFuncs = compute_funcs([evalFuncs], states, SOL, LECoords, TECoords, nodeConn, DVDict;
-        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
-
-    return costFuncs[evalFuncs]
+    return costFuncs[evalFunc]
 end
 
 function compute_funcs(
-    evalFuncsList::Vector, states::Vector, SOL::StaticSolution,
-    # DVVec::Vector, DVLengths::Vector{Int64}
+    evalFunc, states::Vector, SOL::StaticSolution,
     LECoords, TECoords, nodeConn, DVDict;
     appendageOptions=nothing, solverOptions=nothing, DVDictList=[], iComp=1, CLMain=0.0
 )
@@ -400,37 +384,37 @@ function compute_funcs(
         ADIM = 2 * constants.planformArea
     end
 
-    if "wtip" in evalFuncsList
+    if "wtip" in [evalFunc]
         w_tip = W[end]
         costFuncs["wtip"] = w_tip
     end
-    if "psitip" in evalFuncsList
+    if "psitip" in [evalFunc]
         psi_tip = theta[end]
         costFuncs["psitip"] = psi_tip
     end
     TotalLift = sum(Lift)
-    if "lift" in evalFuncsList
+    if "lift" in [evalFunc]
         costFuncs["lift"] = TotalLift
     end
     # Moment about mid-chord (where the finite element is)
     TotalMoment = sum(Moments)
-    if "moment" in evalFuncsList
+    if "moment" in [evalFunc]
         costFuncs["moment"] = TotalMoment
     end
-    if "cl" in evalFuncsList
+    if "cl" in [evalFunc]
         CL = TotalLift / (qdyn * ADIM)
         costFuncs["cl"] = CL
     end
     # Coefficient of moment about the mid-chord
-    if "cmy" in evalFuncsList
+    if "cmy" in [evalFunc]
         CM = TotalMoment / (qdyn * ADIM * meanChord)
         costFuncs["cmy"] = CM
     end
-    if "cd" in evalFuncsList
+    if "cd" in [evalFunc]
         CD = 0.0
         costFuncs["cd"] = CD
     end
-    if "cdi" in evalFuncsList || "fxi" in evalFuncsList
+    if "cdi" in [evalFunc] || "fxi" in [evalFunc]
         wingTwist = theta[1:appendageOptions["nNodes"]]
 
         _, F, CDi = HydroStrip.compute_hydroLLProperties(
@@ -457,16 +441,16 @@ function compute_funcs(
         #     config=appendageOptions["config"],
         # )
 
-        if "cdi" in evalFuncsList
+        if "cdi" in [evalFunc]
             costFuncs["cdi"] = CDi
         end
-        if "fxi" in evalFuncsList
+        if "fxi" in [evalFunc]
             Fxi = CDi * qdyn * ADIM
             costFuncs["fxi"] = Fxi
         end
     end
     # From Hörner Chapter 8
-    if "cdj" in evalFuncsList || "fxj" in evalFuncsList
+    if "cdj" in [evalFunc] || "fxj" in [evalFunc]
         tocbar = 0.5 * (DVDict["toc"][1] + DVDict["toc_strut"][1])
         CDt = 17 * (tocbar)^2 - 0.05
         dj = CDt * (qdyn * (tocbar * DVDict["c"][1])^2)
@@ -474,7 +458,7 @@ function compute_funcs(
         costFuncs["cdj"] = CDj
         costFuncs["fxj"] = dj
     end
-    if "cds" in evalFuncsList || "fxs" in evalFuncsList
+    if "cds" in [evalFunc] || "fxs" in [evalFunc]
         t = DVDict["toc_strut"][end] * DVDict["c_strut"][end]
         # --- Hörner CHapter 10 ---
         # CDts = 0.24
@@ -488,11 +472,11 @@ function compute_funcs(
     end
     # # TODO:
     # Wave drag
-    # if "cdw" in evalFuncs || "fxw" in evalFuncs
+    # if "cdw" in [evalFunc]s || "fxw" in [evalFunc]s
     #     # rws = EQ 6.149 FALTINSEN thickness effect on wave resistance
     #     # rwgamma = EQ 6.145 FALTINSEN wave resistance due to lift
     # end
-    if "cdpr" in evalFuncsList || "fxpr" in evalFuncsList # profile drag
+    if "cdpr" in [evalFunc] || "fxpr" in [evalFunc] # profile drag
         if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
             WSA = 2 * ADIM # both sides
         elseif appendageOptions["config"] == "t-foil"
@@ -518,14 +502,14 @@ function compute_funcs(
     end
     # --- Center of forces ---
     # These calculations are in local appendage frame
-    if "cofz" in evalFuncsList # center of forces in z direction
+    if "cofz" in [evalFunc] # center of forces in z direction
         xcenter = sum(Lift .* FEMESH.mesh[:, XDIM]) / sum(Lift)
         ycenter = sum(Lift .* FEMESH.mesh[:, YDIM]) / sum(Lift)
         zcenter = sum(Lift .* FEMESH.mesh[:, ZDIM]) / sum(Lift)
         costFuncs["cofz"] = [xcenter, ycenter, zcenter]
     end
 
-    if "comy" in evalFuncsList # center of moments about y axis
+    if "comy" in [evalFunc] # center of moments about y axis
         xcenter = sum(Moments .* FEMESH.mesh[:, XDIM]) / sum(Moments)
         ycenter = sum(Moments .* FEMESH.mesh[:, YDIM]) / sum(Moments)
         zcenter = sum(Moments .* FEMESH.mesh[:, ZDIM]) / sum(Moments)
@@ -576,18 +560,46 @@ function cost_funcsFromDVs(
     SOL = solveFromDVs(SOLVERPARAMS, FEMESH, FOIL, STRUT, DVDictList, appendageOptions, solverOptions;
         iComp=iComp, CLMain=CLMain)
     DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-    costFuncs = evalFuncs(
+    costFuncs = get_evalFunc(
         evalFuncsList, SOL.structStates, SOL, DVVec, DVLengths;
         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
     return costFuncs
 end
 
+function cost_funcsFromPtVec(
+    ptVec, nodeConn, appendageParams, iComp::Int64, solverOptions::Dict, evalFunc::String;
+    DVDictList=[], CLMain=0.0
+)
+    """
+    Do primal solve with function signature compatible with Zygote
+    """
+
+    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    appendageOptions = solverOptions["appendageList"][iComp]
+
+    # Setup
+    DVDictList[iComp] = appendageParams
+    FOIL, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromCoords(LECoords, nodeConn, TECoords, appendageParams, appendageOptions, solverOptions; verbose=false)
+
+    # Solve
+    SOL = solveFromCoords(LECoords, nodeConn, TECoords, SOLVERPARAMS, FEMESH, FOIL, STRUT, DVDictList, solverOptions;
+        iComp=iComp)
+
+    costFuncs = get_evalFunc(
+        evalFunc, SOL.structStates, SOL, LECoords, TECoords, nodeConn, appendageParams;
+        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
+
+    return costFuncs
+end
+
 function evalFuncsSens(
-    STATSOLLIST::Vector, evalFuncsSensList::Vector{String}, DVDictList::Vector, FEMESHLIST::Vector, solverOptions::Dict;
+    STATSOLLIST::Vector, evalFuncSens::String, DVDictList::Vector, GridStruct, FEMESHLIST::Vector, solverOptions::Dict;
     mode="FiDi", CLMain=0.0
 )
     """
     Wrapper to compute total sensitivities
+    pts are ordered LE then TE
     """
     println("===================================================================================================")
     println("        STATIC SENSITIVITIES: ", mode)
@@ -597,51 +609,42 @@ function evalFuncsSens(
     funcsSensList::Vector = []
 
     solverOptions["debug"] = false
+    LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+    ptVec, mm, NPT = Utilities.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
 
     # --- Loop foils ---
     for iComp in eachindex(DVDictList)
 
         DVDict = DVDictList[iComp]
-        FEMESH = FEMESHLIST[iComp]
-        _, DVLengths = Utilities.unpack_dvdict(DVDict)
 
-        DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-        funcsSens = Dict()
-        # for (iDV, dvkey) in enumerate(SORTEDDVS)
-        #     funcsSens[dvkey] = zeros(DTYPE, length(evalFuncsSensList), DVLengths[iDV])
-        # end
 
         if uppercase(mode) == "FIDI" # use finite differences the stupid way
             dh = 1e-4
+            idh = 1 / dh
             println("step size: ", dh)
-            dfdx = zeros(DTYPE, length(evalFuncsSensList), sum(DVLengths))
-            DVVecMod = copy(DVVec)
-            for ii in eachindex(DVVec)
-                f_i = SolveStatic.cost_funcsFromDVs(DVDict, iComp, solverOptions, evalFuncsSensList;
+
+            # dfdx = zeros(DTYPE, sum(DVLengths))
+            dfdxpt = zeros(DTYPE, length(ptVec))
+            # TODO PICKUP HERE GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+            f_i = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
+                DVDictList=DVDictList, CLMain=CLMain
+            )
+            for ii in eachindex(ptVec)
+                ptVecwork = copy(ptVec)
+                ptVecwork[ii] += dh
+                f_f = cost_funcsFromPtVec(ptVecwork, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
                     DVDictList=DVDictList, CLMain=CLMain
                 )
-                DVVecMod[ii] += dh
-                DVDict = Utilities.repack_dvdict(DVVecMod, DVLengths)
-                f_f = SolveStatic.cost_funcsFromDVs(DVDict, iComp, solverOptions, evalFuncsSensList;
-                    DVDictList=DVDictList, CLMain=CLMain
-                )
-                DVVecMod[ii] -= dh
-                DVDict = Utilities.repack_dvdict(DVVecMod, DVLengths)
-
-                for ifunc in eachindex(evalFuncsSensList)
-                    dfdx[ifunc, ii] = (f_f[evalFuncsSensList[ifunc]] - f_i[evalFuncsSensList[ifunc]]) / dh
-                end
+                ptVecwork[ii] -= dh
+                dfdxpt[ii] = (f_f - f_i) * idh
             end
 
-            for (ifunc, costFunc) in enumerate(evalFuncsSensList)
-                giDV = 1
-                for (iiDV, dvkey) in enumerate(SORTEDDVS)
-                    ndv = DVLengths[iiDV]
-                    funcsSens[dvkey][ifunc, :] = dfdx[ifunc, giDV:giDV+ndv-1]
-                    giDV += ndv # starting value for next set
-                end
-            end
 
+            funcsSens = reshape(dfdxpt, 3, NPT)
+        elseif uppercase(mode) == "RAD" #RAD the whole thing
+            backend = AD.ZygoteBackend()
+
+            
         elseif uppercase(mode) == "ADJOINT"
             println("TOC adjoint derivative is wrong")
             # TODO: DEBUGGIN WHERE TOC influence is lost :(
@@ -653,10 +656,10 @@ function evalFuncsSens(
             DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
             u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
-            @time ∂r∂x = compute_∂r∂x(STATSOL.structStates, DVDict;
-                # mode="FiDi", 
-                mode="CS",
-                SOLVERPARAMS=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp)
+            @time ∂r∂x = compute_∂r∂x(STATSOL.structStates, DVDict, LECoords, TECoords, nodeConn;
+                mode="FiDi",
+                # mode="CS",
+                appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp)
 
             println("Computing ∂r∂u...")
             @time ∂r∂u = compute_∂r∂uFromDV(
@@ -671,7 +674,7 @@ function evalFuncsSens(
             )
 
             # --- Loop over cost functions ---
-            for (ifunc, costFunc) in enumerate(evalFuncsSensList)
+            for (ifunc, costFunc) in enumerate(evalFuncSens)
                 funcsSens[costFunc] = Dict()
 
                 @time ∂f∂u = compute_∂f∂u(costFunc, STATSOL, DVDict;
@@ -714,8 +717,8 @@ function evalFuncsSens(
             u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
             @time ∂r∂x = compute_∂r∂x(
-                STATSOL.structStates, DVDict;
-                mode="FiDi", SOLVERPARAMS=solverParams, appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                STATSOL.structStates, DVDict, LECoords, TECoords, nodeConn;
+                mode="FiDi", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
             )
 
             @time ∂r∂u = compute_∂r∂uFromDV(
@@ -734,7 +737,7 @@ function evalFuncsSens(
             phiMat = compute_directMatrix(∂r∂u, ∂r∂x;
                 solverParams=solverParams)
 
-            for (ifunc, costFunc) in enumerate(evalFuncsSensList)
+            for (ifunc, costFunc) in enumerate(evalFuncSens)
                 ∂f∂u = compute_∂f∂u(costFunc, STATSOL, DVDict;
                     mode="FiDi", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
                 )
@@ -792,7 +795,7 @@ function compute_∂f∂x(
         DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
         ∂f∂x, = AD.gradient(
             backend,
-            x -> evalFuncs(costFunc, SOL.structStates, SOL, x, DVLengths;
+            x -> get_evalFunc(costFunc, SOL.structStates, SOL, x, DVLengths;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain),
             DVVec, # compute deriv at this DV
         )
@@ -803,11 +806,11 @@ function compute_∂f∂x(
         DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
         ∂f∂x = zeros(DTYPE, length(DVVec))
         for ii in eachindex(DVVec)
-            f_i = evalFuncs(costFunc, SOL.structStates, SOL, DVVec, DVLengths;
+            f_i = get_evalFunc(costFunc, SOL.structStates, SOL, DVVec, DVLengths;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
             )
             DVVec[ii] += dh
-            f_f = evalFuncs(costFunc, SOL.structStates, SOL, DVVec, DVLengths;
+            f_f = get_evalFunc(costFunc, SOL.structStates, SOL, DVVec, DVLengths;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
             )
             DVVec[ii] -= dh
@@ -839,7 +842,7 @@ function compute_∂f∂u(
         backend = AD.ZygoteBackend()
         ∂f∂u, = AD.gradient(
             backend,
-            u -> evalFuncs(
+            u -> get_evalFunc(
                 costFunc, u, SOL, DVVec, DVLengths;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
             ),
@@ -851,14 +854,14 @@ function compute_∂f∂u(
         println("step size:", dh)
         ∂f∂u = zeros(DTYPE, 1, length(SOL.structStates))
         for ii in eachindex(SOL.structStates)
-            r_i = SolveStatic.evalFuncs(
+            r_i = SolveStatic.get_evalFunc(
                 [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
                 appendageOptions=appendageOptions,
                 solverOptions=solverOptions,
                 DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
             )
             SOL.structStates[ii] += dh
-            r_f = SolveStatic.evalFuncs(
+            r_f = SolveStatic.get_evalFunc(
                 [costFunc], SOL.structStates, SOL, DVVec, DVLengths;
                 appendageOptions=appendageOptions,
                 solverOptions=solverOptions,
@@ -883,87 +886,37 @@ end
 
 function compute_∂r∂x(
     allStructStates, DVDict::Dict, LECoords, TECoords, nodeConn;
-    mode="FiDi", SOLVERPARAMS=nothing, appendageOptions=nothing,
+    mode="FiDi", appendageOptions=nothing,
     solverOptions=nothing, iComp=1, CLMain=0.0, DVDictList=[]
 )
     """
     Partial derivatives of residuals with respect to design variables w/o reconverging the solution
     """
 
-    println("Computing ∂r∂x...")
+    println("Computing ∂r∂x in $(mode) mode...")
     DOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; appendageOptions=appendageOptions)
     u = allStructStates[1:end.∉[DOFBlankingList]]
     DVDictList[iComp] = DVDict
     DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-    LECoordsVec, mm, nn = Utilities.unpack_coords(LECoords)
-    TECoordsVec, _, _ = Utilities.unpack_coords(TECoords)
+
+    lengthLE = length(LECoords)
+    lengthTE = length(TECoords)
 
     if uppercase(mode) == "FIDI" # Finite difference
 
         # This is the manual FD
         dh = 1e-4
-        ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
+        ∂r∂x = zeros(DTYPE, length(u), lengthLE + lengthTE)
         println("step size: ", dh)
-        for ii in eachindex(DVVec)
-            r_i = SolveStatic.compute_residualsFromDV(
-                u, DVVec, DVLengths;
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                iComp=iComp,
-                CLMain=CLMain,
-                DVDictList=DVDictList,
-            )
-            DVVec[ii] += dh
-            r_f = SolveStatic.compute_residualsFromDV(
-                u, DVVec, DVLengths;
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                DVDictList=DVDictList,
-                iComp=iComp,
-                CLMain=CLMain,
-            )
-            DVVec[ii] -= dh
-
-            ∂r∂x[:, ii] = (r_f - r_i) ./ dh
-        end
+        ∂r∂x = perturb_coordsForResid(∂r∂x, dh, u, LECoords, TECoords, nodeConn, DVDictList, appendageOptions, solverOptions, iComp)
 
     elseif uppercase(mode) == "CS" # works but slow (4 sec)
         dh = 1e-100
         println("step size: ", dh)
 
-        # ∂r∂x = zeros(DTYPE, length(u), length(DVVec))
-        ∂r∂x = zeros(DTYPE, length(u), length(LECoordsVec) + length(TECoordsVec))
+        ∂r∂x = zeros(DTYPE, length(u), lengthLE + lengthTE)
 
-
-
-        # create a complex copy of the design variables
-        # DVVecCS = complex(copy(DVVec))
-        LECoordsVecCS = complex(copy(LECoordsVec))
-        TECoordsVecCS = complex(copy(TECoordsVec))
-        # for ii in eachindex(DVVec)
-        for ii in eachindex(LECoordsVec)
-            # DVVecCS[ii] += 1im * dh
-            LECoordsVecCS[ii] += 1im * dh
-            # r_f = compute_residualsFromDV(
-            #     u, DVVecCS, DVLengths;
-            #     appendageOptions=appendageOptions,
-            #     solverOptions=solverOptions,
-            #     iComp=iComp,
-            #     CLMain=CLMain,
-            #     DVDictList=DVDictList,
-            # )
-            LECoordsWork = Utilities.repack_coords(LECoordsVecCS, mm, nn)
-            r_f = compute_residualsFromCoords(
-                u, LECoordsWork, TECoordsWork, nodeConn, DVDictList;
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                iComp=iComp,
-            )
-            # DVVecCS[ii] -= 1im * dh
-            LECoordsCS[ii] -= 1im * dh
-
-            ∂r∂x[:, ii] = imag((r_f)) / dh
-        end
+        ∂r∂x = perturb_coordsForResid(∂r∂x, 1im * dh, u, LECoords, TECoords, nodeConn, DVDictList, appendageOptions, solverOptions, iComp)
 
     elseif uppercase(mode) == "ANALYTIC"
 
@@ -989,6 +942,47 @@ function compute_∂r∂x(
         error("Invalid mode")
     end
     return ∂r∂x
+end
+
+function perturb_coordsForResid(∂r∂x, step, u, LECoords, TECoords, nodeConn, DVDictList, appendageOptions, solverOptions, iComp)
+    """
+    step can be real or imag
+    """
+    LECoordsVec, mm, nn = Utilities.unpack_coords(LECoords)
+    TECoordsVec, _, _ = Utilities.unpack_coords(TECoords)
+    lengthLE = length(LECoordsVec)
+    lengthTE = length(TECoordsVec)
+
+    if !isreal(step)
+        LECoordsVec = complex(copy(LECoordsVec))
+        TECoordsVec = complex(copy(TECoordsVec))
+    end
+
+    for ii in 1:lengthLE # LE bumps
+        LECoordsVec[ii] += step
+        LECoordsWork = Utilities.repack_coords(LECoordsVec, mm, nn)
+        r_f = compute_residualsFromCoords(
+            u, LECoordsWork, TECoords, nodeConn, DVDictList;
+            appendageOptions=appendageOptions,
+            solverOptions=solverOptions,
+            iComp=iComp,
+        )
+        LECoordsVec[ii] -= step
+        ∂r∂x[:, ii] = imag((r_f)) / abs(step)
+    end
+    for ii in 1:lengthTE # TE bumps
+        TECoordsVec[ii] += step
+        TECoordsWork = Utilities.repack_coords(TECoordsVec, mm, nn)
+        r_f = compute_residualsFromCoords(
+            u, LECoords, TECoordsWork, nodeConn, DVDictList;
+            appendageOptions=appendageOptions,
+            solverOptions=solverOptions,
+            iComp=iComp,
+        )
+        TECoordsVec[ii] -= step
+        ∂r∂x[:, ii+lengthLE] = imag((r_f)) / abs(step)
+    end
+
 end
 
 function compute_∂r∂uFromDV(
@@ -1229,7 +1223,7 @@ function compute_residualsFromCoords(
             Design variables
     """
 
-    DVDict = appendageParamsList[iComp][1]
+    DVDict = appendageParamsList[iComp]
 
     # There is probably a nicer way to restructure the code so the order of calls is
     # 1. top level solve call to applies the newton raphson

@@ -47,7 +47,7 @@ function lagrangeArrInterp(xj, yj, m::Int64, n::Int64, d::Int64, x)
     #     end
     # end
 
-    # Maybe do this for diff
+    # Might need to zygote buffer this thing
     for ii in 1:m
         for jj in 1:n
             yvals = yj[ii, jj, :]
@@ -106,7 +106,7 @@ function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
         """
 
         # 2 dimensional array interpolation
-        dydxj = zeros(size(xj))
+        # dydxj = zeros(size(xj))
         dydyj = zeros(size(yj))
 
         # y = 0.0
@@ -114,7 +114,7 @@ function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
         for jj in 1:n # loop over points
             L = 1.0 # Lagrange weight
 
-            dxj = 0.0 # derivative of Lagrange weight wrt xj[jj]
+            # dxj = 0.0 # derivative of Lagrange weight wrt xj[jj]
             dx = 0.0 # derivative of Lagrange weight wrt x
 
             for ii in 1:n
@@ -122,19 +122,6 @@ function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
                     # This is the lagrange polynomial
                     L *= (x - xj[ii]) /
                          (xj[jj] - xj[ii])
-
-
-                    # --- Sub level product for the dldxj ---
-                    ldxj = 1.0
-                    for mm in 1:n
-                        if mm != jj && mm != ii
-                            ldxj *= (x - xj[mm]) /
-                                    (xj[jj] - xj[mm])
-                        end
-                    end
-
-                    dxj += (xj[ii] - x) /
-                           (xj[jj] - xj[ii])^2 * ldxj
 
                     dx += 1.0 / (x - xj[ii])
                 end
@@ -145,12 +132,11 @@ function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
             dydyj[jj] = L
 
             # println("yj:", yj[jj], " lj: ", L, " dxj: ", dxj)
-            dydxj[jj] = yj[jj] * dxj
+            # dydxj[jj] = yj[jj] * dxj
         end
 
         # --- Vector-matrix products should happen here ---
-        x0b = ȳ .* dydxj # not correct... but it does not get used in the flutter code!
-        x0b = NoTangent() # TODO: this is incorrect but will work for now
+        x0b = NoTangent() # this is incorrect but will work for now, could use Tapenade to inform...
         y0b = ȳ .* dydyj # Correct
         xb = ȳ .* dydx # Correct
 
@@ -163,6 +149,7 @@ function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
 end
 
 # 2024/11/05 Kind of working but weird outputs
+# The derivative of L(x) wrt xj[jj] is not correct
 # # # Testing lagrange derivatives
 # # using ChainRulesTestUtils
 # # test_rrule(lagrangeInterp, rand(3), rand(3), 3, 0.5)
@@ -172,25 +159,26 @@ end
 # using Zygote, FiniteDifferences, ForwardDiff, ReverseDiff
 
 # backend = AD.FiniteDifferencesBackend()
-# # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
-# # # # AD.gradient(backend, x -> lagrangeInterp(x, 1:0.1:2, 3, 0.5), collect(0:0.2:1.0))
-# # # dfdxfd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+# # # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
+# # # # # AD.gradient(backend, x -> lagrangeInterp(x, 1:0.1:2, 3, 0.5), collect(0:0.2:1.0))
+# # # # dfdxfd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
 
 # xj = 0:0.2:1
 # yj = cat(repeat([1 2 3; 2 3 4; 1 1 1], 1, 1, length(xj) ÷ 2), repeat([1 1 1; 2 3 4; 2 2 1], 1, 1, length(xj) ÷ 2), dims=3)
-# dfdxfd = AD.gradient(backend, x -> lagrangeArrInterp(xj, yj, 3, 3, length(xj), x), 0.75)
-# dfdyjfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, x, 3, 3, length(xj), 0.5), yj)
+# dfdxfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, yj, 3, 3, length(xj), x), 0.75)
+# # dfdyjfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, x, 3, 3, length(xj), 0.5), yj)
 
-# backend = AD.ForwardDiffBackend()
-# # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
-# # dfdxjfwd = AD.gradient(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
-# # dfdxfwd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+# # backend = AD.ForwardDiffBackend()
+# # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
+# # # dfdxjfwd = AD.gradient(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
+# # # dfdxfwd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
 
 
 # backend = AD.ZygoteBackend()
-# AD.jacobian(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.5)
-# # # dfdxjrad = AD.jacobian(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
-# dfdxrad = AD.jacobian(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+# # AD.jacobian(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.5)
+# # # # dfdxjrad = AD.jacobian(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
+# # dfdxrad = AD.jacobian(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+# dfdxrad = AD.jacobian(backend, x -> lagrangeArrInterp(xj, yj, 3, 3, length(xj), x), 0.75) # SHape of the output doesn't fully work yet
 
 function abs_smooth(x, Δx)
     """

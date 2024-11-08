@@ -936,7 +936,7 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
             -sbeta 0.0 cbeta
         ]
     end
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         if any(isnan.(T))
             println("NaN in transformation matrix")
             println("dR1", dR1)

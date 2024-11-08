@@ -17,7 +17,8 @@ export solve
 # --- PACKAGES ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote, ChainRulesCore
+using Zygote
+using ChainRulesCore: @ignore_derivatives
 using FileIO
 
 # --- DCFoil modules ---
@@ -57,7 +58,7 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     # ************************************************
     #     Assemble structural matrices
     # ************************************************
-    
+
     abVec = DVDict["ab"]
     x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
@@ -75,9 +76,9 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     #   Apply BC blanking
     # ---------------------------
     globalDOFBlankingList = 0
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
-    end 
+    end
     Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
 
     # ---------------------------

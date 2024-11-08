@@ -81,12 +81,14 @@ function pack_funcsSens(funcsSens::Dict, funcKey, dvKey, dfdx)
     return funcsSens
 end
 
-function unpack_coords(LineCoords)
+function unpack_coords(LECoords, TECoords)
     """
-    Unpack the line coordinates into a vector
+    Unpack the coordinates into a vector
     """
-    m, n = size(LineCoords)
-    LineCoordsVec = vec(LineCoords)
+    allPts = cat(LECoords, TECoords, dims=2)
+    m, n = size(allPts)
+    LineCoordsVec = vec(allPts)
+
     return LineCoordsVec, m, n
 end
 
@@ -95,7 +97,10 @@ function repack_coords(LineCoordsVec, m, n)
     Repack the line coordinates into a matrix
     """
     LineCoords = reshape(LineCoordsVec, m, n)
-    return LineCoords
+
+    LECoords = LineCoords[:, 1:div(n, 2)]
+    TECoords = LineCoords[:, div(n, 2)+1:end]
+    return LECoords, TECoords
 end
 
 function generate_naca4dig(toc)

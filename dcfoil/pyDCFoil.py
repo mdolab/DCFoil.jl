@@ -387,9 +387,13 @@ class DCFOIL:
         # ************************************************
         for obj in self.curAP.evalFuncs:
 
+            # Get the sensitivity of the cost function wrt all coordinates
+            # this is 'dIdpt' of size(Npt, 3)
             self.Xb = self.DCFoil.evalFuncsSens(
-                self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions, mode="ADJOINT"
+                self.SOLDICT, self.DVDictList, obj, self.solverOptions, mode="ADJOINT"
             )
+            # check shape
+            assert self.Xb.shape == (self.nnodes * 2, 3)
 
             # FFD sensitivities
             self.evalFFDSens()
@@ -435,19 +439,13 @@ class DCFOIL:
         """
 
         # Get the aero mesh sensitivities
-        dIdx_aero = self.DVGeo.totalSensitivity(self.Xb, self.curAP.ptSetName)
+        dIdx = self.DVGeo.totalSensitivity(self.Xb, self.curAP.ptSetName)
 
-        # dIdx_struct = self.DVGeo.totalSensitivity(structXptSens, self.structSolver.curSP.ptSetName)
-
-        # print dIdx_aero
-        # print dIdx_struct
-        # print "Total chord:", dIdx_struct["chord"][0,0] + dIdx_aero["chord"][0,0]
-        # print "Total span:", dIdx_struct["span"][0,0] + dIdx_aero["span"][0,0]
 
         self.dIdx_geo_total = {}
 
-        for key in dIdx_aero:
-            self.dIdx_geo_total[key] = dIdx_aero[key]
+        for key in dIdx:
+            self.dIdx_geo_total[key] = dIdx[key]
 
     def writeSolution(self, number, baseName):
         """

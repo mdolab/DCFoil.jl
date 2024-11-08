@@ -335,12 +335,14 @@ function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions
 
             # DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
             # staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
-            staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, LECoords, TECoords, nodeConn, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
+            for evalFunc in staticEvalFuncs
 
-            for key in keys(staticFuncs)
-                newKey = @sprintf("%s-%s", key, compName)
-                evalFuncsDict[newKey] = staticFuncs[key]
+                staticFunc = SolveStatic.get_evalFunc(evalFunc, STATSOL.structStates, STATSOL, LECoords, TECoords, nodeConn, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
+
+                newKey = @sprintf("%s-%s", evalFunc, compName)
+                evalFuncsDict[newKey] = staticFunc
             end
+
 
             # --- Need to compute main hydrofoil CL ---
             if iComp == 1 && solverOptions["use_dwCorrection"] && !solverOptions["use_nlll"]
@@ -378,33 +380,46 @@ function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions
     return evalFuncsDict
 end # evalFuncs
 
-function evalFuncsSens(
-    SOLDICT::Dict, DVDictList::Vector, evalFuncsSensList::Vector{String}, solverOptions=Dict();
+function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSensList::Vector{String}, solverOptions=Dict();
+    mode="FiDi", CLMain=0.0)
+    """
+    Wrapper to do multiple cost functions at once
+    """
+    costFuncsSensDict = Dict()
+
+    for evalFuncKey in evalFuncSensList
+        funcSens = evalFuncSens(SOLDICT, DVDictList, GridStruct, evalFuncKey, solverOptions; mode=mode, CLMain=CLMain)
+        costFuncsSensDict[evalFuncSens] = funcSens
+    end
+
+    return costFuncsSensDict
+end
+
+function evalFuncSens(
+    SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSens::String, solverOptions=Dict();
     mode="FiDi", CLMain=0.0
 )
     """
-    Think of this as the gluing call for getting all derivatives
+    Think of this as the gluing call for getting derivatives for a single cost function at a time
 
     """
 
     # ---------------------------
     #   Cost functions
     # ---------------------------
-    costFuncsSensDict = Dict()
-
+    costFuncsSens = 0.0 # scope
     if solverOptions["run_flutter"]
-        @time costFuncsSensDict = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
+        @time costFuncsSens = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
     end
 
-    if solverOptions["run_static"]
+    if solverOptions["run_static"] && evalFuncSens in staticCostFuncs
         STATSOLLIST = SOLDICT["STATIC"]
-        evalFuncsSensStat = [key for key in evalFuncsSensList if key in staticCostFuncs]
-        @time costFuncsSensList = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncsSensStat, DVDictList, FEMESHList, solverOptions;
+
+        @time costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncSens, DVDictList, GridStruct, FEMESHList, solverOptions;
             mode=mode, CLMain=CLMain)
-        costFuncsSensDict = costFuncsSensList
     end
 
-    return costFuncsSensDict
+    return costFuncsSens
 end
 
 function set_defaultOptions!(solverOptions)

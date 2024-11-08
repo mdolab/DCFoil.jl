@@ -309,6 +309,7 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
             "debug" => true,
         )
 
+        # TODO: may need to write derivative of this for custom AD
         LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, aeroSpan, sweepAng, rootChord, TR;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
@@ -356,7 +357,7 @@ function correct_downwash(
     sWing = upstreamDict["s"]
     cRefWing = sum(upstreamDict["c"]) / length(upstreamDict["c"])
     chordMMean = cRefWing
-    # ChainRulesCore.ignore_derivatives() do
+    # @ignore_derivatives() do
     #     if solverOptions["debug"]
     #         println(@sprintf("=========================================================================="))
     #         println(@sprintf("Computing downstream flow effects with ℓᵣ = %.2f m, C_L_M = %.1f ", ℓᵣ, CLMain))
@@ -929,7 +930,7 @@ function integrate_hydroLoads(
         error("Invalid element type")
     end
 
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         if solverOptions["debug"]
             config = appendageOptions["config"]
             println("Plotting hydrodynamic loads")

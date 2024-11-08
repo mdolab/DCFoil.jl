@@ -43,7 +43,7 @@ function init_static(
   #   Geometry
   # ---------------------------
   eb::Vector{RealOrComplex} = 0.25 * chordLengths .+ ab
-  t = toc .* chordLengths
+  t::Vector{RealOrComplex} = toc .* chordLengths
 
   # ---------------------------
   #   Structure
@@ -217,7 +217,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-  if haskey(appendageOptions,"path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
+  if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
     print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
     α₀ = appendageParams["alfa0"]
@@ -252,7 +252,6 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     theta_f_strut = appendageParams["theta_f_strut"]
     depth0 = appendageParams["depth0"]
   end
-
 
   WingModel, StrutModel, LLSystem, FlowCond = init_dynamic(α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 

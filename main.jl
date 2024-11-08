@@ -198,4 +198,7 @@ LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruc
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, evalFuncs, solverOptions; mode="ADJOINT")
+costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, GridStruct, evalFuncs, solverOptions; 
+# mode="ADJOINT",
+mode="FiDi",
+)

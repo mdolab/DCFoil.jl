@@ -27,9 +27,9 @@ const ZDIM = 3
 # ==============================================================================
 #                         STRUCTS
 # ==============================================================================
-struct DCFoilSolverParams{TF,TC,TI}
+struct DCFoilSolverParams{TF,TC}
     """
-    This is a catch all immutable struct to store variables that we do not
+    This is a catch all immutable struct to store expensive vars that we do not
     want in function calls like r(u) or f(u)
     """
     Kmat::Matrix{TC} # structural stiffness matrix (no BC blanking)
@@ -37,7 +37,6 @@ struct DCFoilSolverParams{TF,TC,TI}
     Cmat::Matrix{TC} # structural damping matrix (no BC blanking)
     AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
     planformArea::TF
-    dofBlank::Vector{TI} # DOF to blank out
     downwashAngles::TF # downwash angles [rad]
 end
 

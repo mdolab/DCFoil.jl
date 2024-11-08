@@ -1823,12 +1823,20 @@ The derivatives are\footnote{see Wiki for derivation simplification}
 \\
 \dd{L(x)}{x_j} &=  y_j \dd{\ell_j(x)}{x_j} = 
  y_j \sum_{\substack{i=0 \\ i \neq j}}^{k} \left[ 
+    \dd{}{x_j}\left(
+\frac{x-x_i}{x_j-x_i}
+    \right) 
+    \prod_{\substack{m=0 \\m\neq (i,j)}}^{k} \frac{x-x_m}{x_j-x_m}
+    \right]
+=
+ y_j \sum_{\substack{i=0 \\ i \neq j}}^{k} \left[ 
     \frac{x_i - x}{(x_j-x_i)^2} \prod_{\substack{m=0 \\m\neq (i,j)}}^{k} \frac{x-x_m}{x_j-x_m}
     \right]
+    \tn{(this is a vector)}
 \\
 \dd{L(x)}{y_j} &=  \ell_j(x)
 \eeq
-The derivative with respect to $x_j$ has not been debugged.
+The derivative with respect to $x_j$ has not been debugged, but based on looking at Eirikur's Tapenade routines, the $x_j$ derivative is not needed!
 
 % \cite{Garg2015,Garg2015a,Garg2016,Garg2017a,Garg2017b,Garg2019a}
 % \cite{Liao2019a,Liao2019b,Liao2020a,Liao2020b,Liao2021,Liao2021a,Liao2022,Liao2023}
