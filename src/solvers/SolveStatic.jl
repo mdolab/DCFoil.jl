@@ -625,7 +625,6 @@ function evalFuncsSens(
 
             # dfdx = zeros(DTYPE, sum(DVLengths))
             dfdxpt = zeros(DTYPE, length(ptVec))
-            # TODO PICKUP HERE GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
             f_i = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
                 DVDictList=DVDictList, CLMain=CLMain
             )

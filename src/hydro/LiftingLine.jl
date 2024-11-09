@@ -107,7 +107,7 @@ struct LiftingLineNLParams
 end
 
 function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
-    # , midchords # need to compute mesh based on midchord locations!!
+    # , midchords # TODO: need to compute mesh based on midchord locations!!
     ;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
@@ -139,6 +139,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     #     Airfoil hydro properties
     # ************************************************
     if !isnothing(airfoilCoordFile) && isnothing(airfoil_xy) && isnothing(airfoil_ctrl_xy)
+
         println("Reading airfoil coordinates from $(airfoilCoordFile) and using MACH...")
 
         PREFOIL = pyimport("prefoil")
@@ -185,12 +186,14 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     if !isnothing(options) && haskey(options, "translation")
         translation = options["translation"] # [m] 3d translation of the wing
     end
+    # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
+    translatMat = repeat(reshape(translation, 3, 1), 1, npt_wing)
 
     # ************************************************
     #     Make wing coordinates
     # ************************************************
-    wing_xyz = zeros(3, npt_wing + 1)
-    wing_ctrl_xyz = zeros(3, npt_wing)
+    # wing_xyz = zeros(3, npt_wing + 1)
+    # wing_ctrl_xyz = zeros(3, npt_wing)
 
     # ---------------------------
     #   Y coords (span)
@@ -200,61 +203,47 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
 
     # --- Even spacing ---
     θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
-    wing_xyz[YDIM, :] = θ_bound[1:2:end]
-    wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
+    wing_xyz_ycomp = reshape(θ_bound[1:2:end], 1, npt_wing + 1)
+    wing_ctrl_xyz_ycomp = reshape(θ_bound[2:2:end], 1, npt_wing)
+
+    wing_xyz = cat(zeros(1, npt_wing + 1), wing_xyz_ycomp, zeros(1, npt_wing + 1), dims=1)
+    wing_ctrl_xyz = cat(zeros(1, npt_wing), wing_ctrl_xyz_ycomp, zeros(1, npt_wing), dims=1)
 
     # --- Cosine spacing ---
-    if sweepAng != 0.0
+    if abs_cs_safe(sweepAng) > 0.0
         # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
         # println("θ_bound: $(θ_bound)")
         θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-        for (ii, θ) in enumerate(θ_bound[1:2:end])
-            wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-        end
-        for (ii, θ) in enumerate(θ_bound[2:2:end])
-            wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-        end
+        # for (ii, θ) in enumerate(θ_bound[1:2:end])
+        #     wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+        # end
+        wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
+        # for (ii, θ) in enumerate(θ_bound[2:2:end])
+        #     wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+        # end
+        wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
+
     end
 
     # ---------------------------
     #   X coords (chord dist)
     # ---------------------------
-    local_chords = zeros(npt_wing + 1)
-    local_chords_ctrl = zeros(npt_wing)
-
-    # ∂c/∂y
-    local_dchords = zeros(npt_wing + 1)
-    local_dchords_ctrl = zeros(npt_wing)
-
     iTR = 1.0 - taperRatio
 
-    local_chords = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_xyz[YDIM, :]) / wingSpan)
-    local_chords_ctrl = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_ctrl_xyz[YDIM, :]) / wingSpan)
-    local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz[YDIM, :]) / wingSpan
-    local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz[YDIM, :]) / wingSpan
-
-    ZArr = zeros(2, 2, 2)
-    ZM = zeros(2, 2)
-    ZA = zeros(2)
-    LLSystem = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, copy(wing_ctrl_xyz), npt_wing, local_chords, local_chords_ctrl, zeros(2, 2), zeros(2), zeros(2),
-        npt_airfoil, wingSpan, 0.0, 0.0, AR, rootChord, sweepAng, 0.0, ZArr, ZArr, ZA, ZM, ZA)
+    local_chords = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_xyz_ycomp[1, :]) / wingSpan)
+    local_chords_ctrl = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_ctrl_xyz_ycomp[1, :]) / wingSpan)
+    # ∂c/∂y
+    local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz_ycomp[1, :]) / wingSpan
+    local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz_ycomp[1, :]) / wingSpan
 
     # --- Locus of aerodynamic centers (LAC) ---
     # Default is Küchemann's
-    LAC = compute_LAC(LLSystem, LLHydro, wing_xyz[YDIM, :], local_chords, rootChord, sweepAng, wingSpan)
-    for (ii, xloc) in enumerate(LAC)
-        wing_xyz[XDIM, ii] = xloc
+    LAC = compute_LAC(AR, LLHydro, wing_xyz[YDIM, :], local_chords, rootChord, sweepAng, wingSpan)
+    wing_xyz = cat(reshape(LAC, 1, npt_wing + 1), wing_xyz_ycomp, zeros(1, npt_wing + 1), dims=1)
 
-        # # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
-        # wing_xyz[:, ii] .+= translation - 0.25 * vec([local_chords[ii] + rootChord, 0.0, 0.0])
-    end
-    LAC_ctrl = compute_LAC(LLSystem, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
-    for (ii, xloc) in enumerate(LAC_ctrl)
-        wing_ctrl_xyz[XDIM, ii] = xloc
-
-        # # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
-        # wing_ctrl_xyz[:, ii] .+= translation - 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
-    end
+    LAC_ctrl = compute_LAC(AR, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
+    #     wing_ctrl_xyz[:, ii] .+= translation #- 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
+    wing_ctrl_xyz = cat(reshape(LAC_ctrl, 1, npt_wing), wing_ctrl_xyz_ycomp, zeros(1, npt_wing), dims=1) .+ translatMat
 
     # if (!isnothing(options)) && options["make_plot"]
     #     println("Making plot")
@@ -271,7 +260,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     # Need a mess of LAC's for each control point
     # println("wing_xyz:\n $(wing_xyz[YDIM,:])") # these are right
     # println("wing_ctrl_xyz:\n $(wing_ctrl_xyz[YDIM,:])") # these are right
-    LACeff = compute_LACeffective(LLSystem, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
+    LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     # This is a 3D array
     # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
     wing_xyz_eff_xcomp = reshape(LACeff, 1, npt_wing, npt_wing + 1)
@@ -284,13 +273,13 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
 
     # --- Compute local sweeps ---
     # Vectors containing local sweep at each coordinate location in wing_xyz
-    fprime = compute_dLACds(LLSystem, LLHydro, wing_xyz[YDIM, :], local_chords, local_dchords, sweepAng, wingSpan)
+    fprime = compute_dLACds(AR, LLHydro, wing_xyz[YDIM, :], local_chords, local_dchords, sweepAng, wingSpan)
     localSweeps = -atan_cs_safe.(fprime, ones(size(fprime)))
 
-    fprimeCtrl = compute_dLACds(LLSystem, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, local_dchords_ctrl, sweepAng, wingSpan)
+    fprimeCtrl = compute_dLACds(AR, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, local_dchords_ctrl, sweepAng, wingSpan)
     localSweepsCtrl = -atan_cs_safe.(fprimeCtrl, ones(size(fprimeCtrl)))
 
-    fprimeEff = compute_dLACdseffective(LLSystem, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
+    fprimeEff = compute_dLACdseffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
 
     # println("local sweeps: $(localSweeps)")
@@ -348,11 +337,13 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, local_chords_ctrl, ζ, sectionLengths, sectionAreas,
         npt_airfoil, wingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
+
     FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof)
+
     return LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences
 end
 
-function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
+function compute_LAC(AR, LLHydro, y, c, cr, Λ, span; model="kuechemann")
     """
     Compute the locus of aerodynamic centers (LAC) for the wing
 
@@ -372,8 +363,8 @@ function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
     """
 
     if model == "kuechemann"
-        Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * LLMesh.AR))^2)^(0.25) # aspect ratio effect
-        K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * LLMesh.AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
+        Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * AR))^2)^(0.25) # aspect ratio effect
+        K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
 
         if Λ == 0
             fs = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
@@ -404,7 +395,7 @@ function compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span; model="kuechemann")
     return fs
 end
 
-function compute_LACeffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr, span; model="kuechemann")
+function compute_LACeffective(AR, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr, span; model="kuechemann")
     """
     The effective LAC, based on Küchemann's equation .
 
@@ -434,13 +425,13 @@ function compute_LACeffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ
 
     if model == "kuechemann"
 
-        LAC = compute_LAC(LLMesh, LLHydro, ywork[1, :], c, cr, Λ, span)
+        LAC = compute_LAC(AR, LLHydro, ywork[1, :], c, cr, Λ, span)
         LACwork = reshape(LAC, 1, size(LAC)...)
 
-        LAC0 = compute_LAC(LLMesh, LLHydro, y0work[:, 1], c_y0, cr, Λ, span)
+        LAC0 = compute_LAC(AR, LLHydro, y0work[:, 1], c_y0, cr, Λ, span)
         LAC0work = reshape(LAC0, size(LAC0)..., 1)
 
-        fprime0 = compute_dLACds(LLMesh, LLHydro, y0work[:, 1], c_y0, dc_y0, Λ, span)
+        fprime0 = compute_dLACds(AR, LLHydro, y0work[:, 1], c_y0, dc_y0, Λ, span)
 
         LACeff = (1.0 .- blend) .* LACwork .+
                  blend .* (fprime0 .* (ywork .- y0work) .+ LAC0work)
@@ -458,7 +449,7 @@ function compute_LACeffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ
     end
 end
 
-function compute_dLACds(LLMesh, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann")
+function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann")
     """
     Compute the derivative of the LAC curve wrt the spanwise coordinate
     f'(s)
@@ -476,8 +467,8 @@ function compute_dLACds(LLMesh, LLHydro, y, c, ∂c∂y, Λ, span; model="kueche
     """
 
     if model == "kuechemann"
-        Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * LLMesh.AR))^2)^(0.25) # aspect ratio effect
-        K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * LLMesh.AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
+        Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * AR))^2)^(0.25) # aspect ratio effect
+        K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
 
         if Λ == 0
             dx = -∂c∂y * (1.0 - 1.0 / K) * 0.25
@@ -515,7 +506,7 @@ function compute_dLACds(LLMesh, LLHydro, y, c, ∂c∂y, Λ, span; model="kueche
     return dx
 end
 
-function compute_dLACdseffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr, span; model="kuechemann")
+function compute_dLACdseffective(AR, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr, span; model="kuechemann")
     """
     The derivative of the effective LAC , based on Kuchemann 's equation .
 
@@ -545,13 +536,13 @@ function compute_dLACdseffective(LLMesh, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ,
 
     if model == "kuechemann"
 
-        LAC = compute_LAC(LLMesh, LLHydro, y, c, cr, Λ, span)
+        LAC = compute_LAC(AR, LLHydro, y, c, cr, Λ, span)
         LACwork = reshape(LAC, 1, length(LAC))
-        fprime = compute_dLACds(LLMesh, LLHydro, y, c, dc, Λ, span)
+        fprime = compute_dLACds(AR, LLHydro, y, c, dc, Λ, span)
         fprimework = reshape(fprime, 1, length(fprime))
-        LAC0 = compute_LAC(LLMesh, LLHydro, y0, c_y0, cr, Λ, span)
+        LAC0 = compute_LAC(AR, LLHydro, y0, c_y0, cr, Λ, span)
         LAC0work = reshape(LAC0, length(LAC0), 1)
-        fprime0 = compute_dLACds(LLMesh, LLHydro, y0, c_y0, dc_y0, Λ, span)
+        fprime0 = compute_dLACds(AR, LLHydro, y0, c_y0, dc_y0, Λ, span)
         fprime0work = reshape(fprime0, length(fprime0), 1)
 
         return fprimework .+
