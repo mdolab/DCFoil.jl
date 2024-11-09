@@ -9,6 +9,7 @@
 \usepackage{cleveref}
 \usepackage{algorithm2e}
 \usepackage{svg}
+\usepackage{indentfirst}
 \usepackage[compact]{titlesec}
 \usepackage[]{acronym} % provides \acronym 
 \graphicspath{{../figures/}}
@@ -1713,6 +1714,7 @@ Appendage setup is through dictionaries.
 
 \section{Writing derivative routines}
 % 
+\subsection{Intersection of theory and implementation}
 Our goal is computing the derivative (alternative notation $\diff{y}/\diff{x}$) over a massive length of code.
 The forward and reverse mode AD logic is important to understand.
 Forward mode is
@@ -1837,6 +1839,21 @@ The derivatives are\footnote{see Wiki for derivation simplification}
 \dd{L(x)}{y_j} &=  \ell_j(x)
 \eeq
 The derivative with respect to $x_j$ has not been debugged, but based on looking at Eirikur's Tapenade routines, the $x_j$ derivative is not needed!
+
+\subsection{Backends}
+
+The reverse AD rule is the most important for our purposes.
+
+\begin{enumerate}
+    \item ReverseDiff.jl - Tape-based RAD that makes use of dual numbers. They claim it is the fastest and uses the least memory. A downside is that your code should not be type annotated.
+    \item Zygote.jl - RAD using source transformation. More flexible than ReverseDiff.jl hence why this is the preferred tool.
+\end{enumerate}
+
+We don't use forward AD anywhere in the code.
+
+Finite differencing is only used as a check for the routines.
+
+The AbstractDifferentiation.jl tool is the common wrapper for
 
 % \cite{Garg2015,Garg2015a,Garg2016,Garg2017a,Garg2017b,Garg2019a}
 % \cite{Liao2019a,Liao2019b,Liao2020a,Liao2020b,Liao2021,Liao2021a,Liao2022,Liao2023}

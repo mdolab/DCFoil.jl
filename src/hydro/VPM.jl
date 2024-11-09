@@ -15,6 +15,7 @@ module VPM
 using LinearAlgebra
 using Plots
 using FLOWMath: atan_cs_safe
+using ChainRulesCore
 
 # --- DCFoil modules ---
 using ..SolutionConstants: XDIM, YDIM, ZDIM
@@ -104,39 +105,21 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     alpha, Vinf = compute_sweepCorr(Airfoil.sweep, V)
 
-    RHS = zeros(typeof(Vinf), Airfoil.n)
-    RHS[1:end-1] = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
-                                                    .-
-                                                    diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))
+    # RHS = zeros(typeof(Vinf), Airfoil.n)
+    # RHS[1:end-1] = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
+    #                                                 .-
+    #                                                 diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))
+    RHS_noTE = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
+                                                .-
+                                                diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))
+    RHS = vcat(RHS_noTE, 0.0)
 
-    # println("alpha: ", alpha) #OK
-    # println("Vinf: ", Vinf) #OK
-    # println("vortexX: $(Airfoil.vortexXY[XDIM,:]) \n") # fine
-    # println("vortexY: $(Airfoil.vortexXY[YDIM,:]) \n") # fine
-    # println("diff Y: $(diff(Airfoil.vortexXY[YDIM, :])) \n") #OK
-    # println("diff X: $(diff(Airfoil.vortexXY[XDIM, :])) \n") #OK
-    # println("panelLengths: $(Airfoil.panelLengths) \n") # OK
-    # println("RHS: $(RHS)\n") #seems ok
-    # println("Amat: $(Amat[:,1])\n")
     # Airfoil surface vorticity strengths
     γi = Amat \ RHS
-
-    # # Debug code
-    # plot(eachindex(Amat[1,:]), Amat[1,:], label="row 0")
-    # plot!(eachindex(Amat[1,:]), Amat[11,:], label="row 10")
-    # plot!(eachindex(Amat[1,:]), Amat[end-10,:], label="row 10")
-    # plot!(eachindex(Amat[1,:]), Amat[end,:], label="row end")
-    # ylims!(-1, 1)
-    # savefig("eta.png")
 
     # Total circulation for the airfoil
     Γi = sum(0.5 * (γi[1:end-1] .+ γi[2:end]) .* Airfoil.panelLengths)
     cℓ = 2.0 * Vinf * Γi / (chord * cos(Airfoil.sweep) * Vref^2)
-    # println("Γi: ", Γi) #Correct
-    # println("Vref: ", Vref) 
-    # println("chord: ", chord)
-    # println("sweep: ", Airfoil.sweep) #CORRECT
-    # println("cl: ", cℓ) # CORRECT
     cpDist = 1.0 .- (γi ./ Vref) .^ 2
     cm = -sum(
         (
@@ -183,9 +166,6 @@ function compute_panelMatrix(Airfoil)
     x1 = Airfoil.vortexXY[XDIM, 2:end]
     y1 = Airfoil.vortexXY[YDIM, 2:end]
 
-    # println("x1: $(x1)") # OK
-    # println("y1: $(y1)") # OK
-
     ℓ = Airfoil.panelLengths
 
     # Code is slightly different from Reid 2020 b/c Julia is column-major
@@ -201,16 +181,6 @@ function compute_panelMatrix(Airfoil)
         ξ[ii, :] = (1 ./ ℓ) .* (mat1[ii, :] .+ mat2[ii, :])
         η[ii, :] = (1 ./ ℓ) .* (mat3[ii, :] .+ mat4[ii, :])
     end
-    # println("xc: $(xc)\n") #WRONG...why?
-    # println("mat1: $(mat1[1,:])\n") . #WRONG
-    # println("mat2: $(mat2[1,:])\n") #OK
-    # println("mat3: $(mat3[1,:])\n") # WRONG
-    # println("mat4: $(mat4[1,:])\n") #OK
-    # println("panelLengths: $(ℓ)\n") # RIGHT
-    # println("xx: $(xx)\n") # RIGHT
-    # println("yy: $(yy)\n") # RIGHT
-    # println("ξ: $(ξ[1,:])\n") #wrong
-    # println("η: $(η[1,:])\n") #wrong
 
     # Matrix
     arg1 = zeros(DTYPE, size(η))
@@ -255,23 +225,11 @@ function compute_panelMatrix(Airfoil)
         P21_pre[ii, :] = η[ii, :] .* Φ[ii, :] .- (ℓ .- ξ[ii, :]) .* Ψ[ii, :] .- ℓ
         P22_pre[ii, :] = -(η[ii, :] .* Φ[ii, :]) .- ξ[ii, :] .* Ψ[ii, :] .+ ℓ
     end
-    # P11_pre = (l .- ξ) .* Φ .+ η .* Ψ
-    # P12_pre = (ξ .* Φ) .- (η .* Ψ)
-    # P21_pre = η .* Φ .- (l .- ξ) .* Ψ .- l
-    # P22_pre = -(η .* Φ) .- ξ .* Ψ .+ l
 
     P11 = transpose(XY11) .* P11_pre .+ transpose(XY12) .* P21_pre
     P12 = transpose(XY11) .* P12_pre .+ transpose(XY12) .* P22_pre
     P21 = transpose(XY21) .* P11_pre .+ transpose(XY22) .* P21_pre
     P22 = transpose(XY21) .* P12_pre .+ transpose(XY22) .* P22_pre
-
-    # # Debug code
-    # matplot = P21_pre
-    # plot(eachindex(matplot[:, 1]), matplot[1, :], label="row 0")
-    # plot!(eachindex(matplot[:, 1]), matplot[11, :], label="row 10")
-    # plot!(eachindex(matplot[:, 1]), matplot[end-9, :], label="row -10")
-    # plot!(eachindex(matplot[:, 1]), matplot[end, :], label="row end")
-    # savefig("eta.png")
 
     return P11, P12, P21, P22
 end
@@ -294,9 +252,6 @@ function compute_sweepCorr(angle, V)
     alphaCorr = atan_cs_safe(tan(alpha) * Cb, cos(angle - beta))
     VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / SaSb
 
-    # println("V",V)
-    # println("VinfCorr: ", VinfCorr)
-    # println("alpha: ", alpha)
     return alphaCorr, VinfCorr
 end
 

@@ -13,7 +13,7 @@ In julia, the chainrules rrule is '_b'
 # --- PACKAGES ---
 using LinearAlgebra
 using Zygote
-using ChainRulesCore
+using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
 using FLOWMath: abs_cs_safe, atan_cs_safe
 using Printf
 
@@ -58,13 +58,14 @@ function converge_resNonlinear(compute_residuals, compute_∂r∂u, u0::Vector, 
     # ************************************************
     #     Main solver loop
     # ************************************************
-    if is_verbose
-        println("+", "-"^50, "+")
-        println("|              Beginning NL solve                  |")
-        println("+", "-"^50, "+")
-        println(@sprintf("Residual Jacobian computed via the %s mode", uppercase(mode)))
+    @ignore_derivatives() do
+        if is_verbose
+            println("+", "-"^50, "+")
+            println("|              Beginning NL solve                  |")
+            println("+", "-"^50, "+")
+            println(@sprintf("Residual Jacobian computed via the %s mode", uppercase(mode)))
+        end
     end
-
     # Somewhere here, you could do something besides Newton-Raphson if you want
     converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(
         compute_residuals, compute_∂r∂u, u0, x0List;
@@ -666,12 +667,16 @@ function cross3D(arr1, arr2)
     @assert size(arr1, 1) == 3
     @assert size(arr2, 1) == 3
     M, N = size(arr1, 2), size(arr1, 3)
+
     arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
+
     for jj in 1:M
         for kk in 1:N
-            arr1crossarr2[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+            arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
         end
     end
+    arr1crossarr2 = copy(arr1crossarr2_z)
 
     return arr1crossarr2
 

@@ -17,6 +17,8 @@ using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 using Plots
 using LinearAlgebra
 using AbstractDifferentiation: AbstractDifferentiation as AD
+using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
+using Zygote
 using FiniteDifferences
 using PyCall
 # --- DCFoil modules ---
@@ -160,8 +162,8 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
         airfoil_xy = reverse(transpose(airfoil_pts[1:end-1, :]), dims=2)
         airfoil_ctrl_xy = reverse(transpose(airfoil_ctrl_pts), dims=2)
 
-    # elseif !isnothing(airfoil_xy) && !isnothing(airfoil_ctrl_xy)
-    #     println("Using provided airfoil coordinates")
+        # elseif !isnothing(airfoil_xy) && !isnothing(airfoil_ctrl_xy)
+        #     println("Using provided airfoil coordinates")
     end
     # The initial hydro properties use zero sweep
     LLHydro, Airfoil, Airfoil_influences = compute_hydroProperties(0.0, airfoil_xy, airfoil_ctrl_xy)
@@ -238,13 +240,13 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     for (ii, xloc) in enumerate(LAC)
         wing_xyz[XDIM, ii] = xloc
         # Apply translation wrt midchords
-        wing_xyz[:, ii] .+= translation - 0.25 * vec([local_chords[ii]+rootChord, 0.0, 0.0])
+        wing_xyz[:, ii] .+= translation - 0.25 * vec([local_chords[ii] + rootChord, 0.0, 0.0])
     end
     LAC_ctrl = compute_LAC(LLSystem, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
     for (ii, xloc) in enumerate(LAC_ctrl)
         wing_ctrl_xyz[XDIM, ii] = xloc
         # Apply translation wrt midchords
-        wing_ctrl_xyz[:, ii] .+= translation - 0.25 * vec([local_chords_ctrl[ii]+rootChord, 0.0, 0.0])
+        wing_ctrl_xyz[:, ii] .+= translation - 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
     end
 
     # if (!isnothing(options)) && options["make_plot"]
@@ -688,7 +690,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
         solverParams=∂LLNLParams, is_verbose=is_verbose,
         #  is_cmplx=true,
-        mode="CS" # faster than fidi
+        mode="CS" # faster than fidi somehow...
     )
 
     Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
@@ -791,6 +793,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     Array of the residuals between the lift values predicted from
     section properties and from circulation.
     """
+
     if isnothing(solverParams)
         println("WARNING: YOU NEED TO PASS IN SOLVER PARAMETERS")
     end
@@ -802,11 +805,9 @@ function compute_LLresiduals(G; solverParams=nothing)
     FlowCond = solverParams.FlowCond
     ζi = LLSystem.sectionVectors
 
-    # println("TV: $(TV_influence[ZDIM, 1, :])") #CORRECT
 
     # This is a (3 , npt, npt) × (npt,) multiplication
     # PYTHON: _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
-
     uix = TV_influence[XDIM, :, :] * G .+ FlowCond.uvec[XDIM]
     uiy = TV_influence[YDIM, :, :] * G .+ FlowCond.uvec[YDIM]
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
@@ -827,7 +828,10 @@ function compute_LLresiduals(G; solverParams=nothing)
     # println("Ui: $(Ui)") # OK
 
     # TODO: accelerate this!!
-    c_l = [VPM.solve(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf)[1] for (ii, V_local) in enumerate(eachcol(Ui))] # remember to only grab CL out of VPM solve
+    c_l = [
+        VPM.solve(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf)[1]
+        for (ii, V_local) in enumerate(eachcol(Ui))
+    ] # remember to only grab CL out of VPM solve
 
     ui_cross_ζi = cross.(eachcol(ui), eachcol(ζi)) # this gives a vector of vectors, not a matrix, so we need double indexing --> [][]
     ui_cross_ζi = hcat(ui_cross_ζi...) # now it's a (3, npt) matrix
@@ -1017,6 +1021,17 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     return J
 end
 
+# I THINK THIS IS RIGHT
+function ChainRulesCore.rrule(::typeof(compute_LLJacobian), Gi; solverParams, mode="Analytic")
+    J = compute_LLJacobian(Gi; solverParams=solverParams, mode=mode)
+
+    function compute_LLJacobian_pullback(ȳ)
+        return (NoTangent(), ZeroTangent(), NoTangent(), NoTangent())
+    end
+
+    return J, compute_LLJacobian_pullback
+end
+
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     """
     Compute the influence of a straight semi-infinite vortex filament
@@ -1061,26 +1076,11 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    influence = replace(influence, NaN => 0.0)
-    influence = replace(influence, Inf => 0.0)
-    influence = replace(influence, -Inf => 0.0)
-
-    # println("d:\n $(d[1,:,1])") # good
-    # println("pt: \n$(pt[:,1,1])")
-    # println("startpt: \n$(startpt[:,1,1])")
-    # println("r1:\n $(r1[:,1,1])")
-    # println("r1mag:\n $(r1mag[1,:])") # good
-    # println("uinf:\n $(uinf[:,1,1])") # good
-    # println("r1dotuinf:\n $(r1dotuinf[1,:])") # good
-    # println("influence:\n $(influence[ZDIM,1,:])")
-
-    # p1 = plot(1:size(r1, 2), numerator[XDIM, :, 1])
-    # plot!(1:size(r1, 2), numerator[YDIM, :, 1])
-    # plot!(1:size(r1, 2), numerator[ZDIM, :, 1])
-    # p2 = plot(1:size(r1, 2), denominator[1, :, 1])
-
-    # plot(p1, p2, layout=(2, 1))
-    # savefig("test_semiinf.pdf")
+    @ignore_derivatives() do 
+        influence = replace(influence, NaN => 0.0)
+        influence = replace(influence, Inf => 0.0)
+        influence = replace(influence, -Inf => 0.0)
+    end
 
 
     return influence
@@ -1140,9 +1140,11 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     influence = influence ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    influence = replace(influence, NaN => 0.0)
-    influence = replace(influence, Inf => 0.0)
-    influence = replace(influence, -Inf => 0.0)
+    @ignore_derivatives() do 
+        influence = replace(influence, NaN => 0.0)
+        influence = replace(influence, Inf => 0.0)
+        influence = replace(influence, -Inf => 0.0)
+    end
 
     return influence
 end

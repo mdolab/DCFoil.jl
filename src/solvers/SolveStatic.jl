@@ -641,10 +641,15 @@ function evalFuncsSens(
 
 
             funcsSens = reshape(dfdxpt, 3, NPT)
+            println("Finite difference sensitivities for $(evalFuncSens): ", funcsSens)
+
         elseif uppercase(mode) == "RAD" #RAD the whole thing
             backend = AD.ZygoteBackend()
+            @time funcsSens, = AD.gradient(backend, (x) -> cost_funcsFromPtVec(
+                    x, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
+                    DVDictList=DVDictList, CLMain=CLMain),
+                ptVec)
 
-            
         elseif uppercase(mode) == "ADJOINT"
             println("TOC adjoint derivative is wrong")
             # TODO: DEBUGGIN WHERE TOC influence is lost :(

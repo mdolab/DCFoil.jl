@@ -172,6 +172,7 @@ solverOptions = Dict(
 #     Cost functions
 # ************************************************
 evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
+evalFuncSens = ["wtip", "psitip", "cl", "ksflutter"]
 
 # ************************************************
 #     I/O
@@ -197,8 +198,9 @@ GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("juncti
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
-costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, GridStruct, evalFuncs, solverOptions; 
+@show costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
+costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, GridStruct, evalFuncSens, solverOptions; 
 # mode="ADJOINT",
-mode="FiDi",
+# mode="FiDi",
+mode="RAD",
 )

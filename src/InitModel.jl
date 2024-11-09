@@ -11,6 +11,7 @@ module InitModel
 
 # --- PACKAGES ---
 using Zygote
+using ChainRulesCore: @ignore_derivatives
 using Debugger
 
 # --- DCFoil modules ---
@@ -64,13 +65,6 @@ function init_static(
   #   Hydrodynamics
   # ---------------------------
   clα, _, _, LLSystem, FlowCond = HydroStrip.compute_hydroLLProperties(span, chordLengths, α₀, rake, sweepAng, depth0; solverOptions=solverOptions, appendageOptions=appendageOptions)
-  # clα, _, _ = HydroStrip.compute_glauert_circ(span, chord, deg2rad(α₀ + rake), solverOptions["Uinf"];
-  #   h=depth0,
-  #   useFS=solverOptions["use_freeSurface"],
-  #   rho=solverOptions["rhof"],
-  #   config=foilOptions["config"],
-  #   debug=solverOptions["debug"]
-  # )
 
   # ---------------------------
   #   Build final model
@@ -255,7 +249,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   WingModel, StrutModel, LLSystem, FlowCond = init_dynamic(α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
-  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), appendageParams, appendageOptions)
   FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
 
 

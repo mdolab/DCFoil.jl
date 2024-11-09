@@ -104,8 +104,6 @@ function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOp
     nNodeWing = nElemWing + 1
 
 
-    mesh = zeros(RealOrComplex, nNodeTot, 3)
-    elemConn = []
 
     # --- Spline quantities ---
     s_loc_q = LinRange(0.0, semispan, nNodeTot)
@@ -127,15 +125,19 @@ function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOp
     midchordYLocs = SolverRoutines.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
     midchordZLocs = SolverRoutines.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
 
-    mesh[:, XDIM] = midchordXLocs
-    mesh[:, YDIM] = midchordYLocs
-    mesh[:, ZDIM] = midchordZLocs
+    # mesh = zeros(RealOrComplex, nNodeTot, 3)
+    mesh = cat(reshape(midchordXLocs, nNodeTot, 1), reshape(midchordYLocs, nNodeTot, 1), reshape(midchordZLocs, nNodeTot, 1), dims=2)
+    # mesh[:, XDIM] = midchordXLocs
+    # mesh[:, YDIM] = midchordYLocs
+    # mesh[:, ZDIM] = midchordZLocs
 
+    elemConn = zeros(Int64, nElemWing, 2)
+    elemConn_z = Zygote.Buffer(elemConn)
     # --- Element connectivity ---
     for ee in 1:nElemWing
-        push!(elemConn, [ee; ee + 1])
+        elemConn_z[ee, :] = [ee, ee + 1]
     end
-    elemConn = copy(transpose(hcat(elemConn...)))
+    elemConn = copy(elemConn_z)
 
     # println("span loc query", s_loc_q)
     # for coord in eachrow(mesh)
@@ -143,7 +145,10 @@ function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOp
     # end
     if config == "full-wing"
         modifiedConn = elemConn .+ nNodeWing .- 1
-        modifiedConn[1, 1] = 1
+        modifiedConn_z = Zygote.Buffer(modifiedConn)
+        modifiedConn_z[:, :] = modifiedConn
+        modifiedConn_z[1, 1] = 1
+        modifiedConn = copy(modifiedConn_z)
         elemConn = vcat(elemConn, modifiedConn)
     end
 

@@ -9,17 +9,21 @@ export do_newton_raphson
 using LinearAlgebra, Statistics
 using FLOWMath: norm_cs_safe
 using Printf
+using ChainRulesCore: @ignore_derivatives
 
 using ..Utilities
 
 function print_solver_history(iterNum::Int64, resNorm, stepNorm)
-    if iterNum == 1
-        println("+-------+------------------------+----------+")
-        println("|  Iter |         resNorm        | stepNorm |")
-        println("+-------+------------------------+----------+")
+
+    @ignore_derivatives() do
+        if iterNum == 1
+            println("+-------+------------------------+----------+")
+            println("|  Iter |         resNorm        | stepNorm |")
+            println("+-------+------------------------+----------+")
+        end
+        @printf("   %03d    %.16e   %.2e  ", iterNum, real(resNorm), real(stepNorm))
+        println()
     end
-    @printf("   %03d    %.16e   %.2e  ", iterNum, real(resNorm), real(stepNorm))
-    println()
 end
 
 function do_newton_raphson(
@@ -69,7 +73,7 @@ function do_newton_raphson(
             else
                 appendageParamsList = WorkingListOfParams[3+iComp:end]
             end
-            
+
             xLE, nodeConn, xTE = WorkingListOfParams[1:3]
 
             res = compute_residuals(u0, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -104,14 +108,14 @@ function do_newton_raphson(
                     else
                         appendageParamsList = WorkingListOfParams[3+iComp:end]
                     end
-                    
+
                     xLE, nodeConn, xTE = WorkingListOfParams[1:3]
 
                     res = compute_residuals(u, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
                     ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
-                     appendageParamsList=appendageParamsList, 
-                     solverParams=solverParams,
-                     appendageOptions=appendageOptions, solverOptions=solverOptions)
+                        appendageParamsList=appendageParamsList,
+                        solverParams=solverParams,
+                        appendageOptions=appendageOptions, solverOptions=solverOptions)
                 else
 
                     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
@@ -163,20 +167,26 @@ function do_newton_raphson(
             converged_r = copy(res)
             iters = copy(ii)
             if isnan(resNorm)
-                println("+--------------------------------------------")
-                println("Failed to converge. res norm is NaN")
+                @ignore_derivatives() do
+                    println("+--------------------------------------------")
+                    println("Failed to converge. res norm is NaN")
+                end
                 break
             end
             if real(resNorm) < tol
-                if is_verbose
-                    println("+--------------------------------------------")
-                    println("Converged in ", ii, " iterations")
+                @ignore_derivatives() do
+                    if is_verbose
+                        println("+--------------------------------------------")
+                        println("Converged in ", ii, " iterations")
+                    end
                 end
                 break
             elseif ii == maxIters
-                println("+--------------------------------------------")
-                println("Failed to converge. res norm is $(resNorm)")
-                println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
+                @ignore_derivatives() do
+                    println("+--------------------------------------------")
+                    println("Failed to converge. res norm is $(resNorm)")
+                    println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
+                end
             end
         end
 

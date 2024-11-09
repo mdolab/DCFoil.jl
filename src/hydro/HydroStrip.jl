@@ -16,7 +16,8 @@ export compute_AICs, apply_BCs
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
-using Zygote, ChainRulesCore
+using Zygote
+using ChainRulesCore: @ignore_derivatives
 using Printf, DelimitedFiles
 using Plots
 using FLOWMath: norm_cs_safe
@@ -180,13 +181,19 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
     """
 
     if solverOptions["use_nlll"]
-        if appendageOptions["config"] == "wing"
-            println("WARNING: NL LL is only for symmetric wings")
+
+        @ignore_derivatives() do
+            if appendageOptions["config"] == "wing"
+                println("WARNING: NL LL is only for symmetric wings")
+            end
         end
         # println("Using nonlinear lifting line")
 
         # Hard-coded NACA0012
-        airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
+        @ignore_derivatives() do
+            airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
+        end
+
         airfoilX = [1.00000000e+00, 9.98993338e-01, 9.95977406e-01, 9.90964349e-01,
             9.83974351e-01, 9.75035559e-01, 9.64183967e-01, 9.51463269e-01,
             9.36924689e-01, 9.20626766e-01, 9.02635129e-01, 8.83022222e-01,
@@ -291,7 +298,6 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
 
         airfoilXY = copy(transpose(hcat(airfoilX, airfoilY)))
         airfoilCtrlXY = copy(transpose(hcat(airfoilCtrlX, airfoilCtrlY)))
-
         npt_wing = 40
         npt_airfoil = 99
 
@@ -309,7 +315,6 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
             "debug" => true,
         )
 
-        # TODO: may need to write derivative of this for custom AD
         LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, aeroSpan, sweepAng, rootChord, TR;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
@@ -317,7 +322,7 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
             # airfoilCoordFile=airfoilCoordFile,
             airfoil_ctrl_xy=airfoilCtrlXY,
             airfoil_xy=airfoilXY,
-            options=options,
+            options=@ignore_derivatives(options),
         )
         LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLHydro, Airfoils, AirfoilInfluences)
 
