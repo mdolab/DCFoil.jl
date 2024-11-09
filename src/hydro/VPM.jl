@@ -50,7 +50,9 @@ function setup(xx, yy, control_xy, sweep=0.0)
     nodeCt = length(xx)
     vortex_xy = copy(transpose(hcat(xx .* cos(sweep), yy)))
     # println("control_xy pre: $(control_xy[XDIM, :])\n")
-    control_xy[XDIM, :] .= copy(control_xy[XDIM, :]) .* cos(sweep) # change control points to sweep angle
+    # control_xy_work[XDIM, :] .= copy(control_xy[XDIM, :]) .* cos(sweep) # change control points to sweep angle
+    control_xy_xmod = reshape(copy(control_xy[XDIM, :]) .* cos(sweep), 1, nodeCt - 1) # change control points to sweep angle
+    control_xy = cat(control_xy_xmod, reshape(control_xy[YDIM, :], 1, nodeCt - 1), dims=1)
     # println("sweep: $(sweep)\n")
     # println("control_xy post: $(control_xy[XDIM, :])\n")
 
@@ -60,12 +62,16 @@ function setup(xx, yy, control_xy, sweep=0.0)
 
     P11, P12, P21, P22 = compute_panelMatrix(AIRFOIL)
 
-    Amat = zeros(nodeCt, nodeCt)
     dx = (diff(AIRFOIL.vortexXY[XDIM, :]))
     dy = (diff(AIRFOIL.vortexXY[YDIM, :]))
     mat1 = (dx) .* P21 ./ (AIRFOIL.panelLengths)
     mat2 = (dy) .* P11 ./ (AIRFOIL.panelLengths)
-    Amat[1:end-1, 1:end-1] += mat1 .- mat2
+
+    # Amat = zeros(nodeCt, nodeCt)
+    # Amat[1:end-1, 1:end-1] += mat1 .- mat2
+    step1mat = mat1 .- mat2
+    step1Amat = cat(step1mat, zeros(1, size(step1mat)[1]), dims=1) #row on bottom
+    step1Amat = cat(step1Amat, zeros(size(step1Amat)[1], 1), dims=2) #col on right
 
     # # Debug code
     # matplot = mat1
@@ -75,17 +81,19 @@ function setup(xx, yy, control_xy, sweep=0.0)
     # plot!(eachindex(matplot[:, 1]), matplot[end, :], label="row end")
     # savefig("eta.png")
 
-    mat1 = (dx) .* P22 ./ (AIRFOIL.panelLengths)
-    mat2 = (dy) .* P12 ./ (AIRFOIL.panelLengths)
-    Amat[1:end-1, 2:end] += mat1 .- mat2
+    mat11 = (dx) .* P22 ./ (AIRFOIL.panelLengths)
+    mat22 = (dy) .* P12 ./ (AIRFOIL.panelLengths)
 
+    # Amat[1:end-1, 2:end] += mat11 .- mat22
+    step2mat = mat11 .- mat22
+    step2Amat = cat(step2mat, zeros(1, size(step2mat)[1]), dims=1) # row on bottom
+    step2Amat = cat(zeros(size(step2Amat)[1], 1), step2Amat, dims=2) # col on LEFT
 
     # Kutta condition
-    Amat[end, 1] = 1.0
-    Amat[end, end] = 1.0
+    kutta = transpose(vcat(1.0, zeros(nodeCt - 2), 1.0))
+    kuttaMat = cat(zeros(nodeCt - 1, size(kutta)[2]), kutta, dims=1) # Kutta row on bottom
 
-    # println("P11: $(P11[1,:])\n") #RIGHT
-    # println("A: $(Amat[1,:])\n") # RIGHT
+    Amat = step1Amat + step2Amat + kuttaMat
 
     return AIRFOIL, Amat
 end
@@ -154,6 +162,8 @@ function compute_panelMatrix(Airfoil)
     Computes the panel matrix for the VPM
     """
 
+    nctrl = Airfoil.n - 1
+
     # Control points
     xc = Airfoil.controlXY[XDIM, :]
     yc = Airfoil.controlXY[YDIM, :]
@@ -167,6 +177,7 @@ function compute_panelMatrix(Airfoil)
     y1 = Airfoil.vortexXY[YDIM, 2:end]
 
     ℓ = Airfoil.panelLengths
+    ℓmat = transpose(repeat(ℓ, 1, nctrl)) # ℓ matrix
 
     # Code is slightly different from Reid 2020 b/c Julia is column-major
     mat1 = transpose(x1 .- xx) .* (xc .- transpose(xx))
@@ -175,32 +186,23 @@ function compute_panelMatrix(Airfoil)
     mat4 = transpose(x1 .- xx) .* (yc .- transpose(yy))
 
     # η = (1 / l) * ( (x1 - xx)(yc - yy) - (y1 - yy)(xc - xx))
-    η = zeros(DTYPE, size(mat3))
-    ξ = zeros(DTYPE, size(mat3))
-    for ii in 1:size(mat3)[1]
-        ξ[ii, :] = (1 ./ ℓ) .* (mat1[ii, :] .+ mat2[ii, :])
-        η[ii, :] = (1 ./ ℓ) .* (mat3[ii, :] .+ mat4[ii, :])
-    end
+    divℓ = 1.0 ./ ℓmat
+    ξ = divℓ .* (mat1 .+ mat2)
+    η = divℓ .* (mat3 .+ mat4)
 
     # Matrix
-    arg1 = zeros(DTYPE, size(η))
-    arg2 = zeros(DTYPE, size(η))
+    ellmatxi1 = ℓmat .- ξ
+    arg1 = η .* ℓmat
+    arg2 = η .^ 2 .+ ξ .^ 2 .- ξ .* ℓmat
+    numerator = η .^ 2 + ξ .^ 2
+    denominator = η .^ 2 .+ (-ellmatxi1) .^ 2
 
-    # Matrix
-    numerator = zeros(DTYPE, size(η))
-    denominator = zeros(DTYPE, size(η))
-    for ii in 1:size(η)[1]
-        arg1[ii, :] = η[ii, :] .* ℓ
-        arg2[ii, :] = η[ii, :] .^ 2 .+ ξ[ii, :] .^ 2 .- ξ[ii, :] .* ℓ
-        numerator[ii, :] = η[ii, :] .^ 2 + ξ[ii, :] .^ 2
-        denominator[ii, :] = η[ii, :] .* η[ii, :] .+ (ξ[ii, :] .- ℓ) .* (ξ[ii, :] .- ℓ)
-    end
     # Φ = tan⁻¹( ηl / (η² + (ξ - l)²))
     Φ = atan_cs_safe.(arg1, arg2)
     Ψ = 0.5 * log.(numerator ./ denominator)
+
     # Vector
     constant = 2π .* ℓ .^ 2
-
 
     # Vectors
     XY11 = (x1 .- xx) ./ constant
@@ -208,23 +210,12 @@ function compute_panelMatrix(Airfoil)
     XY21 = (y1 .- yy) ./ constant
     XY22 = (x1 .- xx) ./ constant
 
-    P11_pre = zeros(DTYPE, size(η))
-    P12_pre = zeros(DTYPE, size(η))
-    P21_pre = zeros(DTYPE, size(η))
-    P22_pre = zeros(DTYPE, size(η))
-
-    vec1 = zeros(DTYPE, size(η))
-    for ii in 1:size(η)[1]
-        vec1[ii, :] = (ℓ .- ξ[ii, :])
-        mat1[ii, :] = vec1[ii, :] .* Φ[ii, :]
-        mat2[ii, :] = η[ii, :] .* Ψ[ii, :]
-        P11_pre[ii, :] = mat1[ii, :] + mat2[ii, :]
-        P12_pre[ii, :] = (ξ[ii, :] .* Φ[ii, :]) .- (η[ii, :] .* Ψ[ii, :])
-
-
-        P21_pre[ii, :] = η[ii, :] .* Φ[ii, :] .- (ℓ .- ξ[ii, :]) .* Ψ[ii, :] .- ℓ
-        P22_pre[ii, :] = -(η[ii, :] .* Φ[ii, :]) .- ξ[ii, :] .* Ψ[ii, :] .+ ℓ
-    end
+    mat1 = ellmatxi1 .* Φ
+    mat2 = η .* Ψ
+    P11_pre = mat1 .+ mat2
+    P12_pre = (ξ .* Φ) .- (η .* Ψ)
+    P21_pre = η .* Φ .- ellmatxi1 .* Ψ .- ℓmat
+    P22_pre = -(η .* Φ) .- ξ .* Ψ .+ ℓmat
 
     P11 = transpose(XY11) .* P11_pre .+ transpose(XY12) .* P21_pre
     P12 = transpose(XY11) .* P12_pre .+ transpose(XY12) .* P22_pre

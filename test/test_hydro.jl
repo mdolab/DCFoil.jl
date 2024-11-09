@@ -154,7 +154,7 @@ function test_pFactor()
     println(vec(p_i))
 end
 
-test_pFactor()
+# test_pFactor()
 # ==============================================================================
 #                         Larger scale tests
 # ==============================================================================
@@ -1041,7 +1041,7 @@ function test_45degwingLL()
         push!(answers, LLOutputs.CL)
     end
 
-    println(answers)
+    # println("CL: ", answers)
     normError = norm(answers .- referenceCL)
     return normError
     # return LLOutputs, FlowCond, LLSystem
@@ -1052,6 +1052,6 @@ end
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
 
-# test_45degwingLL()
+test_45degwingLL()
 # TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
 # TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")

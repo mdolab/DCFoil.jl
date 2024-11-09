@@ -181,7 +181,10 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     SRef = rootChord * wingSpan * (1 + taperRatio) * 0.5
     AR = wingSpan^2 / SRef
 
-    translation = options["translation"] # [m] translation of the wing
+    translation = zeros(3)
+    if !isnothing(options) && haskey(options, "translation")
+        translation = options["translation"] # [m] 3d translation of the wing
+    end
 
     # ************************************************
     #     Make wing coordinates
@@ -200,16 +203,18 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     wing_xyz[YDIM, :] = θ_bound[1:2:end]
     wing_ctrl_xyz[YDIM, :] = θ_bound[2:2:end]
 
-    # # --- Cosine spacing ---
-    # # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
-    # # println("θ_bound: $(θ_bound)")
-    # θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-    # for (ii, θ) in enumerate(θ_bound[1:2:end])
-    #     wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    # end
-    # for (ii, θ) in enumerate(θ_bound[2:2:end])
-    #     wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-    # end
+    # --- Cosine spacing ---
+    if sweepAng != 0.0
+        # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
+        # println("θ_bound: $(θ_bound)")
+        θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+        for (ii, θ) in enumerate(θ_bound[1:2:end])
+            wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+        end
+        for (ii, θ) in enumerate(θ_bound[2:2:end])
+            wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
+        end
+    end
 
     # ---------------------------
     #   X coords (chord dist)
@@ -239,14 +244,16 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     LAC = compute_LAC(LLSystem, LLHydro, wing_xyz[YDIM, :], local_chords, rootChord, sweepAng, wingSpan)
     for (ii, xloc) in enumerate(LAC)
         wing_xyz[XDIM, ii] = xloc
-        # Apply translation wrt midchords
-        wing_xyz[:, ii] .+= translation - 0.25 * vec([local_chords[ii] + rootChord, 0.0, 0.0])
+
+        # # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
+        # wing_xyz[:, ii] .+= translation - 0.25 * vec([local_chords[ii] + rootChord, 0.0, 0.0])
     end
     LAC_ctrl = compute_LAC(LLSystem, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
     for (ii, xloc) in enumerate(LAC_ctrl)
         wing_ctrl_xyz[XDIM, ii] = xloc
-        # Apply translation wrt midchords
-        wing_ctrl_xyz[:, ii] .+= translation - 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
+
+        # # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
+        # wing_ctrl_xyz[:, ii] .+= translation - 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
     end
 
     # if (!isnothing(options)) && options["make_plot"]
@@ -266,9 +273,14 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     # println("wing_ctrl_xyz:\n $(wing_ctrl_xyz[YDIM,:])") # these are right
     LACeff = compute_LACeffective(LLSystem, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     # This is a 3D array
-    wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
-    wing_xyz_eff[XDIM, :, :] = LACeff
-    wing_xyz_eff[YDIM, :, :] = repeat(transpose(wing_xyz[YDIM, :]), npt_wing, 1)
+    # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
+    wing_xyz_eff_xcomp = reshape(LACeff, 1, npt_wing, npt_wing + 1)
+    wing_xyz_eff_ycomp = reshape(repeat(transpose(wing_xyz[YDIM, :]), npt_wing, 1), 1, npt_wing, npt_wing + 1)
+    wing_xyz_eff = cat(
+        wing_xyz_eff_xcomp,
+        wing_xyz_eff_ycomp,
+        zeros(1, npt_wing, npt_wing + 1),
+        dims=1)
 
     # --- Compute local sweeps ---
     # Vectors containing local sweep at each coordinate location in wing_xyz
@@ -296,28 +308,36 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     # Where the 2D VPM comes into play
     Airfoils = Vector(undef, npt_wing)
     AirfoilInfluences = Vector(undef, npt_wing)
+    Airfoils_z = Zygote.Buffer(Airfoils)
+    AirfoilInfluences_z = Zygote.Buffer(AirfoilInfluences)
     for (ii, sweep) in enumerate(localSweepsCtrl)
         # Pass in copies because this routine was modifying the input
         Airfoil, Airfoil_influences = VPM.setup(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep)
-        Airfoils[ii] = Airfoil
-        AirfoilInfluences[ii] = Airfoil_influences
+        Airfoils_z[ii] = Airfoil
+        AirfoilInfluences_z[ii] = Airfoil_influences
         # println("Airfoil control: $(airfoil_ctrl_xy[XDIM,:])")
     end
+    # # List comprehension version
+    # Airfoils, AirfoilInfluences = [VPM.setup(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep) for sweep in localSweepsCtrl]
+    Airfoils = copy(Airfoils_z)
+    AirfoilInfluences = copy(AirfoilInfluences_z)
 
     # ---------------------------
     #   TV joint locations
     # ---------------------------
     # These are where the bound vortex lines kink and then bend to follow the freestream direction
-    wing_joint_xyz = zeros(size(wing_xyz))
-    wing_joint_xyz_eff = zeros(size(wing_xyz_eff))
+
     local_chords_colmat = reshape(local_chords, 1, size(local_chords)...)
 
-    wing_joint_xyz[XDIM, :] = wing_xyz[XDIM, :] + δ * local_chords .* cos.(localSweeps)
-    wing_joint_xyz_eff[XDIM, :, :] = wing_xyz_eff[XDIM, :, :] + δ * local_chords_colmat .* cos.(localSweepEff)
+    wing_joint_xyz_xcomp = reshape(wing_xyz[XDIM, :] + δ * local_chords .* cos.(localSweeps), 1, npt_wing + 1)
+    wing_joint_xyz_eff_xcomp = reshape(wing_xyz_eff[XDIM, :, :] + δ * local_chords_colmat .* cos.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
 
-    wing_joint_xyz[YDIM, :] = wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps)
-    wing_joint_xyz_eff[YDIM, :, :] = transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff)
+    wing_joint_xyz_ycomp = reshape(wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps), 1, npt_wing + 1)
+    wing_joint_xyz_eff_ycomp = reshape(transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff), 1, npt_wing, npt_wing + 1)
+
+    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, zeros(1, npt_wing + 1), dims=1)
+    wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, zeros(1, npt_wing, npt_wing + 1), dims=1)
 
     # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
@@ -599,9 +619,9 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     # println("ctrlpts z: $(ctrlPtMat[ZDIM, :, 1])")
 
     # # OK
-    # p1 = plot(1:LLMesh.npt_wing, P2[XDIM, :, 1], label="P2[XDIM, :, 1]")
-    # plot!(1:LLMesh.npt_wing, P2[YDIM, 1, :], label="P2[YDIM, :, 1]")
-    # plot!(1:LLMesh.npt_wing, P2[ZDIM, 1, :], label="P2[ZDIM, :, 1]")
+    # p1 = plot(1:LLMesh.npt_wing, P1[XDIM, :, 1], label="P1[XDIM, :, 1]")
+    # plot!(1:LLMesh.npt_wing, P1[YDIM, 1, :], label="P1[YDIM, :, 1]")
+    # plot!(1:LLMesh.npt_wing, P1[ZDIM, 1, :], label="P1[ZDIM, :, 1]")
     # # println("P1 xdim: $(P1[XDIM, :, 1])")
     # # println("P1 ydim: $(P1[YDIM, 1, :])")
     # # println("P1 zdim: $(P1[ZDIM, :, 1])")
@@ -619,12 +639,12 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
 
     # p1 = plot(-influence_semiinfa[ZDIM, :, 1], label="semiinfa")
     # ylims!(-0.1, 0.1)
-    # # p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
-    # # p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
-    # # p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
+    # p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
+    # p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
+    # p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
     # p5 = plot(influence_semiinfb[ZDIM, :, 1], label="semiinfb")
     # ylims!(-0.1, 0.1)
-    # plot(p1, p5, layout=(2, 1))
+    # plot(p1, p2, p3, p4, p5, layout=(5, 1))
     # savefig("test_influences.pdf")
 
     ∂influence_semiinfa = compute_straightSemiinfinite(P1, ∂uinfMat, ctrlPtMat, LLMesh.rc)
@@ -815,9 +835,12 @@ function compute_LLresiduals(G; solverParams=nothing)
     ui = cat(uix, uiy, uiz, dims=2)
     ui = permutedims(ui, [2, 1])
 
-    # println("uix: $(ui[XDIM,:])")
-    # println("uiy: $(ui[YDIM,:])")
-    # println("uiz: $(ui[ZDIM,:])") # GOOD
+    # println("TV influence z dim", TV_influence[ZDIM, :, 1]) # bad
+    # println("uvec: $(FlowCond.uvec)\n")
+
+    # println("uix: $(ui[XDIM,:])\n")
+    # println("uiy: $(ui[YDIM,:])\n")
+    # println("uiz: $(ui[ZDIM,:])\n") # BAD
 
     # Do a curve fit on aero props
     # if self._aero_approx:
@@ -825,9 +848,8 @@ function compute_LLresiduals(G; solverParams=nothing)
     # else:
     # Actually solve VPM for each local velocity c
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
-    # println("Ui: $(Ui)") # OK
+    # println("Ui: $(Ui)\n") # OK
 
-    # TODO: accelerate this!!
     c_l = [
         VPM.solve(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf)[1]
         for (ii, V_local) in enumerate(eachcol(Ui))
@@ -839,13 +861,13 @@ function compute_LLresiduals(G; solverParams=nothing)
 
     # println(size(ui_cross_ζi))
     # println("ucross: $(ui_cross_ζi_mag)") # good
-    # println("G: $(G)") # good
+    # println("G: $(G)\n") # good
 
     dFimag = 2.0 * ui_cross_ζi_mag .* G
 
-    # println("dFimag: $(dFimag)")
-    # println(size(_CL))
-    # println(size(_dF))
+    # println("dFimag: $(dFimag)\n") #wrong
+    # println("c_l: $(c_l)\n") #wrong
+    # println(force) # forced error
 
     # # Make plots OK
     # testvar = TV_influence[XDIM, :, 1]
@@ -1076,7 +1098,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do 
+    @ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
@@ -1140,7 +1162,7 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     influence = influence ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do 
+    @ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
