@@ -1014,7 +1014,7 @@ function test_45degwingLL()
 
     Uinf = 50.0
     angles = [0.01, 2.1, 4.2, 6.3, 8.4, 10.5]
-    # angles = [4.2]
+    angles = [4.2]
     alpha = deg2rad(4.2)
 
     rootChord = 20.0 * 0.0254 # 20 inches
@@ -1037,7 +1037,7 @@ function test_45degwingLL()
         F = LLOutputs.F
         # println("Forces: $(F)")
         # println("Spanwise cl: $(LLOutputs.Fdist[3,:])")
-        # println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
+        println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
         push!(answers, LLOutputs.CL)
     end
 

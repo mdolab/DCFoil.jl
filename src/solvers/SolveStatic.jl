@@ -954,16 +954,18 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
 
     ∂KssU∂x = zeros(DTYPE, length(structStates), length(ptVec))
 
-    # backend = AD.ZygoteBackend() # bugging
+    # backend = AD.ZygoteBackend() # if doing gradients, took 52 sec
     # backend = AD.ReverseDiffBackend()
 
     # backend = AD.FiniteDifferencesBackend()
-    # ∂Kss∂x_u, = AD.jacobian(
-    #     backend, x -> compute_KssU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
-    #     ptVec
-    # )
+    # for ii in eachindex(structStates)
+    #     ∂KssU∂x[ii, :], = AD.gradient(
+    #         backend, x -> compute_KssU(ii, structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
+    #         ptVec
+    #     )
+    # end
 
-    # CS is faster than fidi, but RAD will probably be best later.
+    # CS is faster than fidi, but RAD will probably be best later...? 2.4sec
     dh = 1e-100
     ptVecWork = complex(ptVec)
     for ii in eachindex(ptVec)
@@ -1035,11 +1037,13 @@ function compute_∂KffU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
 
     ∂KffU∂x = zeros(DTYPE, length(structStates), length(ptVec))
 
-    # backend = AD.ZygoteBackend()
-    # ∂KffU∂x, = AD.gradient(
-    #     backend, x -> compute_KffU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
-    #     ptVec
-    # )
+    # backend = AD.ZygoteBackend() # 500 seconds... no
+    # for ii in eachindex(structStates)
+    #     ∂KffU∂x[ii, :], = AD.gradient(
+    #         backend, x -> compute_KffU(ii, structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
+    #         ptVec
+    #     )
+    # end
 
     # dh = 1e-4
     # idh = 1 / dh
@@ -1056,7 +1060,7 @@ function compute_∂KffU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
 
 end
 
-function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+function compute_KffU(ii, structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
@@ -1115,7 +1119,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
     fFull = -AIC * foilTotalStates
     f = fFull[1:end.∉[DOFBlankingList]]
 
-    return f
+    return f[ii]
 end
 # function perturb_coordsForResid(∂r∂x, step, u, LECoords, TECoords, nodeConn, DVDictList, appendageOptions, solverOptions, iComp)
 #     """

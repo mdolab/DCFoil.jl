@@ -187,14 +187,13 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
         translation = options["translation"] # [m] 3d translation of the wing
     end
     # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
-    translatMat = repeat(reshape(translation, 3, 1), 1, npt_wing)
+    translatMatCtrl = repeat(reshape(translation, size(translation)..., 1), 1, npt_wing)
+    translatMat = repeat(reshape(translation, size(translation)..., 1), 1, npt_wing + 1)
+    #     wing_ctrl_xyz[:, ii] .+= translation #- 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
 
     # ************************************************
     #     Make wing coordinates
     # ************************************************
-    # wing_xyz = zeros(3, npt_wing + 1)
-    # wing_ctrl_xyz = zeros(3, npt_wing)
-
     # ---------------------------
     #   Y coords (span)
     # ---------------------------
@@ -206,23 +205,18 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     wing_xyz_ycomp = reshape(θ_bound[1:2:end], 1, npt_wing + 1)
     wing_ctrl_xyz_ycomp = reshape(θ_bound[2:2:end], 1, npt_wing)
 
-    wing_xyz = cat(zeros(1, npt_wing + 1), wing_xyz_ycomp, zeros(1, npt_wing + 1), dims=1)
-    wing_ctrl_xyz = cat(zeros(1, npt_wing), wing_ctrl_xyz_ycomp, zeros(1, npt_wing), dims=1)
+    Zeros = zeros(1, npt_wing + 1)
+    ZerosCtrl = zeros(1, npt_wing)
+    wing_xyz = cat(Zeros, wing_xyz_ycomp, Zeros, dims=1)
+    wing_ctrl_xyz = cat(ZerosCtrl, wing_ctrl_xyz_ycomp, ZerosCtrl, dims=1)
 
     # --- Cosine spacing ---
     if abs_cs_safe(sweepAng) > 0.0
         # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
         # println("θ_bound: $(θ_bound)")
         θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-        # for (ii, θ) in enumerate(θ_bound[1:2:end])
-        #     wing_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-        # end
         wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
-        # for (ii, θ) in enumerate(θ_bound[2:2:end])
-        #     wing_ctrl_xyz[YDIM, ii] = sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ))
-        # end
         wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
-
     end
 
     # ---------------------------
@@ -232,43 +226,28 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
 
     local_chords = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_xyz_ycomp[1, :]) / wingSpan)
     local_chords_ctrl = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_ctrl_xyz_ycomp[1, :]) / wingSpan)
+
     # ∂c/∂y
     local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz_ycomp[1, :]) / wingSpan
     local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz_ycomp[1, :]) / wingSpan
 
     # --- Locus of aerodynamic centers (LAC) ---
-    # Default is Küchemann's
-    LAC = compute_LAC(AR, LLHydro, wing_xyz[YDIM, :], local_chords, rootChord, sweepAng, wingSpan)
-    wing_xyz = cat(reshape(LAC, 1, npt_wing + 1), wing_xyz_ycomp, zeros(1, npt_wing + 1), dims=1)
+    LAC = compute_LAC(AR, LLHydro, wing_xyz_ycomp[1, :], local_chords, rootChord, sweepAng, wingSpan)
+    wing_xyz = cat(reshape(LAC, 1, size(LAC)...), wing_xyz_ycomp, Zeros, dims=1) .+ translatMat
 
-    LAC_ctrl = compute_LAC(AR, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
-    #     wing_ctrl_xyz[:, ii] .+= translation #- 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
-    wing_ctrl_xyz = cat(reshape(LAC_ctrl, 1, npt_wing), wing_ctrl_xyz_ycomp, zeros(1, npt_wing), dims=1) .+ translatMat
-
-    # if (!isnothing(options)) && options["make_plot"]
-    #     println("Making plot")
-    #     plot(wing_xyz[YDIM, :], wing_xyz[XDIM, :], label="Wing LAC", marker=:circle)
-    #     plot!(wing_ctrl_xyz[YDIM, :], wing_ctrl_xyz[XDIM, :], label="Control LAC", marker=:cross)
-    #     plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .+ 0.75 * local_chords, label="Planform", linestyle=:solid, color=:black)
-    #     plot!(wing_xyz[YDIM, :], abs.(wing_xyz[YDIM, :]) * tan(sweepAng) .+ 0.25 * rootChord .- 0.25 * local_chords, linestyle=:solid, color=:black)
-    #     plot!(xlabel="Y", ylabel="X", title="Locus of Aerodynamic Centers")
-    #     xlims!(-4.0, 4.0)
-    #     ylims!(-1, 3)
-    #     savefig("LAC.pdf")
-    # end
+    LAC_ctrl = compute_LAC(AR, LLHydro, wing_ctrl_xyz_ycomp[1, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
+    wing_ctrl_xyz = cat(reshape(LAC_ctrl, 1, size(LAC_ctrl)...), wing_ctrl_xyz_ycomp, ZerosCtrl, dims=1) .+ translatMatCtrl
 
     # Need a mess of LAC's for each control point
-    # println("wing_xyz:\n $(wing_xyz[YDIM,:])") # these are right
-    # println("wing_ctrl_xyz:\n $(wing_ctrl_xyz[YDIM,:])") # these are right
     LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     # This is a 3D array
     # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
-    wing_xyz_eff_xcomp = reshape(LACeff, 1, npt_wing, npt_wing + 1)
+    wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...)
     wing_xyz_eff_ycomp = reshape(repeat(transpose(wing_xyz[YDIM, :]), npt_wing, 1), 1, npt_wing, npt_wing + 1)
     wing_xyz_eff = cat(
         wing_xyz_eff_xcomp,
         wing_xyz_eff_ycomp,
-        zeros(1, npt_wing, npt_wing + 1),
+        zeros(size(wing_xyz_eff_ycomp)),
         dims=1)
 
     # --- Compute local sweeps ---
@@ -282,14 +261,13 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     fprimeEff = compute_dLACdseffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
 
-    # println("local sweeps: $(localSweeps)")
     # --- Other section properties ---
     sectionVectors = wing_xyz[:, 1:end-1] - wing_xyz[:, 2:end] # dℓᵢ
 
     sectionLengths = .√(sectionVectors[XDIM, :] .^ 2 + sectionVectors[YDIM, :] .^ 2 + sectionVectors[ZDIM, :] .^ 2) # ℓᵢ
     sectionAreas = 0.5 * (local_chords[1:end-1] + local_chords[2:end]) .* abs_cs_safe.(wing_xyz[YDIM, 1:end-1] - wing_xyz[YDIM, 2:end]) # dAᵢ
 
-    ζ = sectionVectors ./ reshape(sectionAreas, 1, length(sectionAreas)) # Normalized section vectors, [3, npt_wing]
+    ζ = sectionVectors ./ reshape(sectionAreas, 1, size(sectionAreas)...) # Normalized section vectors, [3, npt_wing]
 
     # ---------------------------
     #   Aero section properties
@@ -325,7 +303,7 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     wing_joint_xyz_ycomp = reshape(wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps), 1, npt_wing + 1)
     wing_joint_xyz_eff_ycomp = reshape(transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
-    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, zeros(1, npt_wing + 1), dims=1)
+    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, Zeros, dims=1)
     wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, zeros(1, npt_wing, npt_wing + 1), dims=1)
 
     # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
@@ -382,15 +360,6 @@ function compute_LAC(AR, LLHydro, y, c, cr, Λ, span; model="kuechemann")
     else
         println("Model not implemented yet")
     end
-
-    # println("====================================")
-    # println("Λk: $(Λₖ)")
-    # println("K: $(K)") # good
-    # println("y: $(y)")
-    # println("tanl\n: $(tanl)")
-    # println("lam:\n $(lam)")
-    # println("fs: $(fs)") #good
-    # println("====================================")
 
     return fs
 end
@@ -558,7 +527,10 @@ end
 
 function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=false)
     """
-    Execute LL algorithm
+    Execute LL algorithm.
+    Top level wrapper to interface with. 
+    Taking derivatives is trickier and done analytically
+
     Inputs:
     -------
     LiftingSystem : LiftingLineSystem
@@ -571,6 +543,22 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     LLResults : LiftingLineResults
         Lifting line results struct with all necessary parameters
     """
+
+    # --- Unpack data structs ---
+    Uinf = FlowCond.Uinf
+    α = FlowCond.alpha
+    β = FlowCond.beta
+    rhof = FlowCond.rhof
+    # TODO PICKUP HERE GGGGGGGGGGG
+    DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS = compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=is_verbose)
+
+    # --- Pack back up  ---
+    LLResults = LiftingLineOutputs(DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS)
+
+    return LLResults
+end
+
+function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=false)
 
     Δα = 1e-3
     ∂α = FlowCond.alpha + Δα # FD
@@ -658,6 +646,7 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
         solverParams=∂LLNLParams, is_verbose=is_verbose,
         #  is_cmplx=true,
         mode="CS" # faster than fidi somehow...
+        # mode="ANALYTIC" # DEBUG ME
     )
 
     Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
@@ -726,9 +715,8 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
     ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
 
-    LLResults = LiftingLineOutputs(DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS)
+    return DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS
 
-    return LLResults
 end
 
 function compute_LLresiduals(G; solverParams=nothing)
@@ -835,7 +823,7 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
 
     """
 
-    if mode == "Analytic" # some reason, this is not working. It's busted
+    if uppercase(mode) == "ANALYTIC" # some reason, this is not working. It's busted
 
         TV_influence = solverParams.TV_influence
         LLSystem = solverParams.LLSystem
@@ -849,7 +837,6 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         # (u∞ + Σ Gj vji)
         uix = vji[XDIM, :, :] * Gi .+ FlowCond.uvec[XDIM]
         uiy = vji[YDIM, :, :] * Gi .+ FlowCond.uvec[YDIM]
-        #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
         uiz = -vji[ZDIM, :, :] * Gi .+ FlowCond.uvec[ZDIM]
 
         ui = cat(uix, uiy, uiz, dims=2)
@@ -866,6 +853,7 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         uxy_norm = .√(uxy[XDIM, :] .^ 2 + uxy[YDIM, :] .^ 2 + uxy[ZDIM, :] .^ 2)
 
         vxy = cross3D(vji, ζArr)
+
         # This is downwash contribution
         uxzdotvxz = uxy[XDIM, :] .* vxy[XDIM, :, :] .+ uxy[YDIM, :] .* vxy[YDIM, :, :] .+ uxy[ZDIM, :] .* vxy[ZDIM, :, :]
         numerator = 2.0 * uxzdotvxz .* Gi
@@ -882,6 +870,7 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         # println("numerator: $(numerator[1,:])") # OK
 
         # TODO GN: I bet this is wrong
+        # TODO: PICKUP HERE ACTUALLY SO ITS FASTER
         _CLa, _aL0 = LLHydro.airfoil_CLa, LLHydro.airfoil_aL0
 
         Λ = LLSystem.local_sweeps_ctrl
@@ -895,9 +884,6 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         numerator = transpose(uix) .* (-vji[ZDIM, :, :]) .- transpose(uiz) .* vji[XDIM, :, :]
         denominator = reshape(uix .^ 2 .+ uiz .^ 2, size(uix)..., 1)
         _da = numerator ./ denominator
-        # println("numerator: $(numerator[1,:])") # OK
-        # println("denominator: $(size(denominator))") # OK
-        # println("denominator: $(denominator)") # OK
 
         numerator = transpose(uix) * vji[YDIM, :, :] .- transpose(uiy) .* vji[XDIM, :, :]
         denominator = reshape(uix .^ 2 + uiy .^ 2, size(uix)..., 1)
@@ -917,12 +903,12 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         # println("aL: $(_aL)") # OK
         # println("bL: $(_bL)") # OK
 
-        # # --- not good ---
-        # println("$(size(_da))")
-        # println("$(size(_db))")
-        # println("_da: $(_da[1,:])")
-        # println("_db: $(_db[1,:])") #OK for now
-        # println("_daL: $(_daL[1,:])") #OK for now
+        # --- not good ---
+        println("$(size(_da))")
+        println("$(size(_db))")
+        println("_da: $(_da[1,:])")
+        println("_db: $(_db[1,:])") #OK for now
+        println("_daL: $(_daL[1,:])") #OK for now
         # println("J: $(size(J))")
         # println("J: $(J[1,:])") # OK
 
@@ -951,8 +937,8 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         # println("dCL:\n $((_dCL[:,1]))") #OK
         J = J .- _dCL
         # println("J: $(J[1,:])") # OK
-        # exit()
-    elseif mode == "CS" # slow as hell
+        # println(forceerror)
+    elseif mode == "CS" # slow as hell but works
         dh = 1e-100
         ∂r∂G = zeros(DTYPE, length(Gi), length(Gi))
 
@@ -964,10 +950,15 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
             ∂r∂G[:, ii] = imag(r_f) / dh
         end
         J = ∂r∂G
-    elseif mode == "FiDi"
+    elseif mode == "FiDi" # too slow, don't use this
 
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
         J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
+
+        # elseif mode == "RAD"
+
+        #     backend = AD.ZygoteBackend()
+        #     J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
 
     else
         println("Mode not implemented yet")
