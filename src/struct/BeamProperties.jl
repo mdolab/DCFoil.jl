@@ -16,13 +16,13 @@ export compute_section_property
 struct SectionProperty{TF,TC}
     c::TC # chord length
     t::TC # thickness (only needed if not using an airfoil section)
-    ab::TC # dist from midchord to EA, +ve for EA aft
+    ab # dist from midchord to EA, +ve for EA aft
     ρₛ::TF # density
     E₁::TF # Young's modulus in-plane fiber longitudinal direction (x)
     E₂::TF # Young's modulus in-plane fiber normal direction (y)
     G₁₂::TF # In-plane Shear modulus
     ν₁₂::TF # Poisson ratio
-    theta_f::TC # global fiber frame orientation
+    theta_f # global fiber frame orientation
     airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 

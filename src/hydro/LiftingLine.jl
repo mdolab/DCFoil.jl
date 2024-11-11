@@ -572,11 +572,8 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
         Lifting line results struct with all necessary parameters
     """
 
-    # Δα = 1e-100
-    # ∂α = FlowCond.alpha + Δα * 1im # Perturbation for complex step
     Δα = 1e-3
     ∂α = FlowCond.alpha + Δα # FD
-    # ∂Γi∂α = zeros(DTYPE, LLMesh.npt_wing)
 
     ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
     ∂Uinf = norm_cs_safe(∂Uinfvec)
@@ -599,25 +596,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
     ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
-    # # OK
-    # println("collocation X $(LLMesh.collocationPts[XDIM,:])")
-    # println("collocation Y $(LLMesh.collocationPts[YDIM,:])")
-    # println("collocation Z $(LLMesh.collocationPts[ZDIM,:])")
-
-    # # OK
-    # println("ctrlpts x: $(ctrlPtMat[XDIM, :, 1])")
-    # println("ctrlpts y: $(ctrlPtMat[YDIM, :, 1])")
-    # println("ctrlpts z: $(ctrlPtMat[ZDIM, :, 1])")
-
-    # # OK
-    # p1 = plot(1:LLMesh.npt_wing, P1[XDIM, :, 1], label="P1[XDIM, :, 1]")
-    # plot!(1:LLMesh.npt_wing, P1[YDIM, 1, :], label="P1[YDIM, :, 1]")
-    # plot!(1:LLMesh.npt_wing, P1[ZDIM, 1, :], label="P1[ZDIM, :, 1]")
-    # # println("P1 xdim: $(P1[XDIM, :, 1])")
-    # # println("P1 ydim: $(P1[YDIM, 1, :])")
-    # # println("P1 zdim: $(P1[ZDIM, :, 1])")
-    # plot(p1)
-    # savefig("test_P1.pdf")
 
     # Mask for the bound segment (npt_wing x npt_wing)
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
@@ -627,16 +605,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
     influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
     influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
-
-    # p1 = plot(-influence_semiinfa[ZDIM, :, 1], label="semiinfa")
-    # ylims!(-0.1, 0.1)
-    # p2 = plot(influence_straightsega[ZDIM, :, 1], label="straightsega")
-    # p3 = plot(influence_straightsegb[ZDIM, :, 1], label="straightsegb")
-    # p4 = plot(influence_straightsegc[ZDIM, :, 1], label="straightsegc")
-    # p5 = plot(influence_semiinfb[ZDIM, :, 1], label="semiinfb")
-    # ylims!(-0.1, 0.1)
-    # plot(p1, p2, p3, p4, p5, layout=(5, 1))
-    # savefig("test_influences.pdf")
 
     ∂influence_semiinfa = compute_straightSemiinfinite(P1, ∂uinfMat, ctrlPtMat, LLMesh.rc)
     ∂influence_semiinfb = compute_straightSemiinfinite(P4, ∂uinfMat, ctrlPtMat, LLMesh.rc)
@@ -654,11 +622,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
                     ∂influence_semiinfb
 
 
-    # p1 = plot(TV_influence[ZDIM, :, 1], label="")
-    # plot!(TV_influence[ZDIM, 1, :], label="")
-    # plot(p1, layout=(1, 1))
-    # savefig("test_influences.pdf")
-
     # ---------------------------
     #   Solve for circulation
     # ---------------------------
@@ -674,17 +637,10 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     ctrl_pts = LLMesh.collocationPts
     ζi = LLMesh.sectionVectors
     dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-    # println("cla:", clα) # GOOD
-    # println("Uz: $(Uz)")
-    # println("Ux: $(Ux)")
-    # println("αL0: $(αL0)") # close enough
-    # println(ctrl_pts[YDIM, :])
-    # println("Sweep: $(Λ)")
     g0 = 0.5 * c_r * clα * cos(Λ) *
          (uz / ux - αL0) *
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
-    # println("g0: $(g0)") # right
 
     # --- Pack up parameters for the NL solve ---
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
@@ -769,20 +725,6 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     # ∂G∂α = imag(∂Gconv) / Δα # CS
     ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
     ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
-
-    # println("clavec: $(∂cl∂α)")
-
-    # p1 = plot(LLMesh.collocationPts[YDIM, :], ∂cl∂α, label="Lift curve slope")
-    # savefig("test_clα.pdf")
-
-    # p1 = plot(ctrl_pts[YDIM, :], NondimForces[ZDIM, :], label="Lift")
-    # ylims!(0.0, 8)
-    # p2 = plot(ctrl_pts[YDIM, :], NondimForces[XDIM, :], label="Induced")
-    # ylims!(-0.5, 0.0)
-    # p3 = plot(ctrl_pts[YDIM, :], Gconv, label="Circulation")
-    # ylims!(0.0, 0.08)
-    # plot(p1, p2, p3, layout=(3, 1), widen=true)
-    # savefig("test_Lift_Induced_Circ.pdf")
 
     LLResults = LiftingLineOutputs(DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS)
 

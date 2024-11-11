@@ -46,13 +46,19 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
 
 
     # About midchord
-    spanwiseVectors = zeros(RealOrComplex, 3, size(nodeConn)[2])
-    for (ii, inds) in enumerate(eachcol(nodeConn))
-        dx = midchords[XDIM, inds[2]] - midchords[XDIM, inds[1]]
-        dy = midchords[YDIM, inds[2]] - midchords[YDIM, inds[1]]
-        dz = midchords[ZDIM, inds[2]] - midchords[ZDIM, inds[1]]
-        spanwiseVectors[:, ii] = [dx, dy, dz]
-    end
+    # spanwiseVectors = zeros(RealOrComplex, 3, size(nodeConn)[2])
+    # for (ii, inds) in enumerate(eachcol(nodeConn))
+    #     dx = midchords[XDIM, inds[2]] - midchords[XDIM, inds[1]]
+    #     dy = midchords[YDIM, inds[2]] - midchords[YDIM, inds[1]]
+    #     dz = midchords[ZDIM, inds[2]] - midchords[ZDIM, inds[1]]
+    #     spanwiseVectors[:, ii] = [dx, dy, dz]
+    # end
+    n1vec = nodeConn[1,:]
+    n2vec = nodeConn[2,:]
+    dxVec = midchords[XDIM, n2vec] - midchords[XDIM, n1vec]
+    dyVec = midchords[YDIM, n2vec] - midchords[YDIM, n1vec]
+    dzVec = midchords[ZDIM, n2vec] - midchords[ZDIM, n1vec]
+    spanwiseVectors = [dxVec; dyVec; dzVec] # 3 x nNodes
 
 
     # twistDist

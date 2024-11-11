@@ -75,8 +75,9 @@ function do_newton_raphson(
             end
 
             xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+            xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
 
-            res = compute_residuals(u0, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+            res = compute_residuals(u0, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
         else
             DVDict = WorkingListOfParams[iComp]
             x0, DVLengths = Utilities.unpack_dvdict(DVDict)
@@ -110,8 +111,9 @@ function do_newton_raphson(
                     end
 
                     xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+                    xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
 
-                    res = compute_residuals(u, xLE, xTE, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+                    res = compute_residuals(u, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
                     ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
                         appendageParamsList=appendageParamsList,
                         solverParams=solverParams,

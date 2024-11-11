@@ -354,7 +354,7 @@ function compute_elem_stiff(
             00 iy 00 00 00 -jy 00 00 ly
         ]
         Ktop = hcat(K11, K12)
-        Kbot = hcat(K12', K22)
+        Kbot = hcat(transpose(K12), K22)
         Kᵉ = vcat(Ktop, Kbot)
     end
 

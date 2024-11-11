@@ -200,7 +200,6 @@ DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, app
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 @show costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, GridStruct, evalFuncSens, solverOptions; 
-# mode="ADJOINT",
+mode="ADJOINT",
 # mode="FiDi",
-mode="RAD",
 )

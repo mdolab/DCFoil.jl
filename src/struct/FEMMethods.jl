@@ -477,11 +477,12 @@ function assemble(StructMesh, x_αbVec,
     """
 
     # --- Local nodal DOF vector ---
-    # Determine the number of dofs per node
-    qLocal = zeros(NDOF * 2)
-
     abVec = FOIL.ab
-    ab_strut = STRUT.ab
+    if config == "t-foil"
+        ab_strut = STRUT.ab
+    else
+        ab_strut = nothing
+    end
     # x_αbVec = StructMesh.x_αb
     # --- Initialize matrices ---
     nElem = size(StructMesh.elemConn)[1]
@@ -515,7 +516,7 @@ end
 
 function populate_matrices!(
     globalK, globalM, globalF,
-    nElem::Int64, StructMesh, FOIL::DynamicFoil, STRUT, abVec, x_αbVec;
+    nElem::Int64, StructMesh, FOIL, STRUT, abVec, x_αbVec;
     config="wing", constitutive="isotropic", verbose=true, elemType="bend-twist", ab_strut=nothing, x_αb_strut=nothing
 )
     nNodes::Int64 = nElem + 1
@@ -886,10 +887,30 @@ function solve_structure(K::Matrix, M::Matrix, F::Vector)
     Solve the structural system
     """
 
-    q = (K) \ F # TODO: should probably replace this with an iterative solver
+    # q = (K) \ F # TODO: should probably replace this with an iterative solver
+    q = inv(K) * F
 
     return q
 end
+
+# function ChainRulesCore.rrule(::typeof(solve_structure), K, M, F)
+#     q = solve_structure(K, M, F)
+
+#     function pullback(qb)
+
+#         # q = inv(K) * F
+#         C = inv(K)
+#         dqdK = -C * C * F
+
+#         Kb = qb * dqdK
+#         Fb = qb * dqdF
+
+#         return (NoTangent(), Kb, ZeroTangent(), Fb)
+#     end
+
+#     q, pullback
+
+# end
 
 function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
     """
