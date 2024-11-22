@@ -11,6 +11,8 @@ module Utilities
 using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex
 
+export compute_KS
+
 function unpack_dvdict(DVDict::Dict)
 
     nDVs::Int64 = 0
@@ -121,5 +123,32 @@ function generate_naca4dig(toc)
     foil_coords = hcat(x_coords, y_coords)
     return foil_coords
 end
+
+function compute_KS(g, ρKS)
+    """
+    Compute the KS function
+
+    Inputs
+    ------
+    g - flutter constraints
+    ρKS - KS parameter. Float
+
+    Outputs
+    -------
+    gKS - KS function. Float
+    """
+
+    gmax = maximum(g)
+
+    Σ = 0.0 # sum
+    for gval in g
+        Σ += exp(ρKS * (gval - gmax))
+    end
+
+    # --- Compute the KS function ---
+    gKS = gmax + 1 / ρKS * log(Σ)
+
+    return gKS
+end # compute_KS
 
 end

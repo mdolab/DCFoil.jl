@@ -1,9 +1,11 @@
-# --- Julia ---
+"""
+--- Julia ---
 
-# @File    :   HydroStrip.jl
-# @Time    :   2022/05/18
-# @Author  :   Galen Ng
-# @Desc    :   Contains hydrodynamic routines and interfaces to other codes
+@File    :   HydroStrip.jl
+@Time    :   2022/05/18
+@Author  :   Galen Ng
+@Desc    :   Contains hydrodynamic routines and interfaces to other codes
+"""
 
 module HydroStrip
 
@@ -26,14 +28,18 @@ using Debugger
 
 # --- DCFoil modules ---
 using ..SolverRoutines
-using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
+using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
 using ..GlauertLL: GlauertLL
-using ..LiftingLine: LiftingLine
+using ..LiftingLine: LiftingLine, Δα
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..DCFoil: RealOrComplex, DTYPE
 using ..DesignConstants: CONFIGS
+using ..Preprocessing
+using ..Utilities
+using ..FEMMethods
 
+const ELEMTYPE = "COMP2"
 # ==============================================================================
 #                         Free surface effects
 # ==============================================================================
@@ -169,7 +175,123 @@ end
 # ==============================================================================
 #                         Hydro forces
 # ==============================================================================
-function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0; solverOptions, appendageOptions)
+function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=false)
+    """
+    This is a wrapper
+    """
+    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    # ---------------------------
+    #   Hydrodynamics
+    # ---------------------------
+    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths; appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
+
+    if return_all
+        return LLOutputs, LLSystem, FlowCond
+    else
+        return LLOutputs.cla
+    end
+end
+
+function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FiDi")
+    """
+    Derivative of the lift slope wrt the design variables
+    """
+
+    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
+
+    dcldX_f = zeros(npt_wing, length(ptVec))
+    dcldX_i = zeros(npt_wing, length(ptVec))
+    appendageParams_da = copy(appendageParams)
+    appendageParams_da["alfa0"] = appendageParams["alfa0"] + Δα
+
+    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+
+        dh = 1e-7
+        idh = 1 / dh
+
+        # ************************************************
+        #     First time with current angle of attack
+        # ************************************************
+        LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+        f_i = LLOutputs_i.cl
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+            f_f = LLOutputs_f.cl
+
+            dcldX_i[:, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+
+        # writedlm("dcldX_i-$(mode).csv", dcldX_i, ',')
+
+        # ************************************************
+        #     Second time with perturbed angle of attack
+        # ************************************************
+
+
+        LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+        f_i = LLOutputs_i.cl
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+            f_f = LLOutputs_f.cl
+            dcldX_f[:, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+        # writedlm("dcldX_f-$(mode).csv", dcldX_f, ',')
+
+
+    elseif uppercase(mode) == "IMPLICIT"
+
+        # ************************************************
+        #     First time with current angle of attack
+        # ************************************************
+        LLOutputs_i, _, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        ∂cl∂Γ = diagm(2 * LLOutputs_i.cl ./ LLOutputs_i.Γdist)
+        ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
+
+        dcldX_i = ∂cl∂X + ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
+        # writedlm("dcldX_i-$(mode).csv", dcldX_i, ',')
+        # writedlm("∂r∂Γ.csv", ∂r∂Γ, ',')
+        # writedlm("∂r∂xPt.csv", ∂r∂xPt, ',')
+
+        # ************************************************
+        #     Second time with perturbed angle of attack
+        # ************************************************
+        LLOutputs_f, _, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+        Gconv = LLOutputs_f.Γdist / FlowCond.Uinf
+
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
+
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
+        ∂cl∂Γ = diagm(2 * LLOutputs_f.cl ./ LLOutputs_f.Γdist)
+        ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
+
+        dcldX_f = ∂cl∂X + ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
+
+    end
+
+    dcladXpt = (dcldX_f - dcldX_i) ./ Δα
+
+    return dcladXpt
+end
+
+
+function compute_hydroLLProperties(midchords, chordVec; appendageParams, solverOptions, appendageOptions)
     """
     Wrapper function to the hydrodynamic lifting line properties
     In this case, α is the angle by which the flow velocity vector is rotated, not the geometry
@@ -180,6 +302,11 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
         Lift slope wrt angle of attack (rad^-1) for each spanwise station
     """
 
+    α0 = appendageParams["alfa0"]
+    β0 = appendageParams["beta"]
+    rake = appendageParams["rake"]
+    sweepAng = appendageParams["sweep"]
+    depth0 = appendageParams["depth0"]
     if solverOptions["use_nlll"]
 
         @ignore_derivatives() do
@@ -194,128 +321,9 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
             airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
         end
 
-        airfoilX = [1.00000000e+00, 9.98993338e-01, 9.95977406e-01, 9.90964349e-01,
-            9.83974351e-01, 9.75035559e-01, 9.64183967e-01, 9.51463269e-01,
-            9.36924689e-01, 9.20626766e-01, 9.02635129e-01, 8.83022222e-01,
-            8.61867019e-01, 8.39254706e-01, 8.15276334e-01, 7.90028455e-01,
-            7.63612734e-01, 7.36135537e-01, 7.07707507e-01, 6.78443111e-01,
-            6.48460188e-01, 6.17879468e-01, 5.86824089e-01, 5.55419100e-01,
-            5.23790958e-01, 4.92067018e-01, 4.60375022e-01, 4.28842581e-01,
-            3.97596666e-01, 3.66763093e-01, 3.36466018e-01, 3.06827437e-01,
-            2.77966694e-01, 2.50000000e-01, 2.23039968e-01, 1.97195156e-01,
-            1.72569633e-01, 1.49262556e-01, 1.27367775e-01, 1.06973453e-01,
-            8.81617093e-02, 7.10082934e-02, 5.55822757e-02, 4.19457713e-02,
-            3.01536896e-02, 2.02535132e-02, 1.22851066e-02, 6.28055566e-03,
-            2.26403871e-03, 2.51728808e-04, 2.51728808e-04, 2.26403871e-03,
-            6.28055566e-03, 1.22851066e-02, 2.02535132e-02, 3.01536896e-02,
-            4.19457713e-02, 5.55822757e-02, 7.10082934e-02, 8.81617093e-02,
-            1.06973453e-01, 1.27367775e-01, 1.49262556e-01, 1.72569633e-01,
-            1.97195156e-01, 2.23039968e-01, 2.50000000e-01, 2.77966694e-01,
-            3.06827437e-01, 3.36466018e-01, 3.66763093e-01, 3.97596666e-01,
-            4.28842581e-01, 4.60375022e-01, 4.92067018e-01, 5.23790958e-01,
-            5.55419100e-01, 5.86824089e-01, 6.17879468e-01, 6.48460188e-01,
-            6.78443111e-01, 7.07707507e-01, 7.36135537e-01, 7.63612734e-01,
-            7.90028455e-01, 8.15276334e-01, 8.39254706e-01, 8.61867019e-01,
-            8.83022222e-01, 9.02635129e-01, 9.20626766e-01, 9.36924689e-01,
-            9.51463269e-01, 9.64183967e-01, 9.75035559e-01, 9.83974351e-01,
-            9.90964349e-01, 9.95977406e-01, 9.98993338e-01, 1.00000000e+00]
+        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
 
-        airfoilY = [1.33226763e-17, -1.41200438e-04, -5.63343432e-04, -1.26208774e-03,
-            -2.23030811e-03, -3.45825298e-03, -4.93375074e-03, -6.64245132e-03,
-            -8.56808791e-03, -1.06927428e-02, -1.29971013e-02, -1.54606806e-02,
-            -1.80620201e-02, -2.07788284e-02, -2.35880799e-02, -2.64660655e-02,
-            -2.93884006e-02, -3.23300020e-02, -3.52650469e-02, -3.81669313e-02,
-            -4.10082448e-02, -4.37607812e-02, -4.63956016e-02, -4.88831639e-02,
-            -5.11935307e-02, -5.32966591e-02, -5.51627743e-02, -5.67628192e-02,
-            -5.80689678e-02, -5.90551853e-02, -5.96978089e-02, -5.99761253e-02,
-            -5.98729133e-02, -5.93749219e-02, -5.84732545e-02, -5.71636340e-02,
-            -5.54465251e-02, -5.33271006e-02, -5.08150416e-02, -4.79241724e-02,
-            -4.46719377e-02, -4.10787401e-02, -3.71671601e-02, -3.29610920e-02,
-            -2.84848303e-02, -2.37621474e-02, -1.88154040e-02, -1.36647314e-02,
-            -8.32732576e-03, -2.81688492e-03, 2.81688492e-03, 8.32732576e-03,
-            1.36647314e-02, 1.88154040e-02, 2.37621474e-02, 2.84848303e-02,
-            3.29610920e-02, 3.71671601e-02, 4.10787401e-02, 4.46719377e-02,
-            4.79241724e-02, 5.08150416e-02, 5.33271006e-02, 5.54465251e-02,
-            5.71636340e-02, 5.84732545e-02, 5.93749219e-02, 5.98729133e-02,
-            5.99761253e-02, 5.96978089e-02, 5.90551853e-02, 5.80689678e-02,
-            5.67628192e-02, 5.51627743e-02, 5.32966591e-02, 5.11935307e-02,
-            4.88831639e-02, 4.63956016e-02, 4.37607812e-02, 4.10082448e-02,
-            3.81669313e-02, 3.52650469e-02, 3.23300020e-02, 2.93884006e-02,
-            2.64660655e-02, 2.35880799e-02, 2.07788284e-02, 1.80620201e-02,
-            1.54606806e-02, 1.29971013e-02, 1.06927428e-02, 8.56808791e-03,
-            6.64245132e-03, 4.93375074e-03, 3.45825298e-03, 2.23030811e-03,
-            1.26208774e-03, 5.63343432e-04, 1.41200438e-04, -1.33226763e-17]
-        airfoilCtrlX = [9.99496669e-01, 9.97485372e-01, 9.93470878e-01, 9.87469350e-01,
-            9.79504955e-01, 9.69609763e-01, 9.57823618e-01, 9.44193979e-01,
-            9.28775727e-01, 9.11630948e-01, 8.92828675e-01, 8.72444620e-01,
-            8.50560862e-01, 8.27265520e-01, 8.02652394e-01, 7.76820594e-01,
-            7.49874136e-01, 7.21921522e-01, 6.93075309e-01, 6.63451649e-01,
-            6.33169828e-01, 6.02351778e-01, 5.71121594e-01, 5.39605029e-01,
-            5.07928988e-01, 4.76221020e-01, 4.44608801e-01, 4.13219623e-01,
-            3.82179880e-01, 3.51614556e-01, 3.21646728e-01, 2.92397065e-01,
-            2.63983347e-01, 2.36519984e-01, 2.10117562e-01, 1.84882395e-01,
-            1.60916095e-01, 1.38315166e-01, 1.17170614e-01, 9.75675810e-02,
-            7.95850013e-02, 6.32952845e-02, 4.87640235e-02, 3.60497304e-02,
-            2.52036014e-02, 1.62693099e-02, 9.28283111e-03, 4.27229719e-03,
-            1.25788376e-03, 2.51728808e-04, 1.25788376e-03, 4.27229719e-03,
-            9.28283111e-03, 1.62693099e-02, 2.52036014e-02, 3.60497304e-02,
-            4.87640235e-02, 6.32952845e-02, 7.95850013e-02, 9.75675810e-02,
-            1.17170614e-01, 1.38315166e-01, 1.60916095e-01, 1.84882395e-01,
-            2.10117562e-01, 2.36519984e-01, 2.63983347e-01, 2.92397065e-01,
-            3.21646728e-01, 3.51614556e-01, 3.82179880e-01, 4.13219623e-01,
-            4.44608801e-01, 4.76221020e-01, 5.07928988e-01, 5.39605029e-01,
-            5.71121594e-01, 6.02351778e-01, 6.33169828e-01, 6.63451649e-01,
-            6.93075309e-01, 7.21921522e-01, 7.49874136e-01, 7.76820594e-01,
-            8.02652394e-01, 8.27265520e-01, 8.50560862e-01, 8.72444620e-01,
-            8.92828675e-01, 9.11630948e-01, 9.28775727e-01, 9.44193979e-01,
-            9.57823618e-01, 9.69609763e-01, 9.79504955e-01, 9.87469350e-01,
-            9.93470878e-01, 9.97485372e-01, 9.99496669e-01]
-        airfoilCtrlY = [-7.06002188e-05, -3.52271935e-04, -9.12715585e-04, -1.74619792e-03,
-            -2.84428054e-03, -4.19600186e-03, -5.78810103e-03, -7.60526962e-03,
-            -9.63041534e-03, -1.18449221e-02, -1.42288910e-02, -1.67613504e-02,
-            -1.94204243e-02, -2.21834542e-02, -2.50270727e-02, -2.79272331e-02,
-            -3.08592013e-02, -3.37975244e-02, -3.67159891e-02, -3.95875880e-02,
-            -4.23845130e-02, -4.50781914e-02, -4.76393828e-02, -5.00383473e-02,
-            -5.22450949e-02, -5.42297167e-02, -5.59627967e-02, -5.74158935e-02,
-            -5.85620766e-02, -5.93764971e-02, -5.98369671e-02, -5.99245193e-02,
-            -5.96239176e-02, -5.89240882e-02, -5.78184443e-02, -5.63050796e-02,
-            -5.43868129e-02, -5.20710711e-02, -4.93696070e-02, -4.62980550e-02,
-            -4.28753389e-02, -3.91229501e-02, -3.50641261e-02, -3.07229612e-02,
-            -2.61234889e-02, -2.12887757e-02, -1.62400677e-02, -1.09960286e-02,
-            -5.57210534e-03, 0.00000000e+00, 5.57210534e-03, 1.09960286e-02,
-            1.62400677e-02, 2.12887757e-02, 2.61234889e-02, 3.07229612e-02,
-            3.50641261e-02, 3.91229501e-02, 4.28753389e-02, 4.62980550e-02,
-            4.93696070e-02, 5.20710711e-02, 5.43868129e-02, 5.63050796e-02,
-            5.78184443e-02, 5.89240882e-02, 5.96239176e-02, 5.99245193e-02,
-            5.98369671e-02, 5.93764971e-02, 5.85620766e-02, 5.74158935e-02,
-            5.59627967e-02, 5.42297167e-02, 5.22450949e-02, 5.00383473e-02,
-            4.76393828e-02, 4.50781914e-02, 4.23845130e-02, 3.95875880e-02,
-            3.67159891e-02, 3.37975244e-02, 3.08592013e-02, 2.79272331e-02,
-            2.50270727e-02, 2.21834542e-02, 1.94204243e-02, 1.67613504e-02,
-            1.42288910e-02, 1.18449221e-02, 9.63041534e-03, 7.60526962e-03,
-            5.78810103e-03, 4.19600186e-03, 2.84428054e-03, 1.74619792e-03,
-            9.12715585e-04, 3.52271935e-04, 7.06002188e-05]
-
-        airfoilXY = copy(transpose(hcat(airfoilX, airfoilY)))
-        airfoilCtrlXY = copy(transpose(hcat(airfoilCtrlX, airfoilCtrlY)))
-        npt_wing = 40
-        npt_airfoil = 99
-
-        rootChord = chordVec[1]
-        TR = chordVec[end] / rootChord
-
-        # println("aoa: $(α₀)")
-        Uvec = [cos(deg2rad(α₀)), 0.0, sin(deg2rad(α₀))] * solverOptions["Uinf"]
-
-        # --- Structural span is not the same as aero span ---
-        aeroSpan = span * cos(sweepAng)
-
-        options = Dict(
-            "translation" => vec([appendageOptions["xMount"], 0, 0]), # of the midchord
-            "debug" => true,
-        )
-
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, aeroSpan, sweepAng, rootChord, TR;
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],
@@ -326,13 +334,13 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
         )
         LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLHydro, Airfoils, AirfoilInfluences)
 
-        Fdist = LLOutputs.Fdist
-        F = LLOutputs.F
-        cla = LLOutputs.cla
-        CDi = LLOutputs.CDi
+        # Fdist = LLOutputs.Fdist
+        # F = LLOutputs.F
+        # cla = LLOutputs.cla
+        # CDi = LLOutputs.CDi
 
     else
-        cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α₀ + rake), solverOptions["Uinf"];
+        cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α0 + rake), solverOptions["Uinf"];
             h=depth0,
             useFS=solverOptions["use_freeSurface"],
             rho=solverOptions["rhof"],
@@ -344,8 +352,10 @@ function compute_hydroLLProperties(span, chordVec, α₀, rake, sweepAng, depth0
         FlowCond = nothing
     end
 
-    return cla, F, CDi, LLSystem, FlowCond
+    return LLOutputs, LLSystem, FlowCond
 end
+
+
 
 function correct_downwash(
     iComp::Int64, CLMain::DTYPE, DVDictList, solverOptions
@@ -444,6 +454,23 @@ function compute_wavePatternDWAng(clM, chordM, Fnc, Fnh, ξ)
     return αiwave
 end
 
+function compute_biplanefreesurface(λ)
+    """
+    Based on Breslin 1957
+    """
+    plamsq = 1 + λ^2
+    k = 1 / √(1 + λ^2)
+    Ek = SpecialFunctions.ellipe(k^2)
+    Kk = SpecialFunctions.ellipk(k^2)
+
+    # Biplane function
+    σλ = 1 - 4 / π * λ * √(1 + λ^2) * (Kk - Ek)
+    # Free surface function
+    γλ = 4 / (3π) * ((2 / π) * plamsq^(1.5) * Ek - 1.5 * λ)
+
+    return σλ, γλ
+end
+
 function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
     """
     Slope of the 3D lift coefficient with respect to the angle of attack considering surface-piercing vertical strut
@@ -462,9 +489,9 @@ end
 #                         Static drag
 # ==============================================================================
 function compute_AICs(
-    AEROMESH, FOIL, dim, Λ, U∞, ω, elemType="BT2";
+    AEROMESH, FOIL, LLSystem, LLOutputs, ϱ, dim, Λ, U∞, ω, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
-    use_nlll=false, LLSystem=nothing
+    use_nlll=false,
 )
     """
     Compute the AIC matrix for a given aeroMesh using LHS convention
@@ -488,23 +515,35 @@ function compute_AICs(
             {F} = -([Mf]{udd} + [Cf]{ud} + [Kf]{u})
         These are matrices
         in the global reference frame
+    NOTE: Do not actually call these AIC when talking to other people because this is technically incorrect.
+    AIC is the A matrix in potential flow
     """
 
-    aeroMesh = AEROMESH.mesh
-    # elemConn = AEROMESH.elemConn
+    # Spline to get lift slope in the right spots if using nonlinear LL
+    clαVec = LLOutputs.cla
 
+    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=use_nlll)
+
+    return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea
+end
+
+function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
+    appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
+    use_nlll=false)
+
+    # Complex step will not work on this routine because we need the real and imag part for unsteady hydro
     # --- Initialize global matrices ---
-    globalMf_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
-    globalCf_r_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
-    globalCf_i_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
-    globalKf_r_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
-    globalKf_i_z = Zygote.Buffer(zeros(RealOrComplex, dim, dim))
+    globalMf_z = Zygote.Buffer(zeros(dim, dim))
+    globalCf_r_z = Zygote.Buffer(zeros(dim, dim))
+    globalCf_i_z = Zygote.Buffer(zeros(dim, dim))
+    globalKf_r_z = Zygote.Buffer(zeros(dim, dim))
+    globalKf_i_z = Zygote.Buffer(zeros(dim, dim))
     # Zygote initialization
-    globalMf_z[:, :] = zeros(RealOrComplex, dim, dim)
-    globalCf_r_z[:, :] = zeros(RealOrComplex, dim, dim)
-    globalCf_i_z[:, :] = zeros(RealOrComplex, dim, dim)
-    globalKf_r_z[:, :] = zeros(RealOrComplex, dim, dim)
-    globalKf_i_z[:, :] = zeros(RealOrComplex, dim, dim)
+    globalMf_z[:, :] = zeros(dim, dim)
+    globalCf_r_z[:, :] = zeros(dim, dim)
+    globalCf_i_z[:, :] = zeros(dim, dim)
+    globalKf_r_z[:, :] = zeros(dim, dim)
+    globalKf_i_z[:, :] = zeros(dim, dim)
 
     # --- Initialize planform area counter ---
     planformArea = 0.0
@@ -512,12 +551,9 @@ function compute_AICs(
     abVec = FOIL.ab
     ebVec = FOIL.eb
 
-    # Spline to get lift slope in the right spots if using nonlinear LL
-    clαVec = FOIL.clα
-
 
     if STRUT != nothing
-        strutclαVec = STRUT.clα
+        # strutclαVec = STRUT.clα
         strutChordVec = STRUT.chord
         strutabVec = STRUT.ab
         strutebVec = STRUT.eb
@@ -537,9 +573,9 @@ function compute_AICs(
     #   Loop over strips (nodes)
     # ---------------------------
     stripVecs = get_strip_vecs(AEROMESH, appendageOptions)
+    aeroMesh = AEROMESH.mesh
     junctionNodeX = aeroMesh[1, :]
 
-    # for inode in eachindex(aeroMesh[:, 1]) # loop aero strips (located at FEM nodes)
     for (inode, XN) in enumerate(eachrow(aeroMesh)) # loop aero strips (located at FEM nodes)
         # @inbounds begin
         # --- compute strip quantities ---
@@ -582,7 +618,7 @@ function compute_AICs(
         @bp
         if use_nlll # TODO: FIX LATER TO BE GENERAL
             xeval = LLSystem.collocationPts[YDIM, :]
-            clα = SolverRoutines.do_linear_interp(xeval, FOIL.clα, yⁿ)
+            clα = SolverRoutines.do_linear_interp(xeval, clαVec, yⁿ)
             sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
             if inode <= FOIL.nNodes # STBD WING
                 c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, yⁿ)
@@ -673,9 +709,9 @@ function compute_AICs(
             Ck = CKVec[1] + 1im * CKVec[2]
         end
 
-        K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
-        C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, FOIL.ρ_f, Ck)
-        M_f = compute_node_mass(b, ab, FOIL.ρ_f)
+        K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
+        C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
+        M_f = compute_node_mass(b, ab, ϱ)
 
         # --- Compute Compute local AIC matrix for this element ---
         if elemType == "bend-twist"
@@ -775,9 +811,162 @@ function compute_AICs(
         # inode += 1 # increment strip counter
         # end # inbounds
     end
-
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
 end
+
+function compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FiDi")
+
+    # ************************************************
+    #     Setup
+    # ************************************************
+    LLOutputs, LLSystem, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+    clαVec = copy(LLOutputs.cla)
+    n_cla = length(LLOutputs.cla)
+    Λ = appendageParams["sweep"]
+
+    # ************************************************
+    #     Computation
+    # ************************************************
+    dKffdcla = zeros(dim^2, n_cla)
+
+    if uppercase(mode) == "FIDI"
+        dh = 1e-6
+
+        _, _, _, AIC_i, _, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+        Kff_i = vec(-AIC_i)
+
+        for icla in 1:n_cla
+            clαVec[icla] += dh
+
+            _, _, _, AIC_f, _, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+            Kff_f = vec(-AIC_f)
+
+            clαVec[icla] -= dh
+
+            dKffdcla[:, icla] = (Kff_f - Kff_i) / dh
+        end
+
+    end
+
+    return dKffdcla
+end
+
+function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FiDi")
+
+    # ************************************************
+    #     Setup
+    # ************************************************
+    LLOutputs, LLSystem, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+    dKffdXpt = zeros(dim^2, length(ptVec))
+
+    if uppercase(mode) == "FIDI"
+        dh = 1e-6
+
+        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+        midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+        if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
+            print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+
+            α₀ = appendageParams["alfa0"]
+            sweepAng = appendageParams["sweep"]
+            rake = appendageParams["rake"]
+            span = appendageParams["s"] * 2
+            zeta = appendageParams["zeta"]
+            theta_f = appendageParams["theta_f"]
+            beta = appendageParams["beta"]
+            s_strut = appendageParams["s_strut"]
+            c_strut = appendageParams["c_strut"]
+            theta_f_strut = appendageParams["theta_f_strut"]
+            depth0 = appendageParams["depth0"]
+
+            toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+        else
+            α₀ = appendageParams["alfa0"]
+            sweepAng = appendageParams["sweep"]
+            rake = appendageParams["rake"]
+            span = appendageParams["s"] * 2
+            toc::Vector{RealOrComplex} = appendageParams["toc"]
+            ab::Vector{RealOrComplex} = appendageParams["ab"]
+            x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+            zeta = appendageParams["zeta"]
+            theta_f = appendageParams["theta_f"]
+            beta = appendageParams["beta"]
+            s_strut = appendageParams["s_strut"]
+            c_strut = appendageParams["c_strut"]
+            toc_strut = appendageParams["toc_strut"]
+            ab_strut = appendageParams["ab_strut"]
+            x_ab_strut = appendageParams["x_ab_strut"]
+            theta_f_strut = appendageParams["theta_f_strut"]
+            depth0 = appendageParams["depth0"]
+        end
+        AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+        FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+        Λ = sweepAng
+
+        _, _, _, AIC_i, _, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+        Kff_i = vec(-AIC_i)
+
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+            midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+            structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+            if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
+                print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+
+                α₀ = appendageParams["alfa0"]
+                sweepAng = appendageParams["sweep"]
+                rake = appendageParams["rake"]
+                span = appendageParams["s"] * 2
+                zeta = appendageParams["zeta"]
+                theta_f = appendageParams["theta_f"]
+                beta = appendageParams["beta"]
+                s_strut = appendageParams["s_strut"]
+                c_strut = appendageParams["c_strut"]
+                theta_f_strut = appendageParams["theta_f_strut"]
+                depth0 = appendageParams["depth0"]
+
+                toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+            else
+                α₀ = appendageParams["alfa0"]
+                sweepAng = appendageParams["sweep"]
+                rake = appendageParams["rake"]
+                span = appendageParams["s"] * 2
+                toc = appendageParams["toc"]
+                ab = appendageParams["ab"]
+                x_ab = appendageParams["x_ab"]
+                zeta = appendageParams["zeta"]
+                theta_f = appendageParams["theta_f"]
+                beta = appendageParams["beta"]
+                s_strut = appendageParams["s_strut"]
+                c_strut = appendageParams["c_strut"]
+                toc_strut = appendageParams["toc_strut"]
+                ab_strut = appendageParams["ab_strut"]
+                x_ab_strut = appendageParams["x_ab_strut"]
+                theta_f_strut = appendageParams["theta_f_strut"]
+                depth0 = appendageParams["depth0"]
+            end
+            AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+            FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+
+            _, _, _, AIC_f, _, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+            Kff_f = vec(-AIC_f)
+
+            dKffdXpt[:, ii] = (Kff_f - Kff_i) / dh
+
+            ptVec[ii] -= dh
+
+        end
+    end
+
+    return dKffdXpt
+end
+
 
 function get_strip_vecs(
     AEROMESH, solverOptions

@@ -36,7 +36,7 @@ using ..Interpolation
 using ..DCFoilSolution
 using ..DesignConstants: SORTEDDVS
 using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
-using ..Utilities: Utilities
+using ..Utilities: Utilities, compute_KS
 
 # ==============================================================================
 #                         MODULE CONSTANTS
@@ -1889,32 +1889,6 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     return obj, pmG
 end
 
-function compute_KS(g, ρKS)
-    """
-    Compute the KS function
-
-    Inputs
-    ------
-    g - flutter constraints
-    ρKS - KS parameter. Float
-
-    Outputs
-    -------
-    gKS - KS function. Float
-    """
-
-    gmax = maximum(g)
-
-    Σ = 0.0 # sum
-    for gval in g
-        Σ += exp(ρKS * (gval - gmax))
-    end
-
-    # --- Compute the KS function ---
-    gKS = gmax + 1 / ρKS * log(Σ)
-
-    return gKS
-end # compute_KS
 
 # ==============================================================================
 #                         Cost func and sensitivity routines

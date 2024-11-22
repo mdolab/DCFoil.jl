@@ -23,13 +23,13 @@ struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     Kₛ::TA # bend-twist coupling vector [N-m²]
     Sₛ::TA # warping resistance vector [N-m⁴]
     EAₛ::TA # axial stiffness vector [N-m²]
-    U∞::TF # flow speed [m/s]
-    ζ::TC # modal damping ratio at first 2 modes
-    clα::Vector # lift slopes [1/rad]
+    # U∞::TF # flow speed [m/s]
+    # ζ::TC # modal damping ratio at first 2 modes
+    # clα::Vector # lift slopes [1/rad]
     eb::TB # distance from center of pressure ahead of elastic axis [m]
     ab::TB # distance from midchord to EA, +ve for EA aft [m]
     chord::TB # chord vector [m]
-    ρ_f::TF # fluid density [kg/m³]
+    # ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
 end
@@ -46,13 +46,13 @@ struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     Kₛ::TA # bend-twist coupling vector [N-m²]
     Sₛ::TA # warping resistance vector [N-m⁴]
     EAₛ::TA # axial stiffness vector [N-m²]
-    U∞::TF # flow speed [m/s]
-    ζ::TC # modal damping ratio at first 2 modes
-    clα::Vector # lift slopes [1/rad]
+    # U∞::TF # flow speed [m/s]
+    # ζ::TC # modal damping ratio at first 2 modes
+    # clα::Vector # lift slopes [1/rad]
     eb::TB
     ab::TB
     chord::TB
-    ρ_f::TF # fluid density [kg/m³]
+    # ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
     # --- Only things different for the dynamic foil ---

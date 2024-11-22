@@ -27,6 +27,7 @@ for headerName in [
     # --- MACH framework ---
     # "../dcfoil/mach",
     # --- Not used in this script but needed for submodules ---
+    "CostFunctions", "DesignVariables",
     "constants/SolutionConstants", "constants/DesignConstants",
     "utils/Utilities", "utils/Interpolation",
     "struct/MaterialLibrary", "bodydynamics/HullLibrary",
@@ -38,16 +39,15 @@ for headerName in [
     "utils/Preprocessing",
     "hydro/VPM", "hydro/LiftingLine", # General LL code
     "hydro/GlauertLL", # Glauert LL code
-    "hydro/HydroStrip",
     "adrules/CustomRules",
     # --- Used in this script ---
     "struct/FEMMethods",
+    "hydro/HydroStrip",
     "InitModel",
     "solvers/DCFoilSolution",
     "io/TecplotIO", "io/MeshIO",
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
     # include("./solvers/SolveBodyDynamics.jl")
-    "CostFunctions",
 ]
     include(headerName * ".jl")
 end
@@ -167,7 +167,7 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
         if isnothing(solverOptions["gridFile"])
             FOIL, STRUT, HULL = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
         else
-            FOIL, STRUT, HULL, FEMESH, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
+            FOIL, STRUT, HULL, FEMESH, _, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
             push!(FEMESHList, FEMESH)
 
             # println("mesh here",FEMESH.mesh)
@@ -320,7 +320,7 @@ function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions
     x = 0.0 # dummy
     evalFuncsDict = Dict()
     LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
-
+    ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
 
     if solverOptions["run_static"]
         # Get evalFuncs that are in the staticCostFuncs list
@@ -337,7 +337,7 @@ function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions
             # staticFuncs = SolveStatic.evalFuncs(staticEvalFuncs, STATSOL.structStates, STATSOL, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
             for evalFunc in staticEvalFuncs
 
-                staticFunc = SolveStatic.get_evalFunc(evalFunc, STATSOL.structStates, STATSOL, LECoords, TECoords, nodeConn, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
+                staticFunc = SolveStatic.get_evalFunc(evalFunc, STATSOL.structStates, STATSOL, ptVec, nodeConn, DVDict; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain)
 
                 newKey = @sprintf("%s-%s", evalFunc, compName)
                 evalFuncsDict[newKey] = staticFunc

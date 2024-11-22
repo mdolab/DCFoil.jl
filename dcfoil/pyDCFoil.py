@@ -407,29 +407,31 @@ class DCFOIL:
             # ============================
             funcsSens[key].update(self.dIdx_geo_total)
 
-        # if self.getOption("printTiming") and self.comm.rank == 0:
-        #     print("+--------------------------------------------------+")
-        #     print("|")
-        #     print("| Adjoint Times:")
-        #     print("|")
-        #     for f in evalFuncs:
-        #         print(
-        #             "| %-30s: %10.3f sec"
-        #             % (
-        #                 "Adjoint Solve Time - %s" % (f),
-        #                 adjointEndTime[f] - adjointStartTime[f],
-        #             )
-        #         )
-        #         print(
-        #             "| %-30s: %10.3f sec"
-        #             % (
-        #                 "Total Sensitivity Time - %s" % (f),
-        #                 totalSensEndTime[f] - adjointEndTime[f],
-        #             )
-        #         )
-        #     print("|")
-        #     print("| %-30s: %10.3f sec" % ("Complete Sensitivity Time", finalEvalSensTime - startEvalSensTime))
-        #     print("+--------------------------------------------------+")
+            finalEvalSensTime = time.time()
+
+        if self.getOption("printTiming") and self.comm.rank == 0:
+            print("+--------------------------------------------------+")
+            # print("|")
+            # print("| Adjoint Times:")
+            # print("|")
+            # for f in evalFuncs:
+            #     print(
+            #         "| %-30s: %10.3f sec"
+            #         % (
+            #             "Adjoint Solve Time - %s" % (f),
+            #             adjointEndTime[f] - adjointStartTime[f],
+            #         )
+            #     )
+            #     print(
+            #         "| %-30s: %10.3f sec"
+            #         % (
+            #             "Total Sensitivity Time - %s" % (f),
+            #             totalSensEndTime[f] - adjointEndTime[f],
+            #         )
+            #     )
+            print("|")
+            print("| %-30s: %10.3f sec" % ("Complete Sensitivity Time", finalEvalSensTime - startEvalSensTime))
+            print("+--------------------------------------------------+")
 
         return funcsSens
 

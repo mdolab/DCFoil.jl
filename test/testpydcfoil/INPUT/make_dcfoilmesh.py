@@ -21,8 +21,8 @@ from pathlib import Path
 import numpy as np
 
 
-n_span = 10  # Number of spanwise points (foil)
-n_strut = 10  # Number of spanwise points (strut)
+n_span = 20  # Number of spanwise points (foil)
+n_strut = 20  # Number of spanwise points (strut)
 xMidchord = 0.0
 # ==============================================================================
 #                         MAIN DRIVER

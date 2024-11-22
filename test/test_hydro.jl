@@ -512,6 +512,28 @@ end
 # end
 
 # AIC, fHydro = test_AICs()
+function test_biplanefs()
+    λRange = 0.0:0.05:0.8
+    σRng = []
+    γRng = []
+    for λ in λRange
+        σ, γ = HydroStrip.compute_biplanefreesurface(λ)
+        push!(σRng, σ)
+        push!(γRng, γ)
+    end
+    p1 = plot(λRange, σRng, xlabel="λ", ylabel="σ", title="σ vs λ")
+    p2 = plot(λRange, γRng, xlabel="λ", ylabel="γ", title="γ vs λ")
+    ylims!(p1, 0, 0.9)
+    ylims!(p2, 0, 0.4)
+    xlims!(p1, 0, 0.7)
+    xlims!(p2, 0, 0.4)
+    # make taller plot
+    plot(p1, p2, layout=(2, 1), size=(400, 900))
+
+
+    savefig("test_biplanefs.pdf")
+    return collect(λRange), σRng, γRng
+end
 
 # ==============================================================================
 #                         Test lifting line code
@@ -888,7 +910,9 @@ function test_LL()
         "make_plot" => true,
     )
     # options = nothing
-    LLSystem, FlowCond, LLHydro, Airfoil, Airfoil_influences = LiftingLine.setup(Uinf, span, sweep, rootChord, TR;
+    midchords = zeros(3, 2)
+    midchords[2, :] = [-0.5 * span, 0.5 * span]
+    LLSystem, FlowCond, LLHydro, Airfoil, Airfoil_influences = LiftingLine.setup(Uinf, sweep, rootChord, TR, midchords;
         npt_wing=npt_wing, npt_airfoil=99, airfoil_xy=airfoilXY, airfoil_ctrl_xy=airfoilCtrlXY, options=options)
     @time LLOutputs = LiftingLine.solve(FlowCond, LLSystem, LLSystem.HydroProperties[1], Airfoil, Airfoil_influences)
 
@@ -902,7 +926,7 @@ end
 
 function test_45degwingLL()
 
-
+    # I introduced a bug here...
     referenceCL = [0.0016496729653562032, 0.14341157629455348, 0.2852589091604507, 0.42593046097276493, 0.5648584898305323, 0.7014970094315793]
     airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
 
@@ -1014,7 +1038,7 @@ function test_45degwingLL()
 
     Uinf = 50.0
     angles = [0.01, 2.1, 4.2, 6.3, 8.4, 10.5]
-    angles = [4.2]
+    # angles = [4.2]
     alpha = deg2rad(4.2)
 
     rootChord = 20.0 * 0.0254 # 20 inches
@@ -1024,10 +1048,12 @@ function test_45degwingLL()
     npt_wing = 40
     npt_airfoil = 99
     answers = []
+    midchords = zeros(3, 2)
+    midchords[2, :] = [-0.5 * span, 0.5 * span]
     for alpha in deg2rad.(angles)
         println("alpha: $(rad2deg(alpha))")
         Uvec = [cos(alpha), 0.0, sin(alpha)] * Uinf
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, span, sweepAng, rootChord, TR;
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
             npt_wing=npt_wing, npt_airfoil=npt_airfoil,
             # airfoilCoordFile=airfoilCoordFile,
             airfoil_ctrl_xy=airfoilCtrlXY,

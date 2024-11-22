@@ -9,6 +9,7 @@ export do_newton_raphson
 using LinearAlgebra, Statistics
 using FLOWMath: norm_cs_safe
 using Printf
+using Debugger
 using ChainRulesCore: @ignore_derivatives
 
 using ..Utilities

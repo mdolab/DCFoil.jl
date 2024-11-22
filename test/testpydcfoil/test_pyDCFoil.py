@@ -169,8 +169,19 @@ if __name__ == "__main__":
         return funcsSens
 
     def objCon(funcs):  # this part is only needed for multipoint
+        # Assemble the objective and any additional constraints:
 
-        funcs["obj"] = funcs["ksflutter"]
+        funcs["obj"] = funcs[ap["cd"]]
+
+        # ---------------------------
+        #   Constraints
+        # ---------------------------
+        # --- Flutter ---
+        funcs[f"ksflutter_con_{ap.name}"] = funcs["ksflutter"]
+
+        # --- Lift ---
+        funcs["cl_con_" + ap.name] = funcs[ap["cl"]] - mycl
+        
 
         if printOK:
             print("funcs in obj: ", funcs)

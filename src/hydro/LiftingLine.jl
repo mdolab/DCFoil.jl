@@ -21,12 +21,17 @@ using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivative
 using Zygote
 using FiniteDifferences
 using PyCall
+using Debugger
+
 # --- DCFoil modules ---
 using ..VPM: VPM
 using ..SolutionConstants: XDIM, YDIM, ZDIM
+using ..Utilities: Utilities, compute_KS
+using ..Preprocessing: Preprocessing
 using ..DCFoil: DTYPE
 using ..SolverRoutines: SolverRoutines, compute_anglesFromVector, compute_vectorFromAngle, normalize_3Dvector, cross3D
 
+const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
 
 # ==============================================================================
 #                         Structs
@@ -85,8 +90,9 @@ struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     Redimensionalize with the reference area and velocity
     """
     Fdist::TM # Loads distribution vector (Dimensional) [N]
-    Γdist::TA # Circulation distribution (Γᵢ) [m^2/s]
+    Γdist::TA # Converged circulation distribution (Γᵢ) [m^2/s]
     cla::TA # Spanwise lift slopes [1/rad]
+    cl::TA # Spanwise lift coefficients
     F::TA # Total integrated loads vector [Fx, Fy, Fz, Mx, My, Mz]
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
     CDi::TF # Induced drag coefficient (aligned w/ freestream)
@@ -106,9 +112,132 @@ struct LiftingLineNLParams
     AirfoilInfluences #
 end
 
-function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
-    # , midchords # TODO: need to compute mesh based on midchord locations!!
-    ;
+function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+
+    airfoilX = [1.00000000e+00, 9.98993338e-01, 9.95977406e-01, 9.90964349e-01,
+        9.83974351e-01, 9.75035559e-01, 9.64183967e-01, 9.51463269e-01,
+        9.36924689e-01, 9.20626766e-01, 9.02635129e-01, 8.83022222e-01,
+        8.61867019e-01, 8.39254706e-01, 8.15276334e-01, 7.90028455e-01,
+        7.63612734e-01, 7.36135537e-01, 7.07707507e-01, 6.78443111e-01,
+        6.48460188e-01, 6.17879468e-01, 5.86824089e-01, 5.55419100e-01,
+        5.23790958e-01, 4.92067018e-01, 4.60375022e-01, 4.28842581e-01,
+        3.97596666e-01, 3.66763093e-01, 3.36466018e-01, 3.06827437e-01,
+        2.77966694e-01, 2.50000000e-01, 2.23039968e-01, 1.97195156e-01,
+        1.72569633e-01, 1.49262556e-01, 1.27367775e-01, 1.06973453e-01,
+        8.81617093e-02, 7.10082934e-02, 5.55822757e-02, 4.19457713e-02,
+        3.01536896e-02, 2.02535132e-02, 1.22851066e-02, 6.28055566e-03,
+        2.26403871e-03, 2.51728808e-04, 2.51728808e-04, 2.26403871e-03,
+        6.28055566e-03, 1.22851066e-02, 2.02535132e-02, 3.01536896e-02,
+        4.19457713e-02, 5.55822757e-02, 7.10082934e-02, 8.81617093e-02,
+        1.06973453e-01, 1.27367775e-01, 1.49262556e-01, 1.72569633e-01,
+        1.97195156e-01, 2.23039968e-01, 2.50000000e-01, 2.77966694e-01,
+        3.06827437e-01, 3.36466018e-01, 3.66763093e-01, 3.97596666e-01,
+        4.28842581e-01, 4.60375022e-01, 4.92067018e-01, 5.23790958e-01,
+        5.55419100e-01, 5.86824089e-01, 6.17879468e-01, 6.48460188e-01,
+        6.78443111e-01, 7.07707507e-01, 7.36135537e-01, 7.63612734e-01,
+        7.90028455e-01, 8.15276334e-01, 8.39254706e-01, 8.61867019e-01,
+        8.83022222e-01, 9.02635129e-01, 9.20626766e-01, 9.36924689e-01,
+        9.51463269e-01, 9.64183967e-01, 9.75035559e-01, 9.83974351e-01,
+        9.90964349e-01, 9.95977406e-01, 9.98993338e-01, 1.00000000e+00]
+
+    airfoilY = [1.33226763e-17, -1.41200438e-04, -5.63343432e-04, -1.26208774e-03,
+        -2.23030811e-03, -3.45825298e-03, -4.93375074e-03, -6.64245132e-03,
+        -8.56808791e-03, -1.06927428e-02, -1.29971013e-02, -1.54606806e-02,
+        -1.80620201e-02, -2.07788284e-02, -2.35880799e-02, -2.64660655e-02,
+        -2.93884006e-02, -3.23300020e-02, -3.52650469e-02, -3.81669313e-02,
+        -4.10082448e-02, -4.37607812e-02, -4.63956016e-02, -4.88831639e-02,
+        -5.11935307e-02, -5.32966591e-02, -5.51627743e-02, -5.67628192e-02,
+        -5.80689678e-02, -5.90551853e-02, -5.96978089e-02, -5.99761253e-02,
+        -5.98729133e-02, -5.93749219e-02, -5.84732545e-02, -5.71636340e-02,
+        -5.54465251e-02, -5.33271006e-02, -5.08150416e-02, -4.79241724e-02,
+        -4.46719377e-02, -4.10787401e-02, -3.71671601e-02, -3.29610920e-02,
+        -2.84848303e-02, -2.37621474e-02, -1.88154040e-02, -1.36647314e-02,
+        -8.32732576e-03, -2.81688492e-03, 2.81688492e-03, 8.32732576e-03,
+        1.36647314e-02, 1.88154040e-02, 2.37621474e-02, 2.84848303e-02,
+        3.29610920e-02, 3.71671601e-02, 4.10787401e-02, 4.46719377e-02,
+        4.79241724e-02, 5.08150416e-02, 5.33271006e-02, 5.54465251e-02,
+        5.71636340e-02, 5.84732545e-02, 5.93749219e-02, 5.98729133e-02,
+        5.99761253e-02, 5.96978089e-02, 5.90551853e-02, 5.80689678e-02,
+        5.67628192e-02, 5.51627743e-02, 5.32966591e-02, 5.11935307e-02,
+        4.88831639e-02, 4.63956016e-02, 4.37607812e-02, 4.10082448e-02,
+        3.81669313e-02, 3.52650469e-02, 3.23300020e-02, 2.93884006e-02,
+        2.64660655e-02, 2.35880799e-02, 2.07788284e-02, 1.80620201e-02,
+        1.54606806e-02, 1.29971013e-02, 1.06927428e-02, 8.56808791e-03,
+        6.64245132e-03, 4.93375074e-03, 3.45825298e-03, 2.23030811e-03,
+        1.26208774e-03, 5.63343432e-04, 1.41200438e-04, -1.33226763e-17]
+    airfoilCtrlX = [9.99496669e-01, 9.97485372e-01, 9.93470878e-01, 9.87469350e-01,
+        9.79504955e-01, 9.69609763e-01, 9.57823618e-01, 9.44193979e-01,
+        9.28775727e-01, 9.11630948e-01, 8.92828675e-01, 8.72444620e-01,
+        8.50560862e-01, 8.27265520e-01, 8.02652394e-01, 7.76820594e-01,
+        7.49874136e-01, 7.21921522e-01, 6.93075309e-01, 6.63451649e-01,
+        6.33169828e-01, 6.02351778e-01, 5.71121594e-01, 5.39605029e-01,
+        5.07928988e-01, 4.76221020e-01, 4.44608801e-01, 4.13219623e-01,
+        3.82179880e-01, 3.51614556e-01, 3.21646728e-01, 2.92397065e-01,
+        2.63983347e-01, 2.36519984e-01, 2.10117562e-01, 1.84882395e-01,
+        1.60916095e-01, 1.38315166e-01, 1.17170614e-01, 9.75675810e-02,
+        7.95850013e-02, 6.32952845e-02, 4.87640235e-02, 3.60497304e-02,
+        2.52036014e-02, 1.62693099e-02, 9.28283111e-03, 4.27229719e-03,
+        1.25788376e-03, 2.51728808e-04, 1.25788376e-03, 4.27229719e-03,
+        9.28283111e-03, 1.62693099e-02, 2.52036014e-02, 3.60497304e-02,
+        4.87640235e-02, 6.32952845e-02, 7.95850013e-02, 9.75675810e-02,
+        1.17170614e-01, 1.38315166e-01, 1.60916095e-01, 1.84882395e-01,
+        2.10117562e-01, 2.36519984e-01, 2.63983347e-01, 2.92397065e-01,
+        3.21646728e-01, 3.51614556e-01, 3.82179880e-01, 4.13219623e-01,
+        4.44608801e-01, 4.76221020e-01, 5.07928988e-01, 5.39605029e-01,
+        5.71121594e-01, 6.02351778e-01, 6.33169828e-01, 6.63451649e-01,
+        6.93075309e-01, 7.21921522e-01, 7.49874136e-01, 7.76820594e-01,
+        8.02652394e-01, 8.27265520e-01, 8.50560862e-01, 8.72444620e-01,
+        8.92828675e-01, 9.11630948e-01, 9.28775727e-01, 9.44193979e-01,
+        9.57823618e-01, 9.69609763e-01, 9.79504955e-01, 9.87469350e-01,
+        9.93470878e-01, 9.97485372e-01, 9.99496669e-01]
+    airfoilCtrlY = [-7.06002188e-05, -3.52271935e-04, -9.12715585e-04, -1.74619792e-03,
+        -2.84428054e-03, -4.19600186e-03, -5.78810103e-03, -7.60526962e-03,
+        -9.63041534e-03, -1.18449221e-02, -1.42288910e-02, -1.67613504e-02,
+        -1.94204243e-02, -2.21834542e-02, -2.50270727e-02, -2.79272331e-02,
+        -3.08592013e-02, -3.37975244e-02, -3.67159891e-02, -3.95875880e-02,
+        -4.23845130e-02, -4.50781914e-02, -4.76393828e-02, -5.00383473e-02,
+        -5.22450949e-02, -5.42297167e-02, -5.59627967e-02, -5.74158935e-02,
+        -5.85620766e-02, -5.93764971e-02, -5.98369671e-02, -5.99245193e-02,
+        -5.96239176e-02, -5.89240882e-02, -5.78184443e-02, -5.63050796e-02,
+        -5.43868129e-02, -5.20710711e-02, -4.93696070e-02, -4.62980550e-02,
+        -4.28753389e-02, -3.91229501e-02, -3.50641261e-02, -3.07229612e-02,
+        -2.61234889e-02, -2.12887757e-02, -1.62400677e-02, -1.09960286e-02,
+        -5.57210534e-03, 0.00000000e+00, 5.57210534e-03, 1.09960286e-02,
+        1.62400677e-02, 2.12887757e-02, 2.61234889e-02, 3.07229612e-02,
+        3.50641261e-02, 3.91229501e-02, 4.28753389e-02, 4.62980550e-02,
+        4.93696070e-02, 5.20710711e-02, 5.43868129e-02, 5.63050796e-02,
+        5.78184443e-02, 5.89240882e-02, 5.96239176e-02, 5.99245193e-02,
+        5.98369671e-02, 5.93764971e-02, 5.85620766e-02, 5.74158935e-02,
+        5.59627967e-02, 5.42297167e-02, 5.22450949e-02, 5.00383473e-02,
+        4.76393828e-02, 4.50781914e-02, 4.23845130e-02, 3.95875880e-02,
+        3.67159891e-02, 3.37975244e-02, 3.08592013e-02, 2.79272331e-02,
+        2.50270727e-02, 2.21834542e-02, 1.94204243e-02, 1.67613504e-02,
+        1.42288910e-02, 1.18449221e-02, 9.63041534e-03, 7.60526962e-03,
+        5.78810103e-03, 4.19600186e-03, 2.84428054e-03, 1.74619792e-03,
+        9.12715585e-04, 3.52271935e-04, 7.06002188e-05]
+
+    airfoilXY = copy(transpose(hcat(airfoilX, airfoilY)))
+    airfoilCtrlXY = copy(transpose(hcat(airfoilCtrlX, airfoilCtrlY)))
+    npt_wing = 40
+    npt_airfoil = 99
+
+    rootChord = chordVec[1]
+    TR = chordVec[end] / rootChord
+
+    Uvec = [cos(deg2rad(α0)), 0.0, sin(deg2rad(α0))] * solverOptions["Uinf"]
+
+    # Rotate by RH rule by leeway angle
+    Tz = SolverRoutines.get_rotate3dMat(deg2rad(β0); axis="z")
+    Uvec = Tz * Uvec
+
+    options = Dict(
+        "translation" => vec([appendageOptions["xMount"], 0, 0]), # of the midchord
+        "debug" => true,
+    )
+    return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
+end
+
+function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -172,6 +301,12 @@ function setup(Uvec, wingSpan, sweepAng, rootChord, taperRatio
     # ************************************************
     #     Preproc stuff
     # ************************************************
+    # --- Structural span is not the same as aero span ---
+    ymax = Utilities.compute_KS(midchords[YDIM, :], 100.0)
+    ymin = -Utilities.compute_KS(-midchords[YDIM, :], 100.0)
+    wingSpan = ymax - ymin
+    # wingSpan = span * cos(sweepAng) #no
+
     # Blending parameter for the LAC
     σ = 4 * cos(sweepAng)^2 / (blend^2 * wingSpan^2)
 
@@ -525,7 +660,7 @@ function compute_dLACdseffective(AR, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ,
     end
 end
 
-function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=false)
+function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=true)
     """
     Execute LL algorithm.
     Top level wrapper to interface with. 
@@ -549,18 +684,16 @@ function solve(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbos
     α = FlowCond.alpha
     β = FlowCond.beta
     rhof = FlowCond.rhof
-    # TODO PICKUP HERE GGGGGGGGGGG
-    DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS = compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=is_verbose)
+    DimForces, Γdist, ∂cl∂α, cl, IntegratedForces, CL, CDi, CS = compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=is_verbose)
 
     # --- Pack back up  ---
-    LLResults = LiftingLineOutputs(DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS)
+    LLResults = LiftingLineOutputs(DimForces, Γdist, ∂cl∂α, cl, IntegratedForces, CL, CDi, CS)
 
     return LLResults
 end
 
-function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=false)
+function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences; is_verbose=true)
 
-    Δα = 1e-3
     ∂α = FlowCond.alpha + Δα # FD
 
     ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
@@ -588,20 +721,14 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     # Mask for the bound segment (npt_wing x npt_wing)
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
 
-    influence_semiinfa = compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LLMesh.rc)
     influence_straightsega = compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
     influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
     influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
-    influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
 
     ∂influence_semiinfa = compute_straightSemiinfinite(P1, ∂uinfMat, ctrlPtMat, LLMesh.rc)
     ∂influence_semiinfb = compute_straightSemiinfinite(P4, ∂uinfMat, ctrlPtMat, LLMesh.rc)
 
-    TV_influence = -influence_semiinfa +
-                   influence_straightsega +
-                   influence_straightsegb +
-                   influence_straightsegc +
-                   influence_semiinfb
+    TV_influence = compute_TVinfluences(FlowCond, LLMesh)
 
     ∂TV_influence = -∂influence_semiinfa +
                     influence_straightsega +
@@ -637,16 +764,17 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     # --- Nonlinear solve for circulation distribution ---
     Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
         solverParams=LLNLParams, is_verbose=is_verbose,
-        # mode="FiDi"
-        mode="CS" # faster than fidi
+        # mode="CS" # 
+        mode="FiDi" # this is the fastest
         # mode="Analytic"
     )
     # println("Secondary solve for lift slope")
     ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
         solverParams=∂LLNLParams, is_verbose=is_verbose,
         #  is_cmplx=true,
-        mode="CS" # faster than fidi somehow...
-        # mode="ANALYTIC" # DEBUG ME
+        # mode="CS" # 
+        mode="FiDi"  # this is the fastest
+        # mode="ANALYTIC"
     )
 
     Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
@@ -714,9 +842,43 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     # ∂G∂α = imag(∂Gconv) / Δα # CS
     ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
     ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
+    clvec = 2 * Gconv ./ LLMesh.localChordsCtrl
 
-    return DimForces, Γdist, ∂cl∂α, IntegratedForces, CL, CDi, CS
+    return DimForces, Γdist, ∂cl∂α, clvec, IntegratedForces, CL, CDi, CS
 
+end
+
+function compute_TVinfluences(FlowCond, LLMesh)
+    # ---------------------------
+    #   Calculate influence matrix
+    # ---------------------------
+    uinf = reshape(FlowCond.uvec, 3, 1, 1)
+    uinfMat = repeat(uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
+
+    P1 = LLMesh.wing_joint_xyz_eff[:, :, 2:end]
+    P2 = LLMesh.wing_xyz_eff[:, :, 2:end]
+    P3 = LLMesh.wing_xyz_eff[:, :, 1:end-1]
+    P4 = LLMesh.wing_joint_xyz_eff[:, :, 1:end-1]
+
+    ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
+    ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
+
+
+    # Mask for the bound segment (npt_wing x npt_wing)
+    bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
+
+    influence_semiinfa = compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LLMesh.rc)
+    influence_straightsega = compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
+    influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
+    influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
+    influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
+
+    TV_influence = -influence_semiinfa +
+                   influence_straightsega +
+                   influence_straightsegb +
+                   influence_straightsegc +
+                   influence_semiinfb
+    return TV_influence
 end
 
 function compute_LLresiduals(G; solverParams=nothing)
@@ -750,18 +912,12 @@ function compute_LLresiduals(G; solverParams=nothing)
     # This is a (3 , npt, npt) × (npt,) multiplication
     # PYTHON: _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
     uix = TV_influence[XDIM, :, :] * G .+ FlowCond.uvec[XDIM]
-    uiy = TV_influence[YDIM, :, :] * G .+ FlowCond.uvec[YDIM]
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    uiy = TV_influence[YDIM, :, :] * G .+ FlowCond.uvec[YDIM]
     uiz = -TV_influence[ZDIM, :, :] * G .+ FlowCond.uvec[ZDIM]
     ui = cat(uix, uiy, uiz, dims=2)
     ui = permutedims(ui, [2, 1])
 
-    # println("TV influence z dim", TV_influence[ZDIM, :, 1]) # bad
-    # println("uvec: $(FlowCond.uvec)\n")
-
-    # println("uix: $(ui[XDIM,:])\n")
-    # println("uiy: $(ui[YDIM,:])\n")
-    # println("uiz: $(ui[ZDIM,:])\n") # BAD
 
     # Do a curve fit on aero props
     # if self._aero_approx:
@@ -780,30 +936,8 @@ function compute_LLresiduals(G; solverParams=nothing)
     ui_cross_ζi = hcat(ui_cross_ζi...) # now it's a (3, npt) matrix
     ui_cross_ζi_mag = .√(ui_cross_ζi[XDIM, :] .^ 2 + ui_cross_ζi[YDIM, :] .^ 2 + ui_cross_ζi[ZDIM, :] .^ 2)
 
-    # println(size(ui_cross_ζi))
-    # println("ucross: $(ui_cross_ζi_mag)") # good
-    # println("G: $(G)\n") # good
 
     dFimag = 2.0 * ui_cross_ζi_mag .* G
-
-    # println("dFimag: $(dFimag)\n") #wrong
-    # println("c_l: $(c_l)\n") #wrong
-    # println(force) # forced error
-
-    # # Make plots OK
-    # testvar = TV_influence[XDIM, :, 1]
-    # p1 = plot(1:length(G), testvar, xlabel="Section", ylabel="Influence", yguidefontrotation=-90.0, ylims=(-1, 1))
-    # p2 = plot(1:length(c_l), c_l, xlabel="Section", ylabel="cℓ", yguidefontrotation=-90.0, ylims=(-15.0, 1.0))
-    # plot!(size=(200, 200))
-    # println("cl_i: $(c_l) \n") # very wrong
-    # # println("G: $(G) \n") # GOOD
-    # # println(FlowCond.Uinf) # GOOD
-    # p3 = plot(1:length(G), G * FlowCond.Uinf, xlabel="Section", ylabel="Γ", yguidefontrotation=-90.0, ylims=(0.0, 5.0))
-    # p4 = plot(1:length(G), dFimag, xlabel="Section", ylabel="dF", yguidefontrotation=-90.0, ylims=(0.0, 0.4))
-    # # println("G: $(G) \n")
-    # plot(p1, p2, p3, p4, layout=(4, 1))
-    # savefig("test_CL_Gamma.pdf")
-    # # bug
 
     return dFimag - c_l
 end
@@ -823,21 +957,22 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
 
     """
 
-    if uppercase(mode) == "ANALYTIC" # some reason, this is not working. It's busted
+    if uppercase(mode) == "ANALYTIC" # After many hours of debugging, it matches Python but still doesn't converge...robustness issue
 
         TV_influence = solverParams.TV_influence
         LLSystem = solverParams.LLSystem
         LLHydro = solverParams.LLHydro
-        # Airfoil = solverParams.Airfoil
-        # Airfoil_influences = solverParams.Airfoil_influences
+        # Airfoils = solverParams.Airfoils
+        # AirfoilInfluences = solverParams.AirfoilInfluences
         FlowCond = solverParams.FlowCond
         # ζi = LLSystem.sectionVectors
         vji = TV_influence
 
         # (u∞ + Σ Gj vji)
-        uix = vji[XDIM, :, :] * Gi .+ FlowCond.uvec[XDIM]
-        uiy = vji[YDIM, :, :] * Gi .+ FlowCond.uvec[YDIM]
-        uiz = -vji[ZDIM, :, :] * Gi .+ FlowCond.uvec[ZDIM]
+        uix = -vji[XDIM, :, :] * Gi .+ FlowCond.uvec[XDIM] # negated...
+        uiy = -vji[YDIM, :, :] * Gi .+ FlowCond.uvec[YDIM] # negated...
+        uiz = -vji[ZDIM, :, :] * Gi .+ FlowCond.uvec[ZDIM] # negated...
+
 
         ui = cat(uix, uiy, uiz, dims=2)
         ui = permutedims(ui, [2, 1])
@@ -845,8 +980,6 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         ζ = LLSystem.sectionVectors
         # 3d array of ζ
         ζArr = repeat(reshape(ζ, size(ζ)..., 1), 1, 1, size(ζ, 2))
-        # println("size(ζ): $(size(ζ))")
-        # println("size(ui): $(size(ui))")
         #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
         uxy = -cross.(eachcol(ui), eachcol(ζ))
         uxy = hcat(uxy...) # now it's a (3, npt) matrix
@@ -855,88 +988,93 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         vxy = cross3D(vji, ζArr)
 
         # This is downwash contribution
-        uxzdotvxz = uxy[XDIM, :] .* vxy[XDIM, :, :] .+ uxy[YDIM, :] .* vxy[YDIM, :, :] .+ uxy[ZDIM, :] .* vxy[ZDIM, :, :]
+        uxyvxy_xcomp = uxy[XDIM, :] .* vxy[XDIM, :, :]
+        uxyvxy_ycomp = uxy[YDIM, :] .* vxy[YDIM, :, :]
+        uxyvxy_zcomp = uxy[ZDIM, :] .* vxy[ZDIM, :, :]
+        uxzdotvxz = uxyvxy_xcomp .+ uxyvxy_ycomp .+ uxyvxy_zcomp
         numerator = 2.0 * uxzdotvxz .* Gi
         J = numerator ./ uxy_norm .+ 2.0 * diagm(uxy_norm)
-        # println("uxy:\n $(uxy[:, 1])")
-        # println("vxy $(vxy[XDIM, 1,:])") # OK
-        # println("vxy $(vxy[YDIM, 1,:])") # OK
-        # println("vxy $(vxy[ZDIM, 1,:])") # OK
-        # println("vxy $(vxy[XDIM, :, 1])")  # OK
-        # println("vxy $(vxy[YDIM, :, 1])") # OK
-        # println("vxy $(vxy[ZDIM, :, 1])") # OK
-        # println("uxzdotvxz: $(uxzdotvxz[1,:])") # OK
-        # println("numerator: $(size(numerator))")
-        # println("numerator: $(numerator[1,:])") # OK
 
-        # TODO GN: I bet this is wrong
-        # TODO: PICKUP HERE ACTUALLY SO ITS FASTER
-        _CLa, _aL0 = LLHydro.airfoil_CLa, LLHydro.airfoil_aL0
-
+        # Along span
         Λ = LLSystem.local_sweeps_ctrl
+
         _Cs = cos.(Λ)
         _Ss = sin.(Λ)
         αs = atan_cs_safe.(uiz, uix)
         βs = atan_cs_safe.(uiy, uix)
-        _aL = atan_cs_safe.(uiz, uix .* _Cs .+ uiy .* _Ss)
+        _aL = atan_cs_safe.(uiz, uix .* _Cs .+ uiy .* _Ss) # GOOD
+        _aLMat = reshape(_aL, size(_aL)..., 1)
         _bL = βs .- Λ
-        #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
-        numerator = transpose(uix) .* (-vji[ZDIM, :, :]) .- transpose(uiz) .* vji[XDIM, :, :]
-        denominator = reshape(uix .^ 2 .+ uiz .^ 2, size(uix)..., 1)
-        _da = numerator ./ denominator
 
-        numerator = transpose(uix) * vji[YDIM, :, :] .- transpose(uiy) .* vji[XDIM, :, :]
-        denominator = reshape(uix .^ 2 + uiy .^ 2, size(uix)..., 1)
-        # println("numerator: $(numerator[1,:])")
-        # println("denominator: $(size(denominator))")
-        # println("denominator: $(denominator)")
-        _db = numerator ./ denominator
+        uixMat = reshape(uix, size(uix)..., 1)
+        uiyMat = reshape(uiy, size(uiy)..., 1)
+        uizMat = reshape(uiz, size(uiz)..., 1)
+        _CsMat = reshape(_Cs, size(_Cs)..., 1)
+        _SsMat = reshape(_Ss, size(_Ss)..., 1)
+        uixviz = uixMat .* (-vji[ZDIM, :, :])
+        uizvix = -(uizMat .* vji[XDIM, :, :])
+        num_da = uixviz .- uizvix
+        denom_da = uixMat .^ 2 .+ uizMat .^ 2
+        _da = num_da ./ denom_da
 
-        firstTerm = (transpose(uix) .* transpose(_Cs) .+ transpose(uiy) .* transpose(_Ss)) .* (-vji[ZDIM, :, :])
-        secondTerm = transpose(uiz) .* (vji[XDIM, :, :] .* transpose(_Cs) .+ vji[YDIM, :, :] .* transpose(_Ss))
-        denominator = reshape(uix .^ 2 .+ (uix .* _Cs .+ uiy .* _Ss) .^ 2, size(uix)..., 1)
-        # println(size(denominator))
-        _daL = (firstTerm .- secondTerm) ./ denominator
+        uixvy = uixMat .* (-vji[YDIM, :, :])
+        uiyvx = -uiyMat .* vji[XDIM, :, :]
+        num_db = uixvy .- uiyvx
+        denom_db = uixMat .^ 2 + uiyMat .^ 2
+        _db = num_db ./ denom_db
 
-        # println("αs: $(αs)") # OK
-        # println("βs: $(βs)") # OK
-        # println("aL: $(_aL)") # OK
-        # println("bL: $(_bL)") # OK
-
-        # --- not good ---
-        println("$(size(_da))")
-        println("$(size(_db))")
-        println("_da: $(_da[1,:])")
-        println("_db: $(_db[1,:])") #OK for now
-        println("_daL: $(_daL[1,:])") #OK for now
-        # println("J: $(size(J))")
-        # println("J: $(J[1,:])") # OK
+        uixcos = uixMat .* _CsMat
+        uiysin = uiyMat .* _SsMat
+        firstTerm_daL = (uixcos .+ uiysin) .* (-vji[ZDIM, :, :])
+        uizvixcos = uizvix .* _CsMat
+        uizviysin = uizMat .* (-vji[YDIM, :, :]) .* _SsMat
+        secondTerm_daL = uizvixcos .+ uizviysin
+        denom_daL = uixMat .^ 2 .+ (uixcos .+ uiysin) .^ 2
+        _daL = (firstTerm_daL .- secondTerm_daL) ./ denom_daL # OK
 
         _Ca = cos.(αs)
         _Sa = sin.(αs)
         _Cb = cos.(βs)
         _Sb = sin.(βs)
+        SaSquared = _Sa .^ 2
+        SbSquared = _Sb .^ 2
         _CaL = cos.(_aL)
         _SaL = sin.(_aL)
+        SaLSquared = _SaL .^ 2
         _CbL = cos.(_bL)
         _SbL = sin.(_bL)
-        _Rn = .√(_Ca .^ 2 .* _CbL .^ 2 .+ _Sa .^ 2 .* _Cb .^ 2)
-        _Rd = .√(1.0 .- _Sa .^ 2 .* _Sb .^ 2)
-        _RLd = .√(1.0 .- _SaL .^ 2 .* _SbL .^ 2)
-        _R = _Rn ./ _Rd
+        SbLSquared = _SbL .^ 2
+        _Rn = .√(_Ca .^ 2 .* _CbL .^ 2 .+ SaSquared .* _Cb .^ 2)
+        _Rd = .√(1.0 .- _Sa .^ 2 .* SbSquared)
+        iRd = 1.0 ./ _Rd
+        iRdSquared = iRd .^ 2
+        _RLd = .√(1.0 .- SaLSquared .* SbLSquared)
+        _R = _Rn .* iRd
+        _RMat = reshape(_R, size(_R)..., 1)
         _RL = _CbL ./ _RLd
-        _dR = (_Sa .* _Ca .* (_Sb .^ 2 .* _Rn ./ (_Rd .^ 2) .+ (_Cb .^ 2 .- _CbL .^ 2) ./ _Rn) ./ _Rd) .* _da .+
-              ((_Sa .^ 2 .* _Sb .* _Cb .* _Rn ./ (_Rd .^ 2) .- (_Ca .^ 2 .* _SbL .* _CbL .+ _Sa .^ 2 .* _Sb .* _Cb) ./ _Rn) ./ _Rd) .* _db
-        _dRL = (_SaL .* _CaL .* _SbL .^ 2 .* _CbL ./ (_RLd .^ 3)) .* _daL .-
-               (_CaL .^ 2 .* _SbL ./ (_RLd .^ 3)) .* _db
-        _dCL = _dR .* transpose(_RL) .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
-               transpose(_R) .* _dRL .* transpose(_CLa) .* (transpose(_aL) .- transpose(_aL0)) .+
-               transpose(_R) .* transpose(_RL) .* transpose(_CLa) .* _daL
-        # println("dR:\n $((_dR[1,:]))") #OK
-        # println("dRL:\n $((_dRL[1,:]))") #OK
-        # println("dCL:\n $((_dCL[:,1]))") #OK
+        _RLMat = reshape(_RL, size(_RL)..., 1)
+
+        firstTermdR = reshape((_Sa .* _Ca .* (SbSquared .* _Rn .* iRdSquared .+ (_Cb .^ 2 .- _CbL .^ 2) ./ _Rn) ./ _Rd), size(_Sa)..., 1)
+        secondTermdR = reshape((SaSquared .* _Sb .* _Cb .* _Rn .* iRdSquared .- (_Ca .^ 2 .* _SbL .* _CbL .+ SaSquared .* _Sb .* _Cb) ./ _Rn) .* iRd, size(_Sa)..., 1)
+
+        _dR = firstTermdR .* _da .+ secondTermdR .* _db # OK
+
+        firstTerm_dRL = reshape(_SaL .* _CaL .* _SbL .^ 2 .* _CbL ./ (_RLd .^ 3), size(_SaL)..., 1)
+        secondTerm_dRL = reshape(_CaL .^ 2 .* _SbL ./ (_RLd .^ 3), size(_SaL)..., 1)
+
+        _dRL = firstTerm_dRL .* _daL .- secondTerm_dRL .* _db # OK
+        HydroProps = [compute_hydroProperties(sweep, LLHydro.airfoil_xy, LLHydro.airfoil_ctrl_xy)[1] for sweep in Λ]
+        _CLa = [HydroProps[ii].airfoil_CLa for (ii, _) in enumerate(Λ)]
+        _aL0 = [HydroProps[ii].airfoil_aL0 for (ii, _) in enumerate(Λ)]
+        _CLaMat = reshape(_CLa, size(_CLa)..., 1)
+        _aL0Mat = reshape(_aL0, size(_aL0)..., 1)
+
+        _dCL = _dR .* _RLMat .* _CLaMat .* (_aLMat .- _aL0Mat) .+ _RMat .* _dRL .* _CLaMat .* (_aLMat .- _aL0Mat) .+ _RMat .* _RLMat .* _CLaMat .* _daL
+
         J = J .- _dCL
-        # println("J: $(J[1,:])") # OK
+        # println("J: $(J[end,:])") # OK
+        # println("\ndCL:")
+        # show(stdout, "text/plain", J)
         # println(forceerror)
     elseif mode == "CS" # slow as hell but works
         dh = 1e-100
@@ -950,15 +1088,28 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
             ∂r∂G[:, ii] = imag(r_f) / dh
         end
         J = ∂r∂G
-    elseif mode == "FiDi" # too slow, don't use this
+    elseif mode == "FiDi" # currently the best
 
-        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        # J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
+
+        dh = 1e-4
+        ∂r∂G = zeros(DTYPE, length(Gi), length(Gi))
+        ∂r∂G_z = Zygote.Buffer(∂r∂G)
+        r_i = compute_LLresiduals(Gi; solverParams=solverParams)
+        for ii in eachindex(Gi)
+            @ignore_derivatives(Gi[ii] += dh)
+            r_f = compute_LLresiduals(Gi; solverParams=solverParams)
+            @ignore_derivatives(Gi[ii] -= dh)
+            # ∂r∂G[:, ii] = (r_f - r_i) / dh
+            ∂r∂G_z[:, ii] = (r_f - r_i) / dh
+        end
+        # J = ∂r∂G
+        J = copy(∂r∂G_z)
+    elseif mode == "RAD" # not working
+
+        backend = AD.ZygoteBackend()
         J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
-
-        # elseif mode == "RAD"
-
-        #     backend = AD.ZygoteBackend()
-        #     J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
 
     else
         println("Mode not implemented yet")
@@ -967,15 +1118,117 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     return J
 end
 
-# I THINK THIS IS RIGHT
-function ChainRulesCore.rrule(::typeof(compute_LLJacobian), Gi; solverParams, mode="Analytic")
-    J = compute_LLJacobian(Gi; solverParams=solverParams, mode=mode)
+# function ChainRulesCore.rrule(::typeof(compute_LLJacobian), Gi; solverParams, mode)
 
-    function compute_LLJacobian_pullback(ȳ)
-        return (NoTangent(), ZeroTangent(), NoTangent(), NoTangent())
+#     function pullback(ybar)
+
+#         return NoTangent(), ZeroTangent(), NoTangent(), NoTangent()
+#     end
+#     return compute_LLJacobian(Gi; solverParams=solverParams, mode=mode), pullback
+# end
+
+function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    α0 = appendageParams["alfa0"]
+    β0 = appendageParams["beta"]
+    rake = appendageParams["rake"]
+    sweepAng = appendageParams["sweep"]
+    depth0 = appendageParams["depth0"]
+
+    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+        npt_wing=npt_wing,
+        npt_airfoil=npt_airfoil,
+        rhof=solverOptions["rhof"],
+        # airfoilCoordFile=airfoilCoordFile,
+        airfoil_ctrl_xy=airfoilCtrlXY,
+        airfoil_xy=airfoilXY,
+        options=@ignore_derivatives(options),
+    )
+
+    TV_influence = compute_TVinfluences(FlowCond, LLSystem)
+
+    # --- Pack up parameters for the NL solve ---
+    solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+
+    ∂r∂G = LiftingLine.compute_LLJacobian(Gconv; solverParams=solverParams, mode="CS")
+    ∂r∂Γ = ∂r∂G / FlowCond.Uinf
+
+    return ∂r∂Γ
+end
+
+function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+
+    ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
+
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-5
+        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+        midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        α0 = appendageParams["alfa0"]
+        β0 = appendageParams["beta"]
+        rake = appendageParams["rake"]
+        sweepAng = appendageParams["sweep"]
+        depth0 = appendageParams["depth0"]
+
+        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+            npt_wing=npt_wing,
+            npt_airfoil=npt_airfoil,
+            rhof=solverOptions["rhof"],
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
+            options=@ignore_derivatives(options),
+        )
+
+        TV_influence = compute_TVinfluences(FlowCond, LLSystem)
+        # --- Pack up parameters for the NL solve ---
+        solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+        resVec_i = compute_LLresiduals(Gconv; solverParams=solverParams)
+
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+            midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+            α0 = appendageParams["alfa0"]
+            β0 = appendageParams["beta"]
+            rake = appendageParams["rake"]
+            sweepAng = appendageParams["sweep"]
+            depth0 = appendageParams["depth0"]
+
+            airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+            LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+                npt_wing=npt_wing,
+                npt_airfoil=npt_airfoil,
+                rhof=solverOptions["rhof"],
+                # airfoilCoordFile=airfoilCoordFile,
+                airfoil_ctrl_xy=airfoilCtrlXY,
+                airfoil_xy=airfoilXY,
+                options=@ignore_derivatives(options),
+            )
+
+            TV_influence = compute_TVinfluences(FlowCond, LLSystem)
+            # --- Pack up parameters for the NL solve ---
+            solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+            resVec_f = compute_LLresiduals(Gconv; solverParams=solverParams)
+
+            ptVec[ii] -= dh
+
+            ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+        end
     end
 
-    return J, compute_LLJacobian_pullback
+    return ∂r∂Xpt
 end
 
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)

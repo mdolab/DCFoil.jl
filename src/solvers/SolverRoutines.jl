@@ -16,6 +16,7 @@ using Zygote
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
 using FLOWMath: abs_cs_safe, atan_cs_safe
 using Printf
+using Debugger
 
 # --- DCFoil modules ---
 using ..NewtonRaphson
@@ -669,6 +670,7 @@ function cross3D(arr1, arr2)
     M, N = size(arr1, 2), size(arr1, 3)
 
     arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
     arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
 
     for jj in 1:M

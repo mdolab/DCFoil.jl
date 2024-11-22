@@ -186,6 +186,41 @@ function compute_node_stiff_faster(
     return K_f, K̂_f
 end
 
+function compute_node_stiff_dcla(
+    b, eb, ab, U∞, clambda, slambda, rho_f, Ck
+)
+    """
+    cla derivative of hydrodynamic stiffness force
+    """
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    Uclambda = U∞ * clambda
+    bCk = b * Ck
+
+
+    k_hα = -2 * bCk # lift due to angle of attack
+    k_αα = k_hα * eb # moment due to angle of attack (disturbing)
+    dK_f = qf * clambda * clambda *
+           [
+               0.0 k_hα
+               0.0 k_αα
+           ]
+
+    # Sweep correction to aerodynamic quasi-steady stiffness
+    e_hh = Uclambda * 2 * Ck
+    e_hα = Uclambda * (1 - a) * (-bCk)
+    e_αh = Uclambda * (1 + a) * bCk
+    e_αα = Uclambda *
+           (-bCk * eb * (1 - 2 * (a)))
+    dK̂_f = qf / U∞ * slambda * b *
+            [
+                e_hh e_hα
+                e_αh e_αα
+            ]
+
+    return dK_f, dK̂_f
+end
+
 function compute_node_stiff_faster(
     clα::DTYPE, b::DTYPE, eb::DTYPE, ab::DTYPE, U∞::DTYPE, clambda::DTYPE, slambda::DTYPE, rho_f::DTYPE, Ck_r::DTYPE, Ck_i::DTYPE
 )
