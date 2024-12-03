@@ -42,6 +42,7 @@ using ..Utilities: Utilities
 using ..DCFoilSolution: DCFoilSolution, StaticSolution
 using ..TecplotIO: TecplotIO
 using ..DesignVariables: allDesignVariables
+using ..ComputeFunctions
 
 # ==============================================================================
 #                         COMMON TERMS
@@ -343,14 +344,12 @@ function compute_funcs(
     # ************************************************
     #     RECOMPUTE FROM u AND x
     # ************************************************
-    # --- First unpack inputs ---
-    WING = SOL.FOIL
-    STRUT = SOL.STRUT
 
     # --- Now update the inputs from DVDict ---
     α₀ = appendageParams["alfa0"]
     rake = appendageParams["rake"]
 
+    ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
     WING, STRUT, constants, FEMESH = setup_problemFromCoords(LECoords, nodeConn, TECoords, appendageParams, appendageOptions, solverOptions)
 
     # solverOptions["debug"] = false
@@ -367,11 +366,6 @@ function compute_funcs(
     # between 'foil' data structures in the multi-appendage case
     # so this line is ok
     qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
-    Fnc =
-        theta = states[ΘIND:NDOF:end]
-    Moments = forces[ΘIND:NDOF:end]
-    W = states[WIND:NDOF:end]
-    Lift = forces[WIND:NDOF:end]
 
     # ************************************************
     #     COMPUTE COST FUNCS
@@ -383,149 +377,19 @@ function compute_funcs(
         ADIM = 2 * constants.planformArea
     end
 
-    if "wtip" in [evalFunc]
-        w_tip = W[end]
-        costFuncs["wtip"] = w_tip
-    end
-    if "psitip" in [evalFunc]
-        psi_tip = theta[end]
-        costFuncs["psitip"] = psi_tip
-    end
-    TotalLift = sum(Lift)
-    if "lift" in [evalFunc]
-        costFuncs["lift"] = TotalLift
-    end
-    # Moment about mid-chord (where the finite element is)
-    TotalMoment = sum(Moments)
-    if "moment" in [evalFunc]
-        costFuncs["moment"] = TotalMoment
-    end
-    if "cl" in [evalFunc]
-        CL = TotalLift / (qdyn * ADIM)
-        costFuncs["cl"] = CL
-    end
-    # Coefficient of moment about the mid-chord
-    if "cmy" in [evalFunc]
-        CM = TotalMoment / (qdyn * ADIM * meanChord)
-        costFuncs["cmy"] = CM
-    end
-    if "cd" in [evalFunc]
-        CD = 0.0
-        costFuncs["cd"] = CD
-    end
-    if "cdi" in [evalFunc] || "fxi" in [evalFunc]
-        wingTwist = theta[1:appendageOptions["nNodes"]]
-
-        _, F, CDi = HydroStrip.compute_hydroLLProperties(
-            appendageParams["s"],
-            WING.chord,
-            deg2rad(appendageParams["alfa0"]),
-            0.0, # rake
-            0.0,# sweep
-            0.0,# depth
-            ;
-            solverOptions=solverOptions
-        )
-        Fxi = F[XDIM]
-        # _, Fxi, CDi = HydroStrip.compute_glauert_circ(
-        #     DVDict["s"],
-        #     WING.chord,
-        #     deg2rad(DVDict["alfa0"]),
-        #     solverOptions["Uinf"];
-        #     h=DVDict["depth0"],
-        #     useFS=solverOptions["use_freeSurface"],
-        #     rho=solverOptions["rhof"],
-        #     twist=wingTwist,
-        #     debug=solverOptions["debug"],
-        #     config=appendageOptions["config"],
-        # )
-
-        if "cdi" in [evalFunc]
-            costFuncs["cdi"] = CDi
-        end
-        if "fxi" in [evalFunc]
-            Fxi = CDi * qdyn * ADIM
-            costFuncs["fxi"] = Fxi
-        end
-    end
-    # From Hörner Chapter 8
-    if "cdj" in [evalFunc] || "fxj" in [evalFunc]
-        tocbar = 0.5 * (appendageParams["toc"][1] + appendageParams["toc_strut"][1])
-        CDt = 17 * (tocbar)^2 - 0.05
-        dj = CDt * (qdyn * (tocbar * appendageParams["c"][1])^2)
-        CDj = dj / (qdyn * ADIM)
-        costFuncs["cdj"] = CDj
-        costFuncs["fxj"] = dj
-    end
-    if "cds" in [evalFunc] || "fxs" in [evalFunc]
-        t = appendageParams["toc_strut"][end] * appendageParams["c_strut"][end]
-        # --- Hörner CHapter 10 ---
-        # CDts = 0.24
-        # ds = CDts * (qdyn * (t)^2)
-        # CDs = ds / (qdyn * ADIM)
-        # Chapman 1971 assuming x/c = 0.35
-        CDs = 0.009 + 0.013 * appendageParams["toc_strut"][end]
-        ds = CDs * qdyn * t * appendageParams["c_strut"][end]
-        costFuncs["cds"] = CDs
-        costFuncs["fxs"] = ds
-    end
-    # Wave drag
-    if "cdw" in [evalFunc] || "fxw" in [evalFunc]
-
-        # Breslin 1957 wave drag for an elliptic hydrofoil
-        λ = appendageParams["depth0"] * 2 / appendageParams["s"]
-        σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
-
-        if Fnc < 2.0
-            println("Warning: Fnc < 2.0. Not valid!")
-        end
-        CDw = (
-            σλ / (π * AR) + γλ / Fnc^2
-        ) * CL^2
-        costFuncs["cdw"] = CDw
-        costFuncs["fxw"] = CDw * qdyn * ADIM
-    end
-    if "cdpr" in [evalFunc] || "fxpr" in [evalFunc] # profile drag
-        if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
-            WSA = 2 * ADIM # both sides
-        elseif appendageOptions["config"] == "t-foil"
-            WSA = 2 * ADIM + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
-        end
-        println("I'm not debugged")
-        # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
-        NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
-        Re = solverOptions["Uinf"] * meanChord / NU
-        # Ma = solverOptions["Uinf"] / 1500
-        cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
-        xcmax = 0.3 # chordwise position of the maximum thickness
-        # # --- Raymer equation 12.30 ---
-        # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["sweep"])^0.28)
-        # --- Torenbeek 1990 ---
-        # First term is increase in skin friction due to thickness and quartic is separation drag
-        FF = 1 .+ 2.7 .* appendageParams["toc"] .+ 100 .* appendageParams["toc"] .^ 4
-        FF = mean(FF)
-        Df = qdyn * WSA * cfittc
-        Dpr = Df * FF
-        costFuncs["fxpr"] = Dpr
-        costFuncs["cdpr"] = Dpr / (qdyn * ADIM)
-    end
-    # --- Center of forces ---
-    # These calculations are in local appendage frame
-    if "cofz" in [evalFunc] # center of forces in z direction
-        xcenter = sum(Lift .* FEMESH.mesh[:, XDIM]) / sum(Lift)
-        ycenter = sum(Lift .* FEMESH.mesh[:, YDIM]) / sum(Lift)
-        zcenter = sum(Lift .* FEMESH.mesh[:, ZDIM]) / sum(Lift)
-        costFuncs["cofz"] = [xcenter, ycenter, zcenter]
-    end
-
-    if "comy" in [evalFunc] # center of moments about y axis
-        xcenter = sum(Moments .* FEMESH.mesh[:, XDIM]) / sum(Moments)
-        ycenter = sum(Moments .* FEMESH.mesh[:, YDIM]) / sum(Moments)
-        zcenter = sum(Moments .* FEMESH.mesh[:, ZDIM]) / sum(Moments)
-        costFuncs["comy"] = [xcenter, ycenter, zcenter]
-    end
+    costFuncs["wtip"] = ComputeFunctions.compute_maxtipbend(states)
+    costFuncs["psitip"] = ComputeFunctions.compute_maxtiptwist(states)
+    costFuncs["lift"], costFuncs["cl"] = ComputeFunctions.compute_lift(forces, qdyn, ADIM)
+    costFuncs["moment"], costFuncs["cmy"] = ComputeFunctions.compute_momy(forces, qdyn, ADIM, meanChord)
+    costFuncs["cd"], costFuncs["cdi"], costFuncs["cdw"], costFuncs["cdpr"], costFuncs["cdj"], costFuncs["cds"] =
+        ComputeFunctions.compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, costFuncs["cl"], meanChord)
+    costFuncs["cofz"], costFuncs["comy"] = ComputeFunctions.compute_centerofforce(forces, FEMESH)
 
     return costFuncs
+end
+
+function compute_funcsFromfhydro()
+
 end
 
 function compute_solFromDVDict(
@@ -680,9 +544,7 @@ function evalFuncsSens(
                 ptVec)
 
         elseif uppercase(mode) == "ADJOINT"
-            println("TOC adjoint derivative is wrong")
 
-            println("Computing adjoint for component ", iComp)
             STATSOL = STATSOLLIST[iComp]
             solverParams = STATSOL.SOLVERPARAMS
             appendageOptions = solverOptions["appendageList"][iComp]
@@ -793,9 +655,24 @@ function compute_∂f∂x(
     ∂f∂xPt = zeros(DTYPE, length(ptVec))
     ∂f∂xStruct = zeros(DTYPE, length(allDesignVariables))
 
+    # Force an automatic initial eval so less code duplication
+    dh = 1e-5
+    f_i = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
+        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
+    )
+
+
     DVDictList[iComp] = appendageParams
     if uppercase(mode) == "ANALYTIC"
+        hydromode = "ANALYTIC"
+        println("Computing hydro derivatives in $(hydromode)")
+        dfstaticdXpt = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
+
+        # TODO: PICKUP HERE
+        ∂f∂fstatic = compute_∂costFunc∂fhydro(appendageOptions, appendageParams, solverOptions)
+
         # Any function can be written as some function of the fluid or structural states
+        ∂f∂xPt = ∂f∂fstatic * dfstaticdXpt
 
     elseif uppercase(mode) == "RAD" # WORKS BUT BUGGING WITH NANs prob from lifting line
         backend = AD.ZygoteBackend()
@@ -807,12 +684,8 @@ function compute_∂f∂x(
         )
     elseif uppercase(mode) == "FIDI"
 
-        dh = 1e-5
         println("step size: ", dh)
 
-        f_i = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
-            appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
-        )
 
         for ii in eachindex(ptVec)
             ptVec[ii] += dh
@@ -824,14 +697,16 @@ function compute_∂f∂x(
             ∂f∂xPt[ii] = (f_f - f_i) / dh
         end
 
-        appendageParams["theta_f"] += dh
-        f_f = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
-            appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
-        )
-        appendageParams["theta_f"] -= dh
-        ∂f∂xStruct = (f_f - f_i) / dh
 
     end
+
+    # --- Struct ---
+    appendageParams["theta_f"] += dh
+    f_f = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
+        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
+    )
+    appendageParams["theta_f"] -= dh
+    ∂f∂xStruct = (f_f - f_i) / dh
 
     println("writing ∂f∂xPt-$(mode).csv")
     writedlm("∂f∂xPt-$(mode).csv", ∂f∂xPt, ',')
@@ -839,6 +714,10 @@ function compute_∂f∂x(
     ∂f∂xPt = reshape(∂f∂xPt, 1, length(∂f∂xPt))
 
     return ∂f∂xPt, ∂f∂xStruct
+end
+
+function compute_∂costFunc∂fhydro(appendageOptions, appendageParams, solverOptions)
+
 end
 
 function compute_∂f∂u(
@@ -855,7 +734,11 @@ function compute_∂f∂u(
     DVDictList[iComp] = appendageParams
     # Do analytic
     if uppercase(mode) == "ANALYTIC"
+        # TODO: PICKUP HERE
+        ∂f∂fstatic = compute_∂costFunc∂fhydro()
 
+        # ∂f∂udirect = costfuncsdpending directly on the structural states (tip bend, etc.)
+        ∂f∂u = ∂f∂fstatic * dfstaticdu + ∂f∂udirect
     elseif uppercase(mode) == "RAD" # works
         backend = AD.ZygoteBackend()
         ∂f∂u, = AD.gradient(
@@ -963,12 +846,12 @@ function compute_∂r∂x(
         # println("hydro partials")
         # It is strange that this is zero
         # hydromode = "FiDi" # This appears to be right
-        hydromode = "ANALYTIC" # SOME BUG HERE
+        hydromode = "ANALYTIC"
         println("Computing hydro derivatives in $(hydromode)")
-        ∂Kff∂x_u = compute_∂fhydrostatic∂X(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
+        dKffdXpt_u = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
 
         # ∂r∂x = u ∂K∂X - dfdX
-        ∂r∂xPt = (∂Kss∂x_u - ∂Kff∂x_u)
+        ∂r∂xPt = (∂Kss∂x_u - dKffdXpt_u)
 
         # ************************************************
         #     Struct
@@ -1081,9 +964,9 @@ function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solv
     return f
 end
 
-function compute_∂fhydrostatic∂X(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="ANALYTIC")
+function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="ANALYTIC")
 
-    ∂fstatic∂X = zeros(DTYPE, length(structStates), length(ptVec))
+    dfstaticdXpt = zeros(DTYPE, length(structStates), length(ptVec))
 
     allStructuralStates, _ = FEMMethods.put_BC_back(structStates, ELEMTYPE; appendageOptions=appendageOptions)
     foilTotalStates = SolverRoutines.return_totalStates(allStructuralStates, appendageParams, ELEMTYPE;
@@ -1153,28 +1036,21 @@ function compute_∂fhydrostatic∂X(structStates, ptVec, nodeConn, appendageOpt
         AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
         FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
-        # 2024-11-20 This is probably correct
         dKffdcla = HydroStrip.compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FIDI")
-        # println("Writing dKffdcla-FiDi.csv")
-        # writedlm("dKffdcla-FiDi.csv", dKffdcla, ',')
 
         ∂Kff∂Xpt = HydroStrip.compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FIDI")
-        # Multidimensional array
-        # dKffdX = zeros(DTYPE, dim, dim, length(ptVec))
-        # ncla = size(dKffdcla, 3)
 
         #  d K_ff     ∂ K_ff    d cl_a     ∂ K_ff
         # -------  = --------- --------- + ------
         #  d   X      ∂ cl_a    d  X       ∂ X
-        
         dKffdXpt = dKffdcla * dcladXpt + ∂Kff∂Xpt
+
 
         # Over all design vars
         for ii in eachindex(ptVec)
-            # ∂Kff = dKffdX[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList], ii]
             ∇Kff = reshape(dKffdXpt[:, ii], dim, dim)
 
-            ∂fstatic∂X[:, ii] = ∇Kff[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] * foilTotalStates[1:end.∉[DOFBlankingList]]
+            dfstaticdXpt[:, ii] = ∇Kff[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] * foilTotalStates[1:end.∉[DOFBlankingList]]
         end
 
     elseif uppercase(mode) == "FIDI" # This seems to fix things!
@@ -1200,29 +1076,16 @@ function compute_∂fhydrostatic∂X(structStates, ptVec, nodeConn, appendageOpt
             DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
             dKfu = (Kff_f - Kff_i) * foilTotalStates
             dKffdX[:, :, ii] = (Kff_f - Kff_i) / dh
-            ∂fstatic∂X[:, ii] = dKfu[1:end.∉[DOFBlankingList]] / dh
+            dfstaticdXpt[:, ii] = dKfu[1:end.∉[DOFBlankingList]] / dh
             # println(maximum(dKffdX[:, :, ii]))
 
             dKffdXpt[:, ii] = (vec(Kff_f) - vec(Kff_i)) / dh
 
         end
 
-        # C = dKffdX
-        # B = dcladXpt
-        # dKffdcla = C * inv(B)
-        # println("Writing dKffdcla-FIDI.csv")
-        # writedlm("dKffdcla-FIDI.csv", dKffdcla, ',')
-        # writedlm("dKffdX-$(mode).csv", dKffdXpt, ',')
-
-        # writedlm("dcladXpt-inFiDi.csv", dcladXpt, ",")
-        # println("Writing dKffdX-$(mode).csv")
-
     end
 
-    # println("writing dfstaticdx-$(mode).csv")
-    # writedlm("dfstaticdx-$(mode).csv", ∂fstatic∂X, ",")
-
-    return ∂fstatic∂X
+    return dfstaticdXpt
 end
 
 function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
@@ -1333,85 +1196,6 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
     return -AIC, LLOutputs.cla
 end
 
-
-function compute_∂r∂uFromDV(
-    structuralStates, mode="CS";
-    DVDictList=[], solverParams=nothing, appendageOptions=Dict(), solverOptions=Dict(), iComp=1, CLMain=0.0
-)
-    """
-    Jacobian of residuals with respect to structural states
-    EXCLUDING BC NODES
-
-    u - structural states
-    """
-
-    DVDict = DVDictList[iComp]
-    DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-
-    if uppercase(mode) == "FIDI" # Finite difference
-        # First derivative using 3 stencil points
-        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-        ∂r∂u, = AD.jacobian(
-            backend,
-            x -> compute_residualsFromDV(x, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain),
-            structuralStates,
-        )
-        # ∂r∂u = FiniteDifferences.jacobian(forward_fdm(2, 1), compute_residuals, structuralStates)
-
-    elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
-        # NOTE: a little slow but it is accurate
-        # This is a tuple
-        backend = AD.ZygoteBackend()
-        ∂r∂u, = AD.jacobian(
-            backend,
-            x -> compute_residualsFromDV(x, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain),
-            structuralStates,
-        )
-        # ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
-
-        # elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
-        #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
-
-    elseif uppercase(mode) == "CS" # Complex step
-
-        dh = 1e-100
-        # println("step size: ", dh)
-
-        ∂r∂u = zeros(DTYPE, length(structuralStates), length(structuralStates))
-
-        # create a complex copy of the structural states
-        structuralStatesCS = complex(copy(structuralStates))
-        for ii in eachindex(structuralStates)
-            structuralStatesCS[ii] += dh * 1im
-            r_f = compute_residualsFromDV(
-                structuralStatesCS, DVVec, DVLengths; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=DVDictList, CLMain=CLMain
-            )
-            structuralStatesCS[ii] -= dh * 1im
-
-            ∂r∂u[:, ii] = imag(r_f) / dh
-        end
-
-    elseif uppercase(mode) == "ANALYTIC"
-        # NOTES:
-        # TODO: there is now a bug when using T-FOIL GEOMETRY THAT IT DOES NOT CONVERGE for basic solution
-        # TODO: longer term, the AIC is influenced by the structural states b/c of the twist distribution
-        # In the case of a linear elastic beam under static fluid loading, 
-        # dr/du = Ks + Kf
-        # NOTE Kf = AIC matrix
-        # where AIC * states = forces on RHS (external)
-        # _, _, solverParams = setup_problem(DVDict, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
-        DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
-        ∂r∂u::Matrix{DTYPE} = solverParams.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
-        +solverParams.AICmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
-        # The behavior of the analytic derivatives is interesting since it takes about 6 NL iterations to 
-        # converge to the same solution as the RAD, which only takes 2 NL iterations.
-    else
-        error("Invalid mode")
-    end
-
-    return ∂r∂u
-end
-
 function compute_∂r∂u(
     structuralStates, xLE, xTE, nodeConn, mode="CS";
     appendageParamsList=[], solverParams=nothing, appendageOptions=Dict(), solverOptions=Dict(), iComp=1, CLMain=0.0
@@ -1493,66 +1277,6 @@ function compute_∂r∂u(
     return ∂r∂u
 end
 
-function compute_residualsFromDV(
-    structStates, DVs::Vector, DVLengths::Vector{Int64};
-    appendageOptions=Dict(), solverOptions=Dict(), iComp=1, CLMain=0.0, DVDictList=[]
-)
-    """
-    Compute residual for every node that is not the clamped root node
-
-        r(u, x) = [K]{u} - {f(u)}
-
-        where f(u) is the force vector from the current solution
-
-        Inputs
-        ------
-        structuralStates : array
-            State vector with nodal DOFs and deformations EXCLUDING BCs
-        x : dict
-            Design variables
-    """
-
-    DVDict = Utilities.repack_dvdict(DVs, DVLengths)
-
-    # Need to put DVDict in the iComp spot of the DVDictListWork array
-    indicesNotMatchingiComp = 1:length(DVDictList) .!= iComp
-    # DVDictWork::Vector = copy(DVDictList[indicesNotMatchingiComp]) # this is a vector...
-    # TODO: make this better
-    if length(DVDictList) > 1
-        if iComp == 1
-            DVDictListWork = vcat([DVDict], [DVDictList[2]])
-        else
-            DVDictListWork = vcat([DVDictList[1]], [DVDict])
-        end
-    else
-        DVDictListWork = [DVDict]
-    end
-    # There is probably a nicer way to restructure the code so the order of calls is
-    # 1. top level solve call to applies the newton raphson
-    # 2.    compute_residuals
-    # solverOptions["debug"] = false
-    # THIS IS SLOW
-    _, _, SOLVERPARAMS = setup_problemFromDVDict(DVDictListWork, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain)
-
-    allStructuralStates, _ = FEMMethods.put_BC_back(structStates, ELEMTYPE; appendageOptions=appendageOptions)
-    foilTotalStates = SolverRoutines.return_totalStates(
-        allStructuralStates, DVDict, ELEMTYPE;
-        appendageOptions=appendageOptions, alphaCorrection=SOLVERPARAMS.downwashAngles
-    )
-
-
-    # --- Outputs ---
-    F = -SOLVERPARAMS.AICmat * foilTotalStates
-    DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
-    FOut = F[1:end.∉[DOFBlankingList]]
-
-
-    # --- Stack them ---
-    resVec = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] * structStates - FOut
-
-    return resVec
-end
-
 function compute_residualsFromCoords(
     structStates, xVec, nodeConn, appendageParamsList;
     appendageOptions=Dict(), solverOptions=Dict(), iComp=1
@@ -1608,10 +1332,6 @@ function compute_residualsFromCoords(
 
     return resVec
 end
-
-# function ChainRulesCore.rrule(::typeof(compute_residualsFromCoords))
-
-# end
 
 function compute_directMatrix(
     ∂r∂u::Matrix, ∂r∂x::Matrix;

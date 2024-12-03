@@ -958,25 +958,6 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f,
 
 end
 
-# function ChainRulesCore.rrule(::typeof(solve_structure), K, M, F)
-#     q = solve_structure(K, M, F)
-
-#     function pullback(qb)
-
-#         # q = inv(K) * F
-#         C = inv(K)
-#         dqdK = -C * C * F
-
-#         Kb = qb * dqdK
-#         Fb = qb * dqdF
-
-#         return (NoTangent(), Kb, ZeroTangent(), Fb)
-#     end
-
-#     q, pullback
-
-# end
-
 function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
     """
     Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.

@@ -3,7 +3,7 @@
 @File    :   costFunctions.jl
 @Time    :   2024/04/02
 @Author  :   Galen Ng
-@Desc    :   Store all possible cost funcs
+@Desc    :   Store all possible cost funcs, and also routines for computing the static ones
 """
 
 module CostFunctions

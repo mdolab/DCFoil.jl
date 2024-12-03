@@ -27,12 +27,13 @@ for headerName in [
     # --- MACH framework ---
     # "../dcfoil/mach",
     # --- Not used in this script but needed for submodules ---
-    "CostFunctions", "DesignVariables",
     "constants/SolutionConstants", "constants/DesignConstants",
     "utils/Utilities", "utils/Interpolation",
+    "struct/EBBeam",
+    "CostFunctions", "DesignVariables",
     "struct/MaterialLibrary", "bodydynamics/HullLibrary",
     "hydro/Unsteady",
-    "struct/BeamProperties", "struct/EBBeam",
+    "struct/BeamProperties", 
     "solvers/NewtonRaphson",
     "solvers/EigenvalueProblem",
     "solvers/SolverRoutines",
@@ -43,6 +44,7 @@ for headerName in [
     # --- Used in this script ---
     "struct/FEMMethods",
     "hydro/HydroStrip",
+    "ComputeFunctions",
     "InitModel",
     "solvers/DCFoilSolution",
     "io/TecplotIO", "io/MeshIO",

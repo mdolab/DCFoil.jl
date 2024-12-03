@@ -1067,7 +1067,7 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
 end
 
 function integrate_hydroLoads(
-    foilStructuralStates, fullAIC, α₀, rake, dofBlank::Vector{Int64}, downwashAngles::DTYPE, elemType="BT2";
+    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::DTYPE, elemType="BT2";
     appendageOptions=Dict(), solverOptions=Dict()
 )
     """
@@ -1155,7 +1155,6 @@ function integrate_hydroLoads(
     for secMom in My
         AbsTotalMoment += abs(secMom)
     end
-    @bp
 
     return ForceVector, AbsTotalLift, AbsTotalMoment
 end
