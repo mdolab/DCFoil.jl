@@ -1,0 +1,188 @@
+# --- Julia 1.11---
+"""
+@File          :   ComputeFunctions.jl
+@Date created  :   2024/11/22
+@Last modified :   2024/11/22
+@Author        :   Galen Ng
+@Desc          :   Compute cost functions
+"""
+
+
+module ComputeFunctions
+
+using ..SolutionConstants: XDIM, YDIM, ZDIM
+using ..Utilities: Utilities, compute_KS
+using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
+using ..HydroStrip
+
+function compute_maxtipbend(states)
+    W = states[WIND:NDOF:end]
+
+    return W[end]
+end
+function compute_maxtiptwist(states)
+    Theta = states[ΘIND:NDOF:end]
+
+    return Theta[end]
+end
+
+function compute_lift(fHydro, qdyn, ADIM)
+
+    Lift = fHydro[WIND:NDOF:end]
+
+    TotalLift = sum(Lift)
+
+    CL = TotalLift / (qdyn * ADIM)
+    return TotalLift, CL
+end
+
+
+function compute_momy(fHydro, qdyn, ADIM, meanChord)
+    """
+    About midchord
+    """
+
+    Moment = fHydro[ΘIND:NDOF:end]
+
+    TotalMoment = sum(Moment)
+
+    CMY = TotalMoment / (qdyn * ADIM * meanChord)
+    return TotalMoment, CMY
+end
+
+# ************************************************
+#     Drag calculations
+# ************************************************
+function compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+    LLOutputs, _, _ = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+    Di = LLOutputs.F[XDIM]
+    CDi = LLOutputs.CDi
+
+    return CDi, Di
+end
+
+function compute_profiledrag(meanChord, qdyn, ADIM, appendageParams, appendageOptions, solverOptions)
+
+    if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
+        WSA = 2 * ADIM # both sides
+    elseif appendageOptions["config"] == "t-foil"
+        WSA = 2 * ADIM + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
+    end
+    println("I'm not debugged")
+    # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
+    NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
+    Re = solverOptions["Uinf"] * meanChord / NU
+    # Ma = solverOptions["Uinf"] / 1500
+    cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
+    xcmax = 0.3 # chordwise position of the maximum thickness
+    # # --- Raymer equation 12.30 ---
+    # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["sweep"])^0.28)
+    # --- Torenbeek 1990 ---
+    # First term is increase in skin friction due to thickness and quartic is separation drag
+    FF = 1 .+ 2.7 .* appendageParams["toc"] .+ 100 .* appendageParams["toc"] .^ 4
+    FF = sum(FF)/length(FF)
+    Df = qdyn * WSA * cfittc
+    Dpr = Df * FF
+    CDpr = Dpr / (qdyn * ADIM)
+
+    return CDpr, Dpr
+end
+
+function compute_wavedrag(CL, meanChord, qdyn, ADIM, appendageParams, solverOptions)
+    Fnc = solverOptions["Uinf"] / sqrt(9.81 * meanChord)
+
+    # Breslin 1957 wave drag for an elliptic hydrofoil
+    λ = appendageParams["depth0"] * 2 / appendageParams["s"]
+    σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
+
+    if Fnc < 2.0
+        println("Warning: Fnc < 2.0. Not valid!")
+    end
+
+    AR = appendageParams["s"] / meanChord
+
+    CDw = (
+        σλ / (π * AR) + γλ / Fnc^2
+    ) * CL^2
+
+    Dw = CDw * qdyn * ADIM
+
+    return CDw, Dw
+end
+
+function compute_spraydrag(appendageParams, qdyn, ADIM)
+
+    t = appendageParams["toc_strut"][end] * appendageParams["c_strut"][end]
+
+    # --- Hörner CHapter 10 ---
+    # CDts = 0.24
+    # ds = CDts * (qdyn * (t)^2)
+    # CDs = ds / (qdyn * ADIM)
+    # Chapman 1971 assuming x/c = 0.35
+    CDs = 0.009 + 0.013 * appendageParams["toc_strut"][end]
+    Ds = CDs * qdyn * t * appendageParams["c_strut"][end]
+
+    return CDs, Ds
+end
+
+function compute_junctiondrag(appendageParams, qdyn, ADIM)
+
+    # From Hörner Chapter 8
+    tocbar = 0.5 * (appendageParams["toc"][1] + appendageParams["toc_strut"][1])
+    CDt = 17 * (tocbar)^2 - 0.05
+    Dj = CDt * (qdyn * (tocbar * appendageParams["c"][1])^2)
+    CDj = Dj / (qdyn * ADIM)
+
+    return CDj, Dj
+end
+
+function compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, CL, meanChord)
+    """
+    All pieces of calmwater drag
+    """
+
+    CDi, Di = compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+    CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, ADIM, appendageParams, solverOptions)
+
+    CDpr, Dpr = compute_profiledrag(meanChord, qdyn, ADIM, appendageParams, appendageOptions, solverOptions)
+
+    CDj, Dj = compute_junctiondrag(appendageParams, qdyn, ADIM)
+
+    CDs, Ds = compute_spraydrag(appendageParams, qdyn, ADIM)
+
+    CD = CDi + CDw + CDpr + CDj + CDs
+    Dtot = Di + Dw + Dpr + Dj + Ds
+
+    return CD, CDi, CDw, CDpr, CDj, CDs
+end
+
+# ************************************************
+#     Center of force calculations
+# ************************************************
+function compute_centerofforce(fHydro, FEMESH)
+
+    Lift = fHydro[WIND:NDOF:end]
+    Moments = fHydro[ΘIND:NDOF:end]
+
+    # --- Center of forces ---
+    # These calculations are in local appendage frame
+    # center of forces in z direction
+    xcenter = sum(Lift .* FEMESH.mesh[:, XDIM]) / sum(Lift)
+    ycenter = sum(Lift .* FEMESH.mesh[:, YDIM]) / sum(Lift)
+    zcenter = sum(Lift .* FEMESH.mesh[:, ZDIM]) / sum(Lift)
+    cofz = [xcenter, ycenter, zcenter]
+
+
+    # center of moments about y axis
+    xcenter = sum(Moments .* FEMESH.mesh[:, XDIM]) / sum(Moments)
+    ycenter = sum(Moments .* FEMESH.mesh[:, YDIM]) / sum(Moments)
+    zcenter = sum(Moments .* FEMESH.mesh[:, ZDIM]) / sum(Moments)
+    comy = [xcenter, ycenter, zcenter]
+
+    return cofz, comy
+end
+
+end # module
