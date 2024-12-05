@@ -17,7 +17,7 @@ export solveFromDVs
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
 using Zygote
-using ReverseDiff
+using ReverseDiff, ForwardDiff
 using ChainRulesCore
 using LinearAlgebra
 using Statistics
@@ -166,39 +166,39 @@ function solveFromCoords(
     return STATSOL
 end
 
-function setup_problemFromDVDict(
-    DVDictList, appendageOptions::Dict, solverOptions::Dict;
-    iComp=1, CLMain=0.0, verbose=false
-)
-    """
-    """
-    DVDict = DVDictList[iComp]
+# function setup_problemFromDVDict(
+#     DVDictList, appendageOptions::Dict, solverOptions::Dict;
+#     iComp=1, CLMain=0.0, verbose=false
+# )
+#     """
+#     """
+#     DVDict = DVDictList[iComp]
 
-    WING, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
+#     WING, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
 
-    nNodes = WING.nNodes
-    nElem = nNodes - 1
-    if appendageOptions["config"] == "wing"
-        STRUT = WING # just to make the code work
-    end
-    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"];
-        config=appendageOptions["config"], nElStrut=STRUT.nNodes - 1, spanStrut=DVDict["s_strut"], rake=DVDict["rake"])
+#     nNodes = WING.nNodes
+#     nElem = nNodes - 1
+#     if appendageOptions["config"] == "wing"
+#         STRUT = WING # just to make the code work
+#     end
+#     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"];
+#         config=appendageOptions["config"], nElStrut=STRUT.nNodes - 1, spanStrut=DVDict["s_strut"], rake=DVDict["rake"])
 
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, WING.chord, DVDict["toc"], WING.ab, DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
+#     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, WING.chord, DVDict["toc"], WING.ab, DVDict["x_ab"], DVDict["theta_f"], zeros(10, 2))
 
-    globalK, globalM, _ = FEMMethods.assemble(FEMESH, DVDict["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, ab_strut=STRUT.ab, x_αb_strut=DVDict["x_ab_strut"], verbose=verbose)
-    alphaCorrection::DTYPE = 0.0
-    if iComp > 1
-        alphaCorrection = HydroStrip.correct_downwash(iComp, CLMain, DVDictList, solverOptions)
-    end
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(FEMESH, WING, size(globalM)[1], DVDict["sweep"], WING.U∞, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT)
-    DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
-    # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
-    derivMode = "RAD"
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, alphaCorrection)
+#     globalK, globalM, _ = FEMMethods.assemble(FEMESH, DVDict["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, ab_strut=STRUT.ab, x_αb_strut=DVDict["x_ab_strut"], verbose=verbose)
+#     alphaCorrection::DTYPE = 0.0
+#     if iComp > 1
+#         alphaCorrection = HydroStrip.correct_downwash(iComp, CLMain, DVDictList, solverOptions)
+#     end
+#     _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(FEMESH, WING, size(globalM)[1], DVDict["sweep"], WING.U∞, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT)
+#     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
+#     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
+#     derivMode = "RAD"
+#     SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, alphaCorrection)
 
-    return WING, STRUT, SOLVERPARAMS, FEMESH
-end
+#     return WING, STRUT, SOLVERPARAMS, FEMESH
+# end
 
 function setup_problemFromCoords(
     LECoords, nodeConn, TECoords, appendageParams, appendageOptions, solverOptions;
@@ -327,86 +327,116 @@ function get_evalFunc(
     Works for a single cost function
     """
 
-    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-
-    costFuncs = compute_funcs(evalFunc, states, SOL, LECoords, TECoords, nodeConn, DVDict;
+    costFuncs = compute_funcs(evalFunc, states, SOL, ptVec, nodeConn, DVDict;
         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
 
-    return costFuncs[evalFunc]
+    return costFuncs
 end
 
-function compute_funcs(
-    evalFunc, states::Vector, SOL::StaticSolution,
-    LECoords, TECoords, nodeConn, appendageParams;
+function compute_funcs(evalFunc, states::Vector, SOL::StaticSolution,
+    ptVec, nodeConn, appendageParams;
     appendageOptions=nothing, solverOptions=nothing, DVDictList=[], iComp=1, CLMain=0.0
 )
 
     # ************************************************
     #     RECOMPUTE FROM u AND x
     # ************************************************
+    FEMESH, forces, WING, planformArea = precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+    meanChord = mean(WING.chord)
+    qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
+
+    if appendageOptions["config"] == "wing"
+        ADIM = planformArea
+    elseif appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
+        ADIM = 2 * planformArea
+    end
+
+    # ************************************************
+    #     COMPUTE COST FUNCS
+    # ************************************************
+
+    fout = compute_funcsFromfhydro(evalFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, FEMESH)
+
+    return fout
+end
+
+function precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     # --- Now update the inputs from DVDict ---
     α₀ = appendageParams["alfa0"]
     rake = appendageParams["rake"]
 
-    ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
+    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     WING, STRUT, constants, FEMESH = setup_problemFromCoords(LECoords, nodeConn, TECoords, appendageParams, appendageOptions, solverOptions)
 
-    # solverOptions["debug"] = false
     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
     forces, _, _ = HydroStrip.integrate_hydroLoads(states, constants.AICmat, α₀, rake, DOFBlankingList, constants.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
-    meanChord = mean(WING.chord)
 
+    return FEMESH, forces, WING, constants.planformArea
+end
 
-    # ************************************************
-    #     CALCULATE COST FUNCTIONS
-    # ************************************************
-    # There should be no reason why the density or flow speed is diff 
-    # between 'foil' data structures in the multi-appendage case
-    # so this line is ok
-    qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
+function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, FEMESH)
+    """
+    states is the structural states with BC
+    """
 
-    # ************************************************
-    #     COMPUTE COST FUNCS
-    # ************************************************
-    costFuncs = Dict() # initialize empty costFunc dictionary
-    if appendageOptions["config"] == "wing"
-        ADIM = constants.planformArea
-    elseif appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
-        ADIM = 2 * constants.planformArea
+    if costFunc == "wtip"
+        wtip = ComputeFunctions.compute_maxtipbend(states)
+        fout = wtip
+    end
+    if costFunc == "psitip"
+        psitip = ComputeFunctions.compute_maxtiptwist(states)
+        fout = psitip
+    end
+    if costFunc in ["lift", "cl", "cd"]
+        lift, cl = ComputeFunctions.compute_lift(forces, qdyn, ADIM)
+        if costFunc == "cl"
+            fout = cl
+        elseif costFunc == "lift"
+            fout = lift
+        end
+    end
+    if costFunc in ["moment", "cmy"]
+        moment, cmy = ComputeFunctions.compute_momy(forces, qdyn, ADIM, meanChord)
+        if costFunc == "cmy"
+            fout = cmy
+        elseif costFunc == "moment"
+            fout = moment
+        end
+    end
+    if costFunc in ["cd", "cdi", "cdw", "cdpr", "cdj", "cds"]
+        cd, cdi, cdw, cdpr, cdj, cds = ComputeFunctions.compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, cl, meanChord)
+        fout = [cd, cdi, cdw, cdpr, cdj, cds]
+    end
+    if costFunc in ["cofz", "comy"]
+        cofz, comy = ComputeFunctions.compute_centerofforce(forces, FEMESH)
+        if costFunc == "cofz"
+            fout = cofz
+        elseif costFunc == "comy"
+            fout = comy
+        end
     end
 
-    costFuncs["wtip"] = ComputeFunctions.compute_maxtipbend(states)
-    costFuncs["psitip"] = ComputeFunctions.compute_maxtiptwist(states)
-    costFuncs["lift"], costFuncs["cl"] = ComputeFunctions.compute_lift(forces, qdyn, ADIM)
-    costFuncs["moment"], costFuncs["cmy"] = ComputeFunctions.compute_momy(forces, qdyn, ADIM, meanChord)
-    costFuncs["cd"], costFuncs["cdi"], costFuncs["cdw"], costFuncs["cdpr"], costFuncs["cdj"], costFuncs["cds"] =
-        ComputeFunctions.compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, costFuncs["cl"], meanChord)
-    costFuncs["cofz"], costFuncs["comy"] = ComputeFunctions.compute_centerofforce(forces, FEMESH)
-
-    return costFuncs
+    return fout
 end
 
-function compute_funcsFromfhydro()
+# function compute_solFromDVDict(
+#     DVDictList, solverOptions::Dict, evalFuncs::Vector{String};
+#     iComp=1, CLMain=0.0
+# )
+#     """
+#     Wrapper function to do primal solve and return solution struct
+#     """
 
-end
+#     appendageOptions = solverOptions["appendageList"][iComp]
+#     WING, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain, verbose=true)
 
-function compute_solFromDVDict(
-    DVDictList, solverOptions::Dict, evalFuncs::Vector{String};
-    iComp=1, CLMain=0.0
-)
-    """
-    Wrapper function to do primal solve and return solution struct
-    """
+#     SOL = solveFromDVs(SOLVERPARAMS, FEMESH, WING, STRUT, DVDictList, solverOptions; iComp=iComp, CLMain=CLMain)
 
-    appendageOptions = solverOptions["appendageList"][iComp]
-    WING, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain, verbose=true)
-
-    SOL = solveFromDVs(SOLVERPARAMS, FEMESH, WING, STRUT, DVDictList, solverOptions; iComp=iComp, CLMain=CLMain)
-
-    return SOL
-end
+#     return SOL
+# end
 
 function compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
 
@@ -416,28 +446,28 @@ function compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList
     return SOL
 end
 
-function cost_funcsFromDVs(
-    DVDict::Dict, iComp::Int64, solverOptions::Dict, evalFuncsList::Vector{String};
-    DVDictList=[], CLMain=0.0
-)
-    """
-    Do primal solve with function signature compatible with Zygote
-    """
+# function cost_funcsFromDVs(
+#     DVDict::Dict, iComp::Int64, solverOptions::Dict, evalFuncsList::Vector{String};
+#     DVDictList=[], CLMain=0.0
+# )
+#     """
+#     Do primal solve with function signature compatible with Zygote
+#     """
 
-    appendageOptions = solverOptions["appendageList"][iComp]
-    # Setup
-    DVDictList[iComp] = DVDict
-    FOIL, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions;
-        verbose=false, iComp=iComp, CLMain=CLMain)
-    # Solve
-    SOL = solveFromDVs(SOLVERPARAMS, FEMESH, FOIL, STRUT, DVDictList, appendageOptions, solverOptions;
-        iComp=iComp, CLMain=CLMain)
-    DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-    costFuncs = get_evalFunc(
-        evalFuncsList, SOL.structStates, SOL, DVVec, DVLengths;
-        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
-    return costFuncs
-end
+#     appendageOptions = solverOptions["appendageList"][iComp]
+#     # Setup
+#     DVDictList[iComp] = DVDict
+#     FOIL, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions;
+#         verbose=false, iComp=iComp, CLMain=CLMain)
+#     # Solve
+#     SOL = solveFromDVs(SOLVERPARAMS, FEMESH, FOIL, STRUT, DVDictList, appendageOptions, solverOptions;
+#         iComp=iComp, CLMain=CLMain)
+#     DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+#     costFuncs = get_evalFunc(
+#         evalFuncsList, SOL.structStates, SOL, DVVec, DVLengths;
+#         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
+#     return costFuncs
+# end
 
 function cost_funcsFromPtVec(
     ptVec, nodeConn, appendageParams, iComp::Int64, solverOptions::Dict, evalFunc::String;
@@ -564,7 +594,8 @@ function evalFuncsSens(
             # This is correct btwn fidi and rad so this probably isn't the bug
             @time ∂f∂u = compute_∂f∂u(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
                 # mode="FiDi", # 200 sec
-                mode="RAD", # 100 sec
+                # mode="RAD", # 100 sec
+                mode="ANALYTIC",
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
             )
             @time ∂f∂xPt, ∂f∂xStruct = compute_∂f∂x(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
@@ -668,8 +699,7 @@ function compute_∂f∂x(
         println("Computing hydro derivatives in $(hydromode)")
         dfstaticdXpt = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
 
-        # TODO: PICKUP HERE
-        ∂f∂fstatic = compute_∂costFunc∂fhydro(appendageOptions, appendageParams, solverOptions)
+        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeCon, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
 
         # Any function can be written as some function of the fluid or structural states
         ∂f∂xPt = ∂f∂fstatic * dfstaticdXpt
@@ -716,9 +746,38 @@ function compute_∂f∂x(
     return ∂f∂xPt, ∂f∂xStruct
 end
 
-function compute_∂costFunc∂fhydro(appendageOptions, appendageParams, solverOptions)
+function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+    """
+    Compute the gradient of the cost functions with respect to the hydrodynamic forces
+    """
 
+    # backend = AD.ReverseDiffBackend()
+    backend = AD.ForwardDiffBackend() # works
+    # backend = AD.FiniteDifferencesBackend() #SUPER SLOW
+    # backend = AD.ZygoteBackend()
+    ∂f∂fhydro, = AD.gradient(backend, x -> compute_funcsFromfhydro(
+            costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, SOL.FEMESH),
+        SOL.fHydro)
+
+    return ∂f∂fhydro
 end
+
+function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+    """
+    Compute the gradient of the cost functions with respect to the hydrodynamic forces
+    """
+
+    backend = AD.ForwardDiffBackend() # works
+
+    ∂f∂udirect, = AD.gradient(backend, x -> compute_funcsFromfhydro(
+            costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, SOL.FEMESH),
+        SOL.structStates)
+
+    return ∂f∂udirect
+end
+
+
+
 
 function compute_∂f∂u(
     costFunc::String, SOL::StaticSolution, ptVec, nodeConn, appendageParams::Dict;
@@ -732,13 +791,29 @@ function compute_∂f∂u(
     println("Computing ∂f∂u...")
     ∂f∂u = zeros(DTYPE, 1, length(SOL.structStates))
     DVDictList[iComp] = appendageParams
-    # Do analytic
-    if uppercase(mode) == "ANALYTIC"
-        # TODO: PICKUP HERE
-        ∂f∂fstatic = compute_∂costFunc∂fhydro()
+
+    if uppercase(mode) == "ANALYTIC" # works, but the root portion may be slightly off compared to finite
+
+        _, _, WING, planformArea = precompute_funcsux(SOL.structStates, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        meanChord = mean(WING.chord)
+        qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
+
+        if appendageOptions["config"] == "wing"
+            ADIM = planformArea
+        elseif appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
+            ADIM = 2 * planformArea
+        end
+
+        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+        dfstaticdu = -SOL.SOLVERPARAMS.AICmat # RHS type
 
         # ∂f∂udirect = costfuncsdpending directly on the structural states (tip bend, etc.)
-        ∂f∂u = ∂f∂fstatic * dfstaticdu + ∂f∂udirect
+        ∂f∂udirect = compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+
+        println("∂f∂u:\n", reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu)
+        ∂f∂u = reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu + reshape(∂f∂udirect, 1, length(∂f∂udirect))
+
     elseif uppercase(mode) == "RAD" # works
         backend = AD.ZygoteBackend()
         ∂f∂u, = AD.gradient(
@@ -778,7 +853,7 @@ function compute_∂f∂u(
     end
 
     # Save matrix for debugging?
-    # writedlm("∂f∂u-$(mode).csv", ∂f∂u, ',')
+    writedlm("∂f∂u-$(mode).csv", ∂f∂u, ',')
 
     return ∂f∂u
 end

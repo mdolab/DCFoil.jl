@@ -10,8 +10,10 @@ module CostFunctions
 
 # --- Solver cost funcs ---
 const staticCostFuncs::Vector{String} = [
+    # functions depending on structstates
     "psitip"
     "wtip"
+    # functions depending on hydrodynamic states
     "lift"
     "moment"
     "cl" # total lift coefficient
