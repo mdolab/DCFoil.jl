@@ -895,7 +895,7 @@ function solve_structure(K::Matrix, M::Matrix, F::Vector)
     return q
 end
 
-function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut,
+function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut,
     appendageParams::Dict, appendageOptions::Dict, solverOptions::Dict)
     """
     similar to above but shortcircuiting the hydroside
@@ -945,7 +945,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f,
         # ---------------------------
         #   Build final model
         # ---------------------------
-        strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, zeta, eb_strut, ab_strut, c_strut, appendageOptions["nNodeStrut"], constitutive)
+        strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb_strut, ab_strut, c_strut, appendageOptions["nNodeStrut"], constitutive)
 
     elseif appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
         strutModel = nothing

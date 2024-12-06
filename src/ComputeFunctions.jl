@@ -26,18 +26,18 @@ function compute_maxtiptwist(states)
     return Theta[end]
 end
 
-function compute_lift(fHydro, qdyn, ADIM)
+function compute_lift(fHydro, qdyn, areaRef)
 
     Lift = fHydro[WIND:NDOF:end]
 
     TotalLift = sum(Lift)
 
-    CL = TotalLift / (qdyn * ADIM)
+    CL = TotalLift / (qdyn * areaRef)
     return TotalLift, CL
 end
 
 
-function compute_momy(fHydro, qdyn, ADIM, meanChord)
+function compute_momy(fHydro, qdyn, areaRef, meanChord)
     """
     About midchord
     """
@@ -46,7 +46,7 @@ function compute_momy(fHydro, qdyn, ADIM, meanChord)
 
     TotalMoment = sum(Moment)
 
-    CMY = TotalMoment / (qdyn * ADIM * meanChord)
+    CMY = TotalMoment / (qdyn * areaRef * meanChord)
     return TotalMoment, CMY
 end
 
@@ -63,12 +63,12 @@ function compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, 
     return CDi, Di
 end
 
-function compute_profiledrag(meanChord, qdyn, ADIM, appendageParams, appendageOptions, solverOptions)
+function compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
 
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
-        WSA = 2 * ADIM # both sides
+        WSA = 2 * areaRef # both sides
     elseif appendageOptions["config"] == "t-foil"
-        WSA = 2 * ADIM + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
+        WSA = 2 * areaRef + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
     end
     println("I'm not debugged")
     # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
@@ -82,15 +82,15 @@ function compute_profiledrag(meanChord, qdyn, ADIM, appendageParams, appendageOp
     # --- Torenbeek 1990 ---
     # First term is increase in skin friction due to thickness and quartic is separation drag
     FF = 1 .+ 2.7 .* appendageParams["toc"] .+ 100 .* appendageParams["toc"] .^ 4
-    FF = sum(FF)/length(FF)
+    FF = sum(FF) / length(FF)
     Df = qdyn * WSA * cfittc
     Dpr = Df * FF
-    CDpr = Dpr / (qdyn * ADIM)
+    CDpr = Dpr / (qdyn * areaRef)
 
     return CDpr, Dpr
 end
 
-function compute_wavedrag(CL, meanChord, qdyn, ADIM, appendageParams, solverOptions)
+function compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
     Fnc = solverOptions["Uinf"] / sqrt(9.81 * meanChord)
 
     # Breslin 1957 wave drag for an elliptic hydrofoil
@@ -107,12 +107,12 @@ function compute_wavedrag(CL, meanChord, qdyn, ADIM, appendageParams, solverOpti
         σλ / (π * AR) + γλ / Fnc^2
     ) * CL^2
 
-    Dw = CDw * qdyn * ADIM
+    Dw = CDw * qdyn * areaRef
 
     return CDw, Dw
 end
 
-function compute_spraydrag(appendageParams, qdyn, ADIM)
+function compute_spraydrag(appendageParams, qdyn)
 
     t = appendageParams["toc_strut"][end] * appendageParams["c_strut"][end]
 
@@ -127,36 +127,37 @@ function compute_spraydrag(appendageParams, qdyn, ADIM)
     return CDs, Ds
 end
 
-function compute_junctiondrag(appendageParams, qdyn, ADIM)
+function compute_junctiondrag(appendageParams, qdyn, areaRef)
 
     # From Hörner Chapter 8
     tocbar = 0.5 * (appendageParams["toc"][1] + appendageParams["toc_strut"][1])
     CDt = 17 * (tocbar)^2 - 0.05
     Dj = CDt * (qdyn * (tocbar * appendageParams["c"][1])^2)
-    CDj = Dj / (qdyn * ADIM)
+    CDj = Dj / (qdyn * areaRef)
 
     return CDj, Dj
 end
 
-function compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, CL, meanChord)
+function compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, CL, meanChord)
     """
     All pieces of calmwater drag
     """
 
     CDi, Di = compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
-    CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, ADIM, appendageParams, solverOptions)
+    CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
 
-    CDpr, Dpr = compute_profiledrag(meanChord, qdyn, ADIM, appendageParams, appendageOptions, solverOptions)
+    CDpr, Dpr = compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
 
-    CDj, Dj = compute_junctiondrag(appendageParams, qdyn, ADIM)
+    CDj, Dj = compute_junctiondrag(appendageParams, qdyn, areaRef)
 
-    CDs, Ds = compute_spraydrag(appendageParams, qdyn, ADIM)
+    CDs, Ds = compute_spraydrag(appendageParams, qdyn, areaRef)
 
     CD = CDi + CDw + CDpr + CDj + CDs
+
     Dtot = Di + Dw + Dpr + Dj + Ds
 
-    return CD, CDi, CDw, CDpr, CDj, CDs
+    return CD, CDi, CDw, CDpr, CDj, CDs, Dtot, Di, Dw, Dpr, Dj, Ds
 end
 
 # ************************************************

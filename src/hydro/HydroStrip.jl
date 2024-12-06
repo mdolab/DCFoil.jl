@@ -522,9 +522,9 @@ function compute_AICs(
     # Spline to get lift slope in the right spots if using nonlinear LL
     clαVec = LLOutputs.cla
 
-    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=use_nlll)
+    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=use_nlll)
 
-    return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, planformArea
+    return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i
 end
 
 function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
@@ -811,24 +811,24 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # inode += 1 # increment strip counter
         # end # inbounds
     end
-    return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z), planformArea
+    return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z)
 end
 
-function compute_planform()
+function compute_areas(AEROMESH, FOIL;
+    appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing)
+    """
+    Planform area ref (and WSA?) for nondimensionalization
+    """
 
     # --- Initialize planform area counter ---
     planformArea = 0.0
+    chordVec = FOIL.chord
 
     if STRUT != nothing
-        # strutclαVec = STRUT.clα
         strutChordVec = STRUT.chord
-        strutabVec = STRUT.ab
-        strutebVec = STRUT.eb
     end
 
     jj = 1 # node index
-    # nElemWing = solverOptions["nNodes"] - 1
-    # nElemStrut = solverOptions["nNodeStrut"] - 1
     nElemWing = length(chordVec) - 1
     # Bit circular logic here
     appendageOptions["nNodes"] = nElemWing + 1
@@ -881,94 +881,40 @@ function compute_planform()
 
         # --- Linearly interpolate values based on y loc ---
         # THis chunk of code is super hacky based on assuming wing and t-foil strut order
-        if use_nlll # TODO: FIX LATER TO BE GENERAL
-            xeval = LLSystem.collocationPts[YDIM, :]
-            clα = SolverRoutines.do_linear_interp(xeval, clαVec, yⁿ)
-            sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
-            if inode <= FOIL.nNodes # STBD WING
-                c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, yⁿ)
-                ab = SolverRoutines.do_linear_interp(sDomFoil, abVec, yⁿ)
-                eb = SolverRoutines.do_linear_interp(sDomFoil, ebVec, yⁿ)
-            else
-                if appendageOptions["config"] in ["t-foil", "full-wing"]
-                    if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
-                        # Put negative sign on the linear interp routine bc there is a bug!
-                        sDomFoil = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-
-                        c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, -yⁿ)
-                        ab = SolverRoutines.do_linear_interp(sDomFoil, abVec, -yⁿ)
-                        eb = SolverRoutines.do_linear_interp(sDomFoil, ebVec, -yⁿ)
-                        # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-                        dR1 = -dR1
-                        dR2 = -dR2
-                        dR3 = -dR3
-                    else # strut section
-                        sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-                        c = SolverRoutines.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
-                        ab = SolverRoutines.do_linear_interp(sDomFoil, strutabVec, zⁿ)
-                        eb = SolverRoutines.do_linear_interp(sDomFoil, strutebVec, zⁿ)
-                    end
-                end
-            end
-            # println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f",eb), "\tyn: $(yⁿ)")
+        sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
+        if inode <= FOIL.nNodes # STBD WING
+            c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, yⁿ)
         else
-            if inode <= FOIL.nNodes # STBD WING
-                sDom = aeroMesh[1:FOIL.nNodes, YDIM]
-                clα = SolverRoutines.do_linear_interp(sDom, clαVec, yⁿ)
-                c = SolverRoutines.do_linear_interp(sDom, chordVec, yⁿ)
-                ab = SolverRoutines.do_linear_interp(sDom, abVec, yⁿ)
-                eb = SolverRoutines.do_linear_interp(sDom, ebVec, yⁿ)
-            else
-                if appendageOptions["config"] == "t-foil"
-                    if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
-                        # Put negative sign on the linear interp routine bc there is a bug!
-                        sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-                        yⁿ = -1 * yⁿ
+            if appendageOptions["config"] in ["t-foil", "full-wing"]
+                if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
+                    # Put negative sign on the linear interp routine bc there is a bug!
+                    sDomFoil = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
 
-                        clα = SolverRoutines.do_linear_interp(sDom, clαVec, yⁿ)
-                        c = SolverRoutines.do_linear_interp(sDom, chordVec, yⁿ)
-                        ab = SolverRoutines.do_linear_interp(sDom, abVec, yⁿ)
-                        eb = SolverRoutines.do_linear_interp(sDom, ebVec, yⁿ)
-                        # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-                        dR1 = -dR1
-                        dR2 = -dR2
-                        dR3 = -dR3
-                        # println("I'm a port wing strip")
-                    else
-                        sDom = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-                        clα = SolverRoutines.do_linear_interp(sDom, strutclαVec, zⁿ)
-                        c = SolverRoutines.do_linear_interp(sDom, strutChordVec, zⁿ)
-                        ab = SolverRoutines.do_linear_interp(sDom, strutabVec, zⁿ)
-                        eb = SolverRoutines.do_linear_interp(sDom, strutebVec, zⁿ)
-                        # println("I'm a strut strip")
-                    end
-                elseif appendageOptions["config"] == "full-wing"
-                    if inode <= nElemWing * 2 + 1
-                        # Put negative sign on the linear interp routine bc there is a bug!
-                        sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-                        yⁿ = -1 * yⁿ
-
-                        clα = SolverRoutines.do_linear_interp(sDom, clαVec, yⁿ)
-                        c = SolverRoutines.do_linear_interp(sDom, chordVec, yⁿ)
-                        ab = SolverRoutines.do_linear_interp(sDom, abVec, yⁿ)
-                        eb = SolverRoutines.do_linear_interp(sDom, ebVec, yⁿ)
-                        # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-                        dR1 = -dR1
-                        dR2 = -dR2
-                        dR3 = -dR3
-                    end
+                    c = SolverRoutines.do_linear_interp(sDomFoil, chordVec, -yⁿ)
+                    # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
+                    dR1 = -dR1
+                    dR2 = -dR2
+                    dR3 = -dR3
+                else # strut section
+                    sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
+                    c = SolverRoutines.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
                 end
             end
         end
-
-
 
         # Add rectangle to planform area
         if inode <= FOIL.nNodes
             planformArea += c * Δy
         end
     end
-    return planformArea
+
+    if appendageOptions["config"] == "wing"
+        areaRef = planformArea
+    elseif appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
+        areaRef = 2 * planformArea
+    end
+
+    return areaRef
 end
 
 function compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FiDi")
@@ -989,13 +935,13 @@ function compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appen
     if uppercase(mode) == "FIDI"
         dh = 1e-6
 
-        _, _, _, AIC_i, _, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+        _, _, _, AIC_i, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
         Kff_i = vec(-AIC_i)
 
         for icla in 1:n_cla
             clαVec[icla] += dh
 
-            _, _, _, AIC_f, _, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+            _, _, _, AIC_f, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
             Kff_f = vec(-AIC_f)
 
             clαVec[icla] -= dh
@@ -1060,10 +1006,10 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             depth0 = appendageParams["depth0"]
         end
         AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
-        FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+        FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
         Λ = sweepAng
 
-        _, _, _, AIC_i, _, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+        _, _, _, AIC_i, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
         Kff_i = vec(-AIC_i)
 
         for ii in eachindex(ptVec)
@@ -1109,9 +1055,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
                 depth0 = appendageParams["depth0"]
             end
             AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
-            FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+            FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
-            _, _, _, AIC_f, _, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+            _, _, _, AIC_f, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
             Kff_f = vec(-AIC_f)
 
             dKffdXpt[:, ii] = (Kff_f - Kff_i) / dh

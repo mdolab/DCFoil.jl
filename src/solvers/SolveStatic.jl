@@ -94,7 +94,6 @@ function solveFromDVs(
     uSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE; appendageOptions=appendageOptions)
 
     # --- Get hydroLoads again on solution ---
-    # _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(uSol), structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; 
     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
     fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -152,7 +151,6 @@ function solveFromCoords(
     uSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE; appendageOptions=appendageOptions)
 
     # --- Get hydroLoads again on solution ---
-    # _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(size(uSol), structMesh, elemConn, Λ, chordVec, abVec, ebVec, FOIL, FOIL.U∞, 0.0, elemType; 
     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
     fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -191,7 +189,6 @@ end
 #     if iComp > 1
 #         alphaCorrection = HydroStrip.correct_downwash(iComp, CLMain, DVDictList, solverOptions)
 #     end
-#     _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(FEMESH, WING, size(globalM)[1], DVDict["sweep"], WING.U∞, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT)
 #     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
 #     # K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, DOFBlankingList)
 #     derivMode = "RAD"
@@ -222,10 +219,11 @@ function setup_problemFromCoords(
     globalK, globalM, _ = FEMMethods.assemble(FEMESH, appendageParams["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, x_αb_strut=appendageParams["x_ab_strut"], verbose=verbose)
     alphaCorrection::DTYPE = 0.0
 
-    _, _, _, AIC, _, planformArea = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
 
     # DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, planformArea, alphaCorrection)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, areaRef, alphaCorrection)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH
 end
@@ -341,22 +339,16 @@ function compute_funcs(evalFunc, states::Vector, SOL::StaticSolution,
     # ************************************************
     #     RECOMPUTE FROM u AND x
     # ************************************************
-    FEMESH, forces, WING, planformArea = precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+    FEMESH, forces, WING, areaRef = precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     meanChord = mean(WING.chord)
     qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
-
-    if appendageOptions["config"] == "wing"
-        ADIM = planformArea
-    elseif appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
-        ADIM = 2 * planformArea
-    end
 
     # ************************************************
     #     COMPUTE COST FUNCS
     # ************************************************
 
-    fout = compute_funcsFromfhydro(evalFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, FEMESH)
+    fout = compute_funcsFromfhydro(evalFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, FEMESH)
 
     return fout
 end
@@ -374,10 +366,10 @@ function precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageO
     forces, _, _ = HydroStrip.integrate_hydroLoads(states, constants.AICmat, α₀, rake, DOFBlankingList, constants.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
-    return FEMESH, forces, WING, constants.planformArea
+    return FEMESH, forces, WING, constants.areaRef
 end
 
-function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, FEMESH)
+function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, FEMESH)
     """
     states is the structural states with BC
     """
@@ -391,7 +383,7 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
         fout = psitip
     end
     if costFunc in ["lift", "cl", "cd"]
-        lift, cl = ComputeFunctions.compute_lift(forces, qdyn, ADIM)
+        lift, cl = ComputeFunctions.compute_lift(forces, qdyn, areaRef)
         if costFunc == "cl"
             fout = cl
         elseif costFunc == "lift"
@@ -399,7 +391,7 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
         end
     end
     if costFunc in ["moment", "cmy"]
-        moment, cmy = ComputeFunctions.compute_momy(forces, qdyn, ADIM, meanChord)
+        moment, cmy = ComputeFunctions.compute_momy(forces, qdyn, areaRef, meanChord)
         if costFunc == "cmy"
             fout = cmy
         elseif costFunc == "moment"
@@ -407,7 +399,7 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
         end
     end
     if costFunc in ["cd", "cdi", "cdw", "cdpr", "cdj", "cds"]
-        cd, cdi, cdw, cdpr, cdj, cds = ComputeFunctions.compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, cl, meanChord)
+        cd, cdi, cdw, cdpr, cdj, cds = ComputeFunctions.compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, cl, meanChord)
         fout = [cd, cdi, cdw, cdpr, cdj, cds]
     end
     if costFunc in ["cofz", "comy"]
@@ -595,12 +587,13 @@ function evalFuncsSens(
             @time ∂f∂u = compute_∂f∂u(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
                 # mode="FiDi", # 200 sec
                 # mode="RAD", # 100 sec
-                mode="ANALYTIC",
+                mode="ANALYTIC", # 2 sec
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
             )
             @time ∂f∂xPt, ∂f∂xStruct = compute_∂f∂x(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
                 # mode="RAD", # 100 sec
-                mode="FiDi",
+                # mode="FiDi", # 79
+                mode="ANALYTIC", # 15 sec
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
             )
             println("+---------------------------------+")
@@ -697,12 +690,27 @@ function compute_∂f∂x(
     if uppercase(mode) == "ANALYTIC"
         hydromode = "ANALYTIC"
         println("Computing hydro derivatives in $(hydromode)")
-        dfstaticdXpt = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
 
-        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeCon, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+        if costFunc ∉ ["cd", "cdi"]
+            DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+            u = SOL.structStates[1:end.∉[DOFBlankingList]]
+            dfstaticdXpt = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
 
-        # Any function can be written as some function of the fluid or structural states
-        ∂f∂xPt = ∂f∂fstatic * dfstaticdXpt
+            meanChord = mean(SOL.FOIL.chord)
+            qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
+            areaRef = HydroStrip.compute_areas(SOL.FEMESH, SOL.FOIL; appendageOptions=appendageOptions, STRUT=SOL.STRUT)
+
+            ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
+            ∂f∂fstatic = ∂f∂fstatic[1:end.∉[DOFBlankingList]]
+
+            # TODO: get a reverse mode working with this
+            ∂f∂xPtdirect = compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+            # Any function can be written as some function of the fluid or structural states
+            ∂f∂xPt = reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdXpt + reshape(∂f∂xPtdirect, 1, length(∂f∂xPtdirect))
+        else
+            ∂f∂xPt = dragDeriv()
+        end
 
     elseif uppercase(mode) == "RAD" # WORKS BUT BUGGING WITH NANs prob from lifting line
         backend = AD.ZygoteBackend()
@@ -738,15 +746,63 @@ function compute_∂f∂x(
     appendageParams["theta_f"] -= dh
     ∂f∂xStruct = (f_f - f_i) / dh
 
-    println("writing ∂f∂xPt-$(mode).csv")
-    writedlm("∂f∂xPt-$(mode).csv", ∂f∂xPt, ',')
 
     ∂f∂xPt = reshape(∂f∂xPt, 1, length(∂f∂xPt))
+
+    println("writing ∂f∂xPt-$(mode).csv")
+    writedlm("∂f∂xPt-$(mode).csv", ∂f∂xPt, ',')
 
     return ∂f∂xPt, ∂f∂xStruct
 end
 
-function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+
+    function costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+        toc::Vector{RealOrComplex} = appendageParams["toc"]
+        ab::Vector{RealOrComplex} = appendageParams["ab"]
+        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+
+        WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
+
+        midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+
+        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], zeros(10, 2))
+
+        areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+        meanChord = mean(WING.chord)
+
+        qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
+
+        fout = compute_funcsFromfhydro(costFunc, SOL.structStates, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, FEMESH)
+        return fout
+    end
+
+    # backend = AD.FiniteDifferencesBackend() # this works alright
+    # ∂f∂xPt, = AD.gradient(backend, x -> costFuncFromXpt(
+    #         costFunc, SOL, x, nodeConn, appendageParams, appendageOptions, solverOptions),
+    #     ptVec)
+    ∂f∂xPt = zeros(DTYPE, length(ptVec))
+    f_i = costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+    dh = 1e-5
+    for ii in eachindex(ptVec)
+        ptVec[ii] += dh
+        f_f = costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        ptVec[ii] -= dh
+
+        ∂f∂xPt[ii] = (f_f - f_i) / dh
+    end
+
+
+    return ∂f∂xPt
+end
+
+function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
     """
     Compute the gradient of the cost functions with respect to the hydrodynamic forces
     """
@@ -756,13 +812,13 @@ function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM
     # backend = AD.FiniteDifferencesBackend() #SUPER SLOW
     # backend = AD.ZygoteBackend()
     ∂f∂fhydro, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-            costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, SOL.FEMESH),
+            costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, SOL.FEMESH),
         SOL.fHydro)
 
     return ∂f∂fhydro
 end
 
-function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
     """
     Compute the gradient of the cost functions with respect to the hydrodynamic forces
     """
@@ -770,13 +826,11 @@ function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, ADI
     backend = AD.ForwardDiffBackend() # works
 
     ∂f∂udirect, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-            costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, ADIM, meanChord, SOL.FEMESH),
+            costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, SOL.FEMESH),
         SOL.structStates)
 
     return ∂f∂udirect
 end
-
-
 
 
 function compute_∂f∂u(
@@ -794,24 +848,20 @@ function compute_∂f∂u(
 
     if uppercase(mode) == "ANALYTIC" # works, but the root portion may be slightly off compared to finite
 
-        _, _, WING, planformArea = precompute_funcsux(SOL.structStates, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        _, _, WING, areaRef = precompute_funcsux(SOL.structStates, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
         meanChord = mean(WING.chord)
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
 
-        if appendageOptions["config"] == "wing"
-            ADIM = planformArea
-        elseif appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
-            ADIM = 2 * planformArea
-        end
 
-        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+
+        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
         dfstaticdu = -SOL.SOLVERPARAMS.AICmat # RHS type
 
         # ∂f∂udirect = costfuncsdpending directly on the structural states (tip bend, etc.)
-        ∂f∂udirect = compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, ADIM, meanChord, appendageOptions, appendageParams, solverOptions)
+        ∂f∂udirect = compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
 
-        println("∂f∂u:\n", reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu)
+        # println("∂f∂u:\n", reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu)
         ∂f∂u = reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu + reshape(∂f∂udirect, 1, length(∂f∂udirect))
 
     elseif uppercase(mode) == "RAD" # works
@@ -1028,7 +1078,7 @@ function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solv
     structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), appendageParams, appendageOptions)
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
 
-    WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+    WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
     globalK, _, _ = FEMMethods.assemble(FEMESH, appendageParams["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, x_αb_strut=appendageParams["x_ab_strut"])
 
@@ -1056,7 +1106,7 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
         hydromode = "IMPLICIT" #
         # hydromode = "FiDi" # slow 2024-11-20 IBoundary nodes pollute the derivative
         #  but there may also be another bug further in this chain
-        println("Computing dcladXpt in $(hydromode) mode...")
+        # println("Computing dcladXpt in $(hydromode) mode...")
         dcladXpt = HydroStrip.compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
 
         # writedlm("dcladXpt-$(hydromode).csv", dcladXpt, ",")
@@ -1109,7 +1159,7 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             depth0 = appendageParams["depth0"]
         end
         AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
-        FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+        FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
         dKffdcla = HydroStrip.compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FIDI")
 
@@ -1133,9 +1183,12 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
 
         Kff_i, cla_i = compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
 
-        dKffdX = zeros(DTYPE, length(structStates) + 9, length(structStates) + 9, length(ptVec))
+        DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+        nblank = length(DOFBlankingList)
+
+        dKffdX = zeros(DTYPE, length(structStates) + nblank, length(structStates) + nblank, length(ptVec))
         dcladXpt = zeros(DTYPE, 40, length(ptVec))
-        dKffdXpt = zeros(DTYPE, (length(structStates) + 9)^2, length(ptVec))
+        dKffdXpt = zeros(DTYPE, (length(structStates) + nblank)^2, length(ptVec))
         for ii in eachindex(ptVec)
 
             ptVec[ii] += dh
@@ -1148,7 +1201,6 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             dcladXpt[:, ii] = (cla_f - cla_i) / dh
 
 
-            DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
             dKfu = (Kff_f - Kff_i) * foilTotalStates
             dKffdX[:, :, ii] = (Kff_f - Kff_i) / dh
             dfstaticdXpt[:, ii] = dKfu[1:end.∉[DOFBlankingList]] / dh
@@ -1209,7 +1261,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
 
     LLOutputs, LLSystem, FlowCond = InitModel.init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
-    statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+    statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
     WING = DesignConstants.DynamicFoil(
         statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
@@ -1221,7 +1273,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
 
     dim = NDOF * (size(elemConn)[1] + 1)
 
-    _, _, _, AIC, _, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
 
     allStructuralStates, _ = FEMMethods.put_BC_back(structStates, ELEMTYPE; appendageOptions=appendageOptions)
     foilTotalStates = SolverRoutines.return_totalStates(allStructuralStates, appendageParams, ELEMTYPE; appendageOptions=appendageOptions,)
@@ -1253,7 +1305,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
 
     LLOutputs, LLSystem, FlowCond = InitModel.init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
-    statWingStructModel, _ = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+    statWingStructModel, _ = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
     WING = DesignConstants.DynamicFoil(
         statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
@@ -1265,7 +1317,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     dim = NDOF * (size(elemConn)[1] + 1)
 
-    _, _, _, AIC, _, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
 
 
     return -AIC, LLOutputs.cla

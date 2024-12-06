@@ -138,7 +138,9 @@ function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_
 
 
   LLOutputs, LLSystem, FlowCond = init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
-  statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+
+
+  statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
   WingStructModel = DesignConstants.DynamicFoil(
     statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
@@ -167,66 +169,66 @@ function init_hull(solverOptions::Dict)
   return HullModel
 end
 
-function init_modelFromDVDict(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
-  """
-  This is a wrapper for init_dynamic() that unpacks a DV dictionary
-  """
+# function init_modelFromDVDict(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
+#   """
+#   This is a wrapper for init_dynamic() that unpacks a DV dictionary
+#   """
 
-  # ************************************************
-  #     DVs that need to be unpacked
-  # ************************************************
-  # NOTE: this is not all DVs!
+#   # ************************************************
+#   #     DVs that need to be unpacked
+#   # ************************************************
+#   # NOTE: this is not all DVs!
 
-  if haskey(appendageOptions, "path_to_geom_props")
-    α₀ = DVDict["alfa0"]
-    sweepAng = DVDict["sweep"]
-    rake = DVDict["rake"]
-    span = DVDict["s"] * 2
-    c = DVDict["c"]
-    zeta = DVDict["zeta"]
-    theta_f = DVDict["theta_f"]
-    beta = DVDict["beta"]
-    s_strut = DVDict["s_strut"]
-    c_strut = DVDict["c_strut"]
-    theta_f_strut = DVDict["theta_f_strut"]
-    depth0 = DVDict["depth0"]
+#   if haskey(appendageOptions, "path_to_geom_props")
+#     α₀ = DVDict["alfa0"]
+#     sweepAng = DVDict["sweep"]
+#     rake = DVDict["rake"]
+#     span = DVDict["s"] * 2
+#     c = DVDict["c"]
+#     zeta = DVDict["zeta"]
+#     theta_f = DVDict["theta_f"]
+#     beta = DVDict["beta"]
+#     s_strut = DVDict["s_strut"]
+#     c_strut = DVDict["c_strut"]
+#     theta_f_strut = DVDict["theta_f_strut"]
+#     depth0 = DVDict["depth0"]
 
-    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
-  else
-    α₀ = DVDict["alfa0"]
-    sweepAng = DVDict["sweep"]
-    rake = DVDict["rake"]
-    span = DVDict["s"] * 2
-    c::Vector{RealOrComplex} = DVDict["c"]
-    toc::Vector{RealOrComplex} = DVDict["toc"]
-    ab::Vector{RealOrComplex} = DVDict["ab"]
-    x_ab::Vector{RealOrComplex} = DVDict["x_ab"]
-    # toc = DVDict["toc"]
-    # ab = DVDict["ab"]
-    # x_ab = DVDict["x_ab"]
-    zeta = DVDict["zeta"]
-    theta_f = DVDict["theta_f"]
-    beta = DVDict["beta"]
-    s_strut = DVDict["s_strut"]
-    c_strut = DVDict["c_strut"]
-    toc_strut = DVDict["toc_strut"]
-    ab_strut = DVDict["ab_strut"]
-    x_ab_strut = DVDict["x_ab_strut"]
-    theta_f_strut = DVDict["theta_f_strut"]
-    depth0 = DVDict["depth0"]
-  end
+#     toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+#   else
+#     α₀ = DVDict["alfa0"]
+#     sweepAng = DVDict["sweep"]
+#     rake = DVDict["rake"]
+#     span = DVDict["s"] * 2
+#     c::Vector{RealOrComplex} = DVDict["c"]
+#     toc::Vector{RealOrComplex} = DVDict["toc"]
+#     ab::Vector{RealOrComplex} = DVDict["ab"]
+#     x_ab::Vector{RealOrComplex} = DVDict["x_ab"]
+#     # toc = DVDict["toc"]
+#     # ab = DVDict["ab"]
+#     # x_ab = DVDict["x_ab"]
+#     zeta = DVDict["zeta"]
+#     theta_f = DVDict["theta_f"]
+#     beta = DVDict["beta"]
+#     s_strut = DVDict["s_strut"]
+#     c_strut = DVDict["c_strut"]
+#     toc_strut = DVDict["toc_strut"]
+#     ab_strut = DVDict["ab_strut"]
+#     x_ab_strut = DVDict["x_ab_strut"]
+#     theta_f_strut = DVDict["theta_f_strut"]
+#     depth0 = DVDict["depth0"]
+#   end
 
-  WingModel, StrutModel = init_dynamic(α₀, sweepAng, rake, span, c, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
+#   WingModel, StrutModel = init_dynamic(α₀, sweepAng, rake, span, c, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut, depth0, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
 
-  if solverOptions["run_body"]
-    HullModel = init_hull(solverOptions)
-  else
-    HullModel = nothing
-  end
+#   if solverOptions["run_body"]
+#     HullModel = init_hull(solverOptions)
+#   else
+#     HullModel = nothing
+#   end
 
-  return WingModel, StrutModel, HullModel
-end
+#   return WingModel, StrutModel, HullModel
+# end
 
 function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 
