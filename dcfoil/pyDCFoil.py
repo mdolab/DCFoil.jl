@@ -389,7 +389,7 @@ class DCFOIL:
 
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
-            self.Xb = self.DCFoil.evalFuncsSens(
+            self.Xb, self.structSens = self.DCFoil.evalFuncsSens(
                 self.SOLDICT, self.DVDictList, obj, self.solverOptions, mode="ADJOINT"
             )
             # check shape

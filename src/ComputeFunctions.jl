@@ -91,21 +91,30 @@ function compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendag
 end
 
 function compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
+
     Fnc = solverOptions["Uinf"] / sqrt(9.81 * meanChord)
-
-    # Breslin 1957 wave drag for an elliptic hydrofoil
+    AR = appendageParams["s"] / meanChord
     λ = appendageParams["depth0"] * 2 / appendageParams["s"]
-    σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
 
+    # Breslin 1957 wave drag for an ELLIPTIC hydrofoil
+    # ************************************************
+    #     High Fnc approximation
+    # ************************************************
     if Fnc < 2.0
         println("Warning: Fnc < 2.0. Not valid!")
     end
-
-    AR = appendageParams["s"] / meanChord
+    σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
 
     CDw = (
         σλ / (π * AR) + γλ / Fnc^2
     ) * CL^2
+
+    # # ************************************************
+    # #     Arbitrary Fnc approximation
+    # # ************************************************
+    # σλ, _ = HydroStrip.compute_biplanefreesurface(λ)
+    # besselInt = HydroStrip.compute_besselint(CL, Fnc, AR)
+    # CDw = -σλ / (π * AR) + 8/(π*AR) * besselInt
 
     Dw = CDw * qdyn * areaRef
 
@@ -138,12 +147,11 @@ function compute_junctiondrag(appendageParams, qdyn, areaRef)
     return CDj, Dj
 end
 
-function compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, CL, meanChord)
+function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, CL, meanChord)
     """
     All pieces of calmwater drag
     """
 
-    CDi, Di = compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
 
@@ -151,13 +159,10 @@ function compute_calmwaterdrag(ptVec, nodeConn, appendageParams, appendageOption
 
     CDj, Dj = compute_junctiondrag(appendageParams, qdyn, areaRef)
 
-    CDs, Ds = compute_spraydrag(appendageParams, qdyn, areaRef)
+    CDs, Ds = compute_spraydrag(appendageParams, qdyn)
 
-    CD = CDi + CDw + CDpr + CDj + CDs
 
-    Dtot = Di + Dw + Dpr + Dj + Ds
-
-    return CD, CDi, CDw, CDpr, CDj, CDs, Dtot, Di, Dw, Dpr, Dj, Ds
+    return CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds
 end
 
 # ************************************************

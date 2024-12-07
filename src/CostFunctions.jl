@@ -21,6 +21,8 @@ const staticCostFuncs::Vector{String} = [
     # Centers
     "cofz"
     "comy"
+    # Total drag
+    "cd"
     # Lift-induced drag
     "cdi"
     "fxi"

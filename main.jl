@@ -171,10 +171,12 @@ solverOptions = Dict(
 # ************************************************
 #     Cost functions
 # ************************************************
-evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
+evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter"]
 evalFuncSens = [
-    # "wtip", 
-    "cl", "ksflutter"]
+    # "wtip",
+    "cd",
+    # "cl", "ksflutter"
+]
 
 # ************************************************
 #     I/O
@@ -203,6 +205,5 @@ SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOption
 @show costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, GridStruct, evalFuncSens, solverOptions;
     mode="ADJOINT",
-    # mode="DIRECT",
     # mode="FiDi",
 )

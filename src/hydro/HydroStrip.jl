@@ -251,7 +251,11 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
 
 
     elseif uppercase(mode) == "IMPLICIT"
+        function compute_directMatrix(∂r∂u, ∂r∂xPt)
 
+            Φ = ∂r∂u \ ∂r∂xPt
+            return Φ
+        end
         # ************************************************
         #     First time with current angle of attack
         # ************************************************
@@ -264,7 +268,9 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
         ∂cl∂Γ = diagm(2 * LLOutputs_i.cl ./ LLOutputs_i.Γdist)
         ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
 
-        dcldX_i = ∂cl∂X + ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        # dcldX_i = ∂cl∂X - ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
+        dcldX_i = ∂cl∂X - ∂cl∂Γ * Φ
         # writedlm("dcldX_i-$(mode).csv", dcldX_i, ',')
         # writedlm("∂r∂Γ.csv", ∂r∂Γ, ',')
         # writedlm("∂r∂xPt.csv", ∂r∂xPt, ',')
@@ -281,7 +287,9 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
         ∂cl∂Γ = diagm(2 * LLOutputs_f.cl ./ LLOutputs_f.Γdist)
         ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
 
-        dcldX_f = ∂cl∂X + ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        # dcldX_f = ∂cl∂X - ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
+        dcldX_f = ∂cl∂X - ∂cl∂Γ * Φ
 
     end
 
@@ -290,6 +298,81 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
     return dcladXpt
 end
 
+function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    """
+    Derivative of the induced drag wrt the design variables
+    """
+
+    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
+
+    dcdidXpt = zeros(1, length(ptVec))
+    LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+
+    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+
+        dh = 1e-5
+        idh = 1 / dh
+
+        f_i = LLOutputs_i.CDi
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+            f_f = LLOutputs_f.CDi
+
+            dcdidXpt[1, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+
+
+    elseif uppercase(mode) == "ADJOINT"
+
+        function compute_adjointVec(∂r∂u, ∂f∂uT)
+            ψ = transpose(∂r∂u) \ ∂f∂uT
+            return ψ
+        end
+
+        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # GOOD
+        ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+
+        ∂f∂uT = reshape(∂cdi∂Γ, size(∂cdi∂Γ)..., 1)
+
+        Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
+        dcdidXpt = ∂cdi∂X - transpose(Ψ) * ∂r∂xPt
+
+        # println("∂cdi∂X", ∂cdi∂X)
+        # println("∂cdi∂Γ", ∂cdi∂Γ)
+
+
+    elseif uppercase(mode) == "DIRECT"
+        function compute_directMatrix(∂r∂u, ∂r∂xPt)
+            Φ = ∂r∂u \ ∂r∂xPt
+            return Φ
+        end
+        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+
+        ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # NEW
+        ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions) # NEW
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        dcdidXpt = ∂cdi∂X - reshape(∂cdi∂Γ, 1, length(∂cdi∂Γ)) * Φ
+    end
+
+    # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
+    # println("writing dcdidXpt-$(mode).csv")
+
+    return dcdidXpt
+end
 
 function compute_hydroLLProperties(midchords, chordVec; appendageParams, solverOptions, appendageOptions)
     """
@@ -469,6 +552,21 @@ function compute_biplanefreesurface(λ)
     γλ = 4 / (3π) * ((2 / π) * plamsq^(1.5) * Ek - 1.5 * λ)
 
     return σλ, γλ
+end
+
+function compute_besselint(Uinf, span, Fnh)
+
+    function integrand(θ)
+
+        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * span * (sec(θ))^2 * sin(θ))
+        exponent = exp(-2 * (sec(θ))^2 / Fnh)
+
+        I = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
+        return I
+    end
+
+    I, _ = quadgk(integrand, 0, π / 2)
+
 end
 
 function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)

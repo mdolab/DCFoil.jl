@@ -1118,14 +1118,59 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     return J
 end
 
-# function ChainRulesCore.rrule(::typeof(compute_LLJacobian), Gi; solverParams, mode)
 
-#     function pullback(ybar)
+function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
 
-#         return NoTangent(), ZeroTangent(), NoTangent(), NoTangent()
-#     end
-#     return compute_LLJacobian(Gi; solverParams=solverParams, mode=mode), pullback
-# end
+    function compute_cdi(Gconv)
+        # ---------------------------
+        #   Calculate influence matrix
+        # ---------------------------
+        TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+
+        ux, uy, uz = FlowCond.uvec
+        ζi = LLMesh.sectionVectors
+        dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
+
+
+        Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
+        Gjvji = TV_influence .* Gi
+        Gjvjix = TV_influence[XDIM, :, :] * Gconv
+        Gjvjiy = TV_influence[YDIM, :, :] * Gconv
+        Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
+        Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
+        Gjvji = permutedims(Gjvji, [2, 1])
+        u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
+
+        ui = Gjvji .+ u∞ # Local velocities (nondimensional)
+
+        # This is the Biot--Savart law but nondimensional
+        # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
+        uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+        uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+        coeff = 2.0 / LLMesh.SRef
+
+        # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
+        IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+
+
+        # --- Final outputs ---
+        CDi = IntegratedForces[XDIM] * ux +
+              IntegratedForces[YDIM] * uy +
+              IntegratedForces[ZDIM] * uz
+        return CDi
+    end
+
+    backend = AD.ReverseDiffBackend()
+    ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+    ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
+    # Compares well with finite difference 2024-12-07
+    # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+    # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+    # println("∂cdi∂Γ: $(∂cdi∂Γ)")
+    # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+
+    return ∂cdi∂Γ
+end
 
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
@@ -1229,6 +1274,92 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
     end
 
     return ∂r∂Xpt
+end
+
+function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+
+    ∂cdi∂Xpt = zeros(DTYPE, 1, length(ptVec))
+
+    function compute_cdifromxpt(xPt)
+
+        LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
+        midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        α0 = appendageParams["alfa0"]
+        β0 = appendageParams["beta"]
+        rake = appendageParams["rake"]
+        sweepAng = appendageParams["sweep"]
+        depth0 = appendageParams["depth0"]
+
+        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        LLMesh, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+            npt_wing=npt_wing,
+            npt_airfoil=npt_airfoil,
+            rhof=solverOptions["rhof"],
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
+            options=@ignore_derivatives(options),
+        )
+
+        TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+
+        ux, uy, uz = FlowCond.uvec
+        ζi = LLMesh.sectionVectors
+        dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
+
+        Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
+        Gjvji = TV_influence .* Gi
+        Gjvjix = TV_influence[XDIM, :, :] * Gconv
+        Gjvjiy = TV_influence[YDIM, :, :] * Gconv
+        Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
+        Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
+        Gjvji = permutedims(Gjvji, [2, 1])
+        u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
+
+        ui = Gjvji .+ u∞ # Local velocities (nondimensional)
+
+        # This is the Biot--Savart law but nondimensional
+        # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
+        uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+        uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+        coeff = 2.0 / LLMesh.SRef
+
+        # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
+        IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+
+        # --- Final outputs ---
+        CDi = IntegratedForces[XDIM] * ux +
+              IntegratedForces[YDIM] * uy +
+              IntegratedForces[ZDIM] * uz
+
+        return CDi
+    end
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-5
+        CDi_i = compute_cdifromxpt(ptVec)
+
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            CDi_f = compute_cdifromxpt(ptVec)
+
+            ptVec[ii] -= dh
+
+            ∂cdi∂Xpt[1, ii] = (CDi_f - CDi_i) / dh
+        end
+    elseif uppercase(mode) == "RAD"
+        backend = AD.ReverseDiffBackend()
+        ∂cdi∂Xpt, = AD.jacobian(backend, x -> compute_cdifromxpt(x), ptVec)
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂cdi∂Xpt, = AD.jacobian(backend, x -> compute_cdifromxpt(x), ptVec)
+    end
+
+    return ∂cdi∂Xpt
 end
 
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)

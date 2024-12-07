@@ -33,7 +33,7 @@ for headerName in [
     "CostFunctions", "DesignVariables",
     "struct/MaterialLibrary", "bodydynamics/HullLibrary",
     "hydro/Unsteady",
-    "struct/BeamProperties", 
+    "struct/BeamProperties",
     "solvers/NewtonRaphson",
     "solvers/EigenvalueProblem",
     "solvers/SolverRoutines",
@@ -288,7 +288,12 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
 
         if solverOptions["run_flutter"]
             DVDict = appendageParamsList[1]
-            @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
+            if isnothing(solverOptions["gridFile"])
+                @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
+            else
+                @time global FLUTTERSOL = SolveFlutter.get_sol(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+                @time STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
+            end
             if solverOptions["writeTecplotSolution"]
                 SolveFlutter.write_tecplot(DVDict, FLUTTERSOL, structMesh, outputDir; solverOptions=solverOptions)
             end
@@ -382,23 +387,24 @@ function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions
     return evalFuncsDict
 end # evalFuncs
 
-function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSensList::Vector{String}, solverOptions=Dict();
-    mode="FiDi", CLMain=0.0)
-    """
-    Wrapper to do multiple cost functions at once
-    """
-    costFuncsSensDict = Dict()
+# function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSensList::Vector{String}, solverOptions=Dict();
+#     mode="FiDi", CLMain=0.0)
+#     """
+#     Wrapper to do multiple cost functions at once
+#     """
+#     # costFuncsSensDict = Dict()
 
-    for evalFuncKey in evalFuncSensList
-        funcSens = evalFuncSens(SOLDICT, DVDictList, GridStruct, evalFuncKey, solverOptions; mode=mode, CLMain=CLMain)
-        costFuncsSensDict[evalFuncSens] = funcSens
-    end
+#     # for evalFuncKey in evalFuncSensList
+#     # funcSens = evalFuncSens(SOLDICT, DVDictList, GridStruct, evalFuncKey, solverOptions; mode=mode, CLMain=CLMain)
+#     #     costFuncsSensDict[evalFuncSens] = funcSens
+#     # end
+#     costFuncsSensDict = evalFuncSens(SOLDICT, DVDictList, GridStruct, evalFuncSensList, solverOptions; mode=mode, CLMain=CLMain)
 
-    return costFuncsSensDict
-end
+#     return costFuncsSensDict
+# end
 
-function evalFuncSens(
-    SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSens::String, solverOptions=Dict();
+function evalFuncsSens(
+    SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSensList, solverOptions=Dict();
     mode="FiDi", CLMain=0.0
 )
     """
@@ -414,10 +420,16 @@ function evalFuncSens(
         @time costFuncsSens = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
     end
 
-    if solverOptions["run_static"] && evalFuncSens in staticCostFuncs
+    if solverOptions["run_static"]
+        staticFuncList = []
+        for evalFuncSens in evalFuncSensList
+            if evalFuncSens in staticCostFuncs
+                push!(staticFuncList, evalFuncSens)
+            end
+        end
         STATSOLLIST = SOLDICT["STATIC"]
 
-        @time costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, evalFuncSens, DVDictList, GridStruct, FEMESHList, solverOptions;
+        @time costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, DVDictList, GridStruct, FEMESHList, solverOptions;
             mode=mode, CLMain=CLMain)
     end
 
