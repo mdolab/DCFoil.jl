@@ -12,7 +12,7 @@ module DCFoil
 # ==============================================================================
 using JSON
 using Printf
-using Debugger
+# using Debugger
 # using PrecompileTools: @setup_workload, @compile_workload, @recompile_invalidations
 
 # Set the default data type
@@ -172,7 +172,7 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
             FOIL, STRUT, HULL, FEMESH, _, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
             push!(FEMESHList, FEMESH)
 
-            # println("mesh here",FEMESH.mesh)
+            # println("mesh here\n", FEMESH.mesh)
 
             TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
         end
@@ -315,7 +315,7 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions=Dict())
+function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsList, solverOptions=Dict())
     """
     Common interface to compute cost functions
 
@@ -326,7 +326,7 @@ function evalFuncs(SOLDICT, GridStruct, DVDictList, evalFuncsList, solverOptions
     """
     x = 0.0 # dummy
     evalFuncsDict = Dict()
-    LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+    # LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
     ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
 
     if solverOptions["run_static"]
@@ -404,7 +404,7 @@ end # evalFuncs
 # end
 
 function evalFuncsSens(
-    SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSensList, solverOptions=Dict();
+    SOLDICT::Dict, DVDictList::Vector, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
     mode="FiDi", CLMain=0.0
 )
     """
@@ -429,6 +429,7 @@ function evalFuncsSens(
         end
         STATSOLLIST = SOLDICT["STATIC"]
 
+        GridStruct = MeshIO.Grid(LECoords, nodeConn, TECoords)
         @time costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, DVDictList, GridStruct, FEMESHList, solverOptions;
             mode=mode, CLMain=CLMain)
     end

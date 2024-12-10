@@ -40,7 +40,7 @@ class DCFOILWarning(object):
 
 
 class DCFOIL:
-    def __init__(self, DVDictList: list, evalFuncs, options=None, debug=False):
+    def __init__(self, appendageParamsList: list, evalFuncs, options=None, debug=False):
         """
         Create the flutter solver class
 
@@ -91,7 +91,6 @@ class DCFOIL:
         self.LEcoords = None
         self.TEcoords = None
         self.nodeConn = None
-        self.TEconn = None
 
         self.debugDVGeo = False
 
@@ -106,7 +105,7 @@ class DCFOIL:
         setupTime = time.time()
 
         # if type(DVDictList) == list:
-        self.DVDictList = DVDictList
+        self.appendageParamsList = appendageParamsList
         # else:
         #     DCFOILWarning("DVs must be a list of dictionaries")
 
@@ -119,7 +118,9 @@ class DCFOIL:
                 self.solverOptions[key] = val
             else:
                 self.solverOptions[key] = options[key]
+
         # self.solverOptions = options
+        print(f"Solver options:\n {self.solverOptions}")
 
         # --- Make output directory ---
         Path(self.solverOptions["outputDir"]).mkdir(parents=True, exist_ok=True)
@@ -149,6 +150,9 @@ class DCFOIL:
 
     @staticmethod
     def _getDefaultOptions():
+        """
+        All keys need to be here
+        """
         defaultOptions = {
             # ---------------------------
             #   I/O
@@ -156,17 +160,20 @@ class DCFOIL:
             "name": "default",
             "debug": False,
             "printTiming": True,
+            "gridFile": None,
             "outputDir": "./OUTPUT/",
             "writeTecplotSolution": True,
             # ---------------------------
             #   General appendage options
             # ---------------------------
             "gravityVector": [0.0, 0.0, -9.81],
+            "appendageList": [],
             # ---------------------------
             #   Flow
             # ---------------------------
             "Uinf": 5.0,  # free stream velocity [m/s]
             "rhof": 1000.0,  # fluid density [kg/m³]
+            "use_nlll": True,
             "use_cavitation": False,
             "use_freeSurface": False,
             "use_ventilation": False,
@@ -176,14 +183,16 @@ class DCFOIL:
             # ---------------------------
             # --- Static solve ---
             "run_static": False,
+            "res_jacobian": "analytic",
             # --- Forced solve ---
             "run_forced": False,
-            # "fSweep": np.linspace(0.0, 1.0, 10),
+            "fRange": [0.1, 1000.0],
+            "df": 0.1,
             # --- p-k (Eigen) solve ---
             "run_modal": False,
             "run_flutter": False,
             "nModes": 3,  # Number of struct modes to solve for (starting)
-            # "uRange": [1.0, 5.0],  # Range of velocities to sweep
+            "uRange": [1.0, 5.0],  # Range of velocities to sweep
             "maxQIter": 100,  # max dyn pressure iters
             "rhoKS": 80.0,
         }
@@ -220,25 +229,29 @@ class DCFOIL:
     # ==============================================================================
     #                         Main functions
     # ==============================================================================
-    def addMesh(self, gridFile):
+    def addMesh(self, gridFiles):
         """
         Add component to mesh
 
         shape: (n_nodes, 3)
         """
 
-        # ************************************************
-        #     Add meshes one by one
-        # ************************************************
-        Grid = self.DCFoil.MeshIO.add_mesh(gridFile)
+        # # ************************************************
+        # #     Add meshes one by one
+        # # ************************************************
+        # Grid = self.DCFoil.MeshIO.add_mesh(gridFile)
 
         # ************************************************
         #     Or do all at once
         # ************************************************
-        if len(gridFile) > 1:
-            Grid = self.DCFoil.MeshIO.add_meshfiles(gridFile)
+        meshOptions = {"junction-first": True}
+        if len(gridFiles) > 1:
+            Grid = self.DCFoil.MeshIO.add_meshfiles(gridFiles, meshOptions)
 
         LE_X, node_conn, TE_X = Grid.LEMesh.T, Grid.nodeConn.T, Grid.TEMesh.T
+        # Check shape
+        assert LE_X.shape[1] == 3
+
         if self.LEcoords is None:
             # Set mesh and connectivity
             self.LEcoords = LE_X
@@ -258,7 +271,7 @@ class DCFOIL:
 
         if self.debugDVGeo:
             print(20 * "-")
-            print(f"Read mesh from {gridFile}")
+            print(f"Read mesh from {gridFiles}")
             print(20 * "-")
             print(f"LE coords:\n{self.LEcoords}")
             print(f"TE coords:\n{self.TEcoords}")
@@ -270,20 +283,18 @@ class DCFOIL:
         Solve foil problem
         """
 
-        DVDictList = self.DVDictList
+        appendageParamsList = self.appendageParamsList
         evalFuncs = self.evalFuncs
 
-        LECoords = self.LEcoords
-        LEConn = self.nodeConn
-        TECoords = self.TEcoords
-        TEConn = self.TEconn
+        # --- Julia is transposed! ---
+        LECoords = self.LEcoords.T
+        nodeConn = self.nodeConn.T
+        TECoords = self.TEcoords.T
 
         solverOptions = self.solverOptions
 
-        breakpoint()
-
-        self.DCFoil.init_model(LECoords, LEConn, TECoords, TEConn, solverOptions=solverOptions)
-        SOLDICT = self.DCFoil.run_model(DVDictList, evalFuncs, solverOptions=solverOptions)
+        self.DCFoil.init_model(LECoords, nodeConn, TECoords, solverOptions=solverOptions, appendageParamsList=appendageParamsList)
+        SOLDICT = self.DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs, solverOptions=solverOptions, appendageParamsList=appendageParamsList)
 
         self.SOLDICT = SOLDICT
 
@@ -333,8 +344,13 @@ class DCFOIL:
         if evalFuncs is None:
             evalFuncs = sorted(self.curAP.evalFuncs)
 
-        costFuncs = self.DCFoil.evalFuncs(self.SOLDICT, self.DVDictList, evalFuncs, self.solverOptions)
+        # Make it a list if it's not
+        if type(evalFuncs) is not list:
+            evalFuncs = [evalFuncs]
+
+        costFuncs = self.DCFoil.evalFuncs(self.SOLDICT, self.LEcoords.T, self.nodeConn.T, self.TEcoords.T,self.appendageParamsList, evalFuncs, self.solverOptions)
         # Convert costFuncs to a dictionary to fill 'funcs'
+        breakpoint() #TODO: PICKUP HERE
 
         for key, val in costFuncs.items():
             if key in evalFuncs:
@@ -380,18 +396,24 @@ class DCFOIL:
 
         # Determine all the design variable sizes
         DVGeo = self.DVGeo
-        nGeoDV, nStructDV = self._getDVSizes(DVGeo)
+        # nGeoDV, nStructDV = self._getDVSizes(DVGeo)
 
         # ************************************************
         #     DCFoil sensitivity
         # ************************************************
+        costFuncsSensDict = self.DCFoil.evalFuncsSens(
+            self.SOLDICT, self.appendageParamsList,
+                self.LECoords.T, self.nodeConn.T, self.TECoords.T,
+                self.curAP.evalFuncs, self.solverOptions, mode="ADJOINT"
+        )
         for obj in self.curAP.evalFuncs:
 
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
-            self.Xb, self.structSens = self.DCFoil.evalFuncsSens(
-                self.SOLDICT, self.DVDictList, obj, self.solverOptions, mode="ADJOINT"
-            )
+            self.Xb = costFuncsSensDict[f"{obj}"]["mesh"]
+            self.structSens = costFuncsSensDict[f"{obj}"]["struct"]
+            breakpoint()
+
             # check shape
             assert self.Xb.shape == (self.nnodes * 2, 3)
 
@@ -449,12 +471,17 @@ class DCFOIL:
         for key in dIdx:
             self.dIdx_geo_total[key] = dIdx[key]
 
-    def writeSolution(self, number, baseName):
+    def writeSolution(self, number=None, baseName=None):
         """
-        TODO
+        Very specific
         """
 
         # self.DCFoil.write
+
+        if number is None:
+            number = self.callCounter
+        if baseName is None:
+            baseName = self.curAP.name
 
         # if self.debugDVGeo:
         print("Writing curves to tecplot...")
@@ -513,6 +540,8 @@ class DCFOIL:
                     print(f"Updated point set {ptSetName}")
                     print(f"LE coords:\n{self.LEcoords}")
 
+            # print("Setting aero problem data")
+            # breakpoint()
         # Set the aeroproblem data
         self._setAeroProblemData(aeroProblem)
 

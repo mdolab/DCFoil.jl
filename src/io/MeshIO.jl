@@ -61,7 +61,7 @@ function add_meshfiles(gridFiles, options)
 
 
         println("-"^50)
-        println("Added mesh file: $gridFile with $(size(meshGrid.LEMesh)[2]) nodes")
+        println("Added mesh file: $gridFile with $(size(meshGrid.LEMesh)[2]) points")
         # println("Total nodes: $nNodes")
         # println("LEMesh: $(size(LEMesh))")
         # for (ii, node) in enumerate(eachcol(LEMesh))

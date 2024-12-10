@@ -24,7 +24,7 @@ using Printf, DelimitedFiles
 using Plots
 using FLOWMath: norm_cs_safe
 # using SparseArrays
-using Debugger
+# using Debugger
 
 # --- DCFoil modules ---
 using ..SolverRoutines
@@ -556,17 +556,29 @@ end
 
 function compute_besselint(Uinf, span, Fnh)
 
-    function integrand(θ)
+    function compute_integrand(θ)
 
-        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * span * (sec(θ))^2 * sin(θ))
-        exponent = exp(-2 * (sec(θ))^2 / Fnh)
+        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * 0.5*span * (sec(θ))^2 * sin(θ))
+        exponent = exp(-2 * (sec(θ))^2 / Fnh^2)
 
-        I = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
-        return I
+        
+        int = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
+        
+        return int
     end
 
-    I, _ = quadgk(integrand, 0, π / 2)
+    dθ = 0.01
+    # Starting at 0 breaks this, so start close
+    θ = 0.001:dθ:π/2
+    
+    # # Trapezoid integration seems to introduce oscillations... wrt Fnc
+    # heights = compute_integrand.(θ)
+    # I = 0.5 * dθ * (heights[1] + heights[end] + 2 * sum(heights[2:end-1]))
 
+    # --- Riemann integration ---
+    I = sum(heights * dθ)
+
+    return I
 end
 
 function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
@@ -713,7 +725,6 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
         # --- Linearly interpolate values based on y loc ---
         # THis chunk of code is super hacky based on assuming wing and t-foil strut order
-        @bp
         if use_nlll # TODO: FIX LATER TO BE GENERAL
             xeval = LLSystem.collocationPts[YDIM, :]
             clα = SolverRoutines.do_linear_interp(xeval, clαVec, yⁿ)

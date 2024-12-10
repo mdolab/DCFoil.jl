@@ -12,7 +12,7 @@ module InitModel
 # --- PACKAGES ---
 using Zygote
 using ChainRulesCore: @ignore_derivatives
-using Debugger
+# using Debugger
 
 # --- DCFoil modules ---
 using ..DCFoil: RealOrComplex
@@ -238,6 +238,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
+
   if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
     print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
@@ -278,7 +279,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
 
 
-  if solverOptions["run_body"]
+  if haskey(solverOptions, "run_body") && solverOptions["run_body"]
     HullModel = init_hull(solverOptions)
   else
     HullModel = nothing

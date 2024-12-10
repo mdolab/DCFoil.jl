@@ -72,9 +72,13 @@ if __name__ == "__main__":
     Path(outputDir).mkdir(parents=True, exist_ok=True)
 
     files = {}
-    files["gridFile"] = f"{args.input}/{args.foil}_foil_mesh.dcf"
+    files["gridFile"] = [
+        f"./{args.input}/{args.foil}_foil_stbd_mesh.dcf",
+        f"./{args.input}/{args.foil}_foil_port_mesh.dcf",
+    ]
     files["FFDFile"] = f"{args.input}/{args.foil}_ffd.xyz"
-    
+    # files["FFDFile-port"] = f"{args.input}/{args.foil}_port_ffd.xyz"
+
     filesSETUP = {
         "adflow": "SETUP/setup_adflow.py",
         "constants": "SETUP/setup_constants.py",
@@ -181,7 +185,6 @@ if __name__ == "__main__":
 
         # --- Lift ---
         funcs["cl_con_" + ap.name] = funcs[ap["cl"]] - mycl
-        
 
         if printOK:
             print("funcs in obj: ", funcs)

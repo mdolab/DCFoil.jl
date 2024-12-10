@@ -5,7 +5,7 @@
 # @Desc    :   Main executable for running DCFoil
 
 using Printf, Dates, Profile
-using Debugger: @run
+# using Debugger: @run
 
 
 # This is the way to import it manually in dev mode
@@ -186,7 +186,7 @@ evalFuncSens = [
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
 outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
-    solverOptions["name"],
+solverOptions["name"],
     rudderOptions["material"],
     rad2deg(paramsList[1]["theta_f"]),
     rad2deg(paramsList[1]["sweep"]))
@@ -202,8 +202,8 @@ GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("juncti
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
-@show costFuncs = DCFoil.evalFuncs(SOLDICT, GridStruct, paramsList, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, GridStruct, evalFuncSens, solverOptions;
+@show costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
     mode="ADJOINT",
     # mode="FiDi",
 )

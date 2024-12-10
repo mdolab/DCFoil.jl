@@ -5,7 +5,7 @@ Test to verify that the static solve works without failing
 using Printf
 using LinearAlgebra
 using Dates
-using Debugger: @run
+# using Debugger: @run
 
 include("../src/DCFoil.jl")
 using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, SolveFlutter, SolveForced, SolveStatic, RealOrComplex

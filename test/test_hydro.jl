@@ -7,7 +7,7 @@ using Printf
 
 
 include("../src/DCFoil.jl")
-using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO
+using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO, ComputeFunctions
 using Plots, Printf, Profile
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -533,6 +533,32 @@ function test_biplanefs()
 
     savefig("test_biplanefs.pdf")
     return collect(λRange), σRng, γRng
+end
+
+function test_wavedrag()
+    CL = 1.0
+    chord = 8.0
+    FncRange = 0.6:0.2:10.0
+    solverOptions = Dict(
+        "Uinf" => 5.0,
+    )
+    appendageParams = Dict(
+        "depth0" => 6.72,
+        "s" => 80.0,
+    )
+    areaRef = 1.0 # doesn't matter for this test
+    qdyn = 1.0 # doesn't matter for this test
+    AR = appendageParams["s"] / chord
+    vals = []
+    for Fnc in FncRange
+
+        solverOptions["Uinf"] = Fnc * sqrt(9.81 * chord)
+
+        Cdw, _ = ComputeFunctions.compute_wavedrag(CL, chord, qdyn, areaRef, appendageParams, solverOptions)
+        CDi = Cdw + 1/(π*AR)
+        push!(vals, CDi / CL^2)
+    end
+    return vals, FncRange
 end
 
 # ==============================================================================
@@ -1077,7 +1103,7 @@ end
 # ==============================================================================
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
-
+vals, FncRange = test_wavedrag()
 test_45degwingLL()
 # TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
 # TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")

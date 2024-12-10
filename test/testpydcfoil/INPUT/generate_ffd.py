@@ -58,8 +58,12 @@ if __name__ == "__main__":
     # ---------------------------
     #   Determine FFD box
     # ---------------------------
+    # NSPANTOT = 2 * n_span - 1 + 2
+    NSPANTOT = 2 * n_span - 1
     # --- FFD box ---
     FFDbox = np.zeros((n_chord, n_span, 2, 3))  # [chord, span, thick, 3]
+    FFDbox = np.zeros((n_chord, 2 * n_span - 1, 2, 3))  # [chord, 2*span, thick, 3]
+    # FFDbox = np.zeros((n_chord, NSPANTOT, 2, 3))  # [chord, 2*span, thick, 3]
 
     # --- Margins ---
     zmargin = 10e-3
@@ -70,6 +74,30 @@ if __name__ == "__main__":
     c_dist = np.linspace(args.rootChord, args.tipChord, n_span)
 
     # --- Loop to populate ---
+    for jj in range(1, n_span):
+        s_frac = -s_dist[-1 - jj + 1]
+        for ii in range(n_chord):
+            c_frac = np.linspace(-c_dist[-jj] * 0.5, c_dist[-jj] * 0.5, n_chord)[ii]
+
+            lower = np.array([c_frac, s_frac, -zmargin])
+            upper = np.array([c_frac, s_frac, zmargin])
+
+            if jj == 1:
+                lower[1] -= ymargin
+                upper[1] -= ymargin
+
+            if ii == 0:
+                lower[0] -= xmargin
+                upper[0] -= xmargin
+            elif ii == 1:
+                lower[0] += xmargin
+                upper[0] += xmargin
+            print(lower)
+
+            FFDbox[ii, jj - 1, 0, :] = lower
+            FFDbox[ii, jj - 1, 1, :] = upper
+
+    # STBD
     for jj in range(n_span):
         s_frac = s_dist[jj]
         for ii in range(n_chord):
@@ -78,10 +106,24 @@ if __name__ == "__main__":
             lower = np.array([c_frac, s_frac, -zmargin])
             upper = np.array([c_frac, s_frac, zmargin])
 
-            if jj == 0:
-                lower[1] -= ymargin
-                upper[1] -= ymargin
-            elif jj == n_span - 1:
+            # if jj == 0:
+            #     lower[1] -= ymargin
+            #     upper[1] -= ymargin
+            #     FFDbox[ii, jj + n_span - 1, 0, :] = lower
+            #     FFDbox[ii, jj + n_span - 1, 1, :] = upper
+            #     print(lower)
+            #     lower[1] += 2 * ymargin
+            #     upper[1] += 2 * ymargin
+            #     FFDbox[ii, jj + n_span + 1, 0, :] = lower
+            #     FFDbox[ii, jj + n_span + 1, 1, :] = upper
+            #     print(lower)
+            #     # RESET
+            #     lower[1] -= ymargin
+            #     upper[1] -= ymargin
+
+            #     lower[1] -= ymargin
+            #     upper[1] -= ymargin
+            if jj == n_span - 1:
                 lower[1] += ymargin
                 upper[1] += ymargin
 
@@ -92,21 +134,41 @@ if __name__ == "__main__":
                 lower[0] += xmargin
                 upper[0] += xmargin
 
-            FFDbox[ii, jj, 0, :] = lower
-            FFDbox[ii, jj, 1, :] = upper
+            print(lower)
+            FFDbox[ii, jj + n_span - 1, 0, :] = lower
+            FFDbox[ii, jj + n_span - 1, 1, :] = upper
+            # FFDbox[ii, jj + n_span, 0, :] = lower
+            # FFDbox[ii, jj + n_span, 1, :] = upper
 
     # ---------------------------
     #   Write to file
     # ---------------------------
     ffdfile = open(f"{output_dir}/{args.foil}_ffd.xyz", "w")
     ffdfile.write("1\n")
-    ffdfile.write(f"{n_chord} {n_span} 2\n")
+    ffdfile.write(f"{n_chord} {NSPANTOT} 2\n")
 
     for coordDir in range(3):  # coordinate index 0->x, 1->y
         for kk in range(2):
-            for jj in range(n_span):
+            for jj in range(NSPANTOT):
                 for ii in range(n_chord):
                     ffdfile.write("%.15f " % (FFDbox[ii, jj, kk, coordDir]))
                 ffdfile.write("\n")
 
     ffdfile.close()
+
+    # # ************************************************
+    # #     Port FFD
+    # # ************************************************
+    # FFDbox[:,:,:,1] *= -1 # flip y
+    # ffdfile = open(f"{output_dir}/{args.foil}_port_ffd.xyz", "w")
+    # ffdfile.write("1\n")
+    # ffdfile.write(f"{n_chord} {n_span} 2\n")
+
+    # for coordDir in range(3):  # coordinate index 0->x, 1->y
+    #     for kk in range(2):
+    #         for jj in range(n_span):
+    #             for ii in range(n_chord):
+    #                 ffdfile.write("%.15f " % (FFDbox[ii, jj, kk, coordDir]))
+    #             ffdfile.write("\n")
+
+    # ffdfile.close()

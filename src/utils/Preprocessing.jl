@@ -34,6 +34,11 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     # TECoords = GridStruct.TECoords
     # nodeConn = GridStruct.nodeConn
 
+    # Double check coords shape 
+    # println("LECoords shape: ", size(LECoords))
+    size(LECoords)[1] == 3 || error("LECoords shape is wrong")
+
+
     # ************************************************
     #     Compute 1D quantities
     # ************************************************

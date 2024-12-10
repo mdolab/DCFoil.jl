@@ -70,7 +70,7 @@ function compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendag
     elseif appendageOptions["config"] == "t-foil"
         WSA = 2 * areaRef + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
     end
-    println("I'm not debugged")
+    println("Profile drag calc I'm not debugged")
     # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
     NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
     Re = solverOptions["Uinf"] * meanChord / NU
@@ -93,28 +93,29 @@ end
 function compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
 
     Fnc = solverOptions["Uinf"] / sqrt(9.81 * meanChord)
+    Fnh = solverOptions["Uinf"] / sqrt(9.81 * appendageParams["depth0"])
     AR = appendageParams["s"] / meanChord
     λ = appendageParams["depth0"] * 2 / appendageParams["s"]
 
-    # Breslin 1957 wave drag for an ELLIPTIC hydrofoil
-    # ************************************************
-    #     High Fnc approximation
-    # ************************************************
-    if Fnc < 2.0
-        println("Warning: Fnc < 2.0. Not valid!")
-    end
-    σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
-
-    CDw = (
-        σλ / (π * AR) + γλ / Fnc^2
-    ) * CL^2
-
+    # # Breslin 1957 wave drag for an ELLIPTIC hydrofoil
     # # ************************************************
-    # #     Arbitrary Fnc approximation
+    # #     High Fnc approximation
     # # ************************************************
-    # σλ, _ = HydroStrip.compute_biplanefreesurface(λ)
-    # besselInt = HydroStrip.compute_besselint(CL, Fnc, AR)
-    # CDw = -σλ / (π * AR) + 8/(π*AR) * besselInt
+    # if Fnc < 2.0
+    #     println("Warning: Fnc < 2.0. Not valid!")
+    # end
+    # σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
+
+    # CDw = (
+    #     σλ / (π * AR) + γλ / Fnc^2
+    # ) * CL^2
+
+    # ************************************************
+    #     Arbitrary Fnc approximation
+    # ************************************************
+    σλ, _ = HydroStrip.compute_biplanefreesurface(λ)
+    besselInt = HydroStrip.compute_besselint(solverOptions["Uinf"], appendageParams["s"], Fnh)
+    CDw = (-σλ / (π * AR) + 8/(π*AR) * besselInt) * CL^2
 
     Dw = CDw * qdyn * areaRef
 

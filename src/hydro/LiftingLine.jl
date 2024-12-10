@@ -21,7 +21,7 @@ using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivative
 using Zygote
 using FiniteDifferences
 using PyCall
-using Debugger
+# using Debugger
 
 # --- DCFoil modules ---
 using ..VPM: VPM

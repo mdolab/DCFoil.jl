@@ -12,16 +12,20 @@ from dcfoil import DCFOIL  # make sure to pip install this code
 
 
 def setup(args, comm, files, evalFuncs, outputDir):
-    nNodes = 3
+    nNodes = 5
     nNodesStrut = 3
     mainFoilOptions = {
-        "compName": "mainFoil",
-        "config": "t-foil",
+        "compName": "rudder",
+        # "config": "t-foil",
+        "config": "full-wing",
         "nNodes": nNodes,
         "nNodeStrut": nNodesStrut,
         "xMount": 3.355,
         "material": "cfrp",
         "strut_material": "cfrp",
+        "path_to_geom_props" : "./INPUT/1DPROPS/",
+        "path_to_struct_props" : None,
+        "path_to_geom_props" : None,
     }
     appendageList = [mainFoilOptions]
     solverOptions = {
@@ -41,8 +45,9 @@ def setup(args, comm, files, evalFuncs, outputDir):
         # ---------------------------
         #   Flow
         # ---------------------------
-        "Uinf": 5.0,  # free stream velocity [m/s]
-        "rhof": 1000.0,  # fluid density [kg/m³]
+        "Uinf": 18.0,  # free stream velocity [m/s]
+        "rhof": 1025.0,  # fluid density [kg/m³]
+        "use_nlll": True,
         "use_freeSurface": False,
         "use_cavitation": False,
         "use_ventilation": False,
@@ -52,7 +57,7 @@ def setup(args, comm, files, evalFuncs, outputDir):
         # ---------------------------
         # --- Static solve ---
         "run_static": True,
-        "res_jacobian": "cs",
+        "res_jacobian": "analytic",
         # --- Forced solve ---
         "run_forced": True,
         "run_forced": False,
@@ -70,18 +75,18 @@ def setup(args, comm, files, evalFuncs, outputDir):
         "rhoKS": 80.0,
     }
 
-    DVDict = {  # THIS IS BASED OFF OF THE MOTH RUDDER
-        "alfa0": 6.0,  # initial angle of attack [deg]
+    params = {  # THIS IS BASED OFF OF THE MOTH RUDDER
+        "alfa0": 2.0,  # initial angle of attack [deg]
         "sweep": np.deg2rad(0.0),  # sweep angle [rad]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
-        "c": 0.1 * np.ones(nNodes),  # chord length [m]
-        "s": 0.3,  # semispan [m]
+        "c": np.linspace(0.14,0.095,nNodes),  # chord length [m]
+        "s": 0.333,  # semispan [m]
         "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
-        "toc": 0.12 * np.ones(nNodes),  # thickness-to-chord ratio
+        "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
         "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
         "theta_f": np.deg2rad(15),  # fiber angle global [rad]
         # --- Strut vars ---
-        "depth0": 0.5,  # submerged depth of strut [m] # from Yingqian
+        "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
         "rake": 0.0,  # rake angle about top of strut [deg]
         "beta": 0.0,  # yaw angle wrt flow [deg]
         "s_strut": 1.0,  # [m]
@@ -95,6 +100,6 @@ def setup(args, comm, files, evalFuncs, outputDir):
     debug = True
 
     # --- Instantiate it ---
-    STICKSolver = DCFOIL(DVDictList=[DVDict], evalFuncs=evalFuncs, options=solverOptions, debug=debug)
+    STICKSolver = DCFOIL(appendageParamsList=[params], evalFuncs=evalFuncs, options=solverOptions, debug=debug)
 
     return STICKSolver, solverOptions

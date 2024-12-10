@@ -105,7 +105,7 @@ It also doesn't fit with the data types.
 
 The ```Project.toml``` means this is a Julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```. However, in development mode, just go into julia for this directory and type ```] dev .```.
 
-### Package Dependencies
+### Package Dependencies and Updating
 
 Add package dependencies in the REPL with
 
@@ -126,6 +126,8 @@ Use `Pkg.rm("<module-name>")` to remove a package.
 
 NOTE: If this screws everything up, you can use `Pkg.undo()` to undo the last change (also see `help <your-command>`).
 Chances are if there is a Pkg bug, it has to do with python, which actually is not necessary.
+
+When there is a new version of Julia and you use `juliaup update`, make sure to `Pkg.update()`.
 
 
 #### Python dependencies from the MACH framework

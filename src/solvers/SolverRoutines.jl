@@ -16,7 +16,7 @@ using Zygote
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
 using FLOWMath: abs_cs_safe, atan_cs_safe
 using Printf
-using Debugger
+# using Debugger
 
 # --- DCFoil modules ---
 using ..NewtonRaphson
