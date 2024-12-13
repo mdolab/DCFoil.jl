@@ -21,6 +21,12 @@ struct StaticSolution{TF}
     STRUT::DynamicFoil#{TF,TI,TA}
 end
 
+struct ForcedVibSolution{TC}
+    Zlift::Vector{TC} # lift forces transfer function
+    Zmom::Vector{TC} # moments transfer function
+    RAO::Array{TC,3} # RAOs (nFreq, nDOF, nDOF) in the sens of deflection output from an input force
+end
+
 struct BodyStaticSolution{TF,TA<:AbstractVector{TF}}
     deltaC::TA # control inputs
 end

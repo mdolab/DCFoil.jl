@@ -34,7 +34,7 @@ struct DCFoilSolverParams{TF,TC}
     """
     Kmat::Matrix{TC} # structural stiffness matrix (no BC blanking)
     Mmat::Matrix{TC} # structural mass matrix (no BC blanking)
-    Cmat::Matrix{TC} # structural damping matrix (no BC blanking)
+    Cmat::Matrix{TF} # structural damping matrix (with BC blanking)
     AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
     areaRef::TF # reference area for coefficients [m^2]
     downwashAngles::TF # downwash angles [rad]
@@ -44,8 +44,6 @@ struct DCFoilDynamicConstants{TF,TC,TI,TS,TA<:AbstractVector{TF}}
     """
     For the dynamic hydroelastic solve, there are more constants to store
     """
-    elemType::TS
-    mesh::Matrix{TF}
     Dmat::Matrix{TC} # dynamic matrix 
     AICmat::Matrix{TC} # just the aero part of Dmat 
     extForceVec::TA # external force vector excluding BC nodes

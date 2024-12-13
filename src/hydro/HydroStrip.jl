@@ -181,7 +181,7 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     """
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Hydrodynamics
@@ -262,18 +262,22 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
         LLOutputs_i, _, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
 
+        # println("∂r∂Γ") # 2 sec, so it's fast
         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        # println("∂r∂Xpt") # ACCELERATE THIS!!?
+        # Takes about 4 sec in pure julia and about 20sec from python
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions;
+            # mode="FAD",
+            mode="FiDi", # fastest
+        )
+
         ∂cl∂Γ = diagm(2 * LLOutputs_i.cl ./ LLOutputs_i.Γdist)
         ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
 
         Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
-        # dcldX_i = ∂cl∂X - ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
         dcldX_i = ∂cl∂X - ∂cl∂Γ * Φ
-        # writedlm("dcldX_i-$(mode).csv", dcldX_i, ',')
-        # writedlm("∂r∂Γ.csv", ∂r∂Γ, ',')
-        # writedlm("∂r∂xPt.csv", ∂r∂xPt, ',')
+
 
         # ************************************************
         #     Second time with perturbed angle of attack
@@ -285,10 +289,8 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
 
         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
         ∂cl∂Γ = diagm(2 * LLOutputs_f.cl ./ LLOutputs_f.Γdist)
-        ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
 
         Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
-        # dcldX_f = ∂cl∂X - ∂cl∂Γ * inv(∂r∂Γ) * ∂r∂xPt
         dcldX_f = ∂cl∂X - ∂cl∂Γ * Φ
 
     end
@@ -558,21 +560,21 @@ function compute_besselint(Uinf, span, Fnh)
 
     function compute_integrand(θ)
 
-        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * 0.5*span * (sec(θ))^2 * sin(θ))
+        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * 0.5 * span * (sec(θ))^2 * sin(θ))
         exponent = exp(-2 * (sec(θ))^2 / Fnh^2)
 
-        
+
         int = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
-        
+
         return int
     end
 
     dθ = 0.01
     # Starting at 0 breaks this, so start close
     θ = 0.001:dθ:π/2
-    
+    heights = compute_integrand.(θ)
+
     # # Trapezoid integration seems to introduce oscillations... wrt Fnc
-    # heights = compute_integrand.(θ)
     # I = 0.5 * dθ * (heights[1] + heights[end] + 2 * sum(heights[2:end-1]))
 
     # --- Riemann integration ---
@@ -1076,7 +1078,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
         dh = 1e-6
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
         if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
@@ -1125,7 +1127,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             ptVec[ii] += dh
 
             LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-            midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+            midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
             structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
             if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
@@ -1310,8 +1312,8 @@ function integrate_hydroLoads(
     # This is the hydro force traction vector
     # The problem is the full AIC matrix build (RHS). These states look good
     # fhydro RHS = -Kf * states
-    ForceVector = zeros(DTYPE, length(foilTotalStates))
-    ForceVector_z = Zygote.Buffer(zeros(DTYPE, length(foilTotalStates)))
+    ForceVector = zeros(typeof(fullAIC[1, 1]), length(foilTotalStates))
+    ForceVector_z = Zygote.Buffer(ForceVector)
     ForceVector_z[:] = ForceVector
 
     # Only compute forces not at the blanked BC node
@@ -1359,16 +1361,16 @@ function integrate_hydroLoads(
     end
 
     # --- Total dynamic hydro force calcs ---
-    AbsTotalLift = 0.0
+    CmplxTotalLift = 0.0
     for secLift in Fz
-        AbsTotalLift += abs(secLift)
+        CmplxTotalLift += secLift
     end
-    AbsTotalMoment = 0.0
+    CmplxTotalMoment = 0.0
     for secMom in My
-        AbsTotalMoment += abs(secMom)
+        CmplxTotalMoment += secMom
     end
 
-    return ForceVector, AbsTotalLift, AbsTotalMoment
+    return ForceVector, CmplxTotalLift, CmplxTotalMoment
 end
 
 function apply_BCs(K, C, M, globalDOFBlankingList)

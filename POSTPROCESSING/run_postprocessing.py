@@ -125,7 +125,11 @@ if __name__ == "__main__":
         key = args.cases[ii]
 
         # --- Read in DVDict ---
-        DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        try:
+            DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        except FileNotFoundError:
+            # There's a chance it's the multicomp case
+            DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
         SolverOptions[key] = json.load(open(f"{caseDir}/solverOptions.json"))
 
         # --- Read in funcs ---
@@ -141,7 +145,12 @@ if __name__ == "__main__":
             try:
                 nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
             except KeyError:
-                nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
+                try:
+                    nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
+                except KeyError:
+                    nodes = np.linspace(
+                        0, DVDictDict[key]["s"], SolverOptions[key]["appendageList"][0]["nNodes"], endpoint=True
+                    )
 
     if args.secondset:
         for ii, caseDir in enumerate(caseDirs):
@@ -409,14 +418,16 @@ if __name__ == "__main__":
     for key in args.cases:
         fname = f"{outputDir}/wing-geom-{key}.pdf"
         DVDict = DVDictDict[key]
-        fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"], cm=cm)
-
-        dosave = not not fname
-        plt.show(block=(not dosave))
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+        try:
+            fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"], cm=cm)
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()
+        except KeyError:
+            print("Skipping wing planform plot")
 
     if args.is_static:
         # ---------------------------
@@ -648,7 +659,10 @@ if __name__ == "__main__":
 
         fig.suptitle("Tip frequency response spectra")
 
-        axes[0, 0].set_xlim(right=600)
+        # TODO: PICKUP FIXING THIS THING
+        axes[0, 0].set_xlim(left=0.0, right=300)
+        for ax in axes.flatten():
+            ax.set_ylim(bottom=0.0)
 
         dosave = not not fname
         plt.show(block=(not dosave))

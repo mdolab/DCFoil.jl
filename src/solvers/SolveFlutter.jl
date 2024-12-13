@@ -271,7 +271,7 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
     alphaCorrection::DTYPE = 0.0 #zeros(DTYPE, appendageOptions["nNodes"])
-    global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, copy(globalKs), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
+    global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), elemType, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
 
     # ---------------------------
     #   Test eigensolver

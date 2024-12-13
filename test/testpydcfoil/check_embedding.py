@@ -664,9 +664,10 @@ if __name__ == "__main__":
     if args.deriv:
         print("Testing derivatives...")
 
-        evalFunc = "cl"
+        evalFuncs = ["lift", "cl"]
 
-        DH = 1e-6
+        stepsizes = [1e-4, 1e-5, 1e-6]
+        # DH = 1e-4
 
         funcSensAdj = {}
         funcSensFD = {}
@@ -680,44 +681,102 @@ if __name__ == "__main__":
         # Solve
         STICKSolver(ap)
         # Analytic sensitivities
-        STICKSolver.evalFunctions(ap, funcs, evalFuncs=evalFunc)
+        STICKSolver.evalFunctions(ap, funcs, evalFuncs=evalFuncs)
         print("Analytic funcs", funcs)
-        STICKSolver.evalFunctionsSens(ap, funcSensAdj, evalFuncs=evalFunc)
+        STICKSolver.evalFunctionsSens(ap, funcSensAdj, evalFuncs=evalFuncs)
+        print("Analytic funcs sens", funcSensAdj)
 
         # ---------------------------
         #   Finite difference
         # ---------------------------
-        if "w" in args.geovar:
+        for DH in stepsizes:
+            if "w" in args.geovar:
+                funcSensFD["sweep"] = {}
 
-            dvDict = DVGeo.getValues()
-            dvDict["sweep"] += DH
-            DVGeo.setDesignVars(dvDict)
-            ap.setDesignVars(dvDict)
+                dvDict = DVGeo.getValues()
+                dvDict["sweep"] += DH
+                DVGeo.setDesignVars(dvDict)
+                ap.setDesignVars(dvDict)
 
-            STICKSolver(ap)
-            STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFunc)
+                STICKSolver(ap)
+                STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFuncs)
 
-            dvDict["sweep"] -= DH
-            DVGeo.setDesignVars(dvDict)
-            ap.setDesignVars(dvDict)
+                dvDict["sweep"] -= DH
+                DVGeo.setDesignVars(dvDict)
+                ap.setDesignVars(dvDict)
 
-            funcSensFD["sweep"] = np.divide(funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH)
+                for evalFunc in evalFuncs:
+                    funcSensFD["sweep"][evalFunc] = np.divide(
+                        funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH
+                    )
 
-        if "t" in args.geovar:
-            funcSensFD["twist"] = np.zeros(nTwist)
+            if "t" in args.geovar:
+                funcSensFD["twist"] = np.zeros(nTwist)
 
-            dvDict = DVGeo.getValues()
-            dvDict["twist"] += np.ones(nTwist) * DH
-            DVGeo.setDesignVars(dvDict)
-            ap.setDesignVars(dvDict)
+                dvDict = DVGeo.getValues()
+                dvDict["twist"] += np.ones(nTwist) * DH
+                DVGeo.setDesignVars(dvDict)
+                ap.setDesignVars(dvDict)
 
-            STICKSolver(ap)
-            STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFunc)
+                STICKSolver(ap)
+                STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFuncs)
 
-            dvDict["twist"] -= np.ones(nTwist) * DH
-            DVGeo.setDesignVars(dvDict)
-            ap.setDesignVars(dvDict)
+                dvDict["twist"] -= np.ones(nTwist) * DH
+                DVGeo.setDesignVars(dvDict)
+                ap.setDesignVars(dvDict)
 
-            funcSensFD["twist"] = np.divide(
-                funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], [DH] * nTwist
-            )
+                for evalFunc in evalFuncs:
+                    funcSensFD["twist"][evalFunc] = np.divide(
+                        funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH
+                    )
+
+            if "r" in args.geovar:
+                funcSensFD["taper"] = {}
+
+                for evalFunc in evalFuncs:
+                    funcSensFD["taper"][evalFunc] = np.zeros(2)
+
+                for ii in range(2):
+                    dvDict = DVGeo.getValues()
+                    dvDict["taper"][ii] += DH
+                    DVGeo.setDesignVars(dvDict)
+                    ap.setDesignVars(dvDict)
+
+                    STICKSolver(ap)
+                    STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFuncs)
+
+                    dvDict["taper"][ii] -= DH
+                    DVGeo.setDesignVars(dvDict)
+                    ap.setDesignVars(dvDict)
+
+                    for evalFunc in evalFuncs:
+                        funcSensFD["taper"][evalFunc][ii] = np.divide(
+                            funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH
+                        )
+
+            if "p" in args.geovar:
+                funcSensFD["span"] = {}
+
+                dvDict = DVGeo.getValues()
+                dvDict["span"] += DH
+                DVGeo.setDesignVars(dvDict)
+                ap.setDesignVars(dvDict)
+
+                STICKSolver(ap)
+                STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFuncs)
+
+                dvDict["span"] -= DH
+                DVGeo.setDesignVars(dvDict)
+                ap.setDesignVars(dvDict)
+
+                for evalFunc in evalFuncs:
+                    funcSensFD["span"][evalFunc] = np.divide(
+                        funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH
+                    )
+
+            print(20 * "=")
+            print(f"FD funcs dh = {DH}")
+            print(pp(funcSensFD))
+
+        print("Analytic funcsSens:")
+        print(pp(funcSensAdj))

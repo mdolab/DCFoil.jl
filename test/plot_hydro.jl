@@ -271,7 +271,7 @@ function test_sears()
     labels = []
     kPlot = 0.01:0.5:10.5
     for k in kPlot
-        Sk = HydroStrip.compute_sears(k)
+        Sk, S0k = HydroStrip.compute_sears(k)
         ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)
@@ -289,7 +289,7 @@ function test_sears()
     SkSweep = []
     CkSweep = []
     for k in kSweep
-        Sk = HydroStrip.compute_sears(k)
+        Sk,S0k = HydroStrip.compute_sears(k)
         ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)

@@ -901,7 +901,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     similar to above but shortcircuiting the hydroside
     """
 
-    midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Geometry
@@ -1013,6 +1013,9 @@ function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, n
     # # Mass proportional damping
     # massPropConst = 2 * ζ * ω₁
     # stiffPropConst = 0.0
+
+
+    println("Natural frequencies for struct. damping:\n$(fns)")
 
     return massPropConst, stiffPropConst
 end

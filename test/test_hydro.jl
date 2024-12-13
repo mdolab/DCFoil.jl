@@ -9,6 +9,8 @@ using Printf
 include("../src/DCFoil.jl")
 using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO, ComputeFunctions
 using Plots, Printf, Profile
+using DelimitedFiles
+
 # ==============================================================================
 #                         Nodal hydrodynamic forces
 # ==============================================================================
@@ -538,7 +540,7 @@ end
 function test_wavedrag()
     CL = 1.0
     chord = 8.0
-    FncRange = 0.6:0.2:10.0
+    FncRange = 0.6:0.1:10.0
     solverOptions = Dict(
         "Uinf" => 5.0,
     )

@@ -23,6 +23,7 @@ using ..SolverRoutines: SolverRoutines
 # using ..BeamProperties
 # using ..DesignConstants: DynamicFoil
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using FLOWMath: atan_cs_safe
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions, appendageParams)
     """
@@ -58,15 +59,39 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     #     dz = midchords[ZDIM, inds[2]] - midchords[ZDIM, inds[1]]
     #     spanwiseVectors[:, ii] = [dx, dy, dz]
     # end
-    n1vec = nodeConn[1,:]
-    n2vec = nodeConn[2,:]
+    n1vec = nodeConn[1, :]
+    n2vec = nodeConn[2, :]
     dxVec = midchords[XDIM, n2vec] - midchords[XDIM, n1vec]
     dyVec = midchords[YDIM, n2vec] - midchords[YDIM, n1vec]
     dzVec = midchords[ZDIM, n2vec] - midchords[ZDIM, n1vec]
     spanwiseVectors = [dxVec; dyVec; dzVec] # 3 x nNodes
+    # Compute the angle
+    sweepAngle = -atan_cs_safe.(dxVec, dyVec)
 
 
-    # twistDist
+    # ---------------------------
+    #   Twist distribution
+    # ---------------------------
+    # Compute the twist distribution based off of angle about midchord
+    dxVec = chordVectors[XDIM, :]
+    dzVec = chordVectors[ZDIM, :]
+    twistVec = atan_cs_safe.(dzVec, dxVec)
+    if abs(π - abs(twistVec[1])) < MEPSLARGE
+        twistVec = twistVec .- π
+    end
+    # println("Twist vec: ", twistVec)
+
+
+    # ---------------------------
+    #   Sweep distribution
+    # ---------------------------
+    sweepAngles, qtrChords = compute_ACSweep(LECoords, TECoords, nodeConn, 0.25)
+    Λ = sum(sweepAngles) / length(sweepAngles)
+    # if abs(π - abs(sweepAngles[1])) > π / 2
+    #     sweepAngles = sweepAngles .+ π
+    # end
+    println("Sweep angle: ", Λ)
+
 
     # println("Midchords: ")
     # for xyz in eachcol(midchords)
@@ -86,12 +111,38 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     s_loc_q = LinRange(0.0, semispan, nNodes)
     s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1)))
     chordLengthsWork::Vector{RealOrComplex} = SolverRoutines.do_linear_interp(s_loc, chordLengths, s_loc_q)
+    qtrChordWork = SolverRoutines.do_linear_interp(s_loc, qtrChords, s_loc_q)
 
 
-
-    return midchords, chordLengthsWork, spanwiseVectors
+    return midchords, chordLengthsWork, spanwiseVectors, Λ
 end
 
+function compute_ACSweep(LECoords, TECoords, nodeConn, e=0.25)
+    """
+    Compute the approximate sweep angle of the aerodynamic center (1/4 chord assumption)
+    """
+
+    # --- Compute the approximate sweep angle ---
+    # Get the quarter chord line
+    qtrChord = ((1 - e) * LECoords .+ e * TECoords) / 2
+    n1vec = nodeConn[1, :]
+    n2vec = nodeConn[2, :]
+    dxVec = qtrChord[XDIM, n2vec] - qtrChord[XDIM, n1vec]
+    dyVec = qtrChord[YDIM, n2vec] - qtrChord[YDIM, n1vec]
+    dzVec = qtrChord[ZDIM, n2vec] - qtrChord[ZDIM, n1vec]
+
+    # Compute the angle
+    sweepAngles = zeros(RealOrComplex, size(dxVec))
+    for (ii, dy) in enumerate(dyVec)
+        if dy < 0.0
+            sweepAngles[ii] = atan_cs_safe(dxVec[ii], -dy)
+        else
+            sweepAngles[ii] = atan_cs_safe(dxVec[ii], dy)
+        end
+    end
+
+    return sweepAngles, qtrChord
+end
 function get_1DBeamPropertiesFromFile(fname)
     """
     Get beam structural properties from file

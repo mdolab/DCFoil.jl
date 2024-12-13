@@ -53,59 +53,59 @@ const loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solveFromDVs(
-    SOLVERPARAMS::DCFoilSolverParams, FEMESH::StructMesh, FOIL::DynamicFoil, STRUT::DynamicFoil, DVDictList,
-    solverOptions;
-    iComp=1, CLMain=0.0
-)
-    """
-    Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
-    """
+# function solveFromDVs(
+#     SOLVERPARAMS::DCFoilSolverParams, FEMESH::StructMesh, FOIL::DynamicFoil, STRUT::DynamicFoil, DVDictList,
+#     solverOptions;
+#     iComp=1, CLMain=0.0
+# )
+#     """
+#     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
+#     """
 
-    DVDict = DVDictList[iComp]
-    appendageOptions = solverOptions["appendageList"][iComp]
-    outputDir = solverOptions["outputDir"]
+#     DVDict = DVDictList[iComp]
+#     appendageOptions = solverOptions["appendageList"][iComp]
+#     outputDir = solverOptions["outputDir"]
 
-    # Initial guess on unknown deflections (excluding BC nodes)
-    DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
-        appendageOptions=appendageOptions, solverOptions=solverOptions)
-    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
+#     # Initial guess on unknown deflections (excluding BC nodes)
+#     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+#     fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+#         appendageOptions=appendageOptions, solverOptions=solverOptions)
+#     q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
 
-    if lowercase(solverOptions["res_jacobian"]) == "cs"
-        mode = "CS"
-    elseif lowercase(solverOptions["res_jacobian"]) == "rad"
-        mode = "RAD"
-    elseif lowercase(solverOptions["res_jacobian"]) == "analytic"
-        mode = "Analytic"
-    end
+#     if lowercase(solverOptions["res_jacobian"]) == "cs"
+#         mode = "CS"
+#     elseif lowercase(solverOptions["res_jacobian"]) == "rad"
+#         mode = "RAD"
+#     elseif lowercase(solverOptions["res_jacobian"]) == "analytic"
+#         mode = "Analytic"
+#     end
 
-    # Actual solve
-    qSol, _ = SolverRoutines.converge_resNonlinear(compute_residualsFromDV, compute_∂r∂uFromDV, q_ss0, DVDictList;
-        is_verbose=true,
-        solverParams=SOLVERPARAMS,
-        appendageOptions=appendageOptions,
-        solverOptions=solverOptions,
-        mode=mode,
-        iComp=iComp,
-        CLMain=CLMain,
-    )
-    # qSol = q # just use pre-solve solution
-    uSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE; appendageOptions=appendageOptions)
+#     # Actual solve
+#     qSol, _ = SolverRoutines.converge_resNonlinear(compute_residualsFromDV, compute_∂r∂uFromDV, q_ss0, DVDictList;
+#         is_verbose=true,
+#         solverParams=SOLVERPARAMS,
+#         appendageOptions=appendageOptions,
+#         solverOptions=solverOptions,
+#         mode=mode,
+#         iComp=iComp,
+#         CLMain=CLMain,
+#     )
+#     # qSol = q # just use pre-solve solution
+#     uSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE; appendageOptions=appendageOptions)
 
-    # --- Get hydroLoads again on solution ---
-    # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
-        appendageOptions=appendageOptions, solverOptions=solverOptions)
-    # global Kf = AIC
+#     # --- Get hydroLoads again on solution ---
+#     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
+#     fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+#         appendageOptions=appendageOptions, solverOptions=solverOptions)
+#     # global Kf = AIC
 
 
-    write_sol(uSol, fHydro, ELEMTYPE, outputDir)
+#     write_sol(uSol, fHydro, ELEMTYPE, outputDir)
 
-    STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro, FEMESH, SOLVERPARAMS, FOIL, STRUT)
+#     STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro, FEMESH, SOLVERPARAMS, FOIL, STRUT)
 
-    return STATSOL
-end
+#     return STATSOL
+# end
 
 function solveFromCoords(
     LECoords, nodeConn, TECoords, SOLVERPARAMS::DCFoilSolverParams, FEMESH::StructMesh, FOIL::DynamicFoil, STRUT::DynamicFoil, appendageParamsList,
@@ -116,13 +116,13 @@ function solveFromCoords(
     Essentially solve [K]{u} = {f} (see paper for actual equations and algorithm)
     """
 
-    DVDict = appendageParamsList[iComp]
+    appendageParams = appendageParamsList[iComp]
     appendageOptions = solverOptions["appendageList"][iComp]
     outputDir = solverOptions["outputDir"]
 
     # Initial guess on unknown deflections (excluding BC nodes)
     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
-    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+    fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
 
@@ -152,7 +152,7 @@ function solveFromCoords(
 
     # --- Get hydroLoads again on solution ---
     # appendageOptions=appendageOptions, STRUT=STRUT, strutChordVec=strutChordVec, strutabVec=strutabVec, strutebVec=strutebVec)
-    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, DVDict["alfa0"], DVDict["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+    fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
 
@@ -223,7 +223,7 @@ function setup_problemFromCoords(
     areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
 
     # DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, globalK, AIC, areaRef, alphaCorrection)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, copy(Float64.(globalK)), AIC, areaRef, alphaCorrection)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH
 end
@@ -576,7 +576,7 @@ function evalFuncsSens(
 
     elseif uppercase(mode) == "RAD" #RAD the whole thing # BUSTED with mutating arrays :(
         backend = AD.ZygoteBackend()
-        @time funcsSens, = AD.gradient(backend, (x) -> cost_funcsFromPtVec(
+        funcsSens, = AD.gradient(backend, (x) -> cost_funcsFromPtVec(
                 x, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
                 DVDictList=DVDictList, CLMain=CLMain),
             ptVec)
@@ -589,37 +589,48 @@ function evalFuncsSens(
         DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
         u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
-        @time ∂r∂xPt, ∂r∂xStruct = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
-            # mode="FiDi", # about 981 sec
-            # mode="RAD", # about 282 sec
-            mode="ANALYTIC", # 10 sec
-            appendageOptions=appendageOptions, solverOptions=solverOptions, CLMain=CLMain, iComp=iComp)
+        tX = @elapsed begin
+            ∂r∂xPt, ∂r∂xStruct = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
+                # mode="FiDi", # about 981 sec
+                # mode="RAD", # about 282 sec
+                mode="ANALYTIC", # 10 sec
+                appendageOptions=appendageOptions, solverOptions=solverOptions, CLMain=CLMain, iComp=iComp)
+        end
 
-        # println("Computing ∂r∂u...")
-        @time ∂r∂u = compute_∂r∂u(u, LECoords, TECoords, nodeConn, "Analytic";
-            appendageParamsList=DVDictList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
+        tStiff = @elapsed begin
+            ∂r∂u = compute_∂r∂u(u, LECoords, TECoords, nodeConn, "Analytic";
+                appendageParamsList=DVDictList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
+        end
 
-
+        println("∂r∂X:\t$(tX) sec\n∂r∂u:\t$(tStiff) sec")
         for evalFuncSensKey in evalFuncSensList
-            @time ∂f∂u = compute_∂f∂u(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
-                # mode="FiDi", # 200 sec
-                # mode="RAD", # 100 sec
-                mode="ANALYTIC", # 2 sec
-                appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
-            )
-            @time ∂f∂xPt, ∂f∂xStruct = compute_∂f∂x(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
-                # mode="RAD", # 100 sec
-                # mode="FiDi", # 79
-                mode="ANALYTIC", # 15 sec
-                appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
-            )
+            tFuncU = @elapsed begin
+                ∂f∂u = compute_∂f∂u(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
+                    # mode="FiDi", # 200 sec
+                    # mode="RAD", # 100 sec
+                    mode="ANALYTIC", # 2 sec
+                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                )
+            end 
+            tFuncX = @elapsed begin
+                ∂f∂xPt, ∂f∂xStruct = compute_∂f∂x(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
+                    # mode="RAD", # 100 sec
+                    # mode="FiDi", # 79
+                    mode="ANALYTIC", # 15 sec
+                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                )
+            end
+            println("∂f∂u:\t$(tFuncU) sec\n∂f∂x:\t$(tFuncX) sec")
 
             println("+---------------------------------+")
             println("| Computing adjoint: $(evalFuncSensKey)")
             println("+---------------------------------+")
             # should be (n_u x n_f) a column vector!
             ∂f∂uT = reshape(∂f∂u, 1, length(∂f∂u)) # we only do one cost func at a time
-            psiVec = compute_adjointVec(∂r∂u, ∂f∂uT; solverParams=solverParams, appendageOptions=appendageOptions)
+            tadjoint = @elapsed begin
+                psiVec = compute_adjointVec(∂r∂u, ∂f∂uT; solverParams=solverParams, appendageOptions=appendageOptions)
+            end
+            println("Ψ solve:\t$(tadjoint) sec")
 
             # println("∂f∂xPt", ∂f∂xPt)
             # println("∂r∂xPt",  ∂r∂xPt)
@@ -641,7 +652,7 @@ function evalFuncsSens(
             )
             # println("Adjoint sensitivities for $(evalFuncSensKey): ", funcsSens)
 
-            # writedlm("funcsSens-mesh-$(evalFuncSens)-$(mode).csv", funcsSens["mesh"], ',')
+            # writedlm("funcsSens-mesh-$(evalFuncSensKey)-$(mode).csv", funcsSens["mesh"], ',')
             # writedlm("funcsSens-struct-$(evalFuncSens)-$(mode).csv", funcsSens["struct"], ',')
 
             funcsSensOut[evalFuncSensKey] = funcsSens
@@ -658,10 +669,10 @@ function evalFuncsSens(
         DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
         u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
-        @time ∂r∂xPt = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
+        ∂r∂xPt = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
             mode="ANALYTIC",
             appendageOptions=appendageOptions, solverOptions=solverOptions, CLMain=CLMain, iComp=iComp)
-        @time ∂r∂u = compute_∂r∂u(u, LECoords, TECoords, nodeConn, "Analytic";
+        ∂r∂u = compute_∂r∂u(u, LECoords, TECoords, nodeConn, "Analytic";
             appendageParamsList=DVDictList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
         println("+---------------------------------+")
         println("| Computing direct: $(evalFuncSens)")
@@ -670,10 +681,10 @@ function evalFuncsSens(
             solverParams=solverParams)
 
         for evalFuncSens in evalFuncSensList
-            @time ∂f∂u = compute_∂f∂u(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
+            ∂f∂u = compute_∂f∂u(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
                 mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
             )
-            @time ∂f∂xPt = compute_∂f∂x(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
+            ∂f∂xPt = compute_∂f∂x(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
                 mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
             )
 
@@ -805,7 +816,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
-        midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
 
@@ -830,7 +841,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
-        midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
 
@@ -862,9 +873,9 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
         end
     elseif costFunc == "cd"
 
-        # @time dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-        @time dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="ADJOINT") # DIRECT and ADJOINT agree and are good
-        # @time dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="DIRECT")
+        #dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+        dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="ADJOINT") # DIRECT and ADJOINT agree and are good
+        #dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="DIRECT")
         # backend = AD.ForwardDiffBackend()
         backend = AD.ZygoteBackend()
 
@@ -1066,7 +1077,7 @@ function compute_∂r∂x(
         ∂Kss∂x_u = compute_∂KssU∂x(u, ptVec, nodeConn, appendageOptions, appendageParamsList[1], solverOptions)
         # writedlm("dKssdx.csv", ∂Kss∂x_u, ',')
 
-        # println("hydro partials")
+
         # It is strange that this is zero
         # hydromode = "FiDi" # This appears to be right
         hydromode = "ANALYTIC"
@@ -1135,7 +1146,7 @@ end
 function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solverOptions)
     LECoords, TECoords = Utilities.repack_coords(xVec, 3, length(xVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
@@ -1218,7 +1229,7 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
         dim = length(structStates) + length(DOFBlankingList)
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
         if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
@@ -1317,7 +1328,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
@@ -1388,7 +1399,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     toc::Vector{RealOrComplex} = appendageParams["toc"]
     ab::Vector{RealOrComplex} = appendageParams["ab"]
@@ -1458,7 +1469,7 @@ function compute_∂r∂u(
         # ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
 
         # elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
-        #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
+        #     ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
     elseif uppercase(mode) == "CS" # Complex step
 

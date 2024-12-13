@@ -50,6 +50,18 @@ function compute_momy(fHydro, qdyn, areaRef, meanChord)
     return TotalMoment, CMY
 end
 
+function compute_kscl(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+    """
+    Compute the KS function for the spanwise lift coefficient
+        Needed for the ventilation constraint
+    """
+    LLOutputs, _, _ = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+    
+    clmax = compute_KS(LLOutputs.cl,)
+    
+    return clmax
+end
+
 # ************************************************
 #     Drag calculations
 # ************************************************
@@ -92,15 +104,15 @@ end
 
 function compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
 
-    Fnc = solverOptions["Uinf"] / sqrt(9.81 * meanChord)
     Fnh = solverOptions["Uinf"] / sqrt(9.81 * appendageParams["depth0"])
     AR = appendageParams["s"] / meanChord
     λ = appendageParams["depth0"] * 2 / appendageParams["s"]
-
+    
     # # Breslin 1957 wave drag for an ELLIPTIC hydrofoil
     # # ************************************************
     # #     High Fnc approximation
     # # ************************************************
+    # Fnc = solverOptions["Uinf"] / sqrt(9.81 * meanChord)
     # if Fnc < 2.0
     #     println("Warning: Fnc < 2.0. Not valid!")
     # end

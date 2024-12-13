@@ -1163,6 +1163,7 @@ function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
     backend = AD.ReverseDiffBackend()
     ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
     ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
+
     # Compares well with finite difference 2024-12-07
     # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
     # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
@@ -1175,7 +1176,7 @@ end
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordVec, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
@@ -1209,13 +1210,9 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
 
     ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
 
-    # ************************************************
-    #     Finite difference
-    # ************************************************
-    if uppercase(mode) == "FIDI"
-        dh = 1e-5
-        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    function compute_resFromXpt(xPt)
+        LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
+        midchords, chordVec, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         α0 = appendageParams["alfa0"]
         β0 = appendageParams["beta"]
@@ -1237,40 +1234,38 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
         TV_influence = compute_TVinfluences(FlowCond, LLSystem)
         # --- Pack up parameters for the NL solve ---
         solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
-        resVec_i = compute_LLresiduals(Gconv; solverParams=solverParams)
+        resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
+        return resVec
+    end
 
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-5
 
-            LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-            midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        resVec_i = compute_resFromXpt(ptVec) # initialize the solver
 
-            α0 = appendageParams["alfa0"]
-            β0 = appendageParams["beta"]
-            rake = appendageParams["rake"]
-            sweepAng = appendageParams["sweep"]
-            depth0 = appendageParams["depth0"]
+        # @inbounds begin # no speedup
+            for ii in eachindex(ptVec)
+                ptVec[ii] += dh
 
-            airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-            LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
-                npt_wing=npt_wing,
-                npt_airfoil=npt_airfoil,
-                rhof=solverOptions["rhof"],
-                # airfoilCoordFile=airfoilCoordFile,
-                airfoil_ctrl_xy=airfoilCtrlXY,
-                airfoil_xy=airfoilXY,
-                options=@ignore_derivatives(options),
-            )
+                resVec_f = compute_resFromXpt(ptVec)
 
-            TV_influence = compute_TVinfluences(FlowCond, LLSystem)
-            # --- Pack up parameters for the NL solve ---
-            solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
-            resVec_f = compute_LLresiduals(Gconv; solverParams=solverParams)
+                ptVec[ii] -= dh
 
-            ptVec[ii] -= dh
+                ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+            end
+        # end
+    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to 4 sec in pure julia
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteBackend()
+        ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
 
-            ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
-        end
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
+
     end
 
     return ∂r∂Xpt
@@ -1283,7 +1278,7 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     function compute_cdifromxpt(xPt)
 
         LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-        midchords, chordVec, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordVec, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         α0 = appendageParams["alfa0"]
         β0 = appendageParams["beta"]

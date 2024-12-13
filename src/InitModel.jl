@@ -236,7 +236,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   uRange = solverOptions["uRange"]
 
 
-  midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+  midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
 
   if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])

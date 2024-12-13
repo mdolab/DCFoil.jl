@@ -91,9 +91,12 @@ function compute_sears(k::DTYPE)
 
     H02 = H₀²ᵣ + 1im * H₀²ᵢ
     H12 = H₁²ᵣ + 1im * H₁²ᵢ
-    S = 2 * 1im / (π * k) / (H12 + 1im * H02)
+    Sk = 2 * 1im / (π * k) / (H12 + 1im * H02)
+    
+    # Leading edge Sears function
+    S0k = exp(-1im * k) * Sk
 
-    return S
+    return Sk, S0k
 end
 
 function compute_pade(k)

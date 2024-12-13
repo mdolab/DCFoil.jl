@@ -33,6 +33,7 @@ for headerName in [
     "CostFunctions", "DesignVariables",
     "struct/MaterialLibrary", "bodydynamics/HullLibrary",
     "hydro/Unsteady",
+    "hydro/OceanWaves",
     "struct/BeamProperties",
     "solvers/NewtonRaphson",
     "solvers/EigenvalueProblem",
@@ -153,6 +154,16 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
         write(io, stringData)
     end
 
+    # ---------------------------
+    #   Write DVs and options
+    # ---------------------------
+    for iComp in eachindex(appendageParamsList)
+        appendageParams = appendageParamsList[iComp]
+        stringData = JSON.json(appendageParams)
+        open(outputDir * @sprintf("init_DVDict-comp%03d.json", iComp), "w") do io
+            write(io, stringData)
+        end
+    end
 
     # ---------------------------
     #   Component structs
@@ -245,9 +256,11 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
 
             # STATSOL = SolveStatic.solve(FEMESH, DVDict, solverOptions, appendageOptions)
             if isnothing(solverOptions["gridFile"])
-                @time STATSOL = SolveStatic.compute_solFromDVDict(appendageParamsList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
+                STATSOL = SolveStatic.compute_solFromDVDict(appendageParamsList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
             else
-                @time STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
+                tStatic = @elapsed begin
+                    STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
+                end
             end
             if solverOptions["writeTecplotSolution"]
                 SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
@@ -273,7 +286,9 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
         #                         Forced vibration solution
         # ==============================================================================
         if solverOptions["run_forced"]
-            @time global forcedCostFuncs = SolveForced.solve(FEMESH, DVDict, solverOptions, appendageOptions)
+            # @time global forcedCostFuncs = SolveForced.solve(FEMESH, DVDict, solverOptions, appendageOptions)
+            @time VIBSOL = SolveForced.solveFromCoords(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
+            SOLDICT["FORCED"] = VIBSOL
         end
 
         # ==============================================================================
@@ -387,21 +402,6 @@ function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsL
     return evalFuncsDict
 end # evalFuncs
 
-# function evalFuncsSens(SOLDICT::Dict, DVDictList::Vector, GridStruct, evalFuncSensList::Vector{String}, solverOptions=Dict();
-#     mode="FiDi", CLMain=0.0)
-#     """
-#     Wrapper to do multiple cost functions at once
-#     """
-#     # costFuncsSensDict = Dict()
-
-#     # for evalFuncKey in evalFuncSensList
-#     # funcSens = evalFuncSens(SOLDICT, DVDictList, GridStruct, evalFuncKey, solverOptions; mode=mode, CLMain=CLMain)
-#     #     costFuncsSensDict[evalFuncSens] = funcSens
-#     # end
-#     costFuncsSensDict = evalFuncSens(SOLDICT, DVDictList, GridStruct, evalFuncSensList, solverOptions; mode=mode, CLMain=CLMain)
-
-#     return costFuncsSensDict
-# end
 
 function evalFuncsSens(
     SOLDICT::Dict, DVDictList::Vector, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
@@ -417,7 +417,9 @@ function evalFuncsSens(
     # ---------------------------
     costFuncsSens = 0.0 # scope
     if solverOptions["run_flutter"]
-        @time costFuncsSens = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
+        tFlutter = @elapsed begin
+            costFuncsSens = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
+        end
     end
 
     if solverOptions["run_static"]
@@ -430,8 +432,11 @@ function evalFuncsSens(
         STATSOLLIST = SOLDICT["STATIC"]
 
         GridStruct = MeshIO.Grid(LECoords, nodeConn, TECoords)
-        @time costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, DVDictList, GridStruct, FEMESHList, solverOptions;
-            mode=mode, CLMain=CLMain)
+        tStatic = @elapsed begin
+            costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, DVDictList, GridStruct, FEMESHList, solverOptions;
+                mode=mode, CLMain=CLMain)
+        end
+        println("Static sensitivity time:\t$(tStatic) sec")
     end
 
     return costFuncsSens

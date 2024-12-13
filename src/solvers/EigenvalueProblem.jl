@@ -7,7 +7,8 @@ function compute_eigsolve(K, M, nEig; issym=true)
 
     # TODO: ok this is most definitely NOT the way it should be in the production version because this
     # is super expensive but whatever
-    A = inv(M) * K # Applied mathematicians are probably rolling over in their graves right now
+    A::Matrix{Float64} = inv(M) * K # Applied mathematicians are probably rolling over in their graves right now
+    # println("A: ", typeof(A))
     eValsAll = eigvals(A)
     eVecsAll = eigvecs(A)
 

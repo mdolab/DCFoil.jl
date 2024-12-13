@@ -56,7 +56,7 @@ def setup(args, comm, files: dict):
     #   SWEEP
     # ---------------------------
     if "w" in args.geovar:
-         # Determine the number of sections that have sweep control
+        # Determine the number of sections that have sweep control
         nSweep = nRefAxPts // 2
 
         print(f"{nSweep} foil sweep vars", flush=True)
@@ -241,7 +241,6 @@ def setup(args, comm, files: dict):
             s = geo.extractS("global")
             for ii in range(1, nSpan):
                 # C[ii, 1] += val * s[ii]
-
 
                 C[ii + nSpan - 1, 1] += val.item() * s[ii + nSpan - 1]
                 C[nSpan - ii - 1, 1] += -val.item() * s[ii + nSpan - 1]

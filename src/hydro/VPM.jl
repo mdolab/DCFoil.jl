@@ -189,13 +189,15 @@ function compute_panelMatrix(Airfoil)
     divℓ = 1.0 ./ ℓmat
     ξ = divℓ .* (mat1 .+ mat2)
     η = divℓ .* (mat3 .+ mat4)
+    ηSq = η .^ 2
+    ξSq = ξ .^ 2
 
     # Matrix
     ellmatxi1 = ℓmat .- ξ
     arg1 = η .* ℓmat
-    arg2 = η .^ 2 .+ ξ .^ 2 .- ξ .* ℓmat
-    numerator = η .^ 2 + ξ .^ 2
-    denominator = η .^ 2 .+ (-ellmatxi1) .^ 2
+    arg2 = ηSq .+ ξSq .- ξ .* ℓmat
+    numerator = ηSq + ξSq
+    denominator = ηSq .+ (-ellmatxi1) .^ 2
 
     # Φ = tan⁻¹( ηl / (η² + (ξ - l)²))
     Φ = atan_cs_safe.(arg1, arg2)

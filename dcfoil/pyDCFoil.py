@@ -293,8 +293,17 @@ class DCFOIL:
 
         solverOptions = self.solverOptions
 
-        self.DCFoil.init_model(LECoords, nodeConn, TECoords, solverOptions=solverOptions, appendageParamsList=appendageParamsList)
-        SOLDICT = self.DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs, solverOptions=solverOptions, appendageParamsList=appendageParamsList)
+        self.DCFoil.init_model(
+            LECoords, nodeConn, TECoords, solverOptions=solverOptions, appendageParamsList=appendageParamsList
+        )
+        SOLDICT = self.DCFoil.run_model(
+            LECoords,
+            nodeConn,
+            TECoords,
+            evalFuncs,
+            solverOptions=solverOptions,
+            appendageParamsList=appendageParamsList,
+        )
 
         self.SOLDICT = SOLDICT
 
@@ -348,13 +357,22 @@ class DCFOIL:
         if type(evalFuncs) is not list:
             evalFuncs = [evalFuncs]
 
-        costFuncs = self.DCFoil.evalFuncs(self.SOLDICT, self.LEcoords.T, self.nodeConn.T, self.TEcoords.T,self.appendageParamsList, evalFuncs, self.solverOptions)
+        costFuncs = self.DCFoil.evalFuncs(
+            self.SOLDICT,
+            self.LEcoords.T,
+            self.nodeConn.T,
+            self.TEcoords.T,
+            self.appendageParamsList,
+            evalFuncs,
+            self.solverOptions,
+        )
         # Convert costFuncs to a dictionary to fill 'funcs'
-        breakpoint() #TODO: PICKUP HERE
 
         for key, val in costFuncs.items():
-            if key in evalFuncs:
-                funcs[key] = val
+            # if key in evalFuncs:  #
+            funcKey = key.split("-")[0]
+            if funcKey in evalFuncs:
+                funcs[f"{aeroProblem.name}_{funcKey}"] = val
 
         self.costFuncs = costFuncs
 
@@ -402,26 +420,31 @@ class DCFOIL:
         #     DCFoil sensitivity
         # ************************************************
         costFuncsSensDict = self.DCFoil.evalFuncsSens(
-            self.SOLDICT, self.appendageParamsList,
-                self.LECoords.T, self.nodeConn.T, self.TECoords.T,
-                self.curAP.evalFuncs, self.solverOptions, mode="ADJOINT"
+            self.SOLDICT,
+            self.appendageParamsList,
+            self.LEcoords.T,
+            self.nodeConn.T,
+            self.TEcoords.T,
+            evalFuncs,
+            self.solverOptions,
+            mode="ADJOINT",
         )
-        for obj in self.curAP.evalFuncs:
+        breakpoint()
+        for obj in evalFuncs:
 
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
-            self.Xb = costFuncsSensDict[f"{obj}"]["mesh"]
+            self.Xb = costFuncsSensDict[f"{obj}"]["mesh"].T
             self.structSens = costFuncsSensDict[f"{obj}"]["struct"]
-            breakpoint()
 
-            # check shape
+            # --- check shape ---
             assert self.Xb.shape == (self.nnodes * 2, 3)
 
             # FFD sensitivities
             self.evalFFDSens()
 
             # Now add derivatives to funcsSens
-            key = self.curAP.name + "_%s" % obj
+            key = f"{self.curAP.name}_{obj}"
             funcsSens[key] = {}
 
             # ============================
@@ -431,29 +454,29 @@ class DCFOIL:
 
             finalEvalSensTime = time.time()
 
-        if self.getOption("printTiming") and self.comm.rank == 0:
-            print("+--------------------------------------------------+")
-            # print("|")
-            # print("| Adjoint Times:")
-            # print("|")
-            # for f in evalFuncs:
-            #     print(
-            #         "| %-30s: %10.3f sec"
-            #         % (
-            #             "Adjoint Solve Time - %s" % (f),
-            #             adjointEndTime[f] - adjointStartTime[f],
-            #         )
-            #     )
-            #     print(
-            #         "| %-30s: %10.3f sec"
-            #         % (
-            #             "Total Sensitivity Time - %s" % (f),
-            #             totalSensEndTime[f] - adjointEndTime[f],
-            #         )
-            #     )
-            print("|")
-            print("| %-30s: %10.3f sec" % ("Complete Sensitivity Time", finalEvalSensTime - startEvalSensTime))
-            print("+--------------------------------------------------+")
+        # if self.getOption("printTiming") and self.comm.rank == 0:
+        #     print("+--------------------------------------------------+")
+        #     # print("|")
+        #     # print("| Adjoint Times:")
+        #     # print("|")
+        #     # for f in evalFuncs:
+        #     #     print(
+        #     #         "| %-30s: %10.3f sec"
+        #     #         % (
+        #     #             "Adjoint Solve Time - %s" % (f),
+        #     #             adjointEndTime[f] - adjointStartTime[f],
+        #     #         )
+        #     #     )
+        #     #     print(
+        #     #         "| %-30s: %10.3f sec"
+        #     #         % (
+        #     #             "Total Sensitivity Time - %s" % (f),
+        #     #             totalSensEndTime[f] - adjointEndTime[f],
+        #     #         )
+        #     #     )
+        #     print("|")
+        #     print("| %-30s: %10.3f sec" % ("Complete Sensitivity Time", finalEvalSensTime - startEvalSensTime))
+        #     print("+--------------------------------------------------+")
 
         return funcsSens
 
@@ -464,7 +487,6 @@ class DCFOIL:
 
         # Get the aero mesh sensitivities
         dIdx = self.DVGeo.totalSensitivity(self.Xb, self.curAP.ptSetName)
-
 
         self.dIdx_geo_total = {}
 

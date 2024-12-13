@@ -32,8 +32,8 @@ tipMass = false
 
 # Uncomment here
 run_static = true
-# run_forced = true
-# run_modal = true
+run_forced = true
+run_modal = true
 # run_flutter = true
 debug = true
 # tipMass = true
@@ -48,6 +48,7 @@ nModes = 4 # number of modes to solve for;
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
+fSweep = range(0.1, 300.0, 1000) # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -157,7 +158,7 @@ solverOptions = Dict(
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fRange" => [fSweep[1], fSweep[end]], # forcing frequency sweep [Hz]
-    "df" => 0.1, # frequency step size
+    "df" => 1, # frequency step size
     "tipForceMag" => tipForceMag,
     # --- p-k (Eigen) solve ---
     "run_modal" => run_modal,
@@ -175,7 +176,7 @@ evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter"]
 evalFuncSens = [
     # "wtip",
     "cd",
-    # "cl", "ksflutter"
+    "cl", "ksflutter"
 ]
 
 # ************************************************
@@ -202,7 +203,7 @@ GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("juncti
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
-@show costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
     mode="ADJOINT",
     # mode="FiDi",

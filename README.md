@@ -60,6 +60,11 @@ You can alternatively run the code from the terminal with
 NOTE:
 `run_main.sh` is a convenience script for the above. Running julia using shell script `nohup` does not work but a regular `nohup` command is fine
 
+### Helpful macros
+Use `@time` to time lines of code (accounts for garbage collection too).
+`t = @elapsed` is OK
+`@show`
+
 ### Conventions
 
 Please use this coding convention:

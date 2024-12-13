@@ -23,9 +23,9 @@ def setup(args, comm, files, evalFuncs, outputDir):
         "xMount": 3.355,
         "material": "cfrp",
         "strut_material": "cfrp",
-        "path_to_geom_props" : "./INPUT/1DPROPS/",
-        "path_to_struct_props" : None,
-        "path_to_geom_props" : None,
+        "path_to_geom_props": "./INPUT/1DPROPS/",
+        "path_to_struct_props": None,
+        "path_to_geom_props": None,
     }
     appendageList = [mainFoilOptions]
     solverOptions = {
@@ -79,7 +79,7 @@ def setup(args, comm, files, evalFuncs, outputDir):
         "alfa0": 2.0,  # initial angle of attack [deg]
         "sweep": np.deg2rad(0.0),  # sweep angle [rad]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
-        "c": np.linspace(0.14,0.095,nNodes),  # chord length [m]
+        "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
         "s": 0.333,  # semispan [m]
         "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
         "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
