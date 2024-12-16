@@ -72,7 +72,7 @@ function compute_theodorsen(k::DTYPE)
     return ans
 end
 
-function compute_sears(k::DTYPE)
+function compute_sears(k)
     """
     Sears transfer function for an airfoil subject to sinusoidal gusts.
     This is potential flow theory.
@@ -92,11 +92,13 @@ function compute_sears(k::DTYPE)
     H02 = H₀²ᵣ + 1im * H₀²ᵢ
     H12 = H₁²ᵣ + 1im * H₁²ᵢ
     Sk = 2 * 1im / (π * k) / (H12 + 1im * H02)
-    
+
     # Leading edge Sears function
     S0k = exp(-1im * k) * Sk
 
-    return Sk, S0k
+    ans = [Sk, S0k]
+
+    return ans
 end
 
 function compute_pade(k)

@@ -25,11 +25,13 @@ using FileIO
 using ..InitModel, ..HydroStrip, ..BeamProperties
 using ..FEMMethods
 using ..SolveStatic
-using ..SolutionConstants
+using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM
 using ..SolverRoutines
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..DCFoilSolution
 using ..OceanWaves
+
+using Debugger
 
 # ==============================================================================
 #                         COMMON VARIABLES
@@ -229,17 +231,21 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
         extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
         extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
     end
-    # TODO: PICKUP here
-    extForceVec = compute_fextwave(fSweep * 2π,)
+
+    extForceVec, Aw = compute_fextwave(fSweep * 2π, FEMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
 
     LiftDyn = zeros(ComplexF64, length(fSweep)) # * 0im
     MomDyn = zeros(ComplexF64, length(fSweep)) # * 0im
-    TipBendDyn = zeros(length(fSweep)) # * 0im
-    TipTwistDyn = zeros(length(fSweep)) # * 0im
 
     ũout = zeros(ComplexF64, length(fSweep), length(u))
+
+    # --- Initialize transfer functions ---
+    # These describe the output deflection relation wrt an input force vector
     GenXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList), length(u) - length(DOFBlankingList))
-    DeflectionXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
+    # These RAOs describe the outputs relation wrt an input wave amplitude
+    LiftRAO = zeros(ComplexF64, length(fSweep))
+    MomRAO = zeros(ComplexF64, length(fSweep))
+    DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
 
     dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
     Ms = SOLVERPARAMS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
@@ -286,7 +292,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             fextω = extForceVec[:, f_ctr]
             H = inv(D) # system transfer function matrix for a force
             # qSol = real(H * extForceVec)
-            qSol = H * fextω
+            qSol = H * fextω[1:end.∉[DOFBlankingList]]
             ũSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE)
             # uSol = real(ũSol)
             uSol = abs.(ũSol) # proper way to do it
@@ -304,9 +310,9 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             LiftDyn[f_ctr] = L̃
             MomDyn[f_ctr] = M̃
 
-            # phaseAngle = angle(L̃)
             GenXferFcn[f_ctr, :, :] = H
 
+            DeflectionRAO[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
 
             # # DEBUG QUIT ON FIRST FREQ
             # break
@@ -314,34 +320,53 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
         end
     end
 
+    LiftRAO = LiftDyn ./ Aw
+    MomRAO = MomDyn ./ Aw
 
     # ************************************************
     #     Write solution out to files
     # ************************************************
-    write_sol(fSweep, ũout, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, GenXferFcn, outputDir)
+    write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn, outputDir)
 
     SOL = DCFoilSolution.ForcedVibSolution(LiftDyn, MomDyn, GenXferFcn)
 
-    # # TODO:
-    # costFuncs = nothing
-    # costFuncs = SolverRoutines.compute_costFuncs()
 
     return SOL
 end
 
-function compute_fextwave(ωRange, FlowCond, appendageParams)
+function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
 
     # TODO: PICKUP HERE
     # --- Wave loads ---
-    fAey, mAey = OceanWaves.compute_waveloads(chordLengths, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, appendageParams["depth0"], stripWidths, claVec)
+    ω_wave = 0.125 # Peak wave frequency
+    Awsig = 0.5 # Wave amplitude [m]
+    ωe = OceanWaves.compute_encounterFreq(π, ω_wave, FlowCond.Uinf)
 
-    extForceVec = zeros(ComplexF64, length(FEMESH.elemConn) * NDOF, length(ωRange))
+    # TODO: PICKUP here
+    stripVecs = HydroStrip.get_strip_vecs(AEROMESH, appendageOptions)
+    spanLocs = AEROMESH.mesh[:, YDIM]
+    nVec = stripVecs
+    stripWidths = .√(nVec[:, XDIM] .^ 2 + nVec[:, YDIM] .^ 2 + nVec[:, ZDIM] .^ 2) # length of elem
+    xeval = LLSystem.collocationPts[YDIM, :]
+    claVec = SolverRoutines.do_linear_interp(xeval, LLOutputs.cla, spanLocs)
 
-    return extForceVec
+    # Elevator chord lengths
+    chordLengths = vcat(WING.chord, WING.chord[2:end])
+    fAey, mAey, Aw = OceanWaves.compute_waveloads(chordLengths, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, appendageParams["depth0"], stripWidths, claVec)
+
+    extForceVec = zeros(ComplexF64, length(spanLocs) * NDOF, length(ωRange))
+
+    # --- Populate the force vector ---
+    # println("shape:$(size(fAey))")
+    # println("shape:$(size(extForceVec[WIND:NDOF:end, :]))")
+    extForceVec[WIND:NDOF:end, :] .= transpose(fAey)
+    extForceVec[ΘIND:NDOF:end, :] .= transpose(mAey)
+
+    return extForceVec, Aw
 end
 
 
-function write_sol(fSweep, ũout, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO, outputDir="./OUTPUT/")
+function write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn, outputDir="./OUTPUT/")
     """
     Write out the dynamic results
     """
@@ -368,16 +393,25 @@ function write_sol(fSweep, ũout, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO
     TipTwistDyn = abs.(ΦVec[:, end])
     save(fname, "data", TipTwistDyn)
 
+    # --- Deflection RAO ---
+    fname = workingOutput * "deflectionRAO.jld2"
+    save(fname, "data", DeflectionRAO)
+
     # --- Write dynamic lift ---
-    fname = workingOutput * "totalLiftDyn.jld2"
-    save(fname, "data", abs.(LiftDyn))
+    fname = workingOutput * "totalLiftRAO.jld2"
+    save(fname, "data", abs.(LiftRAO))
 
     # --- Write dynamic moment ---
-    fname = workingOutput * "totalMomentDyn.jld2"
-    save(fname, "data", abs.(MomDyn))
+    fname = workingOutput * "totalMomentRAO.jld2"
+    save(fname, "data", abs.(MomRAO))
 
-    fname = workingOutput * "RAO.jld2"
-    save(fname, "data", RAO)
+    # --- General transfer function ---
+    fname = workingOutput * "GenXferFcn.jld2"
+    save(fname, "data", GenXferFcn)
+
+    # --- Wave amplitude spectrum A(ω) ---
+    fname = workingOutput * "waveAmpSpectrum.jld2"
+    save(fname, "data", Aw)
 
 end
 

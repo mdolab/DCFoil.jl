@@ -383,11 +383,11 @@ def plot_forced(
     fig,
     axes,
     fExtSweep,
-    dynTipBending,
-    dynTipTwisting,
-    dynLift,
-    dynMoment,
-    rao,
+    waveAmpSpectrum,
+    deflectionRAO,
+    dynLiftRAO,
+    dynMomentRAO,
+    genRAO,
     flowSpeed,
     fs_lgd,
     elem,
@@ -400,16 +400,12 @@ def plot_forced(
     ----------
     fExtSweep : _type_
         external forcing frequency sweep
-    dynTipBending : _type_
-        frequency response of tip bending [m]
-    dynTipTwisting : _type_
-        frequency response of tip twisting [deg]
-    dynLift : _type_
-        frequency response of lift [N]
-    dynMoment : _type_
-        frequency response of moment [N-m] about the midchord
-    rao : _type_
-        response amplitude operator
+    dynLiftRAO : _type_
+        frequency RAO of lift [N]
+    dynMomentRAO : _type_
+        frequency RAO of moment [N-m] about the midchord
+    genRAO : _type_
+        General response amplitude operator of deflections wrt vectorized forces
     flowSpeed : _type_
         flow speed [m/s]
     fs_lgd : _type_
@@ -434,58 +430,29 @@ def plot_forced(
     #     Plot tip deflections
     # ************************************************
     ax = axes[0, 0]
-    yLabel = r"$\frac{w}{w_{f0}}$"
-    nondim = dynTipBending[0]  # nondimensionalize by the static value
-    # ax.plot(fExtSweep, dynTipBending / nondim, c=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    # yLabel = r"$\frac{w}{A($\omega$)}$"
+    # nondim = deflectionRAO[0]  # nondimensionalize by the static value
 
     # yLabel = r"$\left|H_{ww}(\omega)\right|$"
-    yLabel = r"$M_{wftip}(\omega)$"
-    M_wftip = np.zeros_like(fExtSweep)
-    for ii, entry in enumerate(rao[:, OOPIdx, OOPIdx]):
-        M_wftip[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, M_wftip, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    # ax.annotate("$U_{\infty}=$%.1f" % (flowSpeed), xy=(0.8, 0.9), xycoords="axes fraction", color=cm[0])
+    yLabel = r"$M_{wtip}(\omega)$"
+    M_wtipRAO = np.zeros_like(fExtSweep)
+    # for ii, entry in enumerate(genRAO[:, OOPIdx, OOPIdx]):
+    for ii, entry in enumerate(deflectionRAO[OOPIdx, :]):
+        M_wtipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+
+    ax.plot(fExtSweep, M_wtipRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_xlabel(xLabel)
 
     ax = axes[0, 1]
-    # yLabel = r"$\frac{\psi}{\psi_{f0}}$"
-    # nondim = dynTipTwisting[0]  # nondimensionalize by the static value
-    # ax.plot(fExtSweep, dynTipTwisting / nondim, color=cm[0])
-    # yLabel = r"$\left|H_{\psi\psi}(\omega)\right|$"
-    yLabel = r"$M_{\psi\tau}(\omega)$"
-    M_thetaftip = np.zeros_like(fExtSweep)
-    for ii, entry in enumerate(rao[:, TwistIdx, TwistIdx]):
-        M_thetaftip[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, M_thetaftip, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    yLabel = r"$M_{\psi tip}(\omega)$"
+    M_thetatipRAO = np.zeros_like(fExtSweep)
+    # for ii, entry in enumerate(genRAO[:, TwistIdx, TwistIdx]):
+    for ii, entry in enumerate(deflectionRAO[TwistIdx, :]):
+        M_thetatipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    
+    ax.plot(fExtSweep, M_thetatipRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
-
-    # # ************************************************
-    # #     Cross-correlations
-    # # ************************************************
-    # ax = axes[1, 0]
-    # # yLabel = r"$\frac{w}{w_{f0}}$"
-    # # nondim = dynTipBending[0]  # nondimensionalize by the static value
-
-    # # yLabel = r"$\left|H_{w\psi}(\omega)\right|$"
-    # yLabel = r"$M_{w \psi}(\omega)$"
-    # realRAO = np.zeros_like(fExtSweep)
-    # for ii, entry in enumerate(rao[:, OOPIdx, TwistIdx]):
-    #     realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    # ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    # ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
-
-    # ax = axes[1, 1]
-    # # yLabel = r"$\frac{\psi}{\psi_{f0}}$"
-    # # nondim = dynTipTwisting[0]  # nondimensionalize by the static value
-    # # ax.plot(fExtSweep, dynTipTwisting / nondim, color=cm[0])
-    # # yLabel = r"$\left|H_{\psi w}(\omega)\right|$"
-    # yLabel = r"$M_{\psi w}(\omega)$"
-    # realRAO = np.zeros_like(fExtSweep)
-    # for ii, entry in enumerate(rao[:, TwistIdx, OOPIdx]):
-    #     realRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    # ax.plot(fExtSweep, realRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
-    # ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
 
     # NOTE: TBH these are not terribly useful unless you're looking at transmitted force into the hull of the boat
     # which you should not, because you want to couple the foil to the ship model!
@@ -493,16 +460,30 @@ def plot_forced(
     #     Plot forces
     # ************************************************
     ax = axes[1, 0]
-    yLabel = r"$\frac{|L|}{L_{f0}}$"  # Lift
-    nondim = dynLift[0]  # nondimensionalize by the static value
-    ax.plot(fExtSweep, dynLift / nondim, color=cm[0])
+    yLabel = r"$\frac{|L|}{\zeta}$"  # Lift
+
+    LiftRAO = dynLiftRAO
+    # for ii, entry in enumerate(dynLiftRAO):
+    #     LiftRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    ax.plot(fExtSweep, LiftRAO, color=cm[0])
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_xlabel(xLabel)
 
     ax = axes[1, 1]
-    yLabel = r"$\frac{M_y}{M_{y_{f0}}}$"  # Moment
-    nondim = dynMoment[0]  # nondimensionalize by the static value
-    ax.plot(fExtSweep, dynMoment / nondim, color=cm[0])
+    yLabel = r"$\frac{|M_y|}{\zeta}$"  # Moment
+    MomRAO = dynMomentRAO
+    # for ii, entry in enumerate(dynMomentRAO):
+    #     MomRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    ax.plot(fExtSweep, MomRAO, color=cm[0])
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
+    ax.set_xlabel(xLabel)
+
+    # ************************************************
+    #     Wave spectrum plot
+    # ************************************************
+    ax = axes[0, -1]
+    yLabel = r"$\zeta$"
+    ax.plot(fExtSweep, waveAmpSpectrum, color=cm[0])
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_xlabel(xLabel)
 

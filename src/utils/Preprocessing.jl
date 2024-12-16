@@ -90,7 +90,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     # if abs(π - abs(sweepAngles[1])) > π / 2
     #     sweepAngles = sweepAngles .+ π
     # end
-    println("Sweep angle: ", Λ)
+    # println("Sweep angle: ", Λ)
 
 
     # println("Midchords: ")
@@ -111,7 +111,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     s_loc_q = LinRange(0.0, semispan, nNodes)
     s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1)))
     chordLengthsWork::Vector{RealOrComplex} = SolverRoutines.do_linear_interp(s_loc, chordLengths, s_loc_q)
-    qtrChordWork = SolverRoutines.do_linear_interp(s_loc, qtrChords, s_loc_q)
+    # qtrChordWork = SolverRoutines.do_linear_interp(s_loc, qtrChords, s_loc_q)
 
 
     return midchords, chordLengthsWork, spanwiseVectors, Λ

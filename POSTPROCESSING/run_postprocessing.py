@@ -236,13 +236,18 @@ if __name__ == "__main__":
             # --- Read tip twisting ---
             dynTipTwisting = np.rad2deg(np.asarray(load_jld(f"{caseDir}/forced/tipTwistDyn.jld2")["data"]).T)
 
-            # --- Read tip lift ---
-            dynLift = np.asarray(load_jld(f"{caseDir}/forced/totalLiftDyn.jld2")["data"]).T
+            # --- Read lift ---
+            dynLiftRAO = np.asarray(load_jld(f"{caseDir}/forced/totalLiftRAO.jld2")["data"]).T
 
-            # --- Read tip moment ---
-            dynMoment = np.asarray(load_jld(f"{caseDir}/forced/totalMomentDyn.jld2")["data"]).T
+            # --- Read moment ---
+            dynMomentRAO = np.asarray(load_jld(f"{caseDir}/forced/totalMomentRAO.jld2")["data"]).T
 
+            # --- Read wave amp ---
+            waveAmpSpectrum = np.asarray(load_jld(f"{caseDir}/forced/waveAmpSpectrum.jld2")["data"]).T
+
+            # --- Read RAO (general xfer fcn for deflections) ---
             rao = np.asarray(load_jld(f"{caseDir}/forced/RAO.jld2")["data"]).T
+            deflectionRAO = np.asarray(load_jld(f"{caseDir}/forced/deflectionRAO.jld2")["data"]).T
 
     # ************************************************
     #     Flutter and modal solutions
@@ -629,7 +634,7 @@ if __name__ == "__main__":
 
         # Create figure object
         nrows = 2
-        ncols = 2
+        ncols = 3
         figsize = (6 * ncols, 6 * nrows)
         fig, axes = plt.subplots(
             nrows=nrows,
@@ -646,10 +651,10 @@ if __name__ == "__main__":
             fig,
             axes,
             fExtSweep,
-            dynTipBending,
-            dynTipTwisting,
-            dynLift,
-            dynMoment,
+            waveAmpSpectrum,
+            deflectionRAO,
+            dynLiftRAO,
+            dynMomentRAO,
             rao,
             flowSpeed,
             fs_lgd,
@@ -657,10 +662,10 @@ if __name__ == "__main__":
             cm,
         )
 
-        fig.suptitle("Tip frequency response spectra")
+        fig.suptitle("Frequency response spectra")
 
         # TODO: PICKUP FIXING THIS THING
-        axes[0, 0].set_xlim(left=0.0, right=300)
+        axes[0, 0].set_xlim(left=0.0, right=20)
         for ax in axes.flatten():
             ax.set_ylim(bottom=0.0)
 

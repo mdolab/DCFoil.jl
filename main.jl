@@ -47,8 +47,7 @@ nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
-fSweep = range(0.1, 1000.0, 1000) # forcing and search frequency sweep [Hz]
-fSweep = range(0.1, 300.0, 1000) # forcing and search frequency sweep [Hz]
+fSweep = range(1e-4, 100.0, 1000) # forcing frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -158,7 +157,7 @@ solverOptions = Dict(
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fRange" => [fSweep[1], fSweep[end]], # forcing frequency sweep [Hz]
-    "df" => 1, # frequency step size
+    "df" => 0.005, # frequency step size
     "tipForceMag" => tipForceMag,
     # --- p-k (Eigen) solve ---
     "run_modal" => run_modal,

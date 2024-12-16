@@ -12,6 +12,8 @@ module OceanWaves
 using ..Unsteady: compute_sears
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 
+using Plots, Debugger
+
 function compute_PMwave_spectrum(Vwind, w)
     """
     Parameters
@@ -48,24 +50,23 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
     Py - power spectrum
     FT - frequency spectrum
     w_e - encounter frequency
+    waveamp - Aw [m] that you get from WMO sea state (is this significant wave height/amplitude?)
     h - depth
     span - full span of hydrofoil
     claVec - lift slope
     """
 
+    ωpk = w_e # the peak frequency is the encounter frequency
     ampDist = compute_AWave(freqspan, ωpk, waveamp)
+    ampDist .= 1.0 # for now, force wave to be 1.0 m
 
     nStrip = length(chordLengths)
-    fAey = zeros(size(freqspan), nStrip)
-    mAey = zeros(size(freqspan), nStrip)
+    fAey = zeros(ComplexF64, length(freqspan), nStrip)
+    mAey = zeros(ComplexF64, length(freqspan), nStrip)
 
-    # figure()
-    # plot(freqv, ampDist); xlim([0 1]); hold on
-    # xlabel("Frequency [Hz]")
-    # ylabel("Wave amplitude [m]")
-    # l1 = xline(w_e,'--b','DIsplayName',['\omega_e = ' num2str(w_e) 'Hz']); legend(l1);
-    # title(["Wave spectrum \omega_{wave}=" num2str(w_0)])
     bi = 0.5 * chordLengths
+
+    S0k = zeros(ComplexF64, nStrip)
 
     for (ii, ω) in enumerate(freqspan)
 
@@ -73,17 +74,21 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
         kf = (ω * bi / Uinf) # reduced freq using wave encounter
 
-        _, S0k = compute_sears.(kf)
+        for (ii, kk) in enumerate(kf)
+            Skvec = compute_sears(kk)
+            S0k[ii] = Skvec[2]
+        end
 
         Aω = ampDist[ii]
 
+        # This is the depth related term for infinite depth Airy waves
         coeff = ω * Aω * exp(-kw * h)
 
         # ---------------------------
         #   Sectional lift loads
         # ---------------------------
         # Circulatory
-        Lc = 0.5 * ϱ * Uinf * chordLengths .* claVec .* S0k * coeff
+        Lc = 0.5 * ϱ * Uinf * coeff .* chordLengths .* claVec .* S0k
 
         # Noncirculatory (added mass type)
         Lnc = 1im * ϱ * π * bi .^ 2 * w_e * coeff
@@ -93,26 +98,39 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
         mAey[ii, :] = 0.25 * Lc .* stripWidths .* chordLengths # [N-m]
 
         if abs(ω) < MEPSLARGE
-            fAey[ii] = 0
-            mAey[ii] = 0
+            fAey[ii, :] = 0
+            mAey[ii, :] = 0
         end
     end
 
+    p1 = plot(freqspan, ampDist)
+    xlabel!("Frequency [rad/s]")
+    ylabel!("Wave amplitude [m]")
+    xlims!(0, 10)
+    p2 = plot(freqspan, abs.(fAey[:, end]))
+    ylabel!("Wave load [N]")
+    title!("Wave loads at the tip")
+    xlabel!("Frequency [rad/s]")
+    xlims!(0, 10)
+
+    plot(p1, p2)
+    savefig("WaveLoads.png")
+    println("Saved wave loads plot")
     # figure()
     # tt = tiledlayout(1,2); nexttile;
     # plot(freqv, fAey); xlim([0 1])
     # xlabel("Frequency [Hz]")
     # ylabel("Wave force [N]")
-    # l1 = xline(w_e,'--b','DIsplayName',['\omega_e = ' num2str(w_e) 'Hz']);
+    # l1 = xline(w_e,'--b','DisplayName',['\omega_e = ' num2str(w_e) 'Hz']);
     # nexttile;
     # plot(freqv, mAey); xlim([0 1])
     # xlabel("Frequency [Hz]")
     # ylabel("Wave moment [N-m]")
-    # l1 = xline(w_e,'--b','DIsplayName',['\omega_e = ' num2str(w_e) 'Hz']); legend(l1);
+    # l1 = xline(w_e,'--b','DisplayName',['\omega_e = ' num2str(w_e) 'Hz']); legend(l1);
     # string = ["Wave loads with \omega_0=" num2str(w_0) " Hz"];
     # title(tt, string);
 
-    return fAey, mAey
+    return fAey, mAey, ampDist
 
 end
 
@@ -149,7 +167,7 @@ function compute_AWave(ωRange, ωe, waveamp)
     # ************************************************
     #     Rayleigh distribution
     # ************************************************
-    pζ = ωRange / ωe .* exp(-0.5 * (ωRange / ωe) .^ 2) # [-] normalized version
+    pζ = ωRange / ωe .* exp.(-0.5 * (ωRange / ωe) .^ 2) # [-] normalized version
 
     ampDist = waveamp * pζ # [m] distribution
 
