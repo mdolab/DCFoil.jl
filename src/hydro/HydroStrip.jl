@@ -186,7 +186,7 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     # ---------------------------
     #   Hydrodynamics
     # ---------------------------
-    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths; appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
+    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths, Λ; appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
 
     if return_all
         return LLOutputs, LLSystem, FlowCond
@@ -376,7 +376,7 @@ function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, so
     return dcdidXpt
 end
 
-function compute_hydroLLProperties(midchords, chordVec; appendageParams, solverOptions, appendageOptions)
+function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams, solverOptions, appendageOptions)
     """
     Wrapper function to the hydrodynamic lifting line properties
     In this case, α is the angle by which the flow velocity vector is rotated, not the geometry
@@ -390,7 +390,7 @@ function compute_hydroLLProperties(midchords, chordVec; appendageParams, solverO
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
     rake = appendageParams["rake"]
-    sweepAng = appendageParams["sweep"]
+    # sweepAng = appendageParams["sweep"]
     depth0 = appendageParams["depth0"]
     if solverOptions["use_nlll"]
 
@@ -1085,9 +1085,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
             α₀ = appendageParams["alfa0"]
-            sweepAng = appendageParams["sweep"]
+            # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
-            span = appendageParams["s"] * 2
+            # span = appendageParams["s"] * 2
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1099,9 +1099,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
         else
             α₀ = appendageParams["alfa0"]
-            sweepAng = appendageParams["sweep"]
+            # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
-            span = appendageParams["s"] * 2
+            # span = appendageParams["s"] * 2
             toc::Vector{RealOrComplex} = appendageParams["toc"]
             ab::Vector{RealOrComplex} = appendageParams["ab"]
             x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
@@ -1118,7 +1118,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
         end
         AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
         FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
-        Λ = sweepAng
+        # Λ = sweepAng
 
         _, _, _, AIC_i, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
         Kff_i = vec(-AIC_i)
@@ -1134,9 +1134,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
                 print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
                 α₀ = appendageParams["alfa0"]
-                sweepAng = appendageParams["sweep"]
+                # sweepAng = appendageParams["sweep"]
                 rake = appendageParams["rake"]
-                span = appendageParams["s"] * 2
+                # span = appendageParams["s"] * 2
                 zeta = appendageParams["zeta"]
                 theta_f = appendageParams["theta_f"]
                 beta = appendageParams["beta"]
@@ -1148,9 +1148,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
                 toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
             else
                 α₀ = appendageParams["alfa0"]
-                sweepAng = appendageParams["sweep"]
+                # sweepAng = appendageParams["sweep"]
                 rake = appendageParams["rake"]
-                span = appendageParams["s"] * 2
+                # span = appendageParams["s"] * 2
                 toc = appendageParams["toc"]
                 ab = appendageParams["ab"]
                 x_ab = appendageParams["x_ab"]

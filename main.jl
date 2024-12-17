@@ -173,8 +173,8 @@ solverOptions = Dict(
 # ************************************************
 evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter"]
 evalFuncSens = [
-    # "wtip",
-    # "cd",
+    "wtip",
+    "cd",
     "cl", "ksflutter"
 ]
 
@@ -204,6 +204,6 @@ DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, app
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
-    mode="ADJOINT",
-    # mode="FiDi",
+    # mode="ADJOINT",
+    mode="FiDi", #TODO: PICKUP CHECKING IF THE DERIVATIVES ARE CORRECT COMPARED TO ADJOINT
 )

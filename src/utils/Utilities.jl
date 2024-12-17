@@ -10,6 +10,7 @@ module Utilities
 
 using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex
+using FLOWMath: abs_cs_safe
 
 export compute_KS
 
@@ -139,6 +140,7 @@ function compute_KS(g, ρKS)
     """
 
     gmax = maximum(g)
+    # gmax = maximum(abs_cs_safe.(g)) # DON'T DO THIS
 
     Σ = 0.0 # sum
     for gval in g

@@ -207,6 +207,7 @@ function setup_problemFromCoords(
 
     # This part involves a lifting line solution, which takes about 1-2 seconds
     WING, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    sweepAng = LLSystem.sweepAng
 
     nNodes = WING.nNodes
     nElem = nNodes - 1
@@ -219,7 +220,7 @@ function setup_problemFromCoords(
     globalK, globalM, _ = FEMMethods.assemble(FEMESH, appendageParams["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, x_αb_strut=appendageParams["x_ab_strut"], verbose=verbose)
     alphaCorrection::DTYPE = 0.0
 
-    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
     areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
 
     # DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
@@ -401,7 +402,12 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
     if costFunc in ["cd", "cdi", "cdw", "cdpr", "cdj", "cds"]
 
         cdi, Di = ComputeFunctions.compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, cl, meanChord)
+
+
+        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        aeroSpan = Preprocessing.compute_aeroSpan(midchords)
+        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord)
         cd = cdi + cdw + cdpr + cdj + cds
         fout = [cd, cdi, cdw, cdpr, cdj, cds]
     end
@@ -566,7 +572,7 @@ function evalFuncsSens(
                 "mesh" => dfdxPt,
                 "struct" => dfdxstruct
             )
-            # println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
+            println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
 
             writedlm("funcsSens-mesh-$(evalFuncSens)-$(mode).csv", funcsSens["mesh"], ',')
             # writedlm("funcsSens-struct-$(evalFuncSens)-$(mode).csv", funcsSens["struct"], ',')
@@ -611,7 +617,7 @@ function evalFuncsSens(
                     mode="ANALYTIC", # 2 sec
                     appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
                 )
-            end 
+            end
             tFuncX = @elapsed begin
                 ∂f∂xPt, ∂f∂xStruct = compute_∂f∂x(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
                     # mode="RAD", # 100 sec
@@ -852,7 +858,10 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
         _, cl = ComputeFunctions.compute_lift(SOL.fHydro, qdyn, areaRef)
-        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, cl, meanChord)
+        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        aeroSpan = Preprocessing.compute_aeroSpan(midchords)
+        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord)
 
         return vec([cdw, cdpr, cdj, cds, dw, dpr, dj, ds])
     end
@@ -1074,7 +1083,15 @@ function compute_∂r∂x(
 
         # println("struct partials")
         # This seems good
-        ∂Kss∂x_u = compute_∂KssU∂x(u, ptVec, nodeConn, appendageOptions, appendageParamsList[1], solverOptions)
+        # tstruct = @elapsed begin
+        ∂Kss∂x_u = compute_∂KssU∂x(u, ptVec, nodeConn, appendageOptions, appendageParamsList[1], solverOptions;
+            mode="CS" # 4 sec but accurate
+            # mode="FAD" # 5 sec
+            # mode="FiDi" # 2.8 sec
+            # mode="RAD" # broken
+        )
+        # end
+        # println("∂Kss∂x:\t$(tstruct) sec")
         # writedlm("dKssdx.csv", ∂Kss∂x_u, ',')
 
 
@@ -1123,21 +1140,46 @@ function compute_∂r∂x(
     return ∂r∂xPt, ∂r∂xStruct
 end
 
-function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="CS")
     """
     Derivative of structural stiffness matrix with respect to design variables times structural states
     """
 
     ∂KssU∂x = zeros(DTYPE, length(structStates), length(ptVec))
 
-    # CS is faster than fidi, but RAD will probably be best later...? 2.4sec
-    dh = 1e-100
-    ptVecWork = complex(ptVec)
-    for ii in eachindex(ptVec)
-        ptVecWork[ii] += 1im * dh
-        f_f = compute_KssU(structStates, ptVecWork, nodeConn, appendageOptions, appendageParams, solverOptions)
-        ptVecWork[ii] -= 1im * dh
-        ∂KssU∂x[:, ii] = imag(f_f) / dh
+    if uppercase(mode) == "CS"
+        # CS is faster than fidi automated, but RAD will probably be best later...? 2.4sec
+        dh = 1e-100
+        ptVecWork = complex(ptVec)
+        for ii in eachindex(ptVec)
+            ptVecWork[ii] += 1im * dh
+            f_f = compute_KssU(structStates, ptVecWork, nodeConn, appendageOptions, appendageParams, solverOptions)
+            ptVecWork[ii] -= 1im * dh
+            ∂KssU∂x[:, ii] = imag(f_f) / dh
+        end
+    elseif uppercase(mode) == "FIDI"
+        dh = 1e-5
+        f_i = compute_KssU(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = compute_KssU(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+            ptVec[ii] -= dh
+            ∂KssU∂x[:, ii] = (f_f - f_i) / dh
+        end
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂KssU∂x, = AD.jacobian(
+            backend,
+            x -> compute_KssU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
+            ptVec,
+        )
+    elseif uppercase(mode) == "RAD"
+        backend = AD.ReverseDiffBackend()
+        ∂KssU∂x, = AD.jacobian(
+            backend,
+            x -> compute_KssU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
+            ptVec,
+        )
     end
 
     return ∂KssU∂x
@@ -1152,9 +1194,9 @@ function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solv
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
-        sweepAng = appendageParams["sweep"]
+        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
-        span = appendageParams["s"] * 2
+        # span = appendageParams["s"] * 2
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -1166,9 +1208,9 @@ function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solv
         toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
     else
         α₀ = appendageParams["alfa0"]
-        sweepAng = appendageParams["sweep"]
+        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
-        span = appendageParams["s"] * 2
+        # span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]
         ab::Vector{RealOrComplex} = appendageParams["ab"]
         x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
@@ -1236,9 +1278,9 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
             α₀ = appendageParams["alfa0"]
-            sweepAng = appendageParams["sweep"]
+            # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
-            span = appendageParams["s"] * 2
+            # span = appendageParams["s"] * 2
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1250,9 +1292,9 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
         else
             α₀ = appendageParams["alfa0"]
-            sweepAng = appendageParams["sweep"]
+            # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
-            span = appendageParams["s"] * 2
+            # span = appendageParams["s"] * 2
             toc::Vector{RealOrComplex} = appendageParams["toc"]
             ab::Vector{RealOrComplex} = appendageParams["ab"]
             x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
@@ -1336,7 +1378,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         α₀ = appendageParams["alfa0"]
         # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
-        span = appendageParams["s"] * 2
+        # span = appendageParams["s"] * 2
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -1350,7 +1392,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         α₀ = appendageParams["alfa0"]
         # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
-        span = appendageParams["s"] * 2
+        # span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]
         ab::Vector{RealOrComplex} = appendageParams["ab"]
         x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
@@ -1372,6 +1414,8 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
     LLOutputs, LLSystem, FlowCond = InitModel.init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
     statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
+    sweepAng = LLSystem.sweepAng
+
     WING = DesignConstants.DynamicFoil(
         statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
         statWingStructModel.eb, statWingStructModel.ab, statWingStructModel.chord, statWingStructModel.nNodes, statWingStructModel.constitutive,
@@ -1382,7 +1426,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
 
     dim = NDOF * (size(elemConn)[1] + 1)
 
-    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
 
     allStructuralStates, _ = FEMMethods.put_BC_back(structStates, ELEMTYPE; appendageOptions=appendageOptions)
     foilTotalStates = SolverRoutines.return_totalStates(allStructuralStates, appendageParams, ELEMTYPE; appendageOptions=appendageOptions,)
@@ -1416,6 +1460,8 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
     LLOutputs, LLSystem, FlowCond = InitModel.init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
     statWingStructModel, _ = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
+    sweepAng = LLSystem.sweepAng
+
     WING = DesignConstants.DynamicFoil(
         statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
         statWingStructModel.eb, statWingStructModel.ab, statWingStructModel.chord, statWingStructModel.nNodes, statWingStructModel.constitutive,
@@ -1426,7 +1472,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     dim = NDOF * (size(elemConn)[1] + 1)
 
-    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, appendageParams["sweep"], FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
 
 
     return -AIC, LLOutputs.cla

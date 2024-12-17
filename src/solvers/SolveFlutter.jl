@@ -235,7 +235,8 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    Λ = DVDict["sweep"]
+    # Λ = DVDict["sweep"]
+    # Preprocessing.
     globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     # There some weird data type bug here so we need to copy the matrices and make them Float64
     globalKs = zeros(Float64, size(globalKs_work))

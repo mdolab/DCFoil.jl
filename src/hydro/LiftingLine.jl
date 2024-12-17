@@ -1205,31 +1205,7 @@ end
 
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
-    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
-
-    α0 = appendageParams["alfa0"]
-    β0 = appendageParams["beta"]
-    sweepAng = appendageParams["sweep"]
-    rake = appendageParams["rake"]
-    depth0 = appendageParams["depth0"]
-
-    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
-        npt_wing=npt_wing,
-        npt_airfoil=npt_airfoil,
-        rhof=solverOptions["rhof"],
-        # airfoilCoordFile=airfoilCoordFile,
-        airfoil_ctrl_xy=airfoilCtrlXY,
-        airfoil_xy=airfoilXY,
-        options=@ignore_derivatives(options),
-    )
-
-    TV_influence = compute_TVinfluences(FlowCond, LLSystem)
-
-    # --- Pack up parameters for the NL solve ---
-    solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
-    # solverParams, FlowCond = setup_solverparams(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+    solverParams, FlowCond = setup_solverparams(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
 
     ∂r∂G = LiftingLine.compute_LLJacobian(Gconv; solverParams=solverParams, mode="CS")
     ∂r∂Γ = ∂r∂G / FlowCond.Uinf
@@ -1242,31 +1218,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
     ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
 
     function compute_resFromXpt(xPt)
-        LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-        midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
-
-        α0 = appendageParams["alfa0"]
-        β0 = appendageParams["beta"]
-        sweepAng = appendageParams["sweep"]
-        rake = appendageParams["rake"]
-        depth0 = appendageParams["depth0"]
-
-        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
-            npt_wing=npt_wing,
-            npt_airfoil=npt_airfoil,
-            rhof=solverOptions["rhof"],
-            # airfoilCoordFile=airfoilCoordFile,
-            airfoil_ctrl_xy=airfoilCtrlXY,
-            airfoil_xy=airfoilXY,
-            options=@ignore_derivatives(options),
-        )
-
-        TV_influence = compute_TVinfluences(FlowCond, LLSystem)
-        # --- Pack up parameters for the NL solve ---
-        solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
-        # solverParams, _ = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
-
+        solverParams, _ = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
 
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
         return resVec
@@ -1311,31 +1263,9 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
 
     function compute_cdifromxpt(xPt)
 
-        LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-        midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
-
-        α0 = appendageParams["alfa0"]
-        β0 = appendageParams["beta"]
-        sweepAng = appendageParams["sweep"]
-        rake = appendageParams["rake"]
-        depth0 = appendageParams["depth0"]
-
-        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-        LLMesh, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
-            npt_wing=npt_wing,
-            npt_airfoil=npt_airfoil,
-            rhof=solverOptions["rhof"],
-            # airfoilCoordFile=airfoilCoordFile,
-            airfoil_ctrl_xy=airfoilCtrlXY,
-            airfoil_xy=airfoilXY,
-            options=@ignore_derivatives(options),
-        )
-
-        TV_influence = compute_TVinfluences(FlowCond, LLMesh)
-
-        # solverParams, FlowCond = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
-        # TV_influence = solverParams.TV_influence
-        # LLMesh = solverParams.LLSystem
+        solverParams, FlowCond = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+        TV_influence = solverParams.TV_influence
+        LLMesh = solverParams.LLSystem
 
         ux, uy, uz = FlowCond.uvec
         ζi = LLMesh.sectionVectors

@@ -56,9 +56,9 @@ function compute_kscl(ptVec, nodeConn, appendageParams, appendageOptions, solver
         Needed for the ventilation constraint
     """
     LLOutputs, _, _ = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-    
+
     clmax = compute_KS(LLOutputs.cl,)
-    
+
     return clmax
 end
 
@@ -102,12 +102,12 @@ function compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendag
     return CDpr, Dpr
 end
 
-function compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
+function compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
 
     Fnh = solverOptions["Uinf"] / sqrt(9.81 * appendageParams["depth0"])
-    AR = appendageParams["s"] / meanChord
-    λ = appendageParams["depth0"] * 2 / appendageParams["s"]
-    
+    AR = aeroSpan / meanChord
+    λ = appendageParams["depth0"] * 2 / aeroSpan
+
     # # Breslin 1957 wave drag for an ELLIPTIC hydrofoil
     # # ************************************************
     # #     High Fnc approximation
@@ -126,8 +126,8 @@ function compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverO
     #     Arbitrary Fnc approximation
     # ************************************************
     σλ, _ = HydroStrip.compute_biplanefreesurface(λ)
-    besselInt = HydroStrip.compute_besselint(solverOptions["Uinf"], appendageParams["s"], Fnh)
-    CDw = (-σλ / (π * AR) + 8/(π*AR) * besselInt) * CL^2
+    besselInt = HydroStrip.compute_besselint(solverOptions["Uinf"], aeroSpan, Fnh)
+    CDw = (-σλ / (π * AR) + 8 / (π * AR) * besselInt) * CL^2
 
     Dw = CDw * qdyn * areaRef
 
@@ -160,13 +160,13 @@ function compute_junctiondrag(appendageParams, qdyn, areaRef)
     return CDj, Dj
 end
 
-function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, CL, meanChord)
+function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, CL, meanChord)
     """
     All pieces of calmwater drag
     """
 
 
-    CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, areaRef, appendageParams, solverOptions)
+    CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
 
     CDpr, Dpr = compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
 

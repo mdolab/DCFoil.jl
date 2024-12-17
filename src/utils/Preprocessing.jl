@@ -68,7 +68,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     dzVec = midchords[ZDIM, n2vec] - midchords[ZDIM, n1vec]
     spanwiseVectors = [dxVec; dyVec; dzVec] # 3 x nNodes
     # Compute the angle
-    sweepAngle = -atan_cs_safe.(dxVec, dyVec)
+    # sweepAngle = -atan_cs_safe.(dxVec, dyVec)
 
 
     # ---------------------------
@@ -104,11 +104,16 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     #     println("$(xyz)")
     # end
     # println("Chord lengths: ", chordLengths)
+    # ---------------------------
+    #   Span
+    # ---------------------------
+    # aeroSpan = compute_aeroSpan(midchords)
+    structSemispan = compute_structSpan(abs.(midchords))
 
     # ************************************************
     #     Finally, spline them to the discretization
     # ************************************************
-    semispan = appendageParams["s"]
+    semispan = structSemispan
     nNodes = appendageOptions["nNodes"]
     s_loc_q = LinRange(0.0, semispan, nNodes)
     s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1)))
@@ -144,6 +149,8 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, e=0.25)
         end
     end
 
+    # sweepAngles = [atan_cs_safe(dx, dy) for (dx, dy) in zip(dxVec, dyVec) if dy > 0.0]
+
     return copy(sweepAngles_z), qtrChord
 end
 
@@ -160,7 +167,7 @@ function compute_structSpan(midchords)
 
     sVecs = .√(midchords[XDIM, :] .^ 2 + midchords[YDIM, :] .^ 2 + midchords[ZDIM, :] .^ 2)
     smax = Utilities.compute_KS(sVecs, 100.0)
-    
+
     return smax
 end
 

@@ -63,8 +63,8 @@ function make_fullMesh(DVDictList, solverOptions)
         appendageDict = solverOptions["appendageList"][iComp]
         DVDict = DVDictList[iComp]
         println("Meshing ", appendageDict["compName"])
-        span = DVDict["s"]
-        spanStrut = DVDict["s_strut"]
+        # span = DVDict["s"]
+        # spanStrut = DVDict["s_strut"]
         nElem = appendageDict["nNodes"] - 1
         nElStrut = appendageDict["nNodeStrut"] - 1
         config = appendageDict["config"]
@@ -94,7 +94,8 @@ function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOp
 
     """
     config = appendageOptions["config"]
-    semispan = appendageParams["s"]
+    # semispan = appendageParams["s"]
+    semispan = Preprocessing.compute_structSpan(abs.(midchords))
     nElemWing = appendageOptions["nNodes"] - 1
     nElemTot = nothing
     if config == "wing"

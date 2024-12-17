@@ -429,7 +429,7 @@ class DCFOIL:
             self.solverOptions,
             mode="ADJOINT",
         )
-        breakpoint()
+        # breakpoint()
         for obj in evalFuncs:
 
             # Get the sensitivity of the cost function wrt all coordinates
