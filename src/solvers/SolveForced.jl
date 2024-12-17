@@ -246,6 +246,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     LiftRAO = zeros(ComplexF64, length(fSweep))
     MomRAO = zeros(ComplexF64, length(fSweep))
     DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
+    DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
 
     dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
     Ms = SOLVERPARAMS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
@@ -313,6 +314,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             GenXferFcn[f_ctr, :, :] = H
 
             DeflectionRAO[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+            DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
 
             # # DEBUG QUIT ON FIRST FREQ
             # break
@@ -326,7 +328,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     # ************************************************
     #     Write solution out to files
     # ************************************************
-    write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn, outputDir)
+    write_sol(fSweep, Aw, ũout, DeflectionMagRAO, LiftRAO, MomRAO, GenXferFcn, outputDir)
 
     SOL = DCFoilSolution.ForcedVibSolution(LiftDyn, MomDyn, GenXferFcn)
 
@@ -336,13 +338,11 @@ end
 
 function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
 
-    # TODO: PICKUP HERE
     # --- Wave loads ---
     ω_wave = 0.125 # Peak wave frequency
     Awsig = 0.5 # Wave amplitude [m]
     ωe = OceanWaves.compute_encounterFreq(π, ω_wave, FlowCond.Uinf)
 
-    # TODO: PICKUP here
     stripVecs = HydroStrip.get_strip_vecs(AEROMESH, appendageOptions)
     spanLocs = AEROMESH.mesh[:, YDIM]
     nVec = stripVecs

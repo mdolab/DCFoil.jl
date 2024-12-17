@@ -212,7 +212,8 @@ function solve_frequencies(FEMESH, DVDict::Dict, solverOptions::Dict, appendageO
     # ************************************************
     outputDir = solverOptions["outputDir"]
     nModes = solverOptions["nModes"]
-    tipMass = appendageOptions["use_tipMass"]
+    # tipMass = appendageOptions["use_tipMass"]
+    tipMass = false
     debug = solverOptions["debug"]
     # --- Initialize the model ---
     global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)

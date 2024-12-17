@@ -243,9 +243,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
     α₀ = appendageParams["alfa0"]
-    sweepAng = appendageParams["sweep"]
+    # sweepAng = appendageParams["sweep"]
     rake = appendageParams["rake"]
-    span = appendageParams["s"] * 2
+    # span = appendageParams["s"] * 2
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     beta = appendageParams["beta"]
@@ -256,9 +256,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
     toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
   else
-    sweepAng = appendageParams["sweep"]
+    # sweepAng = appendageParams["sweep"]
     rake = appendageParams["rake"]
-    span = appendageParams["s"] * 2
+    # span = appendageParams["s"] * 2
     toc::Vector{RealOrComplex} = appendageParams["toc"]
     ab::Vector{RealOrComplex} = appendageParams["ab"]
     x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]

@@ -24,6 +24,8 @@ using ..SolverRoutines: SolverRoutines
 # using ..DesignConstants: DynamicFoil
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 using FLOWMath: atan_cs_safe
+using ..Utilities: Utilities
+using Zygote
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions, appendageParams)
     """
@@ -133,16 +135,35 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, e=0.25)
 
     # Compute the angle
     sweepAngles = zeros(RealOrComplex, size(dxVec))
+    sweepAngles_z = Zygote.Buffer(sweepAngles)
     for (ii, dy) in enumerate(dyVec)
-        if dy < 0.0
-            sweepAngles[ii] = atan_cs_safe(dxVec[ii], -dy)
+        if real(dy) < 0.0
+            sweepAngles_z[ii] = atan_cs_safe(dxVec[ii], -dy)
         else
-            sweepAngles[ii] = atan_cs_safe(dxVec[ii], dy)
+            sweepAngles_z[ii] = atan_cs_safe(dxVec[ii], dy)
         end
     end
 
-    return sweepAngles, qtrChord
+    return copy(sweepAngles_z), qtrChord
 end
+
+function compute_aeroSpan(midchords)
+
+    ymax = Utilities.compute_KS(midchords[YDIM, :], 100.0)
+    ymin = -Utilities.compute_KS(-midchords[YDIM, :], 100.0)
+    aeroSpan = ymax - ymin
+
+    return aeroSpan
+end
+
+function compute_structSpan(midchords)
+
+    sVecs = .√(midchords[XDIM, :] .^ 2 + midchords[YDIM, :] .^ 2 + midchords[ZDIM, :] .^ 2)
+    smax = Utilities.compute_KS(sVecs, 100.0)
+    
+    return smax
+end
+
 function get_1DBeamPropertiesFromFile(fname)
     """
     Get beam structural properties from file

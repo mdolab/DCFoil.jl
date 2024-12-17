@@ -302,20 +302,19 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     #     Preproc stuff
     # ************************************************
     # --- Structural span is not the same as aero span ---
-    ymax = Utilities.compute_KS(midchords[YDIM, :], 100.0)
-    ymin = -Utilities.compute_KS(-midchords[YDIM, :], 100.0)
-    wingSpan = ymax - ymin
+    aeroWingSpan = Preprocessing.compute_aeroSpan(midchords)
+
     # wingSpan = span * cos(sweepAng) #no
 
     # Blending parameter for the LAC
-    σ = 4 * cos(sweepAng)^2 / (blend^2 * wingSpan^2)
+    σ = 4 * cos(sweepAng)^2 / (blend^2 * aeroWingSpan^2)
 
     alpha, beta, Uinf = compute_anglesFromVector(Uvec)
     uvec = Uvec / Uinf
 
     # Wing area
-    SRef = rootChord * wingSpan * (1 + taperRatio) * 0.5
-    AR = wingSpan^2 / SRef
+    SRef = rootChord * aeroWingSpan * (1 + taperRatio) * 0.5
+    AR = aeroWingSpan^2 / SRef
 
     translation = zeros(3)
     if !isnothing(options) && haskey(options, "translation")
@@ -332,8 +331,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     # ---------------------------
     #   Y coords (span)
     # ---------------------------
-    start = -wingSpan * 0.5
-    stop = wingSpan * 0.5
+    start = -aeroWingSpan * 0.5
+    stop = aeroWingSpan * 0.5
 
     # --- Even spacing ---
     θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
@@ -350,8 +349,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
         # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
         # println("θ_bound: $(θ_bound)")
         θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-        wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
-        wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * wingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
+        wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
+        wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
     end
 
     # ---------------------------
@@ -359,22 +358,22 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     # ---------------------------
     iTR = 1.0 - taperRatio
 
-    local_chords = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_xyz_ycomp[1, :]) / wingSpan)
-    local_chords_ctrl = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_ctrl_xyz_ycomp[1, :]) / wingSpan)
+    local_chords = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_xyz_ycomp[1, :]) / aeroWingSpan)
+    local_chords_ctrl = rootChord * (1.0 .- 2.0 * iTR * abs_cs_safe.(wing_ctrl_xyz_ycomp[1, :]) / aeroWingSpan)
 
     # ∂c/∂y
-    local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz_ycomp[1, :]) / wingSpan
-    local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz_ycomp[1, :]) / wingSpan
+    local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz_ycomp[1, :]) / aeroWingSpan
+    local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz_ycomp[1, :]) / aeroWingSpan
 
     # --- Locus of aerodynamic centers (LAC) ---
-    LAC = compute_LAC(AR, LLHydro, wing_xyz_ycomp[1, :], local_chords, rootChord, sweepAng, wingSpan)
+    LAC = compute_LAC(AR, LLHydro, wing_xyz_ycomp[1, :], local_chords, rootChord, sweepAng, aeroWingSpan)
     wing_xyz = cat(reshape(LAC, 1, size(LAC)...), wing_xyz_ycomp, Zeros, dims=1) .+ translatMat
 
-    LAC_ctrl = compute_LAC(AR, LLHydro, wing_ctrl_xyz_ycomp[1, :], local_chords_ctrl, rootChord, sweepAng, wingSpan)
+    LAC_ctrl = compute_LAC(AR, LLHydro, wing_ctrl_xyz_ycomp[1, :], local_chords_ctrl, rootChord, sweepAng, aeroWingSpan)
     wing_ctrl_xyz = cat(reshape(LAC_ctrl, 1, size(LAC_ctrl)...), wing_ctrl_xyz_ycomp, ZerosCtrl, dims=1) .+ translatMatCtrl
 
     # Need a mess of LAC's for each control point
-    LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
+    LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
     # This is a 3D array
     # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
     wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...)
@@ -387,13 +386,13 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
 
     # --- Compute local sweeps ---
     # Vectors containing local sweep at each coordinate location in wing_xyz
-    fprime = compute_dLACds(AR, LLHydro, wing_xyz[YDIM, :], local_chords, local_dchords, sweepAng, wingSpan)
+    fprime = compute_dLACds(AR, LLHydro, wing_xyz[YDIM, :], local_chords, local_dchords, sweepAng, aeroWingSpan)
     localSweeps = -atan_cs_safe.(fprime, ones(size(fprime)))
 
-    fprimeCtrl = compute_dLACds(AR, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, local_dchords_ctrl, sweepAng, wingSpan)
+    fprimeCtrl = compute_dLACds(AR, LLHydro, wing_ctrl_xyz[YDIM, :], local_chords_ctrl, local_dchords_ctrl, sweepAng, aeroWingSpan)
     localSweepsCtrl = -atan_cs_safe.(fprimeCtrl, ones(size(fprimeCtrl)))
 
-    fprimeEff = compute_dLACdseffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, wingSpan)
+    fprimeEff = compute_dLACdseffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
 
     # --- Other section properties ---
@@ -448,7 +447,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
 
     # Store all computed quantities here
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, local_chords_ctrl, ζ, sectionLengths, sectionAreas,
-        npt_airfoil, wingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
+        npt_airfoil, aeroWingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
 
     FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof)
@@ -1118,6 +1117,37 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     return J
 end
 
+function setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+    """
+    This is a convenience function that sets up the solver parameters for the lifting line algorithm from xPt
+    """
+
+    LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
+    midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    α0 = appendageParams["alfa0"]
+    β0 = appendageParams["beta"]
+    rake = appendageParams["rake"]
+    depth0 = appendageParams["depth0"]
+
+    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+        npt_wing=npt_wing,
+        npt_airfoil=npt_airfoil,
+        rhof=solverOptions["rhof"],
+        # airfoilCoordFile=airfoilCoordFile,
+        airfoil_ctrl_xy=airfoilCtrlXY,
+        airfoil_xy=airfoilXY,
+        options=@ignore_derivatives(options),
+    )
+
+    TV_influence = compute_TVinfluences(FlowCond, LLSystem)
+
+    # --- Pack up parameters for the NL solve ---
+    solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+
+    return solverParams, FlowCond
+end
 
 function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
 
@@ -1176,12 +1206,12 @@ end
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    midchords, chordVec, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
-    rake = appendageParams["rake"]
     sweepAng = appendageParams["sweep"]
+    rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
 
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
@@ -1199,6 +1229,7 @@ function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOpt
 
     # --- Pack up parameters for the NL solve ---
     solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    # solverParams, FlowCond = setup_solverparams(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
 
     ∂r∂G = LiftingLine.compute_LLJacobian(Gconv; solverParams=solverParams, mode="CS")
     ∂r∂Γ = ∂r∂G / FlowCond.Uinf
@@ -1212,12 +1243,12 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
 
     function compute_resFromXpt(xPt)
         LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-        midchords, chordVec, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         α0 = appendageParams["alfa0"]
         β0 = appendageParams["beta"]
-        rake = appendageParams["rake"]
         sweepAng = appendageParams["sweep"]
+        rake = appendageParams["rake"]
         depth0 = appendageParams["depth0"]
 
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
@@ -1234,6 +1265,9 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
         TV_influence = compute_TVinfluences(FlowCond, LLSystem)
         # --- Pack up parameters for the NL solve ---
         solverParams = LiftingLineNLParams(TV_influence, LLSystem, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+        # solverParams, _ = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+
+
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
         return resVec
     end
@@ -1247,15 +1281,15 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
         resVec_i = compute_resFromXpt(ptVec) # initialize the solver
 
         # @inbounds begin # no speedup
-            for ii in eachindex(ptVec)
-                ptVec[ii] += dh
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
 
-                resVec_f = compute_resFromXpt(ptVec)
+            resVec_f = compute_resFromXpt(ptVec)
 
-                ptVec[ii] -= dh
+            ptVec[ii] -= dh
 
-                ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
-            end
+            ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+        end
         # end
     elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to 4 sec in pure julia
         # backend = AD.ReverseDiffBackend()
@@ -1278,12 +1312,12 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     function compute_cdifromxpt(xPt)
 
         LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-        midchords, chordVec, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         α0 = appendageParams["alfa0"]
         β0 = appendageParams["beta"]
-        rake = appendageParams["rake"]
         sweepAng = appendageParams["sweep"]
+        rake = appendageParams["rake"]
         depth0 = appendageParams["depth0"]
 
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
@@ -1298,6 +1332,10 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
         )
 
         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+
+        # solverParams, FlowCond = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+        # TV_influence = solverParams.TV_influence
+        # LLMesh = solverParams.LLSystem
 
         ux, uy, uz = FlowCond.uvec
         ζi = LLMesh.sectionVectors

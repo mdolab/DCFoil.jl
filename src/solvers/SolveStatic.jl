@@ -566,9 +566,9 @@ function evalFuncsSens(
                 "mesh" => dfdxPt,
                 "struct" => dfdxstruct
             )
-            println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
+            # println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
 
-            # writedlm("funcsSens-mesh-$(evalFuncSens)-$(mode).csv", funcsSens["mesh"], ',')
+            writedlm("funcsSens-mesh-$(evalFuncSens)-$(mode).csv", funcsSens["mesh"], ',')
             # writedlm("funcsSens-struct-$(evalFuncSens)-$(mode).csv", funcsSens["struct"], ',')
 
             funcsSensOut[evalFuncSensKey] = funcsSens
@@ -652,7 +652,7 @@ function evalFuncsSens(
             )
             # println("Adjoint sensitivities for $(evalFuncSensKey): ", funcsSens)
 
-            # writedlm("funcsSens-mesh-$(evalFuncSensKey)-$(mode).csv", funcsSens["mesh"], ',')
+            writedlm("funcsSens-mesh-$(evalFuncSensKey)-$(mode).csv", funcsSens["mesh"], ',')
             # writedlm("funcsSens-struct-$(evalFuncSens)-$(mode).csv", funcsSens["struct"], ',')
 
             funcsSensOut[evalFuncSensKey] = funcsSens
@@ -1334,7 +1334,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
-        sweepAng = appendageParams["sweep"]
+        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
         span = appendageParams["s"] * 2
         zeta = appendageParams["zeta"]
@@ -1348,7 +1348,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
     else
         α₀ = appendageParams["alfa0"]
-        sweepAng = appendageParams["sweep"]
+        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
         span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]

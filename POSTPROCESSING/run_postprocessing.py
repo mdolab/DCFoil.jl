@@ -664,8 +664,7 @@ if __name__ == "__main__":
 
         fig.suptitle("Frequency response spectra")
 
-        # TODO: PICKUP FIXING THIS THING
-        axes[0, 0].set_xlim(left=0.0, right=20)
+        axes[0, 0].set_xlim(left=0.0, right=200)
         for ax in axes.flatten():
             ax.set_ylim(bottom=0.0)
 

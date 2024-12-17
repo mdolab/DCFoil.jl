@@ -439,15 +439,19 @@ def plot_forced(
     # for ii, entry in enumerate(genRAO[:, OOPIdx, OOPIdx]):
     for ii, entry in enumerate(deflectionRAO[OOPIdx, :]):
         M_wtipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    breakpoint()
+    # TODO: PICKUP FIXING THIS THING, WHY DO THE DEFLECTIONS NOT SHOW PROPERLY?
+
 
     ax.plot(fExtSweep, M_wtipRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_xlabel(xLabel)
 
     ax = axes[0, 1]
-    yLabel = r"$M_{\psi tip}(\omega)$"
+    yLabel = r"$M_{\theta tip}(\omega)$"
     M_thetatipRAO = np.zeros_like(fExtSweep)
     # for ii, entry in enumerate(genRAO[:, TwistIdx, TwistIdx]):
+    twists = deflectionRAO[4::9,:]
     for ii, entry in enumerate(deflectionRAO[TwistIdx, :]):
         M_thetatipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     

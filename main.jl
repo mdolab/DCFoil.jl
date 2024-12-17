@@ -32,8 +32,8 @@ tipMass = false
 
 # Uncomment here
 run_static = true
-run_forced = true
-run_modal = true
+# run_forced = true
+# run_modal = true
 # run_flutter = true
 debug = true
 # tipMass = true
@@ -174,7 +174,7 @@ solverOptions = Dict(
 evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter"]
 evalFuncSens = [
     # "wtip",
-    "cd",
+    # "cd",
     "cl", "ksflutter"
 ]
 
