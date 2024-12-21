@@ -149,18 +149,18 @@ function compute_spraydrag(appendageParams, qdyn)
     return CDs, Ds
 end
 
-function compute_junctiondrag(appendageParams, qdyn, areaRef)
+function compute_junctiondrag(appendageParams, qdyn, rootChord, areaRef)
 
     # From Hörner Chapter 8
     tocbar = 0.5 * (appendageParams["toc"][1] + appendageParams["toc_strut"][1])
     CDt = 17 * (tocbar)^2 - 0.05
-    Dj = CDt * (qdyn * (tocbar * appendageParams["c"][1])^2)
+    Dj = CDt * (qdyn * (tocbar * rootChord)^2)
     CDj = Dj / (qdyn * areaRef)
 
     return CDj, Dj
 end
 
-function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, CL, meanChord)
+function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, CL, meanChord, rootChord)
     """
     All pieces of calmwater drag
     """
@@ -170,7 +170,7 @@ function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverO
 
     CDpr, Dpr = compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
 
-    CDj, Dj = compute_junctiondrag(appendageParams, qdyn, areaRef)
+    CDj, Dj = compute_junctiondrag(appendageParams, qdyn, rootChord, areaRef)
 
     CDs, Ds = compute_spraydrag(appendageParams, qdyn)
 

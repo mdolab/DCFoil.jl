@@ -305,13 +305,13 @@ function write_sol(
 end
 
 function write_tecplot(
-    DVDict::Dict, STATICSOL, FEMESH, outputDir="./OUTPUT/";
+    appendageParams::Dict, STATICSOL, FEMESH, outputDir="./OUTPUT/";
     appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1
 )
     """
     General purpose tecplot writer wrapper for flutter solution
     """
-    TecplotIO.write_deflections(DVDict, STATICSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+    TecplotIO.write_deflections(appendageParams, STATICSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
 
 end
 
@@ -343,13 +343,14 @@ function compute_funcs(evalFunc, states::Vector, SOL::StaticSolution,
     FEMESH, forces, WING, areaRef = precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     meanChord = mean(WING.chord)
+    rootChord = WING.chord[1]
     qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
 
     # ************************************************
     #     COMPUTE COST FUNCS
     # ************************************************
 
-    fout = compute_funcsFromfhydro(evalFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, FEMESH)
+    fout = compute_funcsFromfhydro(evalFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, FEMESH)
 
     return fout
 end
@@ -370,7 +371,7 @@ function precompute_funcsux(states, ptVec, nodeConn, appendageParams, appendageO
     return FEMESH, forces, WING, constants.areaRef
 end
 
-function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, FEMESH)
+function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, FEMESH)
     """
     states is the structural states with BC
     """
@@ -405,9 +406,9 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
 
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
-        aeroSpan = Preprocessing.compute_aeroSpan(midchords)
-        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord)
+        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, FEMESH.idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        aeroSpan = Preprocessing.compute_aeroSpan(midchords, FEMESH.idxTip)
+        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord)
         cd = cdi + cdw + cdpr + cdj + cds
         fout = [cd, cdi, cdw, cdpr, cdj, cds]
     end
@@ -572,10 +573,11 @@ function evalFuncsSens(
                 "mesh" => dfdxPt,
                 "struct" => dfdxstruct
             )
-            println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
+            # println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
 
-            writedlm("funcsSens-mesh-$(evalFuncSens)-$(mode).csv", funcsSens["mesh"], ',')
-            # writedlm("funcsSens-struct-$(evalFuncSens)-$(mode).csv", funcsSens["struct"], ',')
+            println("writing funcsens to file")
+            writedlm("funcsSens-mesh-$(evalFuncSensKey)-$(mode).csv", funcsSens["mesh"], ',')
+            # writedlm("funcsSens-struct-$(evalFuncSensKey)-$(mode).csv", funcsSens["struct"], ',')
 
             funcsSensOut[evalFuncSensKey] = funcsSens
         end
@@ -740,11 +742,12 @@ function compute_∂f∂x(
             dfstaticdXpt = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
 
             meanChord = mean(SOL.FOIL.chord)
+            rootChord = SOL.FOIL.chord[1]
             qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
             areaRef = HydroStrip.compute_areas(SOL.FEMESH, SOL.FOIL; appendageOptions=appendageOptions, STRUT=SOL.STRUT)
 
             if costFunc != "cd"
-                ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
+                ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, rootChord, appendageOptions, appendageParams, solverOptions)
                 ∂f∂fstatic = ∂f∂fstatic[1:end.∉[DOFBlankingList]]
             else
                 ∂f∂fstatic = zeros(length(u))
@@ -811,6 +814,7 @@ end
 
 function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
+    idxTip = SOL.FEMESH.idxTip
 
     function costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
@@ -822,18 +826,19 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 
-        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], zeros(10, 2))
+        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], idxTip, zeros(10, 2))
 
         areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
         meanChord = mean(WING.chord)
+        rootChord = WING.chord[1]
 
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
 
-        fout = compute_funcsFromfhydro(costFunc, SOL.structStates, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, FEMESH)
+        fout = compute_funcsFromfhydro(costFunc, SOL.structStates, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, FEMESH)
 
         return fout
     end
@@ -847,21 +852,22 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 
-        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], zeros(10, 2))
+        FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], idxTip, zeros(10, 2))
 
         areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
         meanChord = mean(WING.chord)
+        rootChord = WING.chord[1]
 
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
         _, cl = ComputeFunctions.compute_lift(SOL.fHydro, qdyn, areaRef)
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
-        aeroSpan = Preprocessing.compute_aeroSpan(midchords)
-        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord)
+        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, FEMESH.idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        aeroSpan = Preprocessing.compute_aeroSpan(midchords, FEMESH.idxTip)
+        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord)
 
         return vec([cdw, cdpr, cdj, cds, dw, dpr, dj, ds])
     end
@@ -907,7 +913,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
     return ∂f∂xPt
 end
 
-function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
+function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, rootChord, appendageOptions, appendageParams, solverOptions)
     """
     Compute the gradient of the cost functions with respect to the hydrodynamic forces
     """
@@ -919,18 +925,18 @@ function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, area
 
     if costFunc != "cd"
         ∂f∂fhydro, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, SOL.FEMESH),
+                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH),
             SOL.fHydro)
     else
         ∂f∂fhydro, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, SOL.FEMESH)[1],
+                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH)[1],
             SOL.fHydro)
     end
 
     return ∂f∂fhydro
 end
 
-function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
+function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, rootChord, appendageOptions, appendageParams, solverOptions)
     """
     Compute the gradient of the cost functions with respect to the hydrodynamic forces
     """
@@ -940,11 +946,11 @@ function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, are
 
     if costFunc != "cd"
         ∂f∂udirect, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, SOL.FEMESH),
+                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH),
             SOL.structStates)
     else
         ∂f∂udirect, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, SOL.FEMESH)[1],
+                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH)[1],
             SOL.structStates)
     end
 
@@ -971,13 +977,14 @@ function compute_∂f∂u(
         _, _, WING, areaRef = precompute_funcsux(SOL.structStates, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
         meanChord = mean(WING.chord)
+        rootChord = WING.chord[1]
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
 
-        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
+        ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, rootChord, appendageOptions, appendageParams, solverOptions)
         dfstaticdu = -SOL.SOLVERPARAMS.AICmat # RHS type
 
         # ∂f∂udirect = costfuncsdpending directly on the structural states (tip bend, etc.)
-        ∂f∂udirect = compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, appendageOptions, appendageParams, solverOptions)
+        ∂f∂udirect = compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, rootChord, appendageOptions, appendageParams, solverOptions)
 
         # println("∂f∂u:\n", reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu)
         ∂f∂u = reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu + reshape(∂f∂udirect, 1, length(∂f∂udirect))
@@ -1021,7 +1028,7 @@ function compute_∂f∂u(
     end
 
     # Save matrix for debugging?
-    writedlm("∂f∂u-$(mode).csv", ∂f∂u, ',')
+    # writedlm("∂f∂u-$(mode).csv", ∂f∂u, ',')
 
     return ∂f∂u
 end
@@ -1136,7 +1143,7 @@ function compute_∂r∂x(
         error("Invalid mode")
     end
 
-    writedlm("drdxPt-$(mode).csv", ∂r∂xPt, ',')
+    # writedlm("drdxPt-$(mode).csv", ∂r∂xPt, ',')
     return ∂r∂xPt, ∂r∂xStruct
 end
 
@@ -1146,6 +1153,8 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
     """
 
     ∂KssU∂x = zeros(DTYPE, length(structStates), length(ptVec))
+    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = Preprocessing.get_tipnode(LECoords)
 
     if uppercase(mode) == "CS"
         # CS is faster than fidi automated, but RAD will probably be best later...? 2.4sec
@@ -1153,7 +1162,7 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
         ptVecWork = complex(ptVec)
         for ii in eachindex(ptVec)
             ptVecWork[ii] += 1im * dh
-            f_f = compute_KssU(structStates, ptVecWork, nodeConn, appendageOptions, appendageParams, solverOptions)
+            f_f = compute_KssU(structStates, ptVecWork, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
             ptVecWork[ii] -= 1im * dh
             ∂KssU∂x[:, ii] = imag(f_f) / dh
         end
@@ -1185,10 +1194,10 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
     return ∂KssU∂x
 end
 
-function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
     LECoords, TECoords = Utilities.repack_coords(xVec, 3, length(xVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
@@ -1226,8 +1235,8 @@ function compute_KssU(u, xVec, nodeConn, appendageOptions, appendageParams, solv
         depth0 = appendageParams["depth0"]
     end
 
-    structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), appendageParams, appendageOptions)
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+    structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), @ignore_derivatives(idxTip), appendageParams, appendageOptions)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
     WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
@@ -1271,9 +1280,10 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
         dim = length(structStates) + length(DOFBlankingList)
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        idxTip = Preprocessing.get_tipnode(LECoords)
+        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+        structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
         if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
             print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
@@ -1309,7 +1319,7 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             theta_f_strut = appendageParams["theta_f_strut"]
             depth0 = appendageParams["depth0"]
         end
-        AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+        AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
         FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
         dKffdcla = HydroStrip.compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FIDI")
@@ -1370,7 +1380,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
@@ -1408,8 +1418,8 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         depth0 = appendageParams["depth0"]
     end
 
-    structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), appendageParams, appendageOptions)
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+    structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), @ignore_derivatives(idxTip), appendageParams, appendageOptions)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
     LLOutputs, LLSystem, FlowCond = InitModel.init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
     statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
@@ -1443,7 +1453,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     toc::Vector{RealOrComplex} = appendageParams["toc"]
     ab::Vector{RealOrComplex} = appendageParams["ab"]
@@ -1454,8 +1464,8 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
     ab_strut = appendageParams["ab_strut"]
     theta_f_strut = appendageParams["theta_f_strut"]
 
-    structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), appendageParams, appendageOptions)
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+    structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), @ignore_derivatives(idxTip), appendageParams, appendageOptions)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
     LLOutputs, LLSystem, FlowCond = InitModel.init_staticHydro(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
     statWingStructModel, _ = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)

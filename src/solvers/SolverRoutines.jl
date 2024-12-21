@@ -1063,6 +1063,13 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
 
             m = (y1 - y0) / (x1 - x0) # slope
             y[jj] = y0 + m * (xq - x0)
+
+            # # actually just use end value if we're at the end
+            # if real(xq) >= real(xpt)[npt]
+            #     y[jj] = ypt[npt]
+            # elseif real(xq) <= real(xpt)[1]
+            #     y[jj] = ypt[1]
+            # end
         end
     end
 end

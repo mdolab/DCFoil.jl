@@ -82,8 +82,8 @@ paramsRudder = Dict(
     "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => 0.14 * ones(nNodes), # chord length [m]
-    "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
-    "s" => 0.333, # semispan [m]
+    # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
+    # "s" => 0.333, # semispan [m]
     "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
     "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
     "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
@@ -202,8 +202,9 @@ GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("juncti
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
-costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+@show costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
     # mode="ADJOINT",
-    mode="FiDi", #TODO: PICKUP CHECKING IF THE DERIVATIVES ARE CORRECT COMPARED TO ADJOINT
+    mode="FiDi",
 )
+# TODO: FIGURE OUT WHY END NODES ARE BAD and if they actually are for pygeo? fix the interp parts

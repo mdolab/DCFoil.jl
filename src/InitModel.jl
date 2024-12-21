@@ -235,9 +235,8 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   fRange = solverOptions["fRange"]
   uRange = solverOptions["uRange"]
 
-
-  midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
-  # midchords, chordLengths, spanwiseVectors = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+  idxTip = Preprocessing.get_tipnode(LECoords)
+  midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
 
   if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
@@ -274,8 +273,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   WingModel, StrutModel, LLOutputs, LLSystem, FlowCond = init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
-  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), appendageParams, appendageOptions)
-  FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, zeros(10, 2))
+  idxTip = Preprocessing.get_tipnode(LECoords)
+  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn),idxTip, appendageParams, appendageOptions)
+  FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
 
   if haskey(solverOptions, "run_body") && solverOptions["run_body"]

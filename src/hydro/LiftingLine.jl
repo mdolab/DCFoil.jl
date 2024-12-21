@@ -302,7 +302,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     #     Preproc stuff
     # ************************************************
     # --- Structural span is not the same as aero span ---
-    aeroWingSpan = Preprocessing.compute_aeroSpan(midchords)
+    idxTip = Preprocessing.get_tipnode(midchords)
+    aeroWingSpan = Preprocessing.compute_aeroSpan(midchords, idxTip)
 
     # wingSpan = span * cos(sweepAng) #no
 
@@ -1117,13 +1118,13 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     return J
 end
 
-function setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+function setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
     """
     This is a convenience function that sets up the solver parameters for the lifting line algorithm from xPt
     """
 
     LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-    midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
@@ -1205,7 +1206,9 @@ end
 
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
-    solverParams, FlowCond = setup_solverparams(ptVec, nodeConn, appendageOptions, appendageParams, solverOptions)
+    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = Preprocessing.get_tipnode(LECoords)
+    solverParams, FlowCond = setup_solverparams(ptVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
 
     ∂r∂G = LiftingLine.compute_LLJacobian(Gconv; solverParams=solverParams, mode="CS")
     ∂r∂Γ = ∂r∂G / FlowCond.Uinf
@@ -1217,8 +1220,11 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
 
     ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
 
+    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = Preprocessing.get_tipnode(LECoords)
+
     function compute_resFromXpt(xPt)
-        solverParams, _ = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
 
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
         return resVec
@@ -1260,10 +1266,11 @@ end
 function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
     ∂cdi∂Xpt = zeros(DTYPE, 1, length(ptVec))
-
+    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = Preprocessing.get_tipnode(LECoords)
     function compute_cdifromxpt(xPt)
 
-        solverParams, FlowCond = setup_solverparams(xPt, nodeConn, appendageOptions, appendageParams, solverOptions)
+        solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
         TV_influence = solverParams.TV_influence
         LLMesh = solverParams.LLSystem
 

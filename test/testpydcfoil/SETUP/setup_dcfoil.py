@@ -84,7 +84,7 @@ def setup(args, comm, files, evalFuncs, outputDir):
         "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
         "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
         "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
-        "theta_f": np.deg2rad(15),  # fiber angle global [rad]
+        "theta_f": np.deg2rad(0),  # fiber angle global [rad]
         # --- Strut vars ---
         "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
         "rake": 0.0,  # rake angle about top of strut [deg]

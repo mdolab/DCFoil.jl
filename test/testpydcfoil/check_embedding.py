@@ -105,7 +105,8 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         DCFoil setup
     # ==============================================================================
-    V = 10 * 1.9438
+    # V = 10 * 1.9438
+    V = 18.0
     rho = 1025.0
     temp = 288.15
     mu = 1.22e-3  # dynamic viscosity [kg/m/s]
@@ -192,7 +193,10 @@ if __name__ == "__main__":
         print(f"{nSweep} foil sweep vars", flush=True)
         sweepAxis = "global"
 
-        def sweep_rot_func(val, geo):
+        def sweep_rot_func(inval, geo):
+            # REVERSE OF RH RULE FOR DCFOIL
+            val = -inval
+
             # the extractCoef method gets the unperturbed ref axis control points
             C = geo.extractCoef(sweepAxis)
             C_orig = C.copy()
@@ -664,13 +668,15 @@ if __name__ == "__main__":
     if args.deriv:
         print("Testing derivatives...")
 
-        evalFuncs = ["lift", "cl"]
+        evalFuncs = ["lift", "cl", "wtip"]
 
         stepsizes = [1e-4, 1e-5, 1e-6]
         # DH = 1e-4
 
         funcSensAdj = {}
         funcSensFD = {}
+
+        finalFDDict = {}
 
         funcs = {}
         funcsFD = {}
@@ -775,8 +781,17 @@ if __name__ == "__main__":
                     )
 
             print(20 * "=")
-            print(f"FD funcs dh = {DH}")
+            print(f"FD funcsens dh = {DH}")
             print(pp(funcSensFD))
+            finalFDDict[f"{DH}"] = copy.deepcopy(funcSensFD)
 
+        print(20*"=")
+        print("Analytic funcs:")
+        print(pp(funcs))
+        print(20*"=")
         print("Analytic funcsSens:")
         print(pp(funcSensAdj))
+        print("")
+        for k,v in finalFDDict.items():
+            print(f"FD funcsSens dh = {k}")
+            print(pp(v))

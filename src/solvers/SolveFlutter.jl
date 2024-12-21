@@ -700,7 +700,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     end
     # dimwithBC = Nr
 
-    AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, zeros(2, 2))
+    AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, idxTip, zeros(2, 2))
 
     # --- Outputs ---
     p_r = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)

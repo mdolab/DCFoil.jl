@@ -46,6 +46,7 @@ struct StructMesh{TF,TC,TI}
     ab::Vector{TC}
     x_αb::Vector{TC}
     theta_f::TC # global fiber frame orientation
+    idxTip::TI # index of the tip node
     airfoilCoords::AbstractMatrix # airfoil coordinates
 end
 
@@ -84,7 +85,7 @@ function make_fullMesh(DVDictList, solverOptions)
 
 end
 
-function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOptions)
+function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
     """
 
     Replaces make_componentMesh()
@@ -95,7 +96,7 @@ function make_FEMeshFromCoords(midchords, nodeConn, appendageParams, appendageOp
     """
     config = appendageOptions["config"]
     # semispan = appendageParams["s"]
-    semispan = Preprocessing.compute_structSpan(abs.(midchords))
+    semispan = Preprocessing.compute_structSpan(abs.(midchords), idxTip)
     nElemWing = appendageOptions["nNodes"] - 1
     nElemTot = nothing
     if config == "wing"
@@ -902,7 +903,8 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     similar to above but shortcircuiting the hydroside
     """
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    idxTip = Preprocessing.get_tipnode(real.(LECoords))
+    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Geometry

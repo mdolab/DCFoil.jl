@@ -93,7 +93,7 @@ function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     return foilCoordsXform
 end
 
-function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
+function write_airfoils(io, appendageParams::Dict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
     """
     TODO generalize to take in a normal vector in spanwise direction
     """
@@ -113,13 +113,13 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
         )
     end
 
-    foilCoords = Utilities.generate_naca4dig(DVDict["toc"][1])
-    baserake = deg2rad(DVDict["alfa0"])
-    rake = deg2rad(DVDict["rake"])
+    foilCoords = Utilities.generate_naca4dig(appendageParams["toc"][1])
+    baserake = deg2rad(appendageParams["alfa0"])
+    rake = deg2rad(appendageParams["rake"])
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
         for ii in 1:appendageOptions["nNodes"] # iterate over span
             nodeLoc = mesh[ii, :]
-            localChord = DVDict["c"][ii]
+            localChord = chords[ii]
             foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
             # Get u, v, w based on rotations
@@ -147,7 +147,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
         if appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
             for ii in appendageOptions["nNodes"]+1:2*appendageOptions["nNodes"]-1 # iterate over span
                 nodeLoc = mesh[ii, :]
-                localChord = DVDict["c"][ii-appendageOptions["nNodes"]]
+                localChord = chords[ii-appendageOptions["nNodes"]]
                 foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
                 # Get u, v, w based on rotations
@@ -175,10 +175,10 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
 
         if appendageOptions["config"] == "t-foil"
 
-            foilCoords = Utilities.generate_naca4dig(DVDict["toc_strut"][1])
+            foilCoords = Utilities.generate_naca4dig(appendageParams["toc_strut"][1])
             for ii in appendageOptions["nNodes"]*2:(appendageOptions["nNodes"]*2+appendageOptions["nNodeStrut"]-2) # iterate over strut
                 spanLoc = mesh[ii, :]
-                localChord = DVDict["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]
+                localChord = appendageParams["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]
                 foilCoordsXform = transform_airfoil(foilCoords, localChord)
 
                 # Get u, v, w based on rotations
@@ -279,7 +279,7 @@ function write_deflections(
     # ************************************************
     #     Airfoils
     # ************************************************
-    write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
+    write_airfoils(io, DVDict, FEMESH.chord, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
 
     close(io)
 end

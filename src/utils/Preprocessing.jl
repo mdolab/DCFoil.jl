@@ -27,7 +27,7 @@ using FLOWMath: atan_cs_safe
 using ..Utilities: Utilities
 using Zygote
 
-function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions, appendageParams)
+function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions, appendageParams)
     """
     Compute 1D quantities from the grid
     """
@@ -87,12 +87,10 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     # ---------------------------
     #   Sweep distribution
     # ---------------------------
-    sweepAngles, qtrChords = compute_ACSweep(LECoords, TECoords, nodeConn, 0.25)
+    sweepAngles, qtrChords = compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, 0.25)
+    # Λ = sweepAngles
     Λ = sum(sweepAngles) / length(sweepAngles)
-    # if abs(π - abs(sweepAngles[1])) > π / 2
-    #     sweepAngles = sweepAngles .+ π
-    # end
-    # println("Sweep angle: ", Λ)
+    # println("AC Sweep angle: $(rad2deg(Λ)) deg")
 
 
     # println("Midchords: ")
@@ -108,7 +106,8 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     #   Span
     # ---------------------------
     # aeroSpan = compute_aeroSpan(midchords)
-    structSemispan = compute_structSpan(abs.(midchords))
+    structSemispan = compute_structSpan(abs.(midchords), idxTip)
+    # println("Structural semispan: $(structSemispan) m")
 
     # ************************************************
     #     Finally, spline them to the discretization
@@ -116,22 +115,26 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn; appendageOptions,
     semispan = structSemispan
     nNodes = appendageOptions["nNodes"]
     s_loc_q = LinRange(0.0, semispan, nNodes)
-    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1)))
-    chordLengthsWork::Vector{RealOrComplex} = SolverRoutines.do_linear_interp(s_loc, chordLengths, s_loc_q)
-    # qtrChordWork = SolverRoutines.do_linear_interp(s_loc, qtrChords, s_loc_q)
 
+    ds = semispan / (nNodes - 1)
+    s_loc_q = LinRange(ds, semispan - ds, nNodes - 2)
+
+    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1)))
+    chordLengthsWork_interp::Vector{RealOrComplex} = SolverRoutines.do_linear_interp(s_loc, chordLengths, s_loc_q)
+    chordLengthsWork = vcat(chordLengths[1], chordLengthsWork_interp, chordLengths[idxTip])
+    # qtrChordWork = SolverRoutines.do_linear_interp(s_loc, qtrChords, s_loc_q)
 
     return midchords, chordLengthsWork, spanwiseVectors, Λ
 end
 
-function compute_ACSweep(LECoords, TECoords, nodeConn, e=0.25)
+function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)
     """
     Compute the approximate sweep angle of the aerodynamic center (1/4 chord assumption)
     """
 
     # --- Compute the approximate sweep angle ---
     # Get the quarter chord line
-    qtrChord = ((1 - e) * LECoords .+ e * TECoords) / 2
+    qtrChord = ((1 - e) * LECoords .+ e * TECoords)
     n1vec = nodeConn[1, :]
     n2vec = nodeConn[2, :]
     dxVec = qtrChord[XDIM, n2vec] - qtrChord[XDIM, n1vec]
@@ -139,6 +142,7 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, e=0.25)
     dzVec = qtrChord[ZDIM, n2vec] - qtrChord[ZDIM, n1vec]
 
     # Compute the angle
+    # --- Vectorized ---
     sweepAngles = zeros(RealOrComplex, size(dxVec))
     sweepAngles_z = Zygote.Buffer(sweepAngles)
     for (ii, dy) in enumerate(dyVec)
@@ -148,25 +152,34 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, e=0.25)
             sweepAngles_z[ii] = atan_cs_safe(dxVec[ii], dy)
         end
     end
+    sweepAngle = copy(sweepAngles_z)
+    # dx = qtrChord[XDIM, idxTip] - qtrChord[XDIM, 1]
+    # dy = qtrChord[YDIM, idxTip] - qtrChord[XDIM, 1]
+    # # println("dx: $(dx), dy: $(dy)")
+    # # println(idxTip)
+    # sweepAngle = atan_cs_safe(-dx, dy)
 
     # sweepAngles = [atan_cs_safe(dx, dy) for (dx, dy) in zip(dxVec, dyVec) if dy > 0.0]
+    # println("Sweep angles: ", sweepAngle)
 
-    return copy(sweepAngles_z), qtrChord
+    return sweepAngle, qtrChord
 end
 
-function compute_aeroSpan(midchords)
+function compute_aeroSpan(midchords, idxTip)
 
-    ymax = Utilities.compute_KS(midchords[YDIM, :], 100.0)
-    ymin = -Utilities.compute_KS(-midchords[YDIM, :], 100.0)
-    aeroSpan = ymax - ymin
+    # ymax = Utilities.compute_KS(midchords[YDIM, :], 100.0)
+    # ymin = -Utilities.compute_KS(-midchords[YDIM, :], 100.0)
+    # aeroSpan = ymax - ymin
+    aeroSpan = 2 * (midchords[YDIM, idxTip])
 
     return aeroSpan
 end
 
-function compute_structSpan(midchords)
+function compute_structSpan(midchords, idxTip)
 
-    sVecs = .√(midchords[XDIM, :] .^ 2 + midchords[YDIM, :] .^ 2 + midchords[ZDIM, :] .^ 2)
-    smax = Utilities.compute_KS(sVecs, 100.0)
+    # sVecs = .√(midchords[XDIM, idxTip] .^ 2 + midchords[YDIM, idxTip] .^ 2 + midchords[ZDIM, idxTip] .^ 2)
+    # smax = Utilities.compute_KS(sVecs, 100.0)
+    smax = .√(midchords[XDIM, idxTip] .^ 2 + midchords[YDIM, idxTip] .^ 2 + midchords[ZDIM, idxTip] .^ 2)
 
     return smax
 end
@@ -194,6 +207,19 @@ function get_1DGeoPropertiesFromFile(fname)
 
     Returns
     """
+end
+
+function get_tipnode(LECoords)
+    """
+    Based on unaltered coordinates, get the indices of the tip and root mesh points
+    Need unaltered ones for differentiation purposes
+    """
+
+    idxTip = argmax(LECoords[YDIM, :])
+    # if idxTip != 10
+    #     println("Tip node index (hopefully not changing): ", idxTip)
+    # end
+    return idxTip
 end
 
 end
