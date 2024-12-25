@@ -72,7 +72,7 @@ def setup(args, comm, files, evalFuncs, outputDir):
         "nModes": 4,
         "uRange": [170.0, 190.0],
         "maxQIter": 100,  # that didn't fix the slow run time...
-        "rhoKS": 80.0,
+        "rhoKS": 500.0,
     }
 
     params = {  # THIS IS BASED OFF OF THE MOTH RUDDER

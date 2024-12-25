@@ -221,7 +221,8 @@ function setup_problemFromCoords(
     alphaCorrection::DTYPE = 0.0
 
     _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
-    areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+    # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+    areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
 
     # DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions, verbose=verbose)
     SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalK, globalK, copy(Float64.(globalK)), AIC, areaRef, alphaCorrection)
@@ -392,6 +393,10 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
             fout = lift
         end
     end
+    if costFunc == "kscl"
+        kscl = ComputeFunctions.compute_kscl(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        fout = kscl
+    end
     if costFunc in ["moment", "cmy"]
         moment, cmy = ComputeFunctions.compute_momy(forces, qdyn, areaRef, meanChord)
         if costFunc == "cmy"
@@ -528,8 +533,11 @@ function evalFuncsSens(
     dfdxstruct = zeros(DTYPE, length(allDesignVariables))
 
     if uppercase(mode) == "FIDI" # use finite differences the stupid way
+        # dh = 1e-2
+        dh = 1e-3
         # dh = 1e-4
-        dh = 1e-5
+        # dh = 1e-5
+        # dh = 1e-6
         idh = 1 / dh
         println("step size: ", dh)
         for evalFuncSensKey in evalFuncSensList
@@ -736,7 +744,7 @@ function compute_∂f∂x(
         hydromode = "ANALYTIC"
         # println("Computing hydro derivatives in $(hydromode)")
 
-        if costFunc ∉ ["cdi", "cdw", "cdpr", "cdj", "cds"]
+        if costFunc ∉ ["cdi", "cdw", "cdpr", "cdj", "cds"] # parts of the drag build up
             DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
             u = SOL.structStates[1:end.∉[DOFBlankingList]]
             dfstaticdXpt = compute_dfhydrostaticdXpt(u, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode=hydromode)
@@ -744,7 +752,9 @@ function compute_∂f∂x(
             meanChord = mean(SOL.FOIL.chord)
             rootChord = SOL.FOIL.chord[1]
             qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
-            areaRef = HydroStrip.compute_areas(SOL.FEMESH, SOL.FOIL; appendageOptions=appendageOptions, STRUT=SOL.STRUT)
+            # areaRef = HydroStrip.compute_areas(SOL.FEMESH, SOL.FOIL; appendageOptions=appendageOptions, STRUT=SOL.STRUT)
+            LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+            areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
 
             if costFunc != "cd"
                 ∂f∂fstatic = compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, areaRef, meanChord, rootChord, appendageOptions, appendageParams, solverOptions)
@@ -759,7 +769,7 @@ function compute_∂f∂x(
             # Any function can be written as some function of the fluid or structural states
             ∂f∂xPt = reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdXpt + reshape(∂f∂xPtdirect, 1, length(∂f∂xPtdirect))
         else
-            error("Why are you here?")
+            error("Why are you here? $(costFunc)")
         end
 
     elseif uppercase(mode) == "RAD" # WORKS BUT BUGGING WITH NANs prob from lifting line
@@ -832,7 +842,8 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], idxTip, zeros(10, 2))
 
-        areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+        # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+        areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
         meanChord = mean(WING.chord)
         rootChord = WING.chord[1]
 
@@ -858,7 +869,8 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], idxTip, zeros(10, 2))
 
-        areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+        # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
+        areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
         meanChord = mean(WING.chord)
         rootChord = WING.chord[1]
 
@@ -871,6 +883,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         return vec([cdw, cdpr, cdj, cds, dw, dpr, dj, ds])
     end
+
     # backend = AD.FiniteDifferencesBackend() # this works alright
     # ∂f∂xPt, = AD.gradient(backend, x -> costFuncFromXpt(
     #         costFunc, SOL, x, nodeConn, appendageParams, appendageOptions, solverOptions),
@@ -1250,6 +1263,9 @@ function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendagePara
 end
 
 function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="ANALYTIC")
+    """
+    Derivative of steady hydro forces wrt mesh points
+    """
 
     dfstaticdXpt = zeros(DTYPE, length(structStates), length(ptVec))
 

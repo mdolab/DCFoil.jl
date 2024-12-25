@@ -36,7 +36,6 @@ function compute_lift(fHydro, qdyn, areaRef)
     return TotalLift, CL
 end
 
-
 function compute_momy(fHydro, qdyn, areaRef, meanChord)
     """
     About midchord
@@ -51,13 +50,24 @@ function compute_momy(fHydro, qdyn, areaRef, meanChord)
 end
 
 function compute_kscl(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+    # function compute_kscl(fHydro, qdyn, chords, solverOptions)
     """
     Compute the KS function for the spanwise lift coefficient
         Needed for the ventilation constraint
+
+    2024-12-24: All of the derivatives for this are good!
     """
+
+    # This way would be off of the lifting line directly
     LLOutputs, _, _ = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
-    clmax = compute_KS(LLOutputs.cl,)
+    clmax = compute_KS(LLOutputs.cl, solverOptions["rhoKS"])
+    # println("cls across span", LLOutputs.cl)
+
+    # # --- From forces ---
+    # Lift = fHydro[WIND:NDOF:end]
+    # clvec = Lift ./ chords
+    # clmax = compute_KS(clvec, rhoKS=solverOptions["rhoKS"])
 
     return clmax
 end
@@ -83,14 +93,17 @@ function compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendag
         WSA = 2 * areaRef + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
     end
     println("Profile drag calc I'm not debugged")
+
     # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
     NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
     Re = solverOptions["Uinf"] * meanChord / NU
     # Ma = solverOptions["Uinf"] / 1500
     cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
     xcmax = 0.3 # chordwise position of the maximum thickness
+    
     # # --- Raymer equation 12.30 ---
     # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["sweep"])^0.28)
+    
     # --- Torenbeek 1990 ---
     # First term is increase in skin friction due to thickness and quartic is separation drag
     FF = 1 .+ 2.7 .* appendageParams["toc"] .+ 100 .* appendageParams["toc"] .^ 4
@@ -174,7 +187,6 @@ function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverO
 
     CDs, Ds = compute_spraydrag(appendageParams, qdyn)
 
-
     return CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds
 end
 
@@ -202,6 +214,29 @@ function compute_centerofforce(fHydro, FEMESH)
     comy = [xcenter, ycenter, zcenter]
 
     return cofz, comy
+end
+
+# ************************************************
+#     Dynamic functions
+# ************************************************
+function compute_PSDArea(PSD, fSweep, meanChord)
+    """
+    Compute the area under the PSD curve
+    """
+
+    df = fSweep[2] - fSweep[1]
+
+    ω_char = √(GRAV / (0.5 * meanChord)) # [Hz] characteristic frequency for nondimensionalization
+
+    PSDArea = sum(PSD) * df / ω_char
+
+    return
+end
+
+function compute_responsePeak(dynDeflections, limit, solverOptions)
+
+    ksmax = compute_KS(dynDeflections, solverOptions["rhoKS"])
+    return ksmax - limit
 end
 
 end # module

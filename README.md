@@ -95,6 +95,7 @@ I wrote the custom rule with the help of the Julia slack channel.
 It also doesn't fit with the data types.
 * Unicode characters are nice for readability of math-heavy code, but do not use them for interface-level code
 * `hypot()` function for calculating the L2 norm is slower than typing it out
+* `@ignore_derivatives` macro from `ChainRulesCore` sometimes messes with the scope of operations
 
 #### AD Packages
 
@@ -185,6 +186,7 @@ run_tests.jl
 ```
 
 ### Debugging code
+
 Use `@enter` from the `Debugger.jl` to step into functions and `@bp` to put breakpoints.
 Wrap certain code in `@run` to put the execution in debug mode to get the breakpoints.
 You can also use `@show`, `@debug` commands for pesky bugs.

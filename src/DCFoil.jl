@@ -295,22 +295,23 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
         #                         Flutter solution
         # ==============================================================================
         if solverOptions["run_modal"]
-            structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
+            appendageParams = appendageParamsList[1]
+            # structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
+            structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, FEMESH, appendageParams, solverOptions, appendageOptions)
             if solverOptions["writeTecplotSolution"]
-                SolveFlutter.write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, structMesh, outputDir; solverOptions=solverOptions)
+                SolveFlutter.write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, FEMESH.mesh, FEMESH.chord, outputDir; solverOptions=solverOptions)
             end
         end
 
         if solverOptions["run_flutter"]
-            DVDict = appendageParamsList[1]
+            appendageParams = appendageParamsList[1]
             if isnothing(solverOptions["gridFile"])
-                @time global FLUTTERSOL = SolveFlutter.get_sol(DVDict, solverOptions)
+                @time global FLUTTERSOL = SolveFlutter.get_sol(appendageParams, solverOptions)
             else
-                @time global FLUTTERSOL = SolveFlutter.get_sol(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
-                @time STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
+                @time FLUTTERSOL = SolveFlutter.compute_solFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
             end
             if solverOptions["writeTecplotSolution"]
-                SolveFlutter.write_tecplot(DVDict, FLUTTERSOL, structMesh, outputDir; solverOptions=solverOptions)
+                SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
             end
             SOLDICT["FLUTTER"] = FLUTTERSOL
         end
@@ -379,15 +380,16 @@ function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsL
             end
         end
 
-    elseif key in forcedCostFuncs && solverOptions["run_forced"]
+    elseif solverOptions["run_forced"]
+        forcedEvalFuncs = [key for key in evalFuncsList if key in forcedCostFuncs]
         SolveForced.evalFuncs()
 
-    elseif key in flutterCostFuncs && solverOptions["run_flutter"]
+    elseif solverOptions["run_flutter"]
+        flutterEvalFuncs = [key for key in evalFuncsList if key in flutterCostFuncs]
         obj, _ = SolveFlutter.postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, FLUTTERSOL.p_r, FLUTTERSOL.iblank, solverOptions["rhoKS"])
-        flutterCostFuncsDict = Dict(
-            "ksflutter" => obj,
-        )
-        evalFuncsDict = merge(evalFuncsDict, flutterCostFuncsDict)
+        for evalFunc in flutterEvalFuncs
+            evalFuncsDict[evalFunc] = obj
+        end
     else
         println("Unsupported cost function: $(key) or solver mode not on")
     end
@@ -404,7 +406,7 @@ end # evalFuncs
 
 
 function evalFuncsSens(
-    SOLDICT::Dict, DVDictList::Vector, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
+    SOLDICT::Dict, appendageParamsList::Vector, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
     mode="FiDi", CLMain=0.0
 )
     """
@@ -412,13 +414,21 @@ function evalFuncsSens(
 
     """
 
+    GridStruct = MeshIO.Grid(LECoords, nodeConn, TECoords)
     # ---------------------------
     #   Cost functions
     # ---------------------------
     costFuncsSens = 0.0 # scope
     if solverOptions["run_flutter"]
+        flutterFuncList = []
+        for evalFuncSens in evalFuncSensList
+            if evalFuncSens in flutterCostFuncs
+                push!(flutterFuncList, evalFuncSens)
+            end
+        end
+        appendageParams = appendageParamsList[1]
         tFlutter = @elapsed begin
-            costFuncsSens = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode=mode)
+            costFuncsSens = SolveFlutter.evalFuncsSens(flutterFuncList, appendageParams, GridStruct, solverOptions; mode=mode)
         end
     end
 
@@ -431,9 +441,8 @@ function evalFuncsSens(
         end
         STATSOLLIST = SOLDICT["STATIC"]
 
-        GridStruct = MeshIO.Grid(LECoords, nodeConn, TECoords)
         tStatic = @elapsed begin
-            costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, DVDictList, GridStruct, FEMESHList, solverOptions;
+            costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, appendageParamsList, GridStruct, FEMESHList, solverOptions;
                 mode=mode, CLMain=CLMain)
         end
         println("Static sensitivity time:\t$(tStatic) sec")

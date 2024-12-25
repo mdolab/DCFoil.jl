@@ -10,7 +10,7 @@ using LinearAlgebra, Statistics
 using FLOWMath: norm_cs_safe
 using Printf
 # using Debugger
-using ChainRulesCore: @ignore_derivatives
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 
 using ..Utilities
 

@@ -194,7 +194,7 @@ class DCFOIL:
             "nModes": 3,  # Number of struct modes to solve for (starting)
             "uRange": [1.0, 5.0],  # Range of velocities to sweep
             "maxQIter": 100,  # max dyn pressure iters
-            "rhoKS": 80.0,
+            "rhoKS": 500.0,
         }
         return defaultOptions
 
@@ -373,6 +373,9 @@ class DCFOIL:
             funcKey = key.split("-")[0]
             if funcKey in evalFuncs:
                 funcs[f"{aeroProblem.name}_{funcKey}"] = val
+                if "cd" in funcKey:
+                    print("Hard coded to take first value of CD")
+                    funcs[f"{aeroProblem.name}_{funcKey}"] = val[0]
 
         self.costFuncs = costFuncs
 
@@ -451,6 +454,11 @@ class DCFOIL:
             #   Geometric Variables
             # ============================
             funcsSens[key].update(self.dIdx_geo_total)
+
+            # ============================
+            #   Structural Variables
+            # ============================
+            funcsSens[key]["struct"] = self.structSens
 
             finalEvalSensTime = time.time()
 

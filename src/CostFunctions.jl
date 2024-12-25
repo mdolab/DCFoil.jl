@@ -18,6 +18,7 @@ const staticCostFuncs::Vector{String} = [
     "moment"
     "cl" # total lift coefficient
     "cmy"
+    "kscl" # KS max of spanwise lift coefficient
     # Centers
     "cofz"
     "comy"

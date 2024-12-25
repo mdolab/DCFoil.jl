@@ -19,7 +19,7 @@ module FEMMethods
 
 # --- PACKAGES ---
 using Zygote
-using ChainRulesCore: @ignore_derivatives
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using DelimitedFiles
 using LinearAlgebra
 using StaticArrays
@@ -64,8 +64,6 @@ function make_fullMesh(DVDictList, solverOptions)
         appendageDict = solverOptions["appendageList"][iComp]
         DVDict = DVDictList[iComp]
         println("Meshing ", appendageDict["compName"])
-        # span = DVDict["s"]
-        # spanStrut = DVDict["s_strut"]
         nElem = appendageDict["nNodes"] - 1
         nElStrut = appendageDict["nNodeStrut"] - 1
         config = appendageDict["config"]
@@ -95,7 +93,6 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
 
     """
     config = appendageOptions["config"]
-    # semispan = appendageParams["s"]
     semispan = Preprocessing.compute_structSpan(abs.(midchords), idxTip)
     nElemWing = appendageOptions["nNodes"] - 1
     nElemTot = nothing
@@ -122,7 +119,6 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     junctionIdxs = findall(x -> x == 1, nodeConn)
 
     s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
-    # print("s_loc: ", s_loc)
 
 
     midchordXLocs = SolverRoutines.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)

@@ -34,7 +34,7 @@ struct DCFoilSolverParams{TF,TC}
     """
     Kmat::Matrix{TC} # structural stiffness matrix (no BC blanking)
     Mmat::Matrix{TC} # structural mass matrix (no BC blanking)
-    Cmat::Matrix{TF} # structural damping matrix (with BC blanking)
+    Cmat::Matrix{TF} # structural damping matrix (no BC blanking)
     AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
     areaRef::TF # reference area for coefficients [m^2]
     downwashAngles::TF # downwash angles [rad]

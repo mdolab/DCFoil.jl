@@ -465,7 +465,7 @@ function write_1Dfemmesh(io, FEMESH)
 
 end
 
-function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode"; solverOptions=Dict("config" => "wing"))
+function write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir::String, basename="mode"; appendageOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
     Currently writes out a NACA 4-digit airfoil
@@ -564,7 +564,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
                 # ************************************************
                 #     Airfoils
                 # ************************************************
-                write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+                write_airfoils(io, DVDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
 
                 close(io)
             end
@@ -572,7 +572,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
     end
 end
 
-function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String; solverOptions=Dict("config" => "wing"))
+function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir::String; solverOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
     Currently writes out a NACA 4-digit airfoil
@@ -640,7 +640,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+        write_airfoils(io, DVDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=solverOptions["appendageList"][1])
 
         close(io)
     end
@@ -696,7 +696,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+        write_airfoils(io, DVDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=solverOptions["appendageList"][1])
 
         close(io)
     end

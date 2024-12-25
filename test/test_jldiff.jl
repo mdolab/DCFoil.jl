@@ -173,7 +173,7 @@ save("./FWDDiff.jld2", "derivs", derivs, "steps", steps, "funcVal", funcVal)
 # ************************************************
 #     Does it all work?
 # ************************************************
-funcsSensAD = DCFoil.SolveFlutter.evalFuncsSens([evalFunc],DVDict, solverOptions; mode="RAD")
+funcsSensAD = DCFoil.SolveFlutter.evalFuncsSens([evalFunc], DVDict, solverOptions; mode="RAD")
 # funcsSensFD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="FiDi")
 save("./RAD.jld2", "derivs", funcsSensAD, "funcVal", funcVal)
 

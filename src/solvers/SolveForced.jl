@@ -18,7 +18,7 @@ export solve
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
-using ChainRulesCore: @ignore_derivatives
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using FileIO
 
 # --- DCFoil modules ---
@@ -227,7 +227,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     fSweep = solverOptions["fRange"][1]:solverOptions["df"]:solverOptions["fRange"][end]
 
     # --- Tip twist approach ---
-    extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1]) # this is a vector excluded the BC nodes
+    extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
     @ignore_derivatives() do
         extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
         extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
@@ -252,7 +252,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
     Ms = SOLVERPARAMS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
     Ks = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
-    Cs = SOLVERPARAMS.Cmat
+    Cs = SOLVERPARAMS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
 
     # ************************************************
     #     For every frequency, solve the system
@@ -438,8 +438,9 @@ function setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageO
     # ---------------------------
     alphaConst, betaConst = FEMMethods.compute_proportional_damping(real(Ks), real(Ms), appendageParams["zeta"], solverOptions["nModes"])
     Cs = alphaConst * Ms .+ betaConst * Ks
+    globalCs = alphaConst * globalMs .+ betaConst * globalKs
 
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, Cs, zeros(2, 2), 0.0, 0.0)
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, 0.0)
 
     return WING, STRUT, SOLVERPARAMS, FEMESH, LLSystem, LLOutputs, FlowCond
 end

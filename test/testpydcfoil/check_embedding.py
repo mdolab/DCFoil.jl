@@ -21,8 +21,7 @@ from pprint import pprint as pp
 # External Python modules
 # ==============================================================================
 import numpy as np
-
-# from tabulate import tabulate
+from tabulate import tabulate
 
 # ==============================================================================
 # Extension modules
@@ -668,9 +667,9 @@ if __name__ == "__main__":
     if args.deriv:
         print("Testing derivatives...")
 
-        evalFuncs = ["lift", "cl", "wtip"]
+        evalFuncs = ["lift", "cl", "wtip", "cd", "kscl"]
 
-        stepsizes = [1e-4, 1e-5, 1e-6]
+        stepsizes = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
         # DH = 1e-4
 
         funcSensAdj = {}
@@ -783,15 +782,39 @@ if __name__ == "__main__":
             print(20 * "=")
             print(f"FD funcsens dh = {DH}")
             print(pp(funcSensFD))
-            finalFDDict[f"{DH}"] = copy.deepcopy(funcSensFD)
 
-        print(20*"=")
+            finalFDDict[f"{DH}"] = {}
+            for evalFunc in evalFuncs:
+                finalFDDict[f"{DH}"][evalFunc] = {}
+                for dvkey, v in dvDict.items():
+                    finalFDDict[f"{DH}"][evalFunc][dvkey] = copy.deepcopy(funcSensFD[dvkey][evalFunc])
+
+        print(20 * "=")
         print("Analytic funcs:")
         print(pp(funcs))
-        print(20*"=")
+        print(20 * "=")
         print("Analytic funcsSens:")
+        headers = ["Adjoint"] + stepsizes
         print(pp(funcSensAdj))
-        print("")
-        for k,v in finalFDDict.items():
-            print(f"FD funcsSens dh = {k}")
+        for dhkey, v in finalFDDict.items():
+            print(f"FD funcsSens dh = {dhkey}")
             print(pp(v))
+
+        # --- Pretty print stuff ---
+        for DV, value in dvDict.items():
+            print(20 * "=")
+            print(f"Checking DV: {DV}")
+            print(20 * "=")
+            for evalFunc in evalFuncs:
+                print(f"{evalFunc} sens:")
+                adjoint = funcSensAdj[f"dcfoil_{evalFunc}"][DV]
+                
+                fdvals = []
+                for dh in stepsizes:
+                    fdvals.append(finalFDDict[f"{dh}"][evalFunc][DV])
+                
+                print(f" Adjoint |\tdh={stepsizes[0]:.1e} \tdh={stepsizes[1]:.1e}\tdh={stepsizes[2]:.1e}\tdh={stepsizes[3]:.1e}\tdh={stepsizes[4]:.1e}")
+                print(f"{adjoint}\t{fdvals[0]}\t{fdvals[1]}\t{fdvals[2]}\t{fdvals[3]}\t{fdvals[4]}")
+
+                # row = [funcSensAdj[f"dcfoil_{evalFunc}"]["span"], finalFDDict[stepsizes[0]]["span"][evalFunc],finalFDDict[stepsizes[1]]["span"][evalFunc],finalFDDict[stepsizes[2]]["span"][evalFunc],finalFDDict[stepsizes[3]]["span"][evalFunc],finalFDDict[stepsizes[4]]["span"][evalFunc]]
+                # tabulate(row, headers=headers)

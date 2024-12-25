@@ -11,7 +11,7 @@ module InitModel
 
 # --- PACKAGES ---
 using Zygote
-using ChainRulesCore: @ignore_derivatives
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 # using Debugger
 
 # --- DCFoil modules ---

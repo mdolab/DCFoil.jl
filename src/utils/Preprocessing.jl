@@ -23,7 +23,7 @@ using ..SolverRoutines: SolverRoutines
 # using ..BeamProperties
 # using ..DesignConstants: DynamicFoil
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
-using FLOWMath: atan_cs_safe
+using FLOWMath: atan_cs_safe, abs_cs_safe
 using ..Utilities: Utilities
 using Zygote
 
@@ -74,14 +74,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # ---------------------------
     #   Twist distribution
     # ---------------------------
-    # Compute the twist distribution based off of angle about midchord
-    dxVec = chordVectors[XDIM, :]
-    dzVec = chordVectors[ZDIM, :]
-    twistVec = atan_cs_safe.(dzVec, dxVec)
-    if abs(π - abs(twistVec[1])) < MEPSLARGE
-        twistVec = twistVec .- π
-    end
-    # println("Twist vec: ", twistVec)
+    twistVec = compute_twist(chordVectors)
 
 
     # ---------------------------
@@ -93,15 +86,6 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # println("AC Sweep angle: $(rad2deg(Λ)) deg")
 
 
-    # println("Midchords: ")
-    # for xyz in eachcol(midchords)
-    #     println("$(xyz)")
-    # end
-    # println("spanwiseVectors: ")
-    # for xyz in eachcol(spanwiseVectors)
-    #     println("$(xyz)")
-    # end
-    # println("Chord lengths: ", chordLengths)
     # ---------------------------
     #   Span
     # ---------------------------
@@ -118,11 +102,15 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
 
     ds = semispan / (nNodes - 1)
     s_loc_q = LinRange(ds, semispan - ds, nNodes - 2)
-
-    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1)))
-    chordLengthsWork_interp::Vector{RealOrComplex} = SolverRoutines.do_linear_interp(s_loc, chordLengths, s_loc_q)
+    # println("s_loc_q: ", s_loc_q)
+    s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1)))
+    # println("s_loc: ", s_loc)
+    chordLengthsWork_interp::Vector{RealOrComplex} = SolverRoutines.do_linear_interp(s_loc, chordLengths[1:idxTip], s_loc_q)
+    # This is for half of the wing
     chordLengthsWork = vcat(chordLengths[1], chordLengthsWork_interp, chordLengths[idxTip])
     # qtrChordWork = SolverRoutines.do_linear_interp(s_loc, qtrChords, s_loc_q)
+    twistDistribution = SolverRoutines.do_linear_interp(s_loc, twistVec[1:idxTip], s_loc_q)
+    # println("chords: ", chordLengthsWork)
 
     return midchords, chordLengthsWork, spanwiseVectors, Λ
 end
@@ -172,6 +160,7 @@ function compute_aeroSpan(midchords, idxTip)
     # aeroSpan = ymax - ymin
     aeroSpan = 2 * (midchords[YDIM, idxTip])
 
+    # print("Aerodynamic span: ", aeroSpan)
     return aeroSpan
 end
 
@@ -181,9 +170,24 @@ function compute_structSpan(midchords, idxTip)
     # smax = Utilities.compute_KS(sVecs, 100.0)
     smax = .√(midchords[XDIM, idxTip] .^ 2 + midchords[YDIM, idxTip] .^ 2 + midchords[ZDIM, idxTip] .^ 2)
 
+    # print("Structural semispan: ", smax)
     return smax
 end
 
+function compute_twist(chordVectors)
+
+    # Compute the twist distribution based off of angle about midchord
+    dxVec = chordVectors[XDIM, :]
+    dzVec = chordVectors[ZDIM, :]
+    twistVec = atan_cs_safe.(dzVec, dxVec)
+
+    if abs(π - abs(twistVec[1])) < MEPSLARGE
+        twistVec = twistVec .- π
+    end
+    # println("Twist vec: ", twistVec)
+
+    return twistVec
+end
 function get_1DBeamPropertiesFromFile(fname)
     """
     Get beam structural properties from file
@@ -220,6 +224,27 @@ function get_tipnode(LECoords)
     #     println("Tip node index (hopefully not changing): ", idxTip)
     # end
     return idxTip
+end
+
+function compute_areas(LECoords, TECoords, nodeConn)
+
+    areaRef = 0.0
+
+    for (ii, inds) in enumerate(eachcol(nodeConn))
+        # --- Compute chord ---
+        chord1 = TECoords[XDIM, inds[1]] - LECoords[XDIM, inds[1]]
+        chord2 = TECoords[XDIM, inds[2]] - LECoords[XDIM, inds[2]]
+
+        midchords = 0.5 .* (LECoords .+ TECoords)
+        Δy = abs_cs_safe(midchords[YDIM, inds[2]] - midchords[YDIM, inds[1]])
+
+        # --- Compute area ---
+        areaRef += 0.5 * (chord1 + chord2) * Δy
+    end
+
+    # println("Planform area: $(areaRef) m^2")
+
+    return areaRef
 end
 
 end

@@ -33,9 +33,9 @@ tipMass = false
 # Uncomment here
 run_static = true
 # run_forced = true
-# run_modal = true
+run_modal = true
 # run_flutter = true
-debug = true
+# debug = true
 # tipMass = true
 
 # ************************************************
@@ -48,8 +48,8 @@ nModes = 4 # number of modes to solve for;
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 fSweep = range(1e-4, 100.0, 1000) # forcing frequency sweep [Hz]
-# uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
+uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
+# uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************
@@ -61,7 +61,6 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 #     "sweep" => deg2rad(0.0), # sweep angle [rad]
 #     "zeta" => 0.04, # modal damping ratio at first 2 modes
 #     "c" => ".dat", # chord length [m]
-#     "s" => 1.0, # semispan [m]
 #     "ab" => ".dat", # dist from midchord to EA [m]
 #     "toc" => ".dat", # thickness-to-chord ratio (mean)
 #     "x_ab" => ".dat", # static imbalance [m]
@@ -83,7 +82,6 @@ paramsRudder = Dict(
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => 0.14 * ones(nNodes), # chord length [m]
     # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
-    # "s" => 0.333, # semispan [m]
     "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
     "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
     "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
@@ -108,7 +106,7 @@ rudderOptions = Dict(
     "config" => "full-wing",
     "nNodes" => nNodes,
     "nNodeStrut" => nNodesStrut,
-    # "use_tipMass" => false,
+    "use_tipMass" => false,
     "xMount" => 3.355,
     "material" => "cfrp", # preselect from material library
     "strut_material" => "cfrp",
@@ -126,7 +124,7 @@ solverOptions = Dict(
     # ---------------------------
     # "name" => "R3E6",
     "name" => "mothrudder",
-    "debug" => false,
+    "debug" => debug,
     # "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
     "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf"], #, "./INPUT/mothrudder_foil_strut_mesh.dcf"],
     "writeTecplotSolution" => true,
@@ -165,17 +163,18 @@ solverOptions = Dict(
     "nModes" => nModes,
     "uRange" => uRange,
     "maxQIter" => 100, # that didn't fix the slow run time...
-    "rhoKS" => 100.0,
+    "rhoKS" => 500.0,
 )
 
 # ************************************************
 #     Cost functions
 # ************************************************
-evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter"]
+evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter", "kscl"]
 evalFuncSens = [
-    "wtip",
-    "cd",
-    "cl", "ksflutter"
+    # "wtip",
+    # "cd",
+    "cl", "lift", 
+    # "ksflutter", "kscl",
 ]
 
 # ************************************************
@@ -186,7 +185,7 @@ evalFuncSens = [
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
 outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
     string(Dates.today()),
-solverOptions["name"],
+    solverOptions["name"],
     rudderOptions["material"],
     rad2deg(paramsList[1]["theta_f"]),
     rad2deg(paramsList[1]["sweep"]))
@@ -207,4 +206,3 @@ costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TE
     # mode="ADJOINT",
     mode="FiDi",
 )
-# TODO: FIGURE OUT WHY END NODES ARE BAD and if they actually are for pygeo? fix the interp parts

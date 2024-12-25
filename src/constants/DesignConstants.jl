@@ -96,6 +96,21 @@ const SORTEDDVS::Vector{String} = [
     "theta_f_strut"
 ]
 
+const SORTEDSTRUCTDVS::Vector{String} = [
+    "ab"
+    "ab_strut"
+    "beta"
+    "c"
+    "c_strut"
+    "toc"
+    "toc_strut"
+    "x_ab"
+    "x_ab_strut"
+    "theta_f"
+    "theta_f_strut"
+]
+
+
 # All possible configurations for a hydrofoil
 const CONFIGS::Vector{String} =
     [

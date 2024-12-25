@@ -33,6 +33,31 @@ from mpi4py import MPI
 from baseclasses import AeroProblem
 
 comm = MPI.COMM_WORLD
+
+# ==============================================================================
+#                         MODELING FUNCTIONS
+# ==============================================================================
+def compute_clvent(Fnh:float):
+    """
+    Compute the critical c_l for ventilation
+
+    Parameters
+    ----------
+    Fnh : float
+        Depth-based Froude number
+
+    Returns
+    -------
+    clvent : float
+
+    TODO: eventually, this should be in the julia layer to get the fnh(XLoc) effect
+    """
+
+    sigmav = (PATM - PC) / (0.5*RHOF*UINF**2)
+    clvent = (1 - np.exp(-sigmav*Fnh)) / np.sqrt(sigmav*Fnh)
+
+    return clvent
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -127,6 +152,7 @@ if __name__ == "__main__":
         "moment",
         "cd",
         "ksflutter",
+        "kscl",
     ]
     STICKSolver, solverOptions = setup_dcfoil.setup(args, comm, files, evalFuncs, outputDir)
     STICKSolver.setDVGeo(DVGeo)
@@ -149,14 +175,10 @@ if __name__ == "__main__":
         # --- Grab cost funcs ---
         funcs = STICKSolver.evalFunctions(ap, funcs, evalFuncs=evalFuncs)
 
-        for iapp in STICKSolver.solverOptions["appendageList"]:
-            compName = iapp["compName"]
-            funcs["obj"] += (
-                funcs[f"cdi-{compName}"]
-                + funcs[f"cdj-{compName}"]
-                + funcs[f"cdpr-{compName}"]
-                + funcs[f"cds-{compName}"]
-            )
+        # for iapp in STICKSolver.solverOptions["appendageList"]:
+            # compName = iapp["compName"]
+        funcs["obj"] += funcs[f"{ap.name}_cd"]
+            
 
         if comm.rank == 0:
             print("These are the funcs: ")
@@ -169,6 +191,19 @@ if __name__ == "__main__":
 
         # --- Solve sensitivity ---
         funcsSens = STICKSolver.evalFunctionsSens(ap, funcsSens, evalFuncs=evalFuncs)
+
+        # The span derivative is the only broken derivative in DCFoil. We FD it here.
+        dh = 1e-5
+        funcs_i = {}
+        funcs_f = {}
+        STICKSolver.evalFunctions(ap, funcs_i, evalFuncs=evalFuncs)
+        x["span"] += dh
+        ap.setDesignVars(x)
+        STICKSolver.evalFunctions(ap, funcs_f, evalFuncs=evalFuncs)
+        x["span"] -= dh
+        for key, value in funcs_i.items():
+            funcsSens["span"] = (funcs_f[key] - funcs_i[key]) / dh
+
 
         return funcsSens
 
@@ -185,6 +220,11 @@ if __name__ == "__main__":
 
         # --- Lift ---
         funcs["cl_con_" + ap.name] = funcs[ap["cl"]] - mycl
+
+        # --- Ventilation ---
+        funcs[f"vent_con_{ap.name}"] = funcs[ap["kscl"]] - myventcl
+
+        funcs[f"wtip_con_{ap.name}"] = funcs[ap["wtip"]] - mywtip
 
         if printOK:
             print("funcs in obj: ", funcs)
