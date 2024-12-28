@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     ap = AeroProblem(
         name="dcfoil",
-        alpha=0.0,
+        alpha=2.0,
         V=V,
         rho=rho,
         T=temp,
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         TSuthDim=temp,
     )
 
-    STICKSolver, solverOptions = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir)
+    STICKSolver, solverOptions = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
 
     # ==============================================================================
     #                         DVGeometry setup
@@ -779,6 +779,21 @@ if __name__ == "__main__":
                         funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH
                     )
 
+            # Angle of attack derivative
+            funcSensFD["aoa"] = {}
+            ap.alpha += DH
+            STICKSolverNew,_ = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
+            STICKSolverNew.setDVGeo(DVGeo)
+            STICKSolverNew.addMesh(solverOptions["gridFile"])
+            STICKSolverNew(ap)
+            STICKSolverNew.evalFunctions(ap, funcsFD, evalFuncs=evalFuncs)
+            ap.alpha -= DH
+
+            for evalFunc in evalFuncs:
+                funcSensFD["aoa"][evalFunc] = np.divide(
+                    funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH
+                )
+
             print(20 * "=")
             print(f"FD funcsens dh = {DH}")
             print(pp(funcSensFD))
@@ -788,6 +803,8 @@ if __name__ == "__main__":
                 finalFDDict[f"{DH}"][evalFunc] = {}
                 for dvkey, v in dvDict.items():
                     finalFDDict[f"{DH}"][evalFunc][dvkey] = copy.deepcopy(funcSensFD[dvkey][evalFunc])
+                
+                finalFDDict[f"{DH}"][evalFunc]["aoa"] = copy.deepcopy(funcSensFD["aoa"][evalFunc])
 
         print(20 * "=")
         print("Analytic funcs:")
@@ -818,3 +835,16 @@ if __name__ == "__main__":
 
                 # row = [funcSensAdj[f"dcfoil_{evalFunc}"]["span"], finalFDDict[stepsizes[0]]["span"][evalFunc],finalFDDict[stepsizes[1]]["span"][evalFunc],finalFDDict[stepsizes[2]]["span"][evalFunc],finalFDDict[stepsizes[3]]["span"][evalFunc],finalFDDict[stepsizes[4]]["span"][evalFunc]]
                 # tabulate(row, headers=headers)
+
+        print(20 * "=")
+        print(f"Checking DV: aoa")
+        print(20 * "=")
+        for evalFunc in evalFuncs:
+            print(f"{evalFunc} sens:")
+            
+            fdvals = []
+            for dh in stepsizes:
+                fdvals.append(finalFDDict[f"{dh}"][evalFunc]["aoa"])
+            
+            print(f"\tdh={stepsizes[0]:.1e} \tdh={stepsizes[1]:.1e}\tdh={stepsizes[2]:.1e}\tdh={stepsizes[3]:.1e}\tdh={stepsizes[4]:.1e}")
+            print(f"{fdvals[0]}\t{fdvals[1]}\t{fdvals[2]}\t{fdvals[3]}\t{fdvals[4]}")

@@ -182,7 +182,7 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
     idxTip = Preprocessing.get_tipnode(LECoords)
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Hydrodynamics
@@ -391,7 +391,6 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
     rake = appendageParams["rake"]
-    # sweepAng = appendageParams["sweep"]
     depth0 = appendageParams["depth0"]
     if solverOptions["use_nlll"]
 
@@ -1107,7 +1106,7 @@ function compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appen
     LLOutputs, LLSystem, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
     clαVec = copy(LLOutputs.cla)
     n_cla = length(LLOutputs.cla)
-    Λ = appendageParams["sweep"]
+    Λ = LLSystem.sweepAng
 
     # ************************************************
     #     Computation
@@ -1152,7 +1151,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
         dh = 1e-6
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
         if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
@@ -1201,7 +1200,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             ptVec[ii] += dh
 
             LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-            midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+            midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
             structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
             if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])

@@ -112,7 +112,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     twistDistribution = SolverRoutines.do_linear_interp(s_loc, twistVec[1:idxTip], s_loc_q)
     # println("chords: ", chordLengthsWork)
 
-    return midchords, chordLengthsWork, spanwiseVectors, Λ
+    return midchords, chordLengthsWork, spanwiseVectors, Λ, twistDistribution
 end
 
 function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)

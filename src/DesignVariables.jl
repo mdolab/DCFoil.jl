@@ -10,8 +10,9 @@ module DesignVariables
 
 
 const allDesignVariables::Vector{String} = [
-    "theta",
-    # "toc",
+    "alfa0",
+    "theta_f",
+    "toc",
 ]
 
 

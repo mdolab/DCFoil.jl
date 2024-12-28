@@ -11,7 +11,7 @@ import numpy as np
 from dcfoil import DCFOIL  # make sure to pip install this code
 
 
-def setup(args, comm, files, evalFuncs, outputDir):
+def setup(args, comm, files, evalFuncs, outputDir: str, ap):
     nNodes = 5
     nNodesStrut = 3
     mainFoilOptions = {
@@ -76,11 +76,11 @@ def setup(args, comm, files, evalFuncs, outputDir):
     }
 
     params = {  # THIS IS BASED OFF OF THE MOTH RUDDER
-        "alfa0": 2.0,  # initial angle of attack [deg]
+        "alfa0": ap.alpha,  # initial angle of attack [deg]
         "sweep": np.deg2rad(0.0),  # sweep angle [rad]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
-        "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
-        "s": 0.333,  # semispan [m]
+        # "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
+        # "s": 0.333,  # semispan [m]
         "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
         "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
         "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
@@ -100,6 +100,11 @@ def setup(args, comm, files, evalFuncs, outputDir):
     debug = True
 
     # --- Instantiate it ---
-    STICKSolver = DCFOIL(appendageParamsList=[params], evalFuncs=evalFuncs, options=solverOptions, debug=debug)
+    STICKSolver = DCFOIL(
+        appendageParamsList=[params],
+        evalFuncs=evalFuncs,
+        options=solverOptions,
+        debug=debug,
+    )
 
     return STICKSolver, solverOptions

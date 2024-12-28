@@ -210,21 +210,21 @@ if __name__ == "__main__":
     def objCon(funcs):  # this part is only needed for multipoint
         # Assemble the objective and any additional constraints:
 
-        funcs["obj"] = funcs[ap["cd"]]
+        funcs["obj"] = funcs[f"{ap.name}_cd"]
 
         # ---------------------------
         #   Constraints
         # ---------------------------
         # --- Flutter ---
-        funcs[f"ksflutter_con_{ap.name}"] = funcs["ksflutter"]
+        funcs[f"ksflutter_con_{ap.name}"] = funcs[f"{ap.name}_ksflutter"]
 
         # --- Lift ---
-        funcs["cl_con_" + ap.name] = funcs[ap["cl"]] - mycl
+        funcs["cl_con_" + ap.name] = funcs[f"{ap.name}_cl"] - mycl
 
         # --- Ventilation ---
-        funcs[f"vent_con_{ap.name}"] = funcs[ap["kscl"]] - myventcl
+        funcs[f"vent_con_{ap.name}"] = funcs[f"{ap.name}_kscl"] - myventcl
 
-        funcs[f"wtip_con_{ap.name}"] = funcs[ap["wtip"]] - mywtip
+        funcs[f"wtip_con_{ap.name}"] = funcs[f"{ap.name}_wtip"] - mywtip
 
         if printOK:
             print("funcs in obj: ", funcs)

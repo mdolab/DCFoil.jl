@@ -438,7 +438,7 @@ class DCFOIL:
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
             self.Xb = costFuncsSensDict[f"{obj}"]["mesh"].T
-            self.structSens = costFuncsSensDict[f"{obj}"]["struct"]
+            self.paramSens = costFuncsSensDict[f"{obj}"]["params"]
 
             # --- check shape ---
             assert self.Xb.shape == (self.nnodes * 2, 3)
@@ -458,7 +458,7 @@ class DCFOIL:
             # ============================
             #   Structural Variables
             # ============================
-            funcsSens[key]["struct"] = self.structSens
+            funcsSens[key]["params"] = self.paramSens
 
             finalEvalSensTime = time.time()
 

@@ -530,13 +530,13 @@ function evalFuncsSens(
 
     DVDict = DVDictList[iComp]
 
-    dfdxstruct = zeros(DTYPE, length(allDesignVariables))
+    dfdxstruct = Dict()
 
     if uppercase(mode) == "FIDI" # use finite differences the stupid way
         # dh = 1e-2
-        dh = 1e-3
+        # dh = 1e-3
         # dh = 1e-4
-        # dh = 1e-5
+        dh = 1e-5
         # dh = 1e-6
         idh = 1 / dh
         println("step size: ", dh)
@@ -547,21 +547,25 @@ function evalFuncsSens(
             f_i = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
                 DVDictList=DVDictList, CLMain=CLMain
             )
-            for ii in eachindex(ptVec)
-                ptVecwork = copy(ptVec)
-                ptVecwork[ii] += dh
-                f_f = cost_funcsFromPtVec(ptVecwork, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
-                    DVDictList=DVDictList, CLMain=CLMain
-                )
-                ptVecwork[ii] -= dh
-                if evalFuncSensKey == "cd"
-                    # cdi -2 [OK with adjoint], cdw -3 [Not OK], cdpr - 4 [OK], cdj -5, cds -6
-                    dfdxPt[ii] = (f_f[4] - f_i[4]) * idh
-                else
-                    dfdxPt[ii] = (f_f - f_i) * idh
-                end
-            end
+            if !solverOptions["onlyStructDerivs"]
 
+                for ii in eachindex(ptVec)
+                    ptVecwork = copy(ptVec)
+                    ptVecwork[ii] += dh
+                    f_f = cost_funcsFromPtVec(ptVecwork, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
+                        DVDictList=DVDictList, CLMain=CLMain
+                    )
+                    ptVecwork[ii] -= dh
+                    if evalFuncSensKey == "cd"
+                        # cdi -2 [OK with adjoint], cdw -3 [Not OK], cdpr - 4 [OK], cdj -5, cds -6
+                        dfdxPt[ii] = (f_f[1] - f_i[1]) * idh
+                    else
+                        dfdxPt[ii] = (f_f - f_i) * idh
+                    end
+                end
+            else
+                println("Only structural derivatives")
+            end
 
 
             DVDict["theta_f"] += dh
@@ -571,15 +575,30 @@ function evalFuncsSens(
             DVDict["theta_f"] -= dh
 
             if evalFuncSensKey == "cd"
-                dfdxstruct[1] = (f_f[4] - f_i[4]) * idh
+                dfdxstruct["theta_f"] = (f_f[1] - f_i[1]) * idh
             else
-                dfdxstruct[1] = (f_f - f_i) * idh
+                dfdxstruct["theta_f"] = (f_f - f_i) * idh
+            end
+
+            dfdxstruct["toc"] = zeros(DTYPE, 1, length(DVDict["toc"]))
+            for ii in eachindex(DVDict["toc"])
+                DVDict["toc"][ii] += dh
+                f_f = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
+                    DVDictList=DVDictList, CLMain=CLMain
+                )
+                DVDict["toc"][ii] -= dh
+                if evalFuncSensKey == "cd"
+                    dfdxstruct["toc"][1, ii] = (f_f[1] - f_i[1]) * idh
+                else
+                    dfdxstruct["toc"][1, ii] = (f_f - f_i) * idh
+                end
             end
 
             dfdxPt = reshape(dfdxPt, 3, NPT)
             funcsSens = Dict(
                 "mesh" => dfdxPt,
-                "struct" => dfdxstruct
+                "fiber" => dfdxstruct["theta_f"],
+                "toc" => dfdxstruct["toc"],
             )
             # println("Finite difference sensitivities for $(evalFuncSensKey): ", funcsSens)
 
@@ -606,7 +625,7 @@ function evalFuncsSens(
         u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
         tX = @elapsed begin
-            ∂r∂xPt, ∂r∂xStruct = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
+            ∂r∂xPt, ∂r∂xParams = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
                 # mode="FiDi", # about 981 sec
                 # mode="RAD", # about 282 sec
                 mode="ANALYTIC", # 10 sec
@@ -629,7 +648,7 @@ function evalFuncsSens(
                 )
             end
             tFuncX = @elapsed begin
-                ∂f∂xPt, ∂f∂xStruct = compute_∂f∂x(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
+                ∂f∂xPt, ∂f∂xParams = compute_∂f∂x(evalFuncSensKey, STATSOL, ptVec, nodeConn, DVDict;
                     # mode="RAD", # 100 sec
                     # mode="FiDi", # 79
                     mode="ANALYTIC", # 15 sec
@@ -658,13 +677,16 @@ function evalFuncsSens(
             dfdxPt = ∂f∂xPt - (transpose(psiVec) * ∂r∂xPt)
             # println("shape: ", size(psiVec), size(∂r∂xStruct))
             # println("shape: ", size(∂f∂xStruct))
-            dfdxStruct = ∂f∂xStruct - (transpose(psiVec) * ∂r∂xStruct)
+            dfdxParams = Dict()
+            for designVar in allDesignVariables
+                dfdxParams[designVar] = ∂f∂xParams[designVar] - (transpose(psiVec) * ∂r∂xParams[designVar])
+            end
 
             # writedlm("∂f∂ududx.csv", (transpose(psiVec) * ∂r∂xPt), ',')
 
             funcsSens = Dict(
                 "mesh" => reshape(dfdxPt, 3, NPT),
-                "struct" => dfdxStruct
+                "params" => dfdxParams,
             )
             # println("Adjoint sensitivities for $(evalFuncSensKey): ", funcsSens)
 
@@ -730,7 +752,7 @@ function compute_∂f∂x(
 
     # println("Computing ∂f∂x in $(mode)...")
     ∂f∂xPt = zeros(DTYPE, length(ptVec))
-    ∂f∂xStruct = zeros(DTYPE, length(allDesignVariables))
+    ∂f∂xParams = Dict()
 
     # Force an automatic initial eval so less code duplication
     dh = 1e-5
@@ -799,7 +821,7 @@ function compute_∂f∂x(
     end
 
     # ************************************************
-    #     STRUCTURE
+    #     PARAMS DERIVATIVES
     # ************************************************
     appendageParams["theta_f"] += dh
     f_f = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
@@ -807,10 +829,34 @@ function compute_∂f∂x(
     )
     appendageParams["theta_f"] -= dh
     if costFunc != "cd"
-        ∂f∂xStruct = (f_f - f_i) / dh
+        ∂f∂xParams["theta_f"] = (f_f - f_i) / dh
     else
         # When drag coeff is the cost func, pick out the first component
-        ∂f∂xStruct = (f_f[1] - f_i[1]) / dh
+        ∂f∂xParams["theta_f"] = (f_f[1] - f_i[1]) / dh
+    end
+    ∂f∂xParams["toc"] = zeros(DTYPE, 1, length(appendageParams["toc"]))
+    for ii in eachindex(appendageParams["toc"])
+        appendageParams["toc"][ii] += dh
+        f_f = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
+            appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
+        )
+        appendageParams["toc"][ii] -= dh
+        if costFunc != "cd"
+            ∂f∂xParams["toc"][1, ii] = (f_f - f_i) / dh
+        else
+            ∂f∂xParams["toc"][1, ii] = (f_f[1] - f_i[1]) / dh
+        end
+    end
+    appendageParams["alfa0"] += dh
+    f_f = get_evalFunc(costFunc, SOL.structStates, SOL, ptVec, nodeConn, appendageParams;
+        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
+    )
+    appendageParams["alfa0"] -= dh
+    if costFunc != "cd"
+        ∂f∂xParams["alfa0"] = (f_f - f_i) / dh
+    else
+        # When drag coeff is the cost func, pick out the first component
+        ∂f∂xParams["alfa0"] = (f_f[1] - f_i[1]) / dh
     end
 
 
@@ -819,7 +865,7 @@ function compute_∂f∂x(
     # println("writing ∂f∂xPt-$(mode).csv")
     # writedlm("∂f∂xPt-$(mode).csv", ∂f∂xPt, ',')
 
-    return ∂f∂xPt, ∂f∂xStruct
+    return ∂f∂xPt, ∂f∂xParams
 end
 
 function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
@@ -836,7 +882,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 
@@ -863,7 +909,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 
@@ -1063,6 +1109,7 @@ function compute_∂r∂x(
     appendageParams = appendageParamsList[iComp]
 
     ∂r∂xPt = zeros(DTYPE, length(u), length(ptVec))
+    ∂r∂xParams = Dict()
 
     if uppercase(mode) == "FIDI" # Finite difference
 
@@ -1089,7 +1136,7 @@ function compute_∂r∂x(
         appendageParamsList[iComp]["theta_f"] += dh
         f_f = SolveStatic.compute_residualsFromCoords(u, ptVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
-        ∂r∂xStruct = (f_f - f_i) / 1e-4
+        ∂r∂xParams = (f_f - f_i) / 1e-4
 
     elseif uppercase(mode) == "CS" # works but slow (4 sec)
         dh = 1e-100
@@ -1125,14 +1172,26 @@ function compute_∂r∂x(
         ∂r∂xPt = (∂Kss∂x_u - dKffdXpt_u)
 
         # ************************************************
-        #     Struct
+        #     Params derivatives
         # ************************************************
         dh = 1e-4
         f_i = SolveStatic.compute_residualsFromCoords(u, ptVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] += dh
         f_f = SolveStatic.compute_residualsFromCoords(u, ptVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
-        ∂r∂xStruct = (f_f - f_i) / 1e-4
+        ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+
+        ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
+        for ii in eachindex(appendageParamsList[iComp]["toc"])
+            appendageParamsList[iComp]["toc"][ii] += dh
+            f_f = SolveStatic.compute_residualsFromCoords(u, ptVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            appendageParamsList[iComp]["toc"][ii] -= dh
+            ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+        end
+        appendageParamsList[iComp]["alfa0"] += dh
+        f_f = SolveStatic.compute_residualsFromCoords(u, ptVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["alfa0"] -= dh
+        ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
 
 
     elseif uppercase(mode) == "FAD" # this is fked
@@ -1157,7 +1216,7 @@ function compute_∂r∂x(
     end
 
     # writedlm("drdxPt-$(mode).csv", ∂r∂xPt, ',')
-    return ∂r∂xPt, ∂r∂xStruct
+    return ∂r∂xPt, ∂r∂xParams
 end
 
 function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="CS")
@@ -1210,13 +1269,12 @@ end
 function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
     LECoords, TECoords = Utilities.repack_coords(xVec, 3, length(xVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
-        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
         zeta = appendageParams["zeta"]
@@ -1230,7 +1288,6 @@ function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendagePara
         toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
     else
         α₀ = appendageParams["alfa0"]
-        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]
@@ -1297,14 +1354,13 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
         idxTip = Preprocessing.get_tipnode(LECoords)
-        midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
         if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
             print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
             α₀ = appendageParams["alfa0"]
-            # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
             zeta = appendageParams["zeta"]
@@ -1318,7 +1374,6 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
         else
             α₀ = appendageParams["alfa0"]
-            # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
             toc::Vector{RealOrComplex} = appendageParams["toc"]
@@ -1396,13 +1451,12 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
         print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
-        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
         zeta = appendageParams["zeta"]
@@ -1416,7 +1470,6 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
     else
         α₀ = appendageParams["alfa0"]
-        # sweepAng = appendageParams["sweep"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]
@@ -1469,7 +1522,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     toc::Vector{RealOrComplex} = appendageParams["toc"]
     ab::Vector{RealOrComplex} = appendageParams["ab"]

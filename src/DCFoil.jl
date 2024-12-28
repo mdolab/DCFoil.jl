@@ -490,6 +490,7 @@ function set_defaultOptions!(solverOptions)
         # ************************************************
         "run_static",
         "res_jacobian",
+        "onlyStructDerivs",
         "run_forced",
         "run_modal",
         "run_flutter",
@@ -529,6 +530,7 @@ function set_defaultOptions!(solverOptions)
         # ************************************************
         false,
         "analytic", # residual jacobian
+        false,
         false,
         false,
         false,

@@ -900,7 +900,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     """
 
     idxTip = Preprocessing.get_tipnode(real.(LECoords))
-    midchords, chordLengths, spanwiseVectors, Λ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Geometry

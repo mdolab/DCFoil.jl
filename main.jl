@@ -78,7 +78,7 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 # )
 paramsRudder = Dict(
     "alfa0" => 2.0, # initial angle of attack [deg] (angle of flow vector)
-    "sweep" => deg2rad(0.0), # sweep angle [rad]
+    # "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => 0.14 * ones(nNodes), # chord length [m]
     # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
@@ -152,6 +152,7 @@ solverOptions = Dict(
     # "res_jacobian" => "CS",
     "res_jacobian" => "analytic",
     # "res_jacobian" => "RAD",
+    # "onlyStructDerivs" => true,
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fRange" => [fSweep[1], fSweep[end]], # forcing frequency sweep [Hz]
@@ -183,12 +184,13 @@ evalFuncSens = [
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
+outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f/",
     string(Dates.today()),
     solverOptions["name"],
     rudderOptions["material"],
     rad2deg(paramsList[1]["theta_f"]),
-    rad2deg(paramsList[1]["sweep"]))
+    # rad2deg(paramsList[1]["sweep"])
+    )
 mkpath(outputDir)
 
 solverOptions["outputDir"] = outputDir
@@ -203,6 +205,6 @@ DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, app
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 @show costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
-    # mode="ADJOINT",
-    mode="FiDi",
+    mode="ADJOINT",
+    # mode="FiDi",
 )
