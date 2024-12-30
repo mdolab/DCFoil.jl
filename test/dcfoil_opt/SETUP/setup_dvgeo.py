@@ -62,7 +62,10 @@ def setup(args, comm, files: dict):
         print(f"{nSweep} foil sweep vars", flush=True)
         sweepAxis = "global"
 
-        def sweep_rot_func(val, geo):
+        def sweep_rot_func(inval, geo):
+            # REVERSE OF RH RULE FOR DCFOIL
+            val = -inval
+
             # the extractCoef method gets the unperturbed ref axis control points
             C = geo.extractCoef(sweepAxis)
             C_orig = C.copy()

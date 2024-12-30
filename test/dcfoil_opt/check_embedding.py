@@ -782,7 +782,7 @@ if __name__ == "__main__":
             # Angle of attack derivative
             funcSensFD["aoa"] = {}
             ap.alpha += DH
-            STICKSolverNew,_ = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
+            STICKSolverNew, _ = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
             STICKSolverNew.setDVGeo(DVGeo)
             STICKSolverNew.addMesh(solverOptions["gridFile"])
             STICKSolverNew(ap)
@@ -803,7 +803,7 @@ if __name__ == "__main__":
                 finalFDDict[f"{DH}"][evalFunc] = {}
                 for dvkey, v in dvDict.items():
                     finalFDDict[f"{DH}"][evalFunc][dvkey] = copy.deepcopy(funcSensFD[dvkey][evalFunc])
-                
+
                 finalFDDict[f"{DH}"][evalFunc]["aoa"] = copy.deepcopy(funcSensFD["aoa"][evalFunc])
 
         print(20 * "=")
@@ -825,12 +825,14 @@ if __name__ == "__main__":
             for evalFunc in evalFuncs:
                 print(f"{evalFunc} sens:")
                 adjoint = funcSensAdj[f"dcfoil_{evalFunc}"][DV]
-                
+
                 fdvals = []
                 for dh in stepsizes:
                     fdvals.append(finalFDDict[f"{dh}"][evalFunc][DV])
-                
-                print(f" Adjoint |\tdh={stepsizes[0]:.1e} \tdh={stepsizes[1]:.1e}\tdh={stepsizes[2]:.1e}\tdh={stepsizes[3]:.1e}\tdh={stepsizes[4]:.1e}")
+
+                print(
+                    f" Adjoint |\tdh={stepsizes[0]:.1e} \tdh={stepsizes[1]:.1e}\tdh={stepsizes[2]:.1e}\tdh={stepsizes[3]:.1e}\tdh={stepsizes[4]:.1e}"
+                )
                 print(f"{adjoint}\t{fdvals[0]}\t{fdvals[1]}\t{fdvals[2]}\t{fdvals[3]}\t{fdvals[4]}")
 
                 # row = [funcSensAdj[f"dcfoil_{evalFunc}"]["span"], finalFDDict[stepsizes[0]]["span"][evalFunc],finalFDDict[stepsizes[1]]["span"][evalFunc],finalFDDict[stepsizes[2]]["span"][evalFunc],finalFDDict[stepsizes[3]]["span"][evalFunc],finalFDDict[stepsizes[4]]["span"][evalFunc]]
@@ -841,10 +843,12 @@ if __name__ == "__main__":
         print(20 * "=")
         for evalFunc in evalFuncs:
             print(f"{evalFunc} sens:")
-            
+
             fdvals = []
             for dh in stepsizes:
                 fdvals.append(finalFDDict[f"{dh}"][evalFunc]["aoa"])
-            
-            print(f"\tdh={stepsizes[0]:.1e} \tdh={stepsizes[1]:.1e}\tdh={stepsizes[2]:.1e}\tdh={stepsizes[3]:.1e}\tdh={stepsizes[4]:.1e}")
+
+            print(
+                f"\tdh={stepsizes[0]:.1e} \tdh={stepsizes[1]:.1e}\tdh={stepsizes[2]:.1e}\tdh={stepsizes[3]:.1e}\tdh={stepsizes[4]:.1e}"
+            )
             print(f"{fdvals[0]}\t{fdvals[1]}\t{fdvals[2]}\t{fdvals[3]}\t{fdvals[4]}")

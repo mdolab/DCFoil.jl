@@ -107,4 +107,26 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
         debug=debug,
     )
 
-    return STICKSolver, solverOptions
+    # --- Variables for DCFoil ---
+    valDict = {
+        "alfa0": ap.alpha,
+        "theta_f": 0.0,
+        "toc": params["toc"],
+    }
+    lowerDict = {
+        "alfa0": -5.0,
+        "theta_f": -np.pi / 2,  # rad
+        "toc": 0.9 * params["toc"],
+    }
+    upperDict = {
+        "alfa0": 5.0,
+        "theta_f": np.pi / 2,  # rad
+        "toc": 0.11,
+    }
+    scaleDict = {
+        "alfa0": 1.0,
+        "theta_f": 1.0,
+        "toc": 1.1 * params["toc"],
+    }
+
+    return STICKSolver, solverOptions, valDict, lowerDict, upperDict, scaleDict
