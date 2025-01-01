@@ -12,7 +12,8 @@ module OceanWaves
 using ..Unsteady: compute_sears
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 
-using Plots, Debugger
+using Plots
+# using Debugger
 
 function compute_PMwave_spectrum(Vwind, w)
     """

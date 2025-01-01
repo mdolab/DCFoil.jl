@@ -407,6 +407,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     # ---------------------------
     #   Aero section properties
     # ---------------------------
+    # TODO: you can add the twist distribution here probably
     # Where the 2D VPM comes into play
     Airfoils = Vector(undef, npt_wing)
     AirfoilInfluences = Vector(undef, npt_wing)

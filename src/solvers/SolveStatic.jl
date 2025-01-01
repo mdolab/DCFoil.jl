@@ -244,8 +244,6 @@ function write_sol(
     workingOutputDir = outputDir * "static/"
     mkpath(workingOutputDir)
 
-
-
     if elemType == "bend"
         nDOF = 2
     elseif elemType == "bend-twist"
@@ -411,9 +409,9 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
 
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, FEMESH.idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        midchords, chordLengths, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, FEMESH.idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
         aeroSpan = Preprocessing.compute_aeroSpan(midchords, FEMESH.idxTip)
-        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord)
+        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord, chordLengths)
         cd = cdi + cdw + cdpr + cdj + cds
         fout = [cd, cdi, cdw, cdpr, cdj, cds]
     end
@@ -690,7 +688,7 @@ function evalFuncsSens(
             )
             # println("Adjoint sensitivities for $(evalFuncSensKey): ", funcsSens)
 
-            writedlm("funcsSens-mesh-$(evalFuncSensKey)-$(mode).csv", funcsSens["mesh"], ',')
+            # writedlm("funcsSens-mesh-$(evalFuncSensKey)-$(mode).csv", funcsSens["mesh"], ',')
             # writedlm("funcsSens-struct-$(evalFuncSens)-$(mode).csv", funcsSens["struct"], ',')
 
             funcsSensOut[evalFuncSensKey] = funcsSens
@@ -730,7 +728,7 @@ function evalFuncsSens(
             # funcsSens = ∂f∂x - ∂f∂u * [ϕ]
             dfdxPt = ∂f∂xPt - (∂f∂u[:, 1:end.∉[DOFBlankingList]] * phiMat)
             funcsSens = reshape(dfdxPt, 3, NPT)
-            writedlm("funcsSens-$(evalFuncSens)-$(mode).csv", funcsSens, ',')
+            # writedlm("funcsSens-$(evalFuncSens)-$(mode).csv", funcsSens, ',')
 
             push!(funcsSensOut, funcsSens)
         end
@@ -890,8 +888,8 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
         areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
-        meanChord = mean(WING.chord)
-        rootChord = WING.chord[1]
+        meanChord = sum(chordLengths) / length(chordLengths)
+        rootChord = chordLengths[1]
 
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
 
@@ -917,15 +915,14 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
         areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
-        meanChord = mean(WING.chord)
-        rootChord = WING.chord[1]
+        meanChord = sum(chordLengths) / length(chordLengths)
+        rootChord = chordLengths[1]
 
         qdyn = 0.5 * solverOptions["rhof"] * solverOptions["Uinf"]^2
         _, cl = ComputeFunctions.compute_lift(SOL.fHydro, qdyn, areaRef)
-        LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-        midchords, _, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, FEMESH.idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
         aeroSpan = Preprocessing.compute_aeroSpan(midchords, FEMESH.idxTip)
-        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord)
+        cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord, chordLengths)
 
         return vec([cdw, cdpr, cdj, cds, dw, dpr, dj, ds])
     end

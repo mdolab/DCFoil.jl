@@ -126,7 +126,7 @@ if __name__ == "__main__":
         TSuthDim=temp,
     )
 
-    STICKSolver, solverOptions = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
+    STICKSolver, solverOptions,_,_,_,_ = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
 
     # ==============================================================================
     #                         DVGeometry setup
@@ -782,7 +782,7 @@ if __name__ == "__main__":
             # Angle of attack derivative
             funcSensFD["aoa"] = {}
             ap.alpha += DH
-            STICKSolverNew, _ = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
+            STICKSolverNew, _,_,_,_,_ = setup_dcfoil.setup(args, None, files, evalFuncs, outputDir, ap)
             STICKSolverNew.setDVGeo(DVGeo)
             STICKSolverNew.addMesh(solverOptions["gridFile"])
             STICKSolverNew(ap)

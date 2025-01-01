@@ -25,6 +25,7 @@ using Plots
 using FLOWMath: norm_cs_safe, abs_cs_safe
 # using SparseArrays
 # using Debugger
+# using Cthulhu
 
 # --- DCFoil modules ---
 using ..SolverRoutines
@@ -819,18 +820,19 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # ---------------------------
         # Aerodynamics need to happen in global reference frame
         Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
-        KLocal = Γ'[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
-        CLocal = Γ'[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
-        MLocal = Γ'[1:NDOF, 1:NDOF] * MLocal * Γ[1:NDOF, 1:NDOF]
+        ΓT = transpose(Γ)
+        KLocal_trans = ΓT[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
+        CLocal_trans = ΓT[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
+        MLocal_trans = ΓT[1:NDOF, 1:NDOF] * MLocal * Γ[1:NDOF, 1:NDOF]
 
         GDOFIdx::Int64 = NDOF * (inode - 1) + 1
 
         # Add local AIC to global AIC and remember to multiply by strip width to get the right result
-        globalKf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(KLocal) * Δy
-        globalKf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(KLocal) * Δy
-        globalCf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(CLocal) * Δy
-        globalCf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(CLocal) * Δy
-        globalMf_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = MLocal * Δy
+        globalKf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(KLocal_trans) * Δy
+        globalKf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(KLocal_trans) * Δy
+        globalCf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(CLocal_trans) * Δy
+        globalCf_i_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = imag(CLocal_trans) * Δy
+        globalMf_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = MLocal_trans * Δy
 
         # inode += 1 # increment strip counter
     end
@@ -929,7 +931,8 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
     return clα, c, ab, eb, dR1, dR2, dR3
 end
 
-function compute_localAIC(K_f, K̂_f, C_f, Ĉ_f, M_f, elemType)
+function compute_localAIC(K_f, K̂_f, C_f, Ĉ_f, M_f, elemType::String)
+
     if elemType == "bend-twist"
         println("These aerodynamics are all wrong BTW...")
         KLocal = -1 * [

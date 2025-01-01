@@ -630,9 +630,10 @@ function populate_matrices!(
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
         Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, lᵉ, elemType)
-        kElem = Γ' * kLocal * Γ
-        mElem = Γ' * mLocal * Γ
-        fElem = Γ' * fLocal
+        ΓT = transpose(Γ)
+        kElem = ΓT * kLocal * Γ
+        mElem = ΓT * mLocal * Γ
+        fElem = ΓT * fLocal
         @ignore_derivatives() do
             if any(isnan.(kElem))
                 println("NaN in elem stiffness matrix")
@@ -823,11 +824,11 @@ end
 function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
     """
     Applies inertial load and modifies globalF
+    TODO: add gravity vector
     """
 
     println("Adding inertial loads to FEM with gravity vector of", gravityVector)
 
-    # TODO: add gravity vector
 end
 
 function apply_BCs(

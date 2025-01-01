@@ -47,6 +47,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
         # ---------------------------
         "Uinf": 18.0,  # free stream velocity [m/s]
         "rhof": 1025.0,  # fluid density [kg/m³]
+        "nu": 1.1892e-06, # fluid kinematic viscosity [m²/s]
         "use_nlll": True,
         "use_freeSurface": False,
         "use_cavitation": False,
@@ -115,18 +116,18 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
     }
     lowerDict = {
         "alfa0": -5.0,
-        "theta_f": -np.pi / 2,  # rad
+        "theta_f": np.deg2rad(-30),  # rad
         "toc": 0.9 * params["toc"],
     }
     upperDict = {
         "alfa0": 5.0,
-        "theta_f": np.pi / 2,  # rad
-        "toc": 0.11,
+        "theta_f": np.deg2rad(30),  # rad
+        "toc": 1.1 * params["toc"],
     }
     scaleDict = {
-        "alfa0": 1.0,
-        "theta_f": 1.0,
-        "toc": 1.1 * params["toc"],
+        "alfa0": 1 / (upperDict["alfa0"] - lowerDict["alfa0"]),
+        "theta_f": 1 / (upperDict["theta_f"] - lowerDict["theta_f"]),
+        "toc": 1 / (upperDict["toc"] - lowerDict["toc"]),
     }
 
     return STICKSolver, solverOptions, valDict, lowerDict, upperDict, scaleDict

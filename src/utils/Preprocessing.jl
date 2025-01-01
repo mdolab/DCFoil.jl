@@ -188,6 +188,7 @@ function compute_twist(chordVectors)
 
     return twistVec
 end
+
 function get_1DBeamPropertiesFromFile(fname)
     """
     Get beam structural properties from file

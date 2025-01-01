@@ -73,7 +73,8 @@ cd postprocessing
 # ************************************************
 #     Final T-foil cases
 # ************************************************
-python ./run_postprocessing.py --cases 2024-12-16_mothrudder_cfrp_f0.0_w0.0 --is_forced --is_paper
+# python ./run_postprocessing.py --cases 2024-12-16_mothrudder_cfrp_f0.0_w0.0 --is_forced --is_paper
+python ./run_postprocessing.py --cases 2024-12-30_mothrudder_cfrp_f0.0 --is_flutter --is_paper
 
 cd ..
 

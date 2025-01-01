@@ -14,12 +14,12 @@ import sys
 import json
 import argparse
 from pathlib import Path
+from datetime import date
 
 # ==============================================================================
 # External Python modules
 # ==============================================================================
 import numpy as np
-
 # from tabulate import tabulate
 
 # ==============================================================================
@@ -28,7 +28,7 @@ import numpy as np
 # import niceplots
 from pprint import pprint as pp
 from pyoptsparse import Optimization, History
-from SETUP import setup_dcfoil, setup_dvgeo, setup_opt
+from SETUP import setup_dcfoil, setup_dvgeo, setup_opt, setup_utils
 from mpi4py import MPI
 from baseclasses import AeroProblem
 from multipoint import multiPointSparse
@@ -109,23 +109,51 @@ def multipoint_load_balance(nCruise: int, nManeuver: int, task):
     return MP, comm, pt_id
 
 
+def fd_variable(funcsSens, dvDict, dvName, funcs, evalFuncs):
+    DH = 1e-5
+    funcsFD = {}
+    dvDict[dvName] += DH
+    DVGeo.setDesignVars(dvDict)
+    ap.setDesignVars(dvDict)
+
+    STICKSolver(ap)
+    STICKSolver.evalFunctions(ap, funcsFD, evalFuncs=evalFuncs)
+
+    dvDict[dvName] -= DH
+    DVGeo.setDesignVars(dvDict)
+    ap.setDesignVars(dvDict)
+
+    for evalFunc in evalFuncs:
+        funcsSens[dvName][evalFunc] = np.divide(funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH)
+
+def setup_fileIO(args):
+    date_str = date.today().strftime("%Y-%m-%d")
+    caseName = f"{date_str}_{args.task}_{args.foil}"
+
+    if args.restart:
+        caseName = f"{date_str}_{args.task}_restart_{args.restart}"
+    caseoutputDir = f"{args.output}/{caseName}/"
+    return caseName, caseoutputDir
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, default="INPUT")
+    parser.add_argument("--output", type=str, default="OUTPUT")
     parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
     parser.add_argument(
         "--geovar",
         type=str,
         default="w",
-        help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
+        help="Geo vars: twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
     )
     parser.add_argument(
         "--optimizer", "-o", help="type of optimizer", choices=["SLSQP", "SNOPT"], type=str, default="SNOPT"
     )
     parser.add_argument("--opt_pts", type=str, default="1")
+    parser.add_argument("--restart", type=str, default=None, help="restart name")
     parser.add_argument(
         "--task",
         help="Check end of script for task type",
@@ -145,7 +173,7 @@ if __name__ == "__main__":
     # ************************************************
     #     Input Files/ IO
     # ************************************************
-    outputDir = "./pyDCFoilOUTPUT/"
+    caseName, outputDir = setup_fileIO(args)
     Path(outputDir).mkdir(parents=True, exist_ok=True)
 
     nCruise = len(args.opt_pts)
@@ -163,7 +191,6 @@ if __name__ == "__main__":
         "adflow": "SETUP/setup_adflow.py",
         "constants": "SETUP/setup_constants.py",
         "dvgeo": "SETUP/setup_dvgeo.py",
-        "warping": "SETUP/setup_warp.py",
     }
 
     # ************************************************
@@ -186,14 +213,14 @@ if __name__ == "__main__":
         # "ksflutter",
         "kscl",
     ]
-    evalFuncsAdj =[
-        "wtip",
-        "psitip",
+    evalFuncsAdj = [
+        # "wtip",
+        # "psitip",
         "cl",
-        "lift",
+        # "lift",
         "cd",
         # "ksflutter",
-        "kscl",
+        # "kscl",
     ]
 
     all_aps = []
@@ -258,8 +285,9 @@ if __name__ == "__main__":
             for func in evalFuncsAdj:
                 funcs[f"{ap.name}_{func}"] = tmp[f"{ap.name}_{func}"]
 
-
         if MP.gcomm.rank == 0:
+            print("current DVs:")
+            pp(x)
             print(f"These are the funcs at DCFoil call {STICKSolver.callCounter:3d}: ")
             pp(tmp)
             print("Funcs to objCon")
@@ -279,14 +307,20 @@ if __name__ == "__main__":
 
             # The span derivative is the only broken derivative in DCFoil. We FD it here.
             dh = 1e-5
-            if "span" in x:
+            if "span" in x.keys():
                 funcs_i = {}
                 funcs_f = {}
+
                 STICKSolver.evalFunctions(ap, funcs_i, evalFuncs=evalFuncsAdj)
                 x["span"] += dh
+                DVGeo.setDesignVars(x)
                 ap.setDesignVars(x)
+                STICKSolver(ap)
                 STICKSolver.evalFunctions(ap, funcs_f, evalFuncs=evalFuncsAdj)
+
                 x["span"] -= dh
+                DVGeo.setDesignVars(x)
+                ap.setDesignVars(x)
                 for key, value in funcs_i.items():
                     funcsSens["span"] = (funcs_f[key] - funcs_i[key]) / dh
 
@@ -311,13 +345,13 @@ if __name__ == "__main__":
             mycl = clstars[ap.name]
             funcs["cl_con_" + ap.name] = funcs[f"{ap.name}_cl"] - mycl
 
-            # --- Ventilation ---
-            myventcl = all_clvents[ap.name]
-            funcs[f"ventilation_con_{ap.name}"] = funcs[f"{ap.name}_kscl"] - myventcl
+            # # --- Ventilation ---
+            # myventcl = all_clvents[ap.name]
+            # funcs[f"ventilation_con_{ap.name}"] = funcs[f"{ap.name}_kscl"] - myventcl
 
-            # --- Tip bending ---
-            mywtip = 0.05 * 0.333  # 5% of the initial semispan
-            funcs[f"wtip_con_{ap.name}"] = funcs[f"{ap.name}_wtip"] - mywtip
+            # # --- Tip bending ---
+            # mywtip = 0.05 * 0.333  # 5% of the initial semispan
+            # funcs[f"wtip_con_{ap.name}"] = funcs[f"{ap.name}_wtip"] - mywtip
 
             # --- Dynamics ---
             if solverOptions["run_flutter"]:
@@ -335,9 +369,9 @@ if __name__ == "__main__":
     optProb = Optimization("opt", MP.obj, comm=MPI.COMM_WORLD)
     optProb.addObj("obj", scale=1e4)
 
-    # ---------------------------
-    #   Add variables
-    # ---------------------------
+    # ************************************************
+    #     Design varaibles
+    # ************************************************
     # --- Geometric ---
     DVGeo.addVariablesPyOpt(optProb)
     # --- DCFoil variables ---
@@ -345,16 +379,19 @@ if __name__ == "__main__":
     STICKSolver.addVariablesPyOpt(optProb, "theta_f", valDict, lowerDict, upperDict, scaleDict)
     # STICKSolver.addVariablesPyOpt(optProb, "toc", valDict, lowerDict, upperDict, scaleDict)
 
-    # ---------------------------
-    #   Add constraints
-    # ---------------------------
+    # ************************************************
+    #     Constraints
+    # ************************************************
     for ap in all_aps:
         optProb.addCon(f"cl_con_{ap.name}", lower=0.0, upper=0.0, scale=1.0)
-        optProb.addCon(f"ventilation_con_{ap.name}", upper=0.0, scale=1.0)
-        optProb.addCon(f"wtip_con_{ap.name}", upper=0.0, scale=1.0)
+        # optProb.addCon(f"ventilation_con_{ap.name}", upper=0.0, scale=1.0)
+        # optProb.addCon(f"wtip_con_{ap.name}", upper=0.0, scale=1.0)
         if solverOptions["run_flutter"]:
             optProb.addCon(f"ksflutter_con_{ap.name}", lower=0.0, upper=0.0, scale=1.0)
 
+    # ************************************************
+    #     Finalize optimizer
+    # ************************************************
     # The MP object needs the 'obj' and 'sens' function for each proc set,
     # the optimization problem and what the objcon function is:
     MP.setProcSetObjFunc("cruise", cruiseFuncs)
@@ -365,6 +402,16 @@ if __name__ == "__main__":
 
     opt, optOptions = setup_opt.setup(args, outputDir)
 
+    # ==============================================================================
+    #                         RESTART
+    # ==============================================================================
+    x_init = STICKSolver.getValues()
+    if args.restart:
+        from restart_dvs import dv_dict
+
+        x_init = dv_dict[args.restart]
+
+    json.dump(x_init, open(f"{outputDir}/init_dvs.json", "w"), cls=setup_utils.NumpyEncoder)
     # ==============================================================================
     #                         TASKS
     # ==============================================================================

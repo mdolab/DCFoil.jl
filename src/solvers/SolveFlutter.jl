@@ -25,6 +25,8 @@ using FiniteDifferences
 using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
+# using Cthulhu # TAKE ME BACK OUT
+
 # --- DCFoil modules ---
 using ..DCFoil: DTYPE
 using ..InitModel
@@ -35,6 +37,7 @@ using ..SolverRoutines
 using ..Interpolation
 using ..DCFoilSolution
 using ..DesignConstants: SORTEDDVS
+using ..DesignVariables: allDesignVariables
 using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
 using ..Utilities: Utilities, compute_KS
 using ..TecplotIO
@@ -721,7 +724,7 @@ function print_flutter_text(nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalMo
         println("+--------+------------------+-----------------+-------+-------+---------------+------------------+----------+")
     else
         println(@sprintf("|  %04d  | %1.9e  | %1.9e | %02.2f |   %03d |        %03d    |            %03d   |       %d  |",
-            nFlow, dynPTmp, U∞, U∞ * 0.514444, nCorr, nCorrNewModes, NTotalModesFound, isFailed))
+            nFlow, dynPTmp, U∞, U∞ * 1.9439, nCorr, nCorrNewModes, NTotalModesFound, isFailed))
     end
 
 end
@@ -848,7 +851,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     nCorr::Int64 = 0
     NTotalModesFound::Int64 = 0 # total number of modes found over the entire simulation
     nCorrNewModes::Int64 = 0 # number of new modes to correlate
-    is_failed = false
+    is_failed::Bool = false
     nK::Int64 = 22 # number of k values to sweep
     maxK = 3.5 # max reduced frequency k to search
     maxK = 60.0 # max reduced frequency k to search
@@ -1245,6 +1248,13 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep,
             b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER
         )
+
+    # TODO PICKUP HERE
+    # @descend Zygote.jacobian(x -> sweep_kCrossings(
+    #         Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep,
+    #         b_ref, Λ, x, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER
+    #     )[1], chordVec)
+
     if (debug)
         ChainRulesCore.ignore_derivatives() do
             nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
@@ -1373,7 +1383,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
 
     """
 
-    Nr::Int64 = size(Qr)[2]
+    Nr = size(Qr)[2]
     # TODO: visualization of matrix magnitudes
 
     # dimwithBC::Int64 = Nr
@@ -1400,8 +1410,12 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     _, _, Mff = HydroStrip.apply_BCs(globalMf, globalMf, globalMf, DOFBlankingList)
     # Modal fluid added mass matrix (Cf and Kf handled in loop)
     Mf = Qr' * Mff * Qr
-    omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
-    Δk = minimum(.√(ChainRulesCore.ignore_derivatives(omegaSquared)) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
+    # --- Determine Δk ---
+    Δk = 0.0
+    ChainRulesCore.ignore_derivatives() do
+        omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
+        Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
+    end
     # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
     # println("Δk: ", Δk)
 
@@ -1436,10 +1450,11 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
         Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList) # real
         Kffull_i, Cffull_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList) # imag
         # Mode space reduction
-        Kf_r = Qr' * Kffull_r * Qr
-        Kf_i = Qr' * Kffull_i * Qr
-        Cf_r = Qr' * Cffull_r * Qr
-        Cf_i = Qr' * Cffull_i * Qr
+        QrT = transpose(Qr)
+        Kf_r = QrT * real(Kffull_r * Qr)
+        Kf_i = QrT * real(Kffull_i * Qr)
+        Cf_r = QrT * real(Cffull_r * Qr)
+        Cf_i = QrT * real(Cffull_i * Qr)
 
         # --- Solve eigenvalue problem ---
         p_r_tmp, p_i_tmp, R_aa_r_tmp, R_aa_i_tmp = solve_eigenvalueProblem(pkEqnType, Nr, b_ref, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK, CC)
@@ -1680,33 +1695,27 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr, pk
         Ar_r, Ar_i - The interpolated AIC (real/imag parts) evaluated at reduced frequency k. Array(Nmr,Nmr)
     """
 
-    # Nmr = dim
-
     # Calc the difference of current k and the k_sweep
     kDiff = k .- k_sweep
 
     # Find where the sign changes for the interpolation
     b1, b2 = SolverRoutines.find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
-    # b1::Int64 = bound[1]
-    # b2::Int64 = bound[2]
     # Based on the pk equation we are solving it depends how we handle k=0
-    # y0L::Array{Float64,3} = zeros(Nmr, Nmr, 2)
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
         x0L = [k_sweep[b1], k_sweep[b2]] # somehow this line is adding a lot to the time
         # # This unravels to keep computations in the stack, not the heap
-        # x0L1::Float64 = k_sweep[b1]
-        # x0L2::Float64 = k_sweep[b2]
 
         y0L = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
-        # y0L[:, :, 1] = Ar_sweep_r[:, :, b1]
-        # y0L[:, :, 2] = Ar_sweep_r[:, :, b2]
         Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        # Ar_r_vec = Interpolation.lagrangeArrInterp_differentiable(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        # Ar_r = reshape(Ar_r_vec, Nmr, Nmr)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
-        # y0L[:, :, 1] = Ar_sweep_i[:, :, b1]
-        # y0L[:, :, 2] = Ar_sweep_i[:, :, b2]
         Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        # Ar_i_vec = Interpolation.lagrangeArrInterp_differentiable(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        # Ar_i = reshape(Ar_i_vec, Nmr, Nmr)
+        # TODO: PICKUP DEBUGGIN THIS
 
 
     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
@@ -1924,11 +1933,16 @@ function compute_modalSpace(Ms, Ks, Cs; reducedSize=20)
     # --- Compute the modal space matrix ---
     _, ubar = SolverRoutines.compute_eigsolve(Ks, Ms, reducedSize)
     Qr = ubar
+    QrT = transpose(Qr)
 
     # --- Compute the reduced matrices ---
-    Ms_r = Qr' * Ms * Qr
-    Ks_r = Qr' * Ks * Qr
-    Cs_r = Qr' * Cs * Qr
+    Ms_r = QrT * real(Ms * Qr) # need this for type stability in AD
+    Ks_r = QrT * real(Ks * Qr) # need this for type stability in AD
+    Cs_r = QrT * Cs * Qr
+
+    # println("type of QrT", typeof(QrT))
+    # println("type of Ks", typeof(Ks))
+    # println("type of Ks_r", typeof(Ks_r))
 
     return Ms_r, Ks_r, Cs_r, Qr
 end
@@ -2038,7 +2052,10 @@ end
 function compute_solFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
 
     ptVec, _, _ = Utilities.unpack_coords(LECoords, TECoords)
-    obj, SOL = cost_funcsFromCoords(ptVec, nodeConn, appendageParams, solverOptions; return_all=true)
+    alfa0 = appendageParams["alfa0"]
+    theta_f = appendageParams["theta_f"]
+    toc = appendageParams["toc"]
+    obj, SOL = cost_funcsFromCoordsDVs(ptVec, nodeConn, alfa0, theta_f, toc, appendageParams, solverOptions; return_all=true)
     return SOL
 end
 
@@ -2062,9 +2079,12 @@ function cost_funcsFromDVs(
     return obj
 end
 
-function cost_funcsFromCoords(
+function cost_funcsFromCoordsDVs(
     ptVec,
     nodeConn,
+    alfa0,
+    theta_f,
+    toc,
     appendageParams,
     solverOptions;
     return_all=false
@@ -2073,9 +2093,12 @@ function cost_funcsFromCoords(
     This does the primal solve but with a function signature compatible with Zygote
     """
 
-    # DVDict = Utilities.repack_dvdict(DVVec, DVLengths)
-
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
+    appendageParams["alfa0"] = alfa0
+
     # Setup
     FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
         setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
@@ -2103,46 +2126,55 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, sol
     println("===================================================================================================")
 
     # Initialize output dictionary
-    funcsSens = Dict()
-
-    # DVVec, DVLengths = Utilities.unpack_dvdict(appendageParams)
 
     LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
     ptVec, mm, NPT = Utilities.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
+    funcsSensOut = Dict()
 
-    if mode == "FiDi" # use finite differences the stupid way
-        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+    for evalFuncSensKey in evalFuncsSensList
+        println("-"^20)
+        println("Cost func: $(evalFuncSensKey)")
+        println("-"^20)
 
-    elseif mode == "RAD" # use automatic differentiation via Zygote
-        backend = AD.ZygoteBackend()
+        tFunc = @elapsed begin
 
-    elseif mode == "FAD"
-        error("FAD not implemented yet")
+            funcsSens = Dict()
+            if uppercase(mode) == "FIDI" # use finite differences the stupid way
+                backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+
+            elseif uppercase(mode) == "RAD" # use automatic differentiation via Zygote
+                backend = AD.ZygoteBackend()
+
+                # AD backend was screwing up the output so use Zygote directly
+                dfdxAD = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
+                        cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+
+            elseif uppercase(mode) == "FAD"
+                error("FAD not implemented yet")
+            end
+
+        end
+
+        println("Time taken:\t$(tFunc)")
+        # dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromDVs(x, DVLengths, solverOptions), DVVec)
+        # NOTE: just make sure the xalfa, xtheta, xtoc are in the same order as `allDesignVariables` list
+        # @show AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) -> cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+
+        dfdxParams = Dict()
+        for (ii, dvkey) in enumerate(allDesignVariables)
+            dfdxParams[dvkey] = dfdxAD[1+ii]
+        end
+
+        funcsSens = Dict(
+            "mesh" => reshape(dfdxAD[1], 3, NPT),
+            "params" => dfdxParams,
+        )
+
+        funcsSensOut[evalFuncSensKey] = funcsSens
+
     end
 
-    # dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromDVs(x, DVLengths, solverOptions), DVVec)
-    dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromCoords(x, nodeConn, appendageParams, solverOptions), ptVec)
-    for (iDV, dvkey) in enumerate(SORTEDDVS)
-        funcsSens[dvkey] = zeros(DTYPE, length(evalFuncsSensList), DVLengths[iDV])
-    end
-    giDV = 1
-    for (iiDV, dvkey) in enumerate(SORTEDDVS)
-        ndv = DVLengths[iiDV]
-        funcsSens[dvkey][1, :] = dksflutterdx[giDV:giDV+ndv-1]
-        giDV += ndv # starting value for next set
-    end
-
-    # ************************************************
-    #     Sort the sensitivities by key (alphabetical)
-    # ************************************************
-    sorted_keys = sort(collect(keys(funcsSens)))
-    sorted_dict = Dict()
-    for key in sorted_keys
-        sorted_dict[key] = funcsSens[key]
-    end
-    funcsSens = sorted_dict
-
-    return funcsSens
+    return funcsSensOut
 
 end
 

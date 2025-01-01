@@ -14,6 +14,7 @@ using ..SolutionConstants: XDIM, YDIM, ZDIM
 using ..Utilities: Utilities, compute_KS
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..HydroStrip
+using Debugger
 
 function compute_maxtipbend(states)
     W = states[WIND:NDOF:end]
@@ -85,34 +86,57 @@ function compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, 
     return CDi, Di
 end
 
-function compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
-
+function compute_profiledrag(aeroSpan, chordLengths, meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
+    """
+    This is the profile drag for the appendage; sum of skin friction and pressure
+    Vectorized for chord lengths along the half-span
+    """
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
         WSA = 2 * areaRef # both sides
+        ds = 0.5 * aeroSpan / (length(chordLengths))
+        WSA_v = 2 * chordLengths
     elseif appendageOptions["config"] == "t-foil"
         WSA = 2 * areaRef + 2 * appendageParams["s_strut"] * mean(appendageParams["c_strut"])
     end
-    println("Profile drag calc I'm not debugged")
 
-    # TODO: MAKE WSA AND DRAG A VECTORIZED STRIPWISE CALCULATION
-    NU = 1.1892E-06 # kinematic viscosity of seawater at 15C
-    Re = solverOptions["Uinf"] * meanChord / NU
-    # Ma = solverOptions["Uinf"] / 1500
-    cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
-    xcmax = 0.3 # chordwise position of the maximum thickness
-    
+    # Re = solverOptions["Uinf"] * meanChord / solverOptions["nu"]
+    # cfittc = 0.075 / (log10(Re) - 2)^2 # flat plate friction coefficient ITTC 1957
+    # # Ma = solverOptions["Uinf"] / 1500
+
+    Re_v = solverOptions["Uinf"] / solverOptions["nu"] .* chordLengths
+    cfittc_v = 0.075 ./ (log10.(Re_v) .- 2) .^ 2 # flat plate friction coefficient ITTC 1957
+
     # # --- Raymer equation 12.30 ---
+    # xcmax = 0.3 # chordwise position of the maximum thickness
     # FF = (1 .+ 0.6 ./ (xcmax) .* DVDict["toc"] + 100 .* DVDict["toc"].^4) * (1.34*Ma^0.18 * cos(DVDict["sweep"])^0.28)
-    
+
     # --- Torenbeek 1990 ---
     # First term is increase in skin friction due to thickness and quartic is separation drag
     FF = 1 .+ 2.7 .* appendageParams["toc"] .+ 100 .* appendageParams["toc"] .^ 4
-    FF = sum(FF) / length(FF)
-    Df = qdyn * WSA * cfittc
-    Dpr = Df * FF
-    CDpr = Dpr / (qdyn * areaRef)
+    
+    # FFmean = sum(FF) / length(FF) # average assuming the TOC nodes are spaced evenly
+    # Df = qdyn * WSA * cfittc
+    # Dpr = Df * FFmean
+    # CDpr = Dpr / (qdyn * areaRef)
 
-    return CDpr, Dpr
+    Dpr_v = 0.0
+    for ii in eachindex(chordLengths)
+
+        if ii == 1 || ii == length(chordLengths)
+            Δs = ds * 0.5
+        else
+            Δs = ds
+        end
+
+        Dpr_v += qdyn * WSA_v[ii] * Δs * cfittc_v[ii] * FF[ii]
+    end
+    if appendageOptions["config"] == "t-foil" || appendageOptions["config"] == "full-wing"
+        Dpr_v *= 2
+    end
+    CDpr_v = Dpr_v / (qdyn * areaRef)
+
+
+    return CDpr_v, Dpr_v
 end
 
 function compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
@@ -173,7 +197,7 @@ function compute_junctiondrag(appendageParams, qdyn, rootChord, areaRef)
     return CDj, Dj
 end
 
-function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, CL, meanChord, rootChord)
+function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, CL, meanChord, rootChord, chordLengths)
     """
     All pieces of calmwater drag
     """
@@ -181,7 +205,7 @@ function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverO
 
     CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
 
-    CDpr, Dpr = compute_profiledrag(meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
+    CDpr, Dpr = compute_profiledrag(aeroSpan, chordLengths, meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
 
     CDj, Dj = compute_junctiondrag(appendageParams, qdyn, rootChord, areaRef)
 

@@ -1046,7 +1046,9 @@ def plot_vg_vf_rl(
     ax.set_title("$V$-$f$", pad=labelpad)
     # ax.set_xlim(vSweep[0] * 0.99, vSweep[-1] * 1.01)
     ax.set_xlabel(xlabel)
-    # ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+
+    if not annotateModes:
+        ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
     # ************************************************
     #     Root-locus diagram
@@ -1140,7 +1142,14 @@ def plot_vg_vf_rl(
                 "",
                 xytext=(np.array([gSweep[-nmid - 1], fSweep[-nmid - 1]])),  # arrow start
                 xy=(np.array([gSweep[-nmid], fSweep[-nmid]])),  # arrow end
-                arrowprops=dict(arrowstyle="-|>", shrinkA=2, color=cm[iic], alpha=0.5),
+                arrowprops=dict(
+                    # arrowstyle="->",
+                    arrowstyle="fancy",
+                    # shrinkA=2,
+                    color=cm[iic],
+                    alpha=0.5,
+                    # headwidth=0.3, # does not work
+                ),
             )
 
             yticks.append(fSweep[0])

@@ -79,6 +79,9 @@ Please use this coding convention:
 Only use **parametric** types for structs. Concrete types in function arguments do not usually make the code faster; they only restrict usage (unless it is on purpose for multiple dispatch). However, you should declare the struct type argument in function signatures. The `DTYPE` constant in the code `RealOrComplex` should be used when structs are not used in the function
 https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
 
+Data typing code that you will AD is very tricky.
+You do not want to be too specific
+
 ### Derivatives
 
 #### Adding new cost functions
@@ -87,7 +90,7 @@ https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
 
 #### Try not to do this
 
-* NOTE: as of February 24, 2024, `LinRange` is actually better and improves the flutter prediction accuracy. 
+* NOTE: as of February 24, 2024, `LinRange` is actually better and improves the flutter prediction accuracy.
 I wrote the custom rule with the help of the Julia slack channel.
 * Careful of mutating operations because Julia is pass by reference! Use `copy()`
 * Mutating arrays that require the `Zygote.Buffer` data type. It is SUPER slow.
@@ -190,6 +193,9 @@ run_tests.jl
 Use `@enter` from the `Debugger.jl` to step into functions and `@bp` to put breakpoints.
 Wrap certain code in `@run` to put the execution in debug mode to get the breakpoints.
 You can also use `@show`, `@debug` commands for pesky bugs.
+
+Debugging AD code is a bit trickier.
+`Cthulhu.jl` is a package that offers the `@descend` macro that helps step into
 
 ## Citation
 

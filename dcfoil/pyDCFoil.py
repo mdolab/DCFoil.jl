@@ -95,6 +95,8 @@ class DCFOIL:
         self.debugDVGeo = False
 
         self.callCounter = 0
+
+        self.dtype = float
         # ************************************************
         #     Set options, DVs info
         # ************************************************
@@ -120,7 +122,9 @@ class DCFOIL:
                 self.solverOptions[key] = options[key]
 
         # self.solverOptions = options
-        print(f"Solver options:\n {self.solverOptions}")
+        print(f"Solver options:")
+        for key, val in self.solverOptions.items():
+            print(f"{key}: {val}")
 
         # --- Make output directory ---
         Path(self.solverOptions["outputDir"]).mkdir(parents=True, exist_ok=True)
@@ -173,6 +177,7 @@ class DCFOIL:
             # ---------------------------
             "Uinf": 5.0,  # free stream velocity [m/s]
             "rhof": 1000.0,  # fluid density [kg/m³]
+            "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
             "use_nlll": True,
             "use_cavitation": False,
             "use_freeSurface": False,
@@ -432,13 +437,17 @@ class DCFOIL:
             self.solverOptions,
             mode="ADJOINT",
         )
-        # breakpoint()
+
         for obj in evalFuncs:
 
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
-            self.Xb = costFuncsSensDict[f"{obj}"]["mesh"].T
-            self.paramSens = costFuncsSensDict[f"{obj}"]["params"]
+            try:
+                self.Xb = costFuncsSensDict[f"{obj}"]["mesh"].T
+                self.paramSens = costFuncsSensDict[f"{obj}"]["params"]
+            except KeyError:
+                print(f"Could not find {obj} in costFuncsSensDict")
+                continue
 
             # --- check shape ---
             assert self.Xb.shape == (self.nnodes * 2, 3)
@@ -458,7 +467,8 @@ class DCFOIL:
             # ============================
             #   Structural Variables
             # ============================
-            funcsSens[key]["params"] = self.paramSens
+            for paramKey, value in self.paramSens.items():
+                funcsSens[key][paramKey] = value
 
             finalEvalSensTime = time.time()
 
@@ -518,14 +528,15 @@ class DCFOIL:
         from pyspline.utils import writeTecplot1D, openTecplot, closeTecplot
 
         outDir = self.solverOptions["outputDir"]
-        f = openTecplot(f"{outDir}/{baseName}_{number:03d}.dat", 3)
+        f = openTecplot(f"{outDir}/{baseName}_mesh_{number:03d}.dat", 3)
         writeTecplot1D(f, "LE", self.LEcoords)
         writeTecplot1D(f, "TE", self.TEcoords)
         closeTecplot(f)
 
     def setDesignVars(self, DVs):
         """
-        Set the design variables
+        Set the design variables (appendageParams dict in dcfoil)
+        Call this before solving
 
         Parameters
         ----------
@@ -533,7 +544,57 @@ class DCFOIL:
             Design variables
         """
 
-        self.DVDict = DVs
+        if self.appendageParamsList is not None:
+            for dvKey, value in DVs.items():
+                if dvKey in self.appendageParamsList[0].keys():
+                    if len(value) == 1:
+                        self.appendageParamsList[0][dvKey] = value[0]
+                    else:
+                        self.appendageParamsList[0][dvKey] = value
+
+    def addVariablesPyOpt(self, optProb, dvName, valDict, lowerDict, upperDict, scaleDict):
+        """
+        Add current set of variables to the optProb object.
+        This is based on pytacs example.
+
+        Parameters
+        ----------
+        optProb : pyOpt_optimization class
+            Optimization problem definition
+        """
+
+        ndv = self.getNumDesignVars(dvName)
+        print(f"Adding {ndv} design variables to the optimization problem")
+        optProb.addVarGroup(
+            dvName,
+            ndv,
+            "c",
+            value=valDict[dvName],
+            lower=lowerDict[dvName],
+            upper=upperDict[dvName],
+            scale=scaleDict[dvName],
+        )
+
+    def getValues(self):
+
+        x = {}
+
+        for key, value in self.appendageParamsList[0].items():
+            if key in self.DCFoil.DesignVariables.allDesignVariables:
+                x[key] = value
+
+        x.update(self.DVGeo.getValues())
+
+        return x
+
+    def getNumDesignVars(self, dvName):
+        """
+        Get number of design variables
+        """
+        try:
+            len(self.appendageParamsList[0][dvName])
+        except TypeError:
+            return 1
 
     def setDVGeo(self, geo, debug=False):
         """

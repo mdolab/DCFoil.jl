@@ -421,14 +421,19 @@ function evalFuncsSens(
     costFuncsSens = 0.0 # scope
     if solverOptions["run_flutter"]
         flutterFuncList = []
-        for evalFuncSens in evalFuncSensList
-            if evalFuncSens in flutterCostFuncs
-                push!(flutterFuncList, evalFuncSens)
+        for evalFuncSensKey in evalFuncSensList
+            if evalFuncSensKey in flutterCostFuncs
+                push!(flutterFuncList, evalFuncSensKey)
             end
+        end
+        if mode == "ADJOINT"
+            flutterDerivMode = "RAD"
+        else
+            flutterDerivMode = "FiDi"
         end
         appendageParams = appendageParamsList[1]
         tFlutter = @elapsed begin
-            costFuncsSens = SolveFlutter.evalFuncsSens(flutterFuncList, appendageParams, GridStruct, solverOptions; mode=mode)
+            costFuncsSens = SolveFlutter.evalFuncsSens(flutterFuncList, appendageParams, GridStruct, solverOptions; mode=flutterDerivMode)
         end
     end
 
@@ -476,6 +481,7 @@ function set_defaultOptions!(solverOptions)
         # ************************************************
         "Uinf",
         "rhof",
+        "nu",
         "use_freeSurface",
         "use_cavitation",
         "use_ventilation",
@@ -516,6 +522,7 @@ function set_defaultOptions!(solverOptions)
         # ************************************************
         1.0,
         1000.0,
+        1.1892E-06, # kinematic viscosity of seawater at 15C
         false,
         false,
         false,

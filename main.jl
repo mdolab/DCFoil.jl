@@ -31,10 +31,10 @@ debug = false
 tipMass = false
 
 # Uncomment here
-run_static = true
+# run_static = true
 # run_forced = true
 run_modal = true
-# run_flutter = true
+run_flutter = true
 # debug = true
 # tipMass = true
 
@@ -48,7 +48,7 @@ nModes = 4 # number of modes to solve for;
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 fSweep = range(1e-4, 100.0, 1000) # forcing frequency sweep [Hz]
-uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
+uRange = [49.5, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 # uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -173,9 +173,9 @@ solverOptions = Dict(
 evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter", "kscl"]
 evalFuncSens = [
     # "wtip",
-    # "cd",
+    "cd",
     "cl", "lift", 
-    # "ksflutter", "kscl",
+    "ksflutter", "kscl",
 ]
 
 # ************************************************
