@@ -25,8 +25,6 @@ using FiniteDifferences
 using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
-# using Cthulhu # TAKE ME BACK OUT
-
 # --- DCFoil modules ---
 using ..DCFoil: DTYPE
 using ..InitModel
@@ -1249,12 +1247,6 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             b_ref, Λ, chordVec, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER
         )
 
-    # TODO PICKUP HERE
-    # @descend Zygote.jacobian(x -> sweep_kCrossings(
-    #         Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep,
-    #         b_ref, Λ, x, abVec, ebVec, U∞, MM, KK, CC, Qr, structMesh, FOIL, globalDOFBlankingList, N_MAX_K_ITER
-    #     )[1], chordVec)
-
     if (debug)
         ChainRulesCore.ignore_derivatives() do
             nonDimFactor = U∞ * cos(Λ) / b_ref / (2π)
@@ -1381,12 +1373,11 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
 
         The result is 'nMode' sets of lines that the eigenvalue problem was solved for
 
+    TODO: visualization of matrix magnitudes
     """
 
     Nr = size(Qr)[2]
-    # TODO: visualization of matrix magnitudes
 
-    # dimwithBC::Int64 = Nr
     # ---------------------------
     #   Outputs
     # ---------------------------
@@ -1679,7 +1670,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
 end # end extract_kCrossings
 
-function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr, pkEqnType)
+function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::Int, pkEqnType)
     """
     This function interpolates the influence coefficient matrix for specific reduced frequency
     Here a linear interpolation is applied
@@ -1703,19 +1694,15 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr, pk
     # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L = [k_sweep[b1], k_sweep[b2]] # somehow this line is adding a lot to the time
-        # # This unravels to keep computations in the stack, not the heap
-
-        y0L = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+        x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+        
+        # This unravels to keep computations in the stack, not the heap
+        
+        y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
         Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
-        # Ar_r_vec = Interpolation.lagrangeArrInterp_differentiable(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
-        # Ar_r = reshape(Ar_r_vec, Nmr, Nmr)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
         Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
-        # Ar_i_vec = Interpolation.lagrangeArrInterp_differentiable(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
-        # Ar_i = reshape(Ar_i_vec, Nmr, Nmr)
-        # TODO: PICKUP DEBUGGIN THIS
 
 
     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
@@ -1754,6 +1741,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr, pk
     end
 
     return Ar_r, Ar_i
+    # return vec(Ar_r)[1]
 end
 
 function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK, CC)
@@ -2142,6 +2130,10 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, sol
             if uppercase(mode) == "FIDI" # use finite differences the stupid way
                 backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
 
+                # dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromDVs(x, DVLengths, solverOptions), DVVec)
+                # NOTE: just make sure the xalfa, xtheta, xtoc are in the same order as `allDesignVariables` list
+                dksflutterdx = AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) -> cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+
             elseif uppercase(mode) == "RAD" # use automatic differentiation via Zygote
                 backend = AD.ZygoteBackend()
 
@@ -2155,10 +2147,7 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, sol
 
         end
 
-        println("Time taken:\t$(tFunc)")
-        # dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromDVs(x, DVLengths, solverOptions), DVVec)
-        # NOTE: just make sure the xalfa, xtheta, xtoc are in the same order as `allDesignVariables` list
-        # @show AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) -> cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+        println("Sensitivity time:\t$(tFunc)")
 
         dfdxParams = Dict()
         for (ii, dvkey) in enumerate(allDesignVariables)

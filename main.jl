@@ -31,7 +31,7 @@ debug = false
 tipMass = false
 
 # Uncomment here
-# run_static = true
+run_static = true
 # run_forced = true
 run_modal = true
 run_flutter = true
@@ -189,7 +189,6 @@ outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f/",
     solverOptions["name"],
     rudderOptions["material"],
     rad2deg(paramsList[1]["theta_f"]),
-    # rad2deg(paramsList[1]["sweep"])
     )
 mkpath(outputDir)
 

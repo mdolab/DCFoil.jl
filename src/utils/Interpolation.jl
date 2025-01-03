@@ -71,7 +71,7 @@ function lagrangeArrInterp(xj, yj, m::Int64, n::Int64, d::Int64, x)
     return y
 end
 
-function lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
+function lagrangeArrInterp_differentiable(xj, yj, m::Int64, n::Int64, d::Int64, x)
     """
     Unroll the output
 
@@ -81,7 +81,7 @@ function lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
     """
 
     # 2 dimensional array interpolation
-    y = zeros(DTYPE, m, n)
+    y = zeros(m, n)
 
     @inbounds @fastmath begin
         for ii in 1:d
@@ -92,7 +92,7 @@ function lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
                          (xj[ii] - xj[jj])
                 end
             end
-            y += yj[:, :, ii] .* L # matrix version so we don't use Lagrange interp
+            y += yj[:, :, ii] .* L # matrix version so we don't use Lagrange interp excessively
         end
     end
 
@@ -101,7 +101,7 @@ function lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
     return yout
 end
 
-function lagrangeInterp(xj, yj, n::Int, x)
+function lagrangeInterp(xj, yj, n::Int64, x)
     """
     Interpolate/extrapolate polynomial of order 'm'
     Providing 'n' points gives us inter/extrapolant of order m = n-1
@@ -132,129 +132,129 @@ function lagrangeInterp(xj, yj, n::Int, x)
     return y
 end
 
-function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
-    """
-    Derivative of lagrangeInterp
-    """
-
-    y = lagrangeInterp(xj, yj, n, x)
-
-    function lagrangeInterp_pullback(ȳ)
-        """
-        Pullback for lagrangeInterp
-
-        ȳ - the seed for the pullback
-        """
-
-        # 2 dimensional array interpolation
-        # dydxj = zeros(size(xj))
-        dydyj = zeros(size(yj))
-
-        # y = 0.0
-        dydx = 0.0
-        for jj in 1:n # loop over points
-            L = 1.0 # Lagrange weight
-
-            dx = 0.0 # derivative of Lagrange weight wrt x
-
-            for ii in 1:n
-                if ii != jj
-                    # This is the lagrange polynomial
-                    L *= (x - xj[ii]) /
-                         (xj[jj] - xj[ii])
-
-                    dx += 1.0 / (x - xj[ii])
-                end
-            end
-
-            dydx += yj[jj] * L * dx
-            dydyj[jj] = L
-
-        end
-
-        # --- Vector-matrix products should happen here ---
-        x0b = NoTangent() # this is incorrect but will work for now, could use Tapenade to inform...
-        y0b = ȳ .* dydyj # Correct
-        xb = ȳ .* dydx # Correct
-
-        # println("back seed size", length(ȳ))
-
-        return (NoTangent(), x0b, y0b, NoTangent(), xb)
-    end
-
-
-    return y, lagrangeInterp_pullback
-
-end
-
-# function ChainRulesCore.rrule(::typeof(lagrangeArrInterp_differentiable), xj, yj, m, n, d, x)
+# function ChainRulesCore.rrule(::typeof(lagrangeInterp), xj, yj, n, x)
 #     """
-#     Derivative of lagrangeArrInterp
+#     Derivative of lagrangeInterp
 #     """
 
-#     # --- Primal ---
-#     y = lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
+#     y = lagrangeInterp(xj, yj, n, x)
 
-#     function lagrangeArrInterp_pullback(ȳ)
+#     function lagrangeInterp_pullback(ȳ)
 #         """
-#         Pullback for lagrangeArrInterp
+#         Pullback for lagrangeInterp
 
-#         ȳ - the seed for the pullback, size(m, n)
+#         ȳ - the seed for the pullback
 #         """
 
-#         dydxArr = zeros(m, n)
-#         dydyjArr = zeros(m, n, d)
+#         # 2 dimensional array interpolation
+#         # dydxj = zeros(size(xj))
+#         dydyj = zeros(size(yj))
 
-#         # Loop over all dimensions
-#         for kk in 1:m
-#             for ll in 1:n
+#         # y = 0.0
+#         dydx = 0.0
+#         for jj in 1:n # loop over points
+#             L = 1.0 # Lagrange weight
 
-#                 # --- Now do core lagrange derivative routine ---
-#                 dydyj = zeros(d)
-#                 dydx = 0.0
-#                 for jj in 1:d # loop over points
-#                     L = 1.0 # Lagrange weight
+#             dx = 0.0 # derivative of Lagrange weight wrt x
 
-#                     dx = 0.0 # derivative of Lagrange weight wrt x
+#             for ii in 1:n
+#                 if ii != jj
+#                     # This is the lagrange polynomial
+#                     L *= (x - xj[ii]) /
+#                          (xj[jj] - xj[ii])
 
-#                     for ii in 1:d
-#                         if ii != jj
-#                             # This is the lagrange polynomial
-#                             L *= (x - xj[ii]) /
-#                                  (xj[jj] - xj[ii])
-
-#                             dx += 1.0 / (x - xj[ii])
-#                         end
-#                     end
-
-#                     dydx += yj[kk, ll, jj] * L * dx
-#                     dydyj[jj] = L
+#                     dx += 1.0 / (x - xj[ii])
 #                 end
-
-#                 dydxArr[kk, ll] = dydx
-#                 dydyjArr[kk, ll, :] = dydyj
-
 #             end
+
+#             dydx += yj[jj] * L * dx
+#             dydyj[jj] = L
+
 #         end
-#         # --- Reshape stuff ---
-#         dydxVec = reshape(dydxArr, m * n)
-#         dydyjVec = reshape(dydyjArr, m * n, d)
 
 #         # --- Vector-matrix products should happen here ---
 #         x0b = NoTangent() # this is incorrect but will work for now, could use Tapenade to inform...
-#         y0b = ȳ .* dydyjVec
-#         xb = ȳ .* dydxVec
+#         y0b = ȳ .* dydyj # Correct
+#         xb = ȳ .* dydx # Correct
 
-#         # --- Reshaping again to fit input var shape ---
-#         y0b = reshape(y0b, m, n, d)
-#         xb = reshape(xb, m, n)
-
-#         return (NoTangent(), x0b, y0b, NoTangent(), NoTangent(), NoTangent(), xb)
+#         return (NoTangent(), x0b, y0b, NoTangent(), xb)
 #     end
 
-#     return y, lagrangeArrInterp_pullback
+
+#     return y, lagrangeInterp_pullback
 
 # end
+
+function ChainRulesCore.rrule(::typeof(lagrangeArrInterp_differentiable), xj, yj, m::Int64, n::Int64, d::Int64, x)
+    """
+    Derivative of lagrangeArrInterp
+    """
+
+    # --- Primal ---
+    yvec = lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
+
+    function lagrangeArrInterp_pullback(ȳ)
+        """
+        Pullback for lagrangeArrInterp
+
+        ȳ - the seed for the pullback, size(m, n)
+        """
+
+        dydxArr = zeros(m, n)
+        dydyjArr = zeros(m, n, d)
+
+        # Loop over all dimensions
+        @inbounds @fastmath begin
+
+            for kk in 1:m
+                for ll in 1:n
+
+                    # --- Now do core lagrange derivative routine ---
+                    dydyj = zeros(d)
+                    dydx = 0.0
+                    for jj in 1:d # loop over points
+                        L = 1.0 # Lagrange weight
+
+                        dx = 0.0 # derivative of Lagrange weight wrt x
+
+                        for ii in 1:d
+                            if ii != jj
+                                # This is the lagrange polynomial
+                                L *= (x - xj[ii]) /
+                                     (xj[jj] - xj[ii])
+
+                                dx += 1.0 / (x - xj[ii])
+                            end
+                        end
+
+                        dydx += yj[kk, ll, jj] * L * dx
+                        dydyj[jj] = L
+                    end
+
+                    dydxArr[kk, ll] = dydx
+                    dydyjArr[kk, ll, :] = dydyj
+
+                end
+            end
+        end
+        # --- Reshape stuff ---
+        dydxVec = reshape(dydxArr, m * n)
+        dydyjVec = reshape(dydyjArr, m * n, d)
+
+        # --- Vector-matrix products should happen here ---
+        x0b = NoTangent() # this is incorrect but will work for now, could use Tapenade to inform...
+        y0b = ȳ .* dydyjVec
+        xb = sum(ȳ .* dydxVec) # same as a dot product
+
+        # --- Reshaping again to fit input var shape ---
+        y0b = reshape(y0b, m, n, d)
+
+        return (NoTangent(), x0b, y0b, NoTangent(), NoTangent(), NoTangent(), xb)
+    end
+
+    return yvec, lagrangeArrInterp_pullback
+
+end
 
 # 2024/11/05 Kind of working but weird outputs
 # The derivative of L(x) wrt xj[jj] is not correct
@@ -264,27 +264,29 @@ end
 # lagrangeInterp(0:0.1:1, 1:0.1:2, 3, 0.5)
 
 # using AbstractDifferentiation: AbstractDifferentiation as AD
-# using Zygote, FiniteDifferences, ForwardDiff, ReverseDiff
+# using Zygote, FiniteDifferences, ForwardDiff, ReverseDiff, ChainRulesCore
 
 # backend = AD.FiniteDifferencesBackend()
-# # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.5)
-# # # # # AD.gradient(backend, x -> lagrangeInterp(x, 1:0.1:2, 3, 0.5), collect(0:0.2:1.0))
-# # # # dfdxfd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
-# yjtest = zeros(3, 3, 2)
-# yjtest[:, :, 1] = [1 2 3; 2 3 4; 1 1 1]
-# yjtest[:, :, 2] = [1 1 1; 5 3 4; 2 2 1]
-# dfdxfd, = AD.jacobian(backend, x -> lagrangeArrInterp(0:0.2:1, yjtest, 3, 3, 2, x)[1], 0.5)
-# # 2024/12/30 the array version works and agrees with the FD mode
+# # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.5)
+# # # # # # AD.gradient(backend, x -> lagrangeInterp(x, 1:0.1:2, 3, 0.5), collect(0:0.2:1.0))
+# # # # # dfdxfd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+# dim = 10
+# yjtest = zeros(dim, dim, 2)
+# yjtest[:, :, 1] = rand(dim, dim)
+# yjtest[:, :, 2] = rand(dim, dim)
+# dfdxfd, = AD.jacobian(backend, x -> lagrangeArrInterp([0,1.0], yjtest, 3, 3, 2, x), 0.5)
+# dfdxfd, = AD.jacobian(backend, x -> lagrangeArrInterp_differentiable([0, 1.0], yjtest, dim, dim, 2, x), 0.5)
+# # # 2024/12/30 the array version works and agrees with the FD mode
 
-# xj = 0:0.2:1
-# yj = cat(repeat([1 2 3; 2 3 4; 1 1 1], 1, 1, length(xj) ÷ 2), repeat([1 1 1; 2 3 4; 2 2 1], 1, 1, length(xj) ÷ 2), dims=3)
-# dfdxfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, yj, 3, 3, length(xj), x), 0.75)
-# # dfdyjfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, x, 3, 3, length(xj), 0.5), yj)
+# # xj = 0:0.2:1
+# # yj = cat(repeat([1 2 3; 2 3 4; 1 1 1], 1, 1, length(xj) ÷ 2), repeat([1 1 1; 2 3 4; 2 2 1], 1, 1, length(xj) ÷ 2), dims=3)
+# # dfdxfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, yj, 3, 3, length(xj), x), 0.75)
+# # # dfdyjfd = AD.jacobian(backend, x -> lagrangeArrInterp(xj, x, 3, 3, length(xj), 0.5), yj)
 
-# # backend = AD.ForwardDiffBackend()
-# # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
-# # # dfdxjfwd = AD.gradient(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
-# # # dfdxfwd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
+# # # backend = AD.ForwardDiffBackend()
+# # # # AD.gradient(backend, x -> lagrangeInterp(0:0.2:1, 1:0.1:2, 3, x), 0.75)
+# # # # dfdxjfwd = AD.gradient(backend, x -> lagrangeInterp(x, ones(5), 3, 0.5), collect(0:0.2:1.0))
+# # # # dfdxfwd = AD.gradient(backend, x -> lagrangeInterp(0:0.2:1.0, x, 3, 0.5), collect(1:0.1:2))
 
 
 # backend = AD.ZygoteBackend()

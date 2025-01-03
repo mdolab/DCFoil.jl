@@ -712,7 +712,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
 
         # --- Linearly interpolate values based on y loc ---
-        clα, c, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll) #TODO PICKUP HERE
+        clα, c, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll) 
         # # THis chunk of code is super hacky based on assuming wing and t-foil strut order
         # if use_nlll # TODO: FIX LATER TO BE GENERAL
         #     xeval = LLSystem.collocationPts[YDIM, :]

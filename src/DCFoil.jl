@@ -419,6 +419,22 @@ function evalFuncsSens(
     #   Cost functions
     # ---------------------------
     costFuncsSens = 0.0 # scope
+    if solverOptions["run_static"]
+        staticFuncList = []
+        for evalFuncSens in evalFuncSensList
+            if evalFuncSens in staticCostFuncs
+                push!(staticFuncList, evalFuncSens)
+            end
+        end
+        STATSOLLIST = SOLDICT["STATIC"]
+
+        tStatic = @elapsed begin
+            costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, appendageParamsList, GridStruct, FEMESHList, solverOptions;
+                mode=mode, CLMain=CLMain)
+        end
+        println("Static sensitivity time:\t$(tStatic) sec")
+    end
+
     if solverOptions["run_flutter"]
         flutterFuncList = []
         for evalFuncSensKey in evalFuncSensList
@@ -437,21 +453,6 @@ function evalFuncsSens(
         end
     end
 
-    if solverOptions["run_static"]
-        staticFuncList = []
-        for evalFuncSens in evalFuncSensList
-            if evalFuncSens in staticCostFuncs
-                push!(staticFuncList, evalFuncSens)
-            end
-        end
-        STATSOLLIST = SOLDICT["STATIC"]
-
-        tStatic = @elapsed begin
-            costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, appendageParamsList, GridStruct, FEMESHList, solverOptions;
-                mode=mode, CLMain=CLMain)
-        end
-        println("Static sensitivity time:\t$(tStatic) sec")
-    end
 
     return costFuncsSens
 end

@@ -928,7 +928,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
     # println("Ui: $(Ui)\n") # OK
 
-    c_l = [
+    c_l::Vector{Number} = [
         VPM.solve(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf)[1]
         for (ii, V_local) in enumerate(eachcol(Ui))
     ] # remember to only grab CL out of VPM solve

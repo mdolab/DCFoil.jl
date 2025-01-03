@@ -564,7 +564,7 @@ function cmplxStdEigValProb2(A_r, A_i, n; nEigs=10)
     return y
 end # cmplxStdEigValProb
 
-function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
+function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r::Matrix, A_i::Matrix, n::Int)
     """
     Reverse rule for the eigenvalue problem
     """
