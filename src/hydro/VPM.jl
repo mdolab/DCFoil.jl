@@ -98,7 +98,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
     return AIRFOIL, Amat
 end
 
-function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
+function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
     """
     Solve vortex strength and lift and moment
 
@@ -113,21 +113,29 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
 
     alpha, Vinf = compute_sweepCorr(Airfoil.sweep, V)
 
+    calpha = cos(alpha)
+    salpha = sin(alpha)
+    csweep = cos(Airfoil.sweep)
     # RHS = zeros(typeof(Vinf), Airfoil.n)
     # RHS[1:end-1] = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
     #                                                 .-
     #                                                 diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))
-    RHS_noTE = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* cos(alpha)
+    RHS_noTE = Vinf ./ Airfoil.panelLengths .* (diff(Airfoil.vortexXY[YDIM, :]) .* calpha
                                                 .-
-                                                diff(Airfoil.vortexXY[XDIM, :] .* sin(alpha)))
+                                                diff(Airfoil.vortexXY[XDIM, :] .* salpha))
     RHS = vcat(RHS_noTE, 0.0)
 
     # Airfoil surface vorticity strengths
-    γi = Amat \ RHS
+    γi = Amat \ RHS # bottleneck code
 
     # Total circulation for the airfoil
     Γi = sum(0.5 * (γi[1:end-1] .+ γi[2:end]) .* Airfoil.panelLengths)
-    cℓ = 2.0 * Vinf * Γi / (chord * cos(Airfoil.sweep) * Vref^2)
+
+    # --- Correct to total section circulation via the FS effect ---
+    corrFactor = (1.0 + 16.0 * hcRatio^2) / (2.0 + 16.0 * hcRatio^2)
+    Γi *= corrFactor
+
+    cℓ = 2.0 * Vinf * Γi / (chord * csweep * Vref^2)
     cpDist = 1.0 .- (γi ./ Vref) .^ 2
     cm = -sum(
         (
@@ -138,7 +146,7 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
                 + 2.0 * Airfoil.vortexXY[XDIM, 2:end] .* γi[2:end]
             )
             .*
-            cos(alpha)
+            calpha
             .+
             (
                 2.0 * Airfoil.vortexXY[YDIM, 1:end-1] .* γi[1:end-1]
@@ -147,11 +155,11 @@ function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0)
                 + 2.0 * Airfoil.vortexXY[YDIM, 2:end] .* γi[2:end]
             )
             .*
-            sin(alpha)
+            salpha
         )
         .*
         Airfoil.panelLengths
-    ) * Vinf / (3.0 * chord^2 * cos(Airfoil.sweep) * Vref^2)
+    ) * Vinf / (3.0 * chord^2 * csweep * Vref^2)
 
 
     return cℓ, cm, Γi, cpDist

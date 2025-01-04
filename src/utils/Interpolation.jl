@@ -202,16 +202,17 @@ function ChainRulesCore.rrule(::typeof(lagrangeArrInterp_differentiable), xj, yj
 
         dydxArr = zeros(m, n)
         dydyjArr = zeros(m, n, d)
+        Z = zeros(d) # trying to avoid another allocation
 
-        # Loop over all dimensions
         @inbounds @fastmath begin
-
+            # Loop over all dimensions
             for kk in 1:m
                 for ll in 1:n
 
                     # --- Now do core lagrange derivative routine ---
-                    dydyj = zeros(d)
+                    dydyj = Z
                     dydx = 0.0
+
                     for jj in 1:d # loop over points
                         L = 1.0 # Lagrange weight
 
@@ -234,6 +235,7 @@ function ChainRulesCore.rrule(::typeof(lagrangeArrInterp_differentiable), xj, yj
                     dydxArr[kk, ll] = dydx
                     dydyjArr[kk, ll, :] = dydyj
 
+                    dydyj *= 0.0
                 end
             end
         end

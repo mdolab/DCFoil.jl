@@ -391,7 +391,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, FEMESH, appendageParams
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, use_nlll=solverOptions["use_nlll"])
+    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
     wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = .√(wetOmegaSquared) / (2π)
@@ -1437,7 +1437,6 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
         globalKf_r, globalKf_i = interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, pkEqnType)
         # --- Direct AIC computation ---
         # ω = k * U∞ * (cos(Λ)) / b_ref
-        # _, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(dim, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
         Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList) # real
         Kffull_i, Cffull_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList) # imag
         # Mode space reduction
@@ -1695,9 +1694,9 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
         x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
-        
+
         # This unravels to keep computations in the stack, not the heap
-        
+
         y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
         Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
@@ -2132,13 +2131,14 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, sol
 
                 # dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromDVs(x, DVLengths, solverOptions), DVVec)
                 # NOTE: just make sure the xalfa, xtheta, xtoc are in the same order as `allDesignVariables` list
-                dksflutterdx = AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) -> cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+                dIdxDV = AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) ->
+                        cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
 
             elseif uppercase(mode) == "RAD" # use automatic differentiation via Zygote
                 backend = AD.ZygoteBackend()
 
                 # AD backend was screwing up the output so use Zygote directly
-                dfdxAD = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
+                dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
                         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
 
             elseif uppercase(mode) == "FAD"
@@ -2151,11 +2151,11 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, sol
 
         dfdxParams = Dict()
         for (ii, dvkey) in enumerate(allDesignVariables)
-            dfdxParams[dvkey] = dfdxAD[1+ii]
+            dfdxParams[dvkey] = dIdxDV[1+ii]
         end
 
         funcsSens = Dict(
-            "mesh" => reshape(dfdxAD[1], 3, NPT),
+            "mesh" => reshape(dIdxDV[1], 3, NPT),
             "params" => dfdxParams,
         )
 

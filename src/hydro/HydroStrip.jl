@@ -604,7 +604,7 @@ end
 function compute_AICs(
     AEROMESH, FOIL, LLSystem, LLOutputs, ϱ, dim, Λ, U∞, ω, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
-    use_nlll=false,
+    solverOptions=Dict(),
 )
     """
     Compute the AIC matrix for a given aeroMesh using LHS convention
@@ -635,14 +635,14 @@ function compute_AICs(
     # Spline to get lift slope in the right spots if using nonlinear LL
     clαVec = LLOutputs.cla
 
-    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=use_nlll)
+    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
     return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i
 end
 
 function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
-    use_nlll=false)
+    solverOptions=Dict())
     """
     Complex step will not work on this routine because we need the real and imag part for unsteady hydro
     # TODO: use the nVec to grab sweep and dihedral effects, then use the external Lambda as inflow angle change
@@ -712,7 +712,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
 
         # --- Linearly interpolate values based on y loc ---
-        clα, c, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll) 
+        clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
         # # THis chunk of code is super hacky based on assuming wing and t-foil strut order
         # if use_nlll # TODO: FIX LATER TO BE GENERAL
         #     xeval = LLSystem.collocationPts[YDIM, :]
@@ -800,7 +800,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         #     #     end
         #     # end
         # end
-        b = 0.5 * c # semichord for more readable code
+        b = 0.5 * localchord # semichord for more readable code
 
         # --- Precomputes ---
         clambda = cos(Λ)
@@ -813,6 +813,15 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
         C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
         M_f = compute_node_mass(b, ab, ϱ)
+        p_i = 1.0
+        if solverOptions["use_freeSurface"]
+            if appendageOptions["config"] == "full-wing"
+                localspan = 0.5 * LLSystem.span - abs_cs_safe(yⁿ) 
+            end
+            p_i = compute_pFactor(localchord, localspan)
+            # println("local span:\t $(localspan)\nyn:\t$(yⁿ)\np factor:\t$(p_i)")
+        end
+        M_f *= p_i
         KLocal, CLocal, MLocal = compute_localAIC(K_f, K̂_f, C_f, Ĉ_f, M_f, elemType)
 
         # ---------------------------
@@ -1339,7 +1348,7 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
 
         # Compute AIC
         # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, dim, Λ, U∞, ω, elemType)
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, use_nlll=solverOptions["use_nlll"])
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
 
         # Accumulate in frequency sweep matrix
         # @inbounds begin
