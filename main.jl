@@ -48,7 +48,7 @@ nModes = 4 # number of modes to solve for;
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 fSweep = range(1e-4, 100.0, 1000) # forcing frequency sweep [Hz]
-uRange = [49.5, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
+uRange = [10.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 # uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -123,7 +123,7 @@ solverOptions = Dict(
     #   I/O
     # ---------------------------
     # "name" => "R3E6",
-    "name" => "mothrudder",
+    "name" => "mothrudder-fs",
     "debug" => debug,
     # "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
     "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf"], #, "./INPUT/mothrudder_foil_strut_mesh.dcf"],
@@ -140,7 +140,7 @@ solverOptions = Dict(
     # "Uinf" => 11.0, # free stream velocity [m/s]
     "rhof" => 1025.0, # fluid density [kg/m³]
     "use_nlll" => true, # use non-linear lifting line code
-    # "use_freeSurface" => true,
+    "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,
     # "use_dwCorrection" => true,
@@ -202,8 +202,8 @@ GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("juncti
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
-@show costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
+costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+@profview costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
     mode="ADJOINT",
     # mode="FiDi",
 )

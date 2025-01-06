@@ -220,7 +220,7 @@ function setup_problemFromCoords(
     globalK, globalM, _ = FEMMethods.assemble(FEMESH, appendageParams["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, x_αb_strut=appendageParams["x_ab_strut"], verbose=verbose)
     alphaCorrection::DTYPE = 0.0
 
-    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, size(globalM)[1], sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
     # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
     areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
 
@@ -1502,7 +1502,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
 
     dim = NDOF * (size(elemConn)[1] + 1)
 
-    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
     allStructuralStates, _ = FEMMethods.put_BC_back(structStates, ELEMTYPE; appendageOptions=appendageOptions)
     foilTotalStates = SolverRoutines.return_totalStates(allStructuralStates, appendageParams, ELEMTYPE; appendageOptions=appendageOptions,)
@@ -1548,7 +1548,7 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     dim = NDOF * (size(elemConn)[1] + 1)
 
-    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+    _, _, _, AIC, _ = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
 
     return -AIC, LLOutputs.cla
