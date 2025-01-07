@@ -592,7 +592,7 @@ class DCFOIL:
         Get number of design variables
         """
         try:
-            len(self.appendageParamsList[0][dvName])
+            return len(self.appendageParamsList[0][dvName])
         except TypeError:
             return 1
 

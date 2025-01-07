@@ -78,7 +78,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
 
     params = {  # THIS IS BASED OFF OF THE MOTH RUDDER
         "alfa0": ap.alpha,  # initial angle of attack [deg]
-        "sweep": np.deg2rad(0.0),  # sweep angle [rad]
+        # "sweep": np.deg2rad(0.0),  # sweep angle [rad]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
         # "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
         # "s": 0.333,  # semispan [m]
