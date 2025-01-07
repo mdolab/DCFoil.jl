@@ -116,7 +116,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
     }
     lowerDict = {
         "alfa0": -5.0,
-        "theta_f": np.deg2rad(-30),  # rad
+        "theta_f": np.deg2rad(0),  # rad
         "toc": 0.9 * params["toc"],
     }
     upperDict = {

@@ -214,7 +214,7 @@ if __name__ == "__main__":
         "kscl",
     ]
     evalFuncsAdj = [
-        # "wtip",
+        "wtip",
         # "psitip",
         "cl",
         # "lift",
@@ -349,9 +349,9 @@ if __name__ == "__main__":
             # myventcl = all_clvents[ap.name]
             # funcs[f"ventilation_con_{ap.name}"] = funcs[f"{ap.name}_kscl"] - myventcl
 
-            # # --- Tip bending ---
-            # mywtip = 0.05 * 0.333  # 5% of the initial semispan
-            # funcs[f"wtip_con_{ap.name}"] = funcs[f"{ap.name}_wtip"] - mywtip
+            # --- Tip bending ---
+            mywtip = 0.05 * 0.333  # 5% of the initial semispan
+            funcs[f"wtip_con_{ap.name}"] = funcs[f"{ap.name}_wtip"] - mywtip
 
             # --- Dynamics ---
             if solverOptions["run_flutter"]:
@@ -385,7 +385,7 @@ if __name__ == "__main__":
     for ap in all_aps:
         optProb.addCon(f"cl_con_{ap.name}", lower=0.0, upper=0.0, scale=1.0)
         # optProb.addCon(f"ventilation_con_{ap.name}", upper=0.0, scale=1.0)
-        # optProb.addCon(f"wtip_con_{ap.name}", upper=0.0, scale=1.0)
+        optProb.addCon(f"wtip_con_{ap.name}", upper=0.0, scale=1.0)
         if solverOptions["run_flutter"]:
             optProb.addCon(f"ksflutter_con_{ap.name}", lower=0.0, upper=0.0, scale=1.0)
 
@@ -423,7 +423,14 @@ if __name__ == "__main__":
 
         print(sol)
         print(f"final DVs:\n")
-        print(sol.xStar)
+        pp(sol.xStar)
+
+        # --- Append DV to restart file ---
+        restart_dvs_file = open("./restart_dvs.py", "a")  # append mode
+        restart_dvs_file.write(f'\ndv_dict["{caseName}"] = ')
+        json.dump(sol.xStar, restart_dvs_file, cls=setup_utils.NumpyEncoder)
+        restart_dvs_file.write("\n")
+        restart_dvs_file.close()
 
     # ---------------------------
     #   ANALYSIS
