@@ -282,12 +282,13 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
     elseif length(solverOptions["appendageList"]) == 1
         FEMESH = FEMESHList[1]
         appendageOptions = solverOptions["appendageList"][1]
+        appendageParams = appendageParamsList[1]
         # ==============================================================================
         #                         Forced vibration solution
         # ==============================================================================
         if solverOptions["run_forced"]
             # @time global forcedCostFuncs = SolveForced.solve(FEMESH, DVDict, solverOptions, appendageOptions)
-            @time VIBSOL = SolveForced.solveFromCoords(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
+            @time VIBSOL = SolveForced.solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
             SOLDICT["FORCED"] = VIBSOL
         end
 
@@ -328,6 +329,48 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
     return SOLDICT
 end
 
+function write_solution(SOLDICT, solverOptions, appendageParamsList)
+    """
+    Actually write solutions to files
+    """
+
+    outputDir = solverOptions["outputDir"]
+
+    println("="^80)
+    println("Writing solution files...")
+    println("="^80)
+
+    if solverOptions["run_static"]
+        STATSOLLIST = SOLDICT["STATIC"]
+
+        iComp = 1
+        STATSOL = STATSOLLIST[iComp]
+
+        SolveStatic.write_sol(STATSOL, ELEMTYPE, outputDir)
+
+        if solverOptions["writeTecplotSolution"]
+            appendageOptions = solverOptions["appendageList"][iComp]
+            appendageParams = appendageParamsList[iComp]
+            SolveStatic.write_tecplot(appendageParams, STATSOL, STATSOL.FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        end
+    end
+
+    if solverOptions["run_forced"]
+        VIBSOL = SOLDICT["FORCED"]
+        SolveForced.write_sol(VIBSOL, outputDir)
+    end
+
+    if solverOptions["run_flutter"]
+        FLUTTERSOL = SOLDICT["FLUTTER"]
+        SolveFlutter.write_sol(FLUTTERSOL, outputDir)
+
+        if solverOptions["writeTecplotSolution"]
+            STATSOL = STATSOLLIST[iComp]
+            FEMESH = STATSOL.FEMESH
+            SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+        end
+    end
+end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
@@ -380,18 +423,20 @@ function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsL
             end
         end
 
-    elseif solverOptions["run_forced"]
+    end
+    if solverOptions["run_forced"]
         forcedEvalFuncs = [key for key in evalFuncsList if key in forcedCostFuncs]
         SolveForced.evalFuncs()
+    end
+    if solverOptions["run_flutter"]
 
-    elseif solverOptions["run_flutter"]
+        FLUTTERSOL = SOLDICT["FLUTTER"]
+
         flutterEvalFuncs = [key for key in evalFuncsList if key in flutterCostFuncs]
         obj, _ = SolveFlutter.postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, FLUTTERSOL.p_r, FLUTTERSOL.iblank, solverOptions["rhoKS"])
         for evalFunc in flutterEvalFuncs
             evalFuncsDict[evalFunc] = obj
         end
-    else
-        println("Unsupported cost function: $(key) or solver mode not on")
     end
 
     # --- Write cost funcs to file ---
@@ -418,7 +463,7 @@ function evalFuncsSens(
     # ---------------------------
     #   Cost functions
     # ---------------------------
-    costFuncsSens = 0.0 # scope
+    costFuncsSens = Dict() # scope
     if solverOptions["run_static"]
         staticFuncList = []
         for evalFuncSens in evalFuncSensList
@@ -429,10 +474,13 @@ function evalFuncsSens(
         STATSOLLIST = SOLDICT["STATIC"]
 
         tStatic = @elapsed begin
-            costFuncsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, appendageParamsList, GridStruct, FEMESHList, solverOptions;
+            funcsSens = SolveStatic.evalFuncsSens(STATSOLLIST, staticFuncList, appendageParamsList, GridStruct, FEMESHList, solverOptions;
                 mode=mode, CLMain=CLMain)
         end
         println("Static sensitivity time:\t$(tStatic) sec")
+        for key in staticFuncList
+            costFuncsSens[key] = funcsSens[key]
+        end
     end
 
     if solverOptions["run_flutter"]
@@ -449,7 +497,11 @@ function evalFuncsSens(
         end
         appendageParams = appendageParamsList[1]
         tFlutter = @elapsed begin
-            costFuncsSens = SolveFlutter.evalFuncsSens(flutterFuncList, appendageParams, GridStruct, solverOptions; mode=flutterDerivMode)
+            funcsSens = SolveFlutter.evalFuncsSens(flutterFuncList, appendageParams, GridStruct, solverOptions; mode=flutterDerivMode)
+        end
+
+        for key in flutterFuncList
+            costFuncsSens[key] = funcsSens[key]
         end
     end
 

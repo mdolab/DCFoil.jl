@@ -387,7 +387,7 @@ def plot_forced(
     deflectionRAO,
     dynLiftRAO,
     dynMomentRAO,
-    genRAO,
+    genXferFcn,
     flowSpeed,
     fs_lgd,
     elem,
@@ -427,72 +427,178 @@ def plot_forced(
     xLabel = "$f$ [Hz]"
 
     # ************************************************
-    #     Plot tip deflections
+    #     Plot deflection FRF
     # ************************************************
     ax = axes[0, 0]
-    # yLabel = r"$\frac{w}{A($\omega$)}$"
-    # nondim = deflectionRAO[0]  # nondimensionalize by the static value
-
-    # yLabel = r"$\left|H_{ww}(\omega)\right|$"
-    yLabel = r"$M_{wtip}(\omega)$"
-    M_wtipRAO = np.zeros_like(fExtSweep)
+    yLabel = r"$M_{\bar{w}\bar{f}_z}(\omega)$"
+    M_wFRF = np.zeros_like(fExtSweep)
     # for ii, entry in enumerate(genRAO[:, OOPIdx, OOPIdx]):
-    for ii, entry in enumerate(deflectionRAO[OOPIdx, :]):
-        M_wtipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    breakpoint()
-    # TODO: PICKUP FIXING THIS THING, WHY DO THE DEFLECTIONS NOT SHOW PROPERLY?
+    # for ii, entry in enumerate(genRAO[:, 2::9, OOPIdx]):
+    for ii, entry in enumerate(fExtSweep):
+        # for ii, entry in enumerate(deflectionRAO[:,OOPIdx]):
+        meanDef = 0.0  # mean deflection over the span
 
-    ax.plot(fExtSweep, M_wtipRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+        ndef = len(genXferFcn[ii, 2::9, OOPIdx])
+
+        bendingXferFcn = genXferFcn[ii, 2::9, 2::9]
+
+        for jj in range(ndef):
+            for kk in range(ndef):
+                meanDef += np.sqrt(bendingXferFcn[jj, kk][0] ** 2 + bendingXferFcn[jj, kk][1] ** 2) / (ndef**2)
+
+        M_wFRF[ii] = meanDef
+        # M_wtipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+        # M_wtipRAO[ii] = entry
+
+    ax.plot(fExtSweep, M_wFRF, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
-    ax.set_xlabel(xLabel)
 
-    ax = axes[0, 1]
-    yLabel = r"$M_{\theta tip}(\omega)$"
-    M_thetatipRAO = np.zeros_like(fExtSweep)
+    ax = axes[1, 0]
+    yLabel = r"$M_{\bar{\vartheta} \bar{\tau_y}}(\omega)$"
+    M_thetaFRF = np.zeros_like(fExtSweep)
     # for ii, entry in enumerate(genRAO[:, TwistIdx, TwistIdx]):
-    twists = deflectionRAO[4::9, :]
-    for ii, entry in enumerate(deflectionRAO[TwistIdx, :]):
-        M_thetatipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    # for ii, entry in enumerate(genRAO[:, 4::9, TwistIdx]):
+    # for ii, entry in enumerate(deflectionRAO[:, TwistIdx]):
+    for ii, entry in enumerate(fExtSweep):
+        meanDef = 0.0  # mean deflection over the span
 
-    ax.plot(fExtSweep, M_thetatipRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+        ndef = len(genXferFcn[ii, 4::9, TwistIdx])
+
+        twistXferFcn = genXferFcn[ii, 4::9, 4::9]
+
+        for jj in range(ndef):
+            for kk in range(ndef):
+                meanDef += np.sqrt(twistXferFcn[jj, kk][0] ** 2 + twistXferFcn[jj, kk][1] ** 2) / (ndef**2)
+
+        M_thetaFRF[ii] = meanDef
+        # M_thetatipRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+        # M_thetatipRAO[ii] = entry
+
+    ax.plot(fExtSweep, M_thetaFRF, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
+
+    # ************************************************
+    #     Deflection RAO
+    # ************************************************
+    angleLim = 90
+    ax = axes[0, 1]
+    ylabel = r"$\frac{|\bar{w}|}{\zeta}$"
+    M_wRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(fExtSweep):
+        ndef = len(deflectionRAO[ii, 2::9])
+        bendingRAO = deflectionRAO[ii, 2::9]
+        meanDef = 0.0
+        for jj in range(ndef):
+            meanDef += np.sqrt(bendingRAO[jj][0] ** 2 + bendingRAO[jj][1] ** 2) / ndef
+
+        M_wRAO[ii] = meanDef
+
+    ax.plot(fExtSweep, M_wRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
+
+    ax = axes[1, 1]
+    ylabel = r"$ \angle \frac{w_{tip}}{\zeta}$"
+    arg_wRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(fExtSweep):
+        ndef = len(deflectionRAO[ii, 2::9])
+        bendingRAO = deflectionRAO[ii, 2::9]
+        # meanDef = 0.0
+        # for jj in range(ndef):
+        # meanDef += (bendingRAO[jj][0] + 1j * bendingRAO[jj][1]) / ndef
+        meanDef = bendingRAO[-1][0] + 1j * bendingRAO[-1][1]
+        arg_wRAO[ii] = np.angle(meanDef, deg=True)
+
+    ax.plot(fExtSweep, arg_wRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
+    ax.set_ylim(-angleLim, angleLim)
+
+    ax = axes[0, 2]
+    ylabel = r"$\frac{|\bar{\vartheta}|}{\zeta}$"
+    M_thetaRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(fExtSweep):
+        ndef = len(deflectionRAO[ii, 4::9])
+        twistingRAO = deflectionRAO[ii, 4::9]
+        meanDef = 0.0
+        for jj in range(ndef):
+            meanDef += np.sqrt(twistingRAO[jj][0] ** 2 + twistingRAO[jj][1] ** 2) / ndef
+
+        M_thetaRAO[ii] = meanDef
+
+    ax.plot(fExtSweep, M_thetaRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
+
+    ax = axes[1, 2]
+    ylabel = r"$ \angle \frac{\vartheta_{tip}}{\zeta}$"
+    arg_thetaRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(fExtSweep):
+        ndef = len(deflectionRAO[ii, 4::9])
+        twistingRAO = deflectionRAO[ii, 4::9]
+        # meanDef = 0.0
+        # for jj in range(ndef):
+        # meanDef += (bendingRAO[jj][0] + 1j * bendingRAO[jj][1]) / ndef
+        meanDef = twistingRAO[-1][0] + 1j * twistingRAO[-1][1]
+
+        arg_thetaRAO[ii] = np.angle(meanDef, deg=True)
+
+    ax.plot(fExtSweep, arg_thetaRAO, color=cm[0], label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
+    ax.set_ylim(-angleLim, angleLim)
 
     # NOTE: TBH these are not terribly useful unless you're looking at transmitted force into the hull of the boat
     # which you should not, because you want to couple the foil to the ship model!
+    # Answer and theory, because the wave loads go to zero at high frequency, this will taper off significantly
+    # You actually want it wrt the magnitude of the input force at the tip
     # ************************************************
     #     Plot forces
     # ************************************************
-    ax = axes[1, 0]
-    yLabel = r"$\frac{|L|}{\zeta}$"  # Lift
+    ax = axes[0, 3]
+    yLabel = r"$\frac{|\tilde{L}|}{\zeta}$"  # Lift
 
-    LiftRAO = dynLiftRAO
-    # for ii, entry in enumerate(dynLiftRAO):
-    #     LiftRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    LiftRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(dynLiftRAO):
+        LiftRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, LiftRAO, color=cm[0])
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
-    ax.set_xlabel(xLabel)
+    # ax.set_xlabel(xLabel)
 
-    ax = axes[1, 1]
-    yLabel = r"$\frac{|M_y|}{\zeta}$"  # Moment
-    MomRAO = dynMomentRAO
-    # for ii, entry in enumerate(dynMomentRAO):
-    #     MomRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
+    ax = axes[1, 3]
+    yLabel = r"$\angle \frac{\tilde{L}}{\zeta}$"  # Lift
+    argLiftRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(dynLiftRAO):
+        argLiftRAO[ii] = np.angle(entry[0] + 1j * entry[1], deg=True)
+    ax.plot(fExtSweep, argLiftRAO, color=cm[0])
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
+    ax.set_ylim(-angleLim, angleLim)
+
+    ax = axes[0, 4]
+    yLabel = r"$\frac{|\tilde{M}_y|}{\zeta}$"  # Moment
+    MomRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(dynMomentRAO):
+        MomRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
     ax.plot(fExtSweep, MomRAO, color=cm[0])
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
-    ax.set_xlabel(xLabel)
 
+    ax = axes[1, 4]
+    yLabel = r"$\angle \frac{\tilde{M}_y}{\zeta}$"
+    argMomRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(dynMomentRAO):
+        argMomRAO[ii] = np.angle(entry[0] + 1j * entry[1], deg=True)
+    ax.plot(fExtSweep, argMomRAO, color=cm[0])
+    ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
+    ax.set_ylim(-angleLim, angleLim)
     # ************************************************
     #     Wave spectrum plot
     # ************************************************
     ax = axes[0, -1]
-    yLabel = r"$\zeta$"
+    yLabel = r"$\zeta(\omega)$"
     ax.plot(fExtSweep, waveAmpSpectrum, color=cm[0])
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
-    ax.set_xlabel(xLabel)
+    # ax.set_xlabel(xLabel)
 
-    for ax in axes.flatten():
+    for ax in axes[1, :].flatten():
         ax.set_xlabel(xLabel)
-        ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
+    for ax in axes.flatten():
+        # ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
         nplt.adjust_spines(ax, outward=True)
 
     return fig, axes

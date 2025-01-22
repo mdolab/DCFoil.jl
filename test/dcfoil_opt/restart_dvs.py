@@ -12,7 +12,7 @@ from numpy import array
 
 dv_dict = {}
 
-# Optimization of just the wing with a CL, tip bending constraint for single point
+# Optimization of just the wing with a CL, tip bending constraint for single point p1
 dv_dict["2025-01-06_mothrudder_opt_elevator_wtipcon1pt"] = {
     OrderedDict(
         [
@@ -21,4 +21,35 @@ dv_dict["2025-01-06_mothrudder_opt_elevator_wtipcon1pt"] = {
             ("theta_f", array([0.0])),
         ]
     )
+}
+
+dv_dict["2025-01-06_opt_mothrudder"] = {
+    "sweep": [13.628222873826793],
+    "alfa0": [0.8371772641701823],
+    "theta_f": [0.0],
+    "toc": [0.07235312041651762, 0.0698772605875427, 0.0675, 0.0675, 0.0675],
+}
+
+dv_dict["2025-01-11_opt_mothrudder"] = {
+    "sweep": [-29.999999725065432],
+    "span": [-3.7649993250593927],
+    "alfa0": [1.1361520063738593],
+    "theta_f": [0.5235987755982988],
+    "toc": [0.07266296707567994, 0.0780128798069001, 0.07816589449614274, 0.07811365692012627, 0.07425872413168429],
+}
+
+dv_dict["2025-01-12_opt_mothrudder"] = {
+    "sweep": [3.5436561349395866e-10],
+    "span": [4.5662670261769445e-09],
+    "alfa0": [2.0000000749961337],
+    "theta_f": [0.5235987708735165],
+    "toc": [0.07500000003314197, 0.075000000015662, 0.07499999999380307, 0.07499999998707892, 0.07499999999381993],
+}
+
+dv_dict["2025-01-12_opt_mothrudder"] = {
+    "sweep": [3.5436561349395866e-10],
+    "span": [4.5662670261769445e-09],
+    "alfa0": [2.0000000749961337],
+    "theta_f": [0.5235987708735165],
+    "toc": [0.07500000003314197, 0.075000000015662, 0.07499999999380307, 0.07499999998707892, 0.07499999999381993],
 }

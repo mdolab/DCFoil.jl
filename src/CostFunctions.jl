@@ -24,6 +24,7 @@ const staticCostFuncs::Vector{String} = [
     "comy"
     # Total drag
     "cd"
+    "drag"
     # Lift-induced drag
     "cdi"
     "fxi"

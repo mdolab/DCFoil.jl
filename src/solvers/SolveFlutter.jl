@@ -1433,8 +1433,8 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
         # In Eirikur's code, he interpolates the AIC matrix. We tried computing it exactly 
         # but the cost is still too much even with strip theory
         # --- Interpolate AICs ---
-        globalCf_r, globalCf_i = interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, dim, pkEqnType)
-        globalKf_r, globalKf_i = interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, pkEqnType)
+        globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, dim, pkEqnType)
+        globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, pkEqnType)
         # --- Direct AIC computation ---
         # ω = k * U∞ * (cos(Λ)) / b_ref
         Kffull_r, Cffull_r, _ = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList) # real
@@ -1669,79 +1669,79 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
 
 end # end extract_kCrossings
 
-function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::Int, pkEqnType)
-    """
-    This function interpolates the influence coefficient matrix for specific reduced frequency
-    Here a linear interpolation is applied
+# function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::Int, pkEqnType)
+#     """
+#     This function interpolates the influence coefficient matrix for specific reduced frequency
+#     Here a linear interpolation is applied
 
-    Inputs
-    ------
-        k_sweep - vector of reduced frequency values that the AIC was generated at. Array(Nk)
-        Ar_sweep_r, Ar_sweep_i - The AIC (real/imag parts) evaluated at reduced frequencies in k_sweep. Array(Nmr,Nmr,Nk)
-        Nmr - the size of reduced problem
+#     Inputs
+#     ------
+#         k_sweep - vector of reduced frequency values that the AIC was generated at. Array(Nk)
+#         Ar_sweep_r, Ar_sweep_i - The AIC (real/imag parts) evaluated at reduced frequencies in k_sweep. Array(Nmr,Nmr,Nk)
+#         Nmr - the size of reduced problem
 
-    Outputs
-    -------
-        Ar_r, Ar_i - The interpolated AIC (real/imag parts) evaluated at reduced frequency k. Array(Nmr,Nmr)
-    """
+#     Outputs
+#     -------
+#         Ar_r, Ar_i - The interpolated AIC (real/imag parts) evaluated at reduced frequency k. Array(Nmr,Nmr)
+#     """
 
-    # Calc the difference of current k and the k_sweep
-    kDiff = k .- k_sweep
+#     # Calc the difference of current k and the k_sweep
+#     kDiff = k .- k_sweep
 
-    # Find where the sign changes for the interpolation
-    b1, b2 = SolverRoutines.find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
-    # Based on the pk equation we are solving it depends how we handle k=0
-    if (pkEqnType == "hassig" || pkEqnType == "ng")
-        # Use the lagrange interpolation (L for linear)
-        x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+#     # Find where the sign changes for the interpolation
+#     b1, b2 = SolverRoutines.find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
+#     # Based on the pk equation we are solving it depends how we handle k=0
+#     if (pkEqnType == "hassig" || pkEqnType == "ng")
+#         # Use the lagrange interpolation (L for linear)
+#         x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
 
-        # This unravels to keep computations in the stack, not the heap
+#         # This unravels to keep computations in the stack, not the heap
 
-        y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
-        Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+#         y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+#         Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
-        y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
-        Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
-
-
-    elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
-        if (k == 0)
-
-            # ! Use the lagrange polynomial for quadratic extrapolation for k = 0
-            x0Q[1] = k_sweep[2]
-            x0Q[2] = k_sweep[3]
-            x0Q[3] = k_sweep[4]
-
-            y0Q[:, :, 1] = Ar_sweep_r[:, :, 2]
-            y0Q[:, :, 2] = Ar_sweep_r[:, :, 3]
-            y0Q[:, :, 3] = Ar_sweep_r[:, :, 4]
-            Ar_r = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_r)
-
-            y0Q[:, :, 1] = Ar_sweep_i[:, :, 2] / k_sweep[2]
-            y0Q[:, :, 2] = Ar_sweep_i[:, :, 3] / k_sweep[3]
-            y0Q[:, :, 3] = Ar_sweep_i[:, :, 4] / k_sweep[4]
-            Ar_i = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_i)
+#         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
+#         Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
 
-        else
-            # ! Use linear interpolation
-            x0L[1] = k_sweep[bound[1]]
-            x0L[2] = k_sweep[bound[2]]
+#     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
+#         if (k == 0)
 
-            y0L[:, :, 1] = Ar_sweep_r[:, :, bound[1]]
-            y0L[:, :, 2] = Ar_sweep_r[:, :, bound[2]]
-            Ar_r = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_r)
+#             # ! Use the lagrange polynomial for quadratic extrapolation for k = 0
+#             x0Q[1] = k_sweep[2]
+#             x0Q[2] = k_sweep[3]
+#             x0Q[3] = k_sweep[4]
 
-            y0L[:, :, 1] = Ar_sweep_i[:, :, bound[1]] / k
-            y0L[:, :, 2] = Ar_sweep_i[:, :, bound[2]] / k
-            Ar_i = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_i)
+#             y0Q[:, :, 1] = Ar_sweep_r[:, :, 2]
+#             y0Q[:, :, 2] = Ar_sweep_r[:, :, 3]
+#             y0Q[:, :, 3] = Ar_sweep_r[:, :, 4]
+#             Ar_r = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_r)
 
-        end
-    end
+#             y0Q[:, :, 1] = Ar_sweep_i[:, :, 2] / k_sweep[2]
+#             y0Q[:, :, 2] = Ar_sweep_i[:, :, 3] / k_sweep[3]
+#             y0Q[:, :, 3] = Ar_sweep_i[:, :, 4] / k_sweep[4]
+#             Ar_i = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_i)
 
-    return Ar_r, Ar_i
-    # return vec(Ar_r)[1]
-end
+
+#         else
+#             # ! Use linear interpolation
+#             x0L[1] = k_sweep[bound[1]]
+#             x0L[2] = k_sweep[bound[2]]
+
+#             y0L[:, :, 1] = Ar_sweep_r[:, :, bound[1]]
+#             y0L[:, :, 2] = Ar_sweep_r[:, :, bound[2]]
+#             Ar_r = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_r)
+
+#             y0L[:, :, 1] = Ar_sweep_i[:, :, bound[1]] / k
+#             y0L[:, :, 2] = Ar_sweep_i[:, :, bound[2]] / k
+#             Ar_i = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_i)
+
+#         end
+#     end
+
+#     return Ar_r, Ar_i
+#     # return vec(Ar_r)[1]
+# end
 
 function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf_r, Kf_i, MM, KK, CC)
     # """

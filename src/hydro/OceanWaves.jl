@@ -104,19 +104,37 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
         end
     end
 
-    p1 = plot(freqspan, ampDist)
+    p1 = plot(freqspan, ampDist, ylims=(0, :auto), xlims=(0, 2))
     xlabel!("Frequency [rad/s]")
     ylabel!("Wave amplitude [m]")
-    xlims!(0, 10)
-    p2 = plot(freqspan, abs.(fAey[:, end]))
+    xlims!(0, 20)
+
+    p2 = plot(freqspan, abs.(fAey[:, end]), xlims=(0, 2))
     ylabel!("Wave load [N]")
-    title!("Wave loads at the tip")
+    title!("Wave loads at the tip of the foil")
     xlabel!("Frequency [rad/s]")
-    xlims!(0, 10)
+    xlims!(0, 20)
+
+    p3 = plot(eachindex(claVec) / length(claVec), abs.(fAey[2, :]))
+    # p3 = plot!(eachindex(claVec) / length(claVec), abs.(mAey[2, :]))
+    ylabel!("Wave load and moment [N]")
+    title!("Spanwise at ω=$(freqspan[2])")
+    xlabel!("Spanwise location")
+
+    p4 = plot(2 * eachindex(claVec) / length(claVec), chordLengths)
+    ylabel!("Chord lengths [m]")
+    title!("Spanwise chord")
+    xlabel!("Spanwise location")
+
+    p5 = plot(2 * eachindex(claVec) / length(claVec), claVec, ylims=(0, :auto))
+    ylabel!("Chord lengths [m]")
+    title!("Spanwise lift slope")
+    xlabel!("Spanwise location")
+
 
     plot(p1, p2)
     savefig("WaveLoads.png")
-    println("Saved wave loads plot")
+    println("Saved wave loads plot to WaveLoads.png")
     # figure()
     # tt = tiledlayout(1,2); nexttile;
     # plot(freqv, fAey); xlim([0 1])
@@ -171,6 +189,8 @@ function compute_AWave(ωRange, ωe, waveamp)
     pζ = ωRange / ωe .* exp.(-0.5 * (ωRange / ωe) .^ 2) # [-] normalized version
 
     ampDist = waveamp * pζ # [m] distribution
+
+    println("Rayleigh distributed amplitude spectrum \nω_pk : $(ωe)\nwaveamp : $(waveamp)")
 
     return ampDist
 end

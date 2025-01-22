@@ -20,6 +20,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
         "config": "full-wing",
         "nNodes": nNodes,
         "nNodeStrut": nNodesStrut,
+        "use_tipMass": False,
         "xMount": 3.355,
         "material": "cfrp",
         "strut_material": "cfrp",
@@ -47,7 +48,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
         # ---------------------------
         "Uinf": 18.0,  # free stream velocity [m/s]
         "rhof": 1025.0,  # fluid density [kg/m³]
-        "nu": 1.1892e-06, # fluid kinematic viscosity [m²/s]
+        "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
         "use_nlll": True,
         "use_freeSurface": False,
         "use_cavitation": False,
@@ -68,13 +69,18 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
         # --- p-k (Eigen) solve ---
         "run_modal": False,
         "run_flutter": False,
-        # "run_modal": True,
-        # "run_flutter": True,
         "nModes": 4,
-        "uRange": [170.0, 190.0],
+        "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
         "maxQIter": 100,  # that didn't fix the slow run time...
         "rhoKS": 500.0,
     }
+    if args.is_dynamic:
+        solverOptions.update(
+            {
+                "run_modal": True,
+                "run_flutter": True,
+            }
+        )
 
     params = {  # THIS IS BASED OFF OF THE MOTH RUDDER
         "alfa0": ap.alpha,  # initial angle of attack [deg]
@@ -85,7 +91,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
         "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
         "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
         "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
-        "theta_f": np.deg2rad(0),  # fiber angle global [rad]
+        "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
         # --- Strut vars ---
         "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
         "rake": 0.0,  # rake angle about top of strut [deg]
@@ -111,7 +117,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str, ap):
     # --- Variables for DCFoil ---
     valDict = {
         "alfa0": ap.alpha,
-        "theta_f": 0.0,
+        "theta_f": params["theta_f"],
         "toc": params["toc"],
     }
     lowerDict = {

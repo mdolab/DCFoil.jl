@@ -254,7 +254,7 @@ if __name__ == "__main__":
             waveAmpSpectrum = np.asarray(load_jld(f"{caseDir}/forced/waveAmpSpectrum.jld2")["data"]).T
 
             # --- Read RAO (general xfer fcn for deflections) ---
-            rao = np.asarray(load_jld(f"{caseDir}/forced/RAO.jld2")["data"]).T
+            rao = np.asarray(load_jld(f"{caseDir}/forced/GenXferFcn.jld2")["data"]).T
             deflectionRAO = np.asarray(load_jld(f"{caseDir}/forced/deflectionRAO.jld2")["data"]).T
 
     # ************************************************
@@ -641,13 +641,13 @@ if __name__ == "__main__":
         fname = f"{outputDir}/forced-dynamics.pdf"
 
         # Create figure object
-        nrows = 2
-        ncols = 3
-        figsize = (6 * ncols, 6 * nrows)
+        nrows = 3
+        ncols = 6
+        figsize = (8 * ncols, 6 * nrows)
         fig, axes = plt.subplots(
             nrows=nrows,
             ncols=ncols,
-            sharex=True,
+            sharex="col",
             constrained_layout=True,
             figsize=figsize,
         )
@@ -672,8 +672,11 @@ if __name__ == "__main__":
 
         fig.suptitle("Frequency response spectra")
 
-        axes[0, 0].set_xlim(left=0.0, right=200)
-        for ax in axes.flatten():
+        # axes[0, 0].set_xlim(left=0.0, right=250)
+        for ax in axes[:, 1:5].flatten():
+            ax.set_xlim(left=0.0, right=2.0)
+
+        for ax in axes[0, :].flatten():
             ax.set_ylim(bottom=0.0)
 
         dosave = not not fname
@@ -760,7 +763,7 @@ if __name__ == "__main__":
                 annotateModes = False
 
             # can force to see modes in legend label
-            # annotateModes = False
+            annotateModes = False
 
             # --- Plot ---
             fig, axes = plot_vg_vf_rl(
@@ -768,7 +771,7 @@ if __name__ == "__main__":
                 axes,
                 flutterSol=flutterSolDict[key],
                 cm=cm,
-                # ls=ls[ii],
+                ls=ls[ii],
                 alpha=alphas[ii],
                 units=units,
                 # marker="o",

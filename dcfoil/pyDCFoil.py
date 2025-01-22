@@ -283,6 +283,15 @@ class DCFOIL:
             print(f"Node conn:\n{self.nodeConn}")
             print(f"all coords:\n{self.X}")
 
+    def set_structDamping(self):
+        """
+        When running optimization, the alpha and beta parameters in the proportional damping model have to be held constant for a fair optimization
+        """
+
+        alphaConst, betaConst = self.DCFoil.FEMMethods.compute_proportional_damping(
+            Ks, Ms, appendageParams["zeta"], solverOptions["nModes"]
+        )
+
     def solve(self):
         """
         Solve foil problem
@@ -547,9 +556,10 @@ class DCFOIL:
         if self.appendageParamsList is not None:
             for dvKey, value in DVs.items():
                 if dvKey in self.appendageParamsList[0].keys():
-                    if len(value) == 1:
+                    print(f"Setting {dvKey} to {value}")
+                    if len(value) == 1:  # scalar case
                         self.appendageParamsList[0][dvKey] = value[0]
-                    else:
+                    else:  # vector case
                         self.appendageParamsList[0][dvKey] = value
 
     def addVariablesPyOpt(self, optProb, dvName, valDict, lowerDict, upperDict, scaleDict):
@@ -564,7 +574,7 @@ class DCFOIL:
         """
 
         ndv = self.getNumDesignVars(dvName)
-        print(f"Adding {ndv} design variables to the optimization problem")
+        print(f"Adding {ndv} {dvName} design variables to the optimization problem")
         optProb.addVarGroup(
             dvName,
             ndv,

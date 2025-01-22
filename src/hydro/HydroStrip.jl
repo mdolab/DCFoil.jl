@@ -39,6 +39,7 @@ using ..DesignConstants: CONFIGS
 using ..Preprocessing
 using ..Utilities
 using ..FEMMethods
+using ..Interpolation
 
 const ELEMTYPE = "COMP2"
 # ==============================================================================
@@ -376,6 +377,67 @@ function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, so
     # println("writing dcdidXpt-$(mode).csv")
 
     return dcdidXpt
+end
+
+function compute_dDidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    """
+    Derivative of the induced drag wrt the design variables
+    Dimensional 
+    TODO PICKUP WRITING THIS
+    """
+
+    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
+
+    dDidXpt = zeros(1, length(ptVec))
+    LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+
+    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+
+        dh = 1e-5
+        idh = 1 / dh
+
+        f_i = LLOutputs_i.F[1]
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+            f_f = LLOutputs_f.F[1]
+
+            dDidXpt[1, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+
+
+    elseif uppercase(mode) == "ADJOINT"
+
+        function compute_adjointVec(∂r∂u, ∂f∂uT)
+            ψ = transpose(∂r∂u) \ ∂f∂uT
+            return ψ
+        end
+
+        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        ∂Di∂Γ = LiftingLine.compute_∂Di∂Γ(Gconv, LLMesh, FlowCond) # GOOD
+        ∂Di∂X = LiftingLine.compute_∂Di∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+
+        ∂f∂uT = reshape(∂Di∂Γ, size(∂Di∂Γ)..., 1)
+
+        Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
+        dDidXpt = ∂Di∂X - transpose(Ψ) * ∂r∂xPt
+
+
+    end
+
+    # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
+    # println("writing dcdidXpt-$(mode).csv")
+
+    return dDidXpt
 end
 
 function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams, solverOptions, appendageOptions)
@@ -1128,13 +1190,13 @@ function compute_∂Kff∂cla(AEROMESH, FOIL, STRUT, dim, ptVec, nodeConn, appen
     if uppercase(mode) == "FIDI"
         dh = 1e-6
 
-        _, _, _, AIC_i, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+        _, _, _, AIC_i, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
         Kff_i = vec(-AIC_i)
 
         for icla in 1:n_cla
             clαVec[icla] += dh
 
-            _, _, _, AIC_f, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+            _, _, _, AIC_f, _ = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
             Kff_f = vec(-AIC_f)
 
             clαVec[icla] -= dh
@@ -1205,7 +1267,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
         FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
         # Λ = sweepAng
 
-        _, _, _, AIC_i, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+        _, _, _, AIC_i, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
         Kff_i = vec(-AIC_i)
 
         for ii in eachindex(ptVec)
@@ -1253,7 +1315,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
             FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
-            _, _, _, AIC_f, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, use_nlll=solverOptions["use_nlll"])
+            _, _, _, AIC_f, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
             Kff_f = vec(-AIC_f)
 
             dKffdXpt[:, ii] = (Kff_f - Kff_i) / dh
@@ -1347,7 +1409,6 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
         ω = k * U∞ * (cos(Λ)) / b_ref
 
         # Compute AIC
-        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, dim, Λ, U∞, ω, elemType)
         globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
 
         # Accumulate in frequency sweep matrix
@@ -1362,6 +1423,79 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
     end
 
     return copy(Mf_sweep_z[:, :, 1]), copy(Cf_r_sweep_z), copy(Cf_i_sweep_z), copy(Kf_r_sweep_z), copy(Kf_i_sweep_z), kSweep
+end
+
+function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::Int, pkEqnType)
+    """
+    This function interpolates the influence coefficient matrix for specific reduced frequency
+    Here a linear interpolation is applied
+
+    Inputs
+    ------
+        k_sweep - vector of reduced frequency values that the AIC was generated at. Array(Nk)
+        Ar_sweep_r, Ar_sweep_i - The AIC (real/imag parts) evaluated at reduced frequencies in k_sweep. Array(Nmr,Nmr,Nk)
+        Nmr - the size of reduced problem
+
+    Outputs
+    -------
+        Ar_r, Ar_i - The interpolated AIC (real/imag parts) evaluated at reduced frequency k. Array(Nmr,Nmr)
+    """
+
+    # Calc the difference of current k and the k_sweep
+    kDiff = k .- k_sweep
+
+    # Find where the sign changes for the interpolation
+    b1, b2 = SolverRoutines.find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
+    # Based on the pk equation we are solving it depends how we handle k=0
+    if (pkEqnType == "hassig" || pkEqnType == "ng")
+        # Use the lagrange interpolation (L for linear)
+        x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+
+        # This unravels to keep computations in the stack, not the heap
+
+        y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+        Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+
+        y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
+        Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+
+
+    elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
+        if (k == 0)
+
+            # ! Use the lagrange polynomial for quadratic extrapolation for k = 0
+            x0Q[1] = k_sweep[2]
+            x0Q[2] = k_sweep[3]
+            x0Q[3] = k_sweep[4]
+
+            y0Q[:, :, 1] = Ar_sweep_r[:, :, 2]
+            y0Q[:, :, 2] = Ar_sweep_r[:, :, 3]
+            y0Q[:, :, 3] = Ar_sweep_r[:, :, 4]
+            Ar_r = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_r)
+
+            y0Q[:, :, 1] = Ar_sweep_i[:, :, 2] / k_sweep[2]
+            y0Q[:, :, 2] = Ar_sweep_i[:, :, 3] / k_sweep[3]
+            y0Q[:, :, 3] = Ar_sweep_i[:, :, 4] / k_sweep[4]
+            Ar_i = lagrangeArrInterp(x0Q, y0Q, Nmr, Nmr, 3, k, Ar_i)
+
+
+        else
+            # ! Use linear interpolation
+            x0L[1] = k_sweep[bound[1]]
+            x0L[2] = k_sweep[bound[2]]
+
+            y0L[:, :, 1] = Ar_sweep_r[:, :, bound[1]]
+            y0L[:, :, 2] = Ar_sweep_r[:, :, bound[2]]
+            Ar_r = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_r)
+
+            y0L[:, :, 1] = Ar_sweep_i[:, :, bound[1]] / k
+            y0L[:, :, 2] = Ar_sweep_i[:, :, bound[2]] / k
+            Ar_i = lagrangeArrInterp(x0L, y0L, Nmr, Nmr, 2, k, Ar_i)
+
+        end
+    end
+
+    return Ar_r, Ar_i
 end
 
 function integrate_hydroLoads(

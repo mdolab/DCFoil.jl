@@ -20,6 +20,7 @@ from datetime import date
 # External Python modules
 # ==============================================================================
 import numpy as np
+
 # from tabulate import tabulate
 
 # ==============================================================================
@@ -31,6 +32,7 @@ from pyoptsparse import Optimization, History
 from SETUP import setup_dcfoil, setup_dvgeo, setup_opt, setup_utils
 from mpi4py import MPI
 from baseclasses import AeroProblem
+from baseclasses.utils import readJSON, redirectIO, writeJSON
 from multipoint import multiPointSparse
 
 from INPUT.flow_constants import TEMP, MU, RHO_F, P_ATM, GRAV, P_VAP
@@ -126,14 +128,18 @@ def fd_variable(funcsSens, dvDict, dvName, funcs, evalFuncs):
     for evalFunc in evalFuncs:
         funcsSens[dvName][evalFunc] = np.divide(funcsFD[f"{ap.name}_{evalFunc}"] - funcs[f"{ap.name}_{evalFunc}"], DH)
 
+
 def setup_fileIO(args):
     date_str = date.today().strftime("%Y-%m-%d")
     caseName = f"{date_str}_{args.task}_{args.foil}"
 
     if args.restart:
         caseName = f"{date_str}_{args.task}_restart_{args.restart}"
+
     caseoutputDir = f"{args.output}/{caseName}/"
+
     return caseName, caseoutputDir
+
 
 # ==============================================================================
 #                         MAIN DRIVER
@@ -160,6 +166,7 @@ if __name__ == "__main__":
         type=str,
         default="run",
     )
+    parser.add_argument("--is_dynamic", action="store_true", default=False)
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -219,6 +226,7 @@ if __name__ == "__main__":
         "cl",
         # "lift",
         "cd",
+        # "drag",
         # "ksflutter",
         # "kscl",
     ]
@@ -262,6 +270,8 @@ if __name__ == "__main__":
     STICKSolver.setDVGeo(DVGeo)
     STICKSolver.addMesh(solverOptions["gridFile"])
 
+    is_dynamic = solverOptions["run_flutter"] and "ksflutter" in evalFuncsAdj
+
     # ************************************************
     #     Functions
     # ************************************************
@@ -284,6 +294,12 @@ if __name__ == "__main__":
 
             for func in evalFuncsAdj:
                 funcs[f"{ap.name}_{func}"] = tmp[f"{ap.name}_{func}"]
+
+            out_ext = f"{STICKSolver.callCounter:03d}"
+            if MP.gcomm.rank == 0:
+                # NOTE: write stuff to the json files because python will know it's a dictionary
+                writeJSON(os.path.join(outputDir, f"dvs_{out_ext}.json"), x)
+                writeJSON(os.path.join(outputDir, f"funcs_{ap.name}_{out_ext}.json"), tmp)
 
         if MP.gcomm.rank == 0:
             print("current DVs:")
@@ -319,6 +335,9 @@ if __name__ == "__main__":
                 STICKSolver.evalFunctions(ap, funcs_f, evalFuncs=evalFuncsAdj)
 
                 x["span"] -= dh
+
+                STICKSolver.callCounter -= 1
+
                 DVGeo.setDesignVars(x)
                 ap.setDesignVars(x)
                 for key, value in funcs_i.items():
@@ -354,7 +373,7 @@ if __name__ == "__main__":
             funcs[f"wtip_con_{ap.name}"] = funcs[f"{ap.name}_wtip"] - mywtip
 
             # --- Dynamics ---
-            if solverOptions["run_flutter"]:
+            if is_dynamic:
                 # --- Flutter ---
                 funcs[f"ksflutter_con_{ap.name}"] = funcs[f"{ap.name}_ksflutter"]
 
@@ -366,7 +385,7 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         Setup optimizer
     # ==============================================================================
-    optProb = Optimization("opt", MP.obj, comm=MPI.COMM_WORLD)
+    optProb = Optimization(f"{caseName}", MP.obj, comm=MPI.COMM_WORLD)
     optProb.addObj("obj", scale=1e4)
 
     # ************************************************
@@ -377,7 +396,7 @@ if __name__ == "__main__":
     # --- DCFoil variables ---
     STICKSolver.addVariablesPyOpt(optProb, "alfa0", valDict, lowerDict, upperDict, scaleDict)
     STICKSolver.addVariablesPyOpt(optProb, "theta_f", valDict, lowerDict, upperDict, scaleDict)
-    # STICKSolver.addVariablesPyOpt(optProb, "toc", valDict, lowerDict, upperDict, scaleDict)
+    STICKSolver.addVariablesPyOpt(optProb, "toc", valDict, lowerDict, upperDict, scaleDict)
 
     # ************************************************
     #     Constraints
@@ -386,7 +405,7 @@ if __name__ == "__main__":
         optProb.addCon(f"cl_con_{ap.name}", lower=0.0, upper=0.0, scale=1.0)
         # optProb.addCon(f"ventilation_con_{ap.name}", upper=0.0, scale=1.0)
         optProb.addCon(f"wtip_con_{ap.name}", upper=0.0, scale=1.0)
-        if solverOptions["run_flutter"]:
+        if is_dynamic:
             optProb.addCon(f"ksflutter_con_{ap.name}", lower=0.0, upper=0.0, scale=1.0)
 
     # ************************************************

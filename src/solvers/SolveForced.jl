@@ -226,13 +226,13 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     u = zeros(size(SOLVERPARAMS.Kmat)[1])
     fSweep = solverOptions["fRange"][1]:solverOptions["df"]:solverOptions["fRange"][end]
 
-    # --- Tip twist approach ---
-    extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
-    @ignore_derivatives() do
-        extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
-        extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
-    end
-
+    # # --- Tip twist approach ---
+    # extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
+    # @ignore_derivatives() do
+    #     extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
+    #     extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
+    # end
+    # --- Wave-induced forces ---
     extForceVec, Aw = compute_fextwave(fSweep * 2π, FEMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
 
     LiftDyn = zeros(ComplexF64, length(fSweep)) # * 0im
@@ -243,9 +243,10 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     # --- Initialize transfer functions ---
     # These describe the output deflection relation wrt an input force vector
     GenXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList), length(u) - length(DOFBlankingList))
+
     # These RAOs describe the outputs relation wrt an input wave amplitude
-    LiftRAO = zeros(ComplexF64, length(fSweep))
-    MomRAO = zeros(ComplexF64, length(fSweep))
+    LiftXFERfcn = zeros(ComplexF64, length(fSweep))
+    MomXferFcn = zeros(ComplexF64, length(fSweep))
     DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
     DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
 
@@ -253,6 +254,12 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     Ms = SOLVERPARAMS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
     Ks = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
     Cs = SOLVERPARAMS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+
+    maxK = fSweep[end] * 2π / FlowCond.Uinf
+    nK = 22
+    globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(
+        maxK, nK, FlowCond.Uinf, 1.0, dim, FEMESH, LLSystem.sweepAng, WING, LLSystem, LLOutputs, FlowCond.rhof, ELEMTYPE;
+        appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     # ************************************************
     #     For every frequency, solve the system
@@ -268,7 +275,13 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             # ---------------------------
             #   Assemble hydro matrices
             # ---------------------------
-            globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, ω, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
+            # TODO: PICKUP HERE to accelerate forced solution
+            # # --- Interpolate AICs ---
+            k = ω / FlowCond.Uinf
+            globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
+            globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
+            # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, ω, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
+
             Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
             Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
 
@@ -277,6 +290,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
 
             #  Dynamic matrix. also written as Λ_ij in na520 notes
             D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
+            # Rows are outputs "i" and columns are inputs "j"
 
             # # Complex AIC
             # AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)
@@ -306,7 +320,8 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             # ---------------------------
             fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
 
-            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
+            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+                appendageOptions=appendageOptions, solverOptions=solverOptions)
 
             # --- Store total force and tip deflection values ---
             LiftDyn[f_ctr] = L̃
@@ -315,7 +330,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             GenXferFcn[f_ctr, :, :] = H
 
             DeflectionRAO[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
-            DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+            # DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
 
             # # DEBUG QUIT ON FIRST FREQ
             # break
@@ -323,21 +338,23 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
         end
     end
 
-    LiftRAO = LiftDyn ./ Aw
-    MomRAO = MomDyn ./ Aw
+    LiftXFERfcn = LiftDyn ./ Aw
+    MomXferFcn = MomDyn ./ Aw
 
     # ************************************************
     #     Write solution out to files
     # ************************************************
-    write_sol(fSweep, Aw, ũout, DeflectionMagRAO, LiftRAO, MomRAO, GenXferFcn, outputDir)
+    write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftXFERfcn, MomXferFcn, GenXferFcn, outputDir)
 
     SOL = DCFoilSolution.ForcedVibSolution(LiftDyn, MomDyn, GenXferFcn)
-
 
     return SOL
 end
 
 function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
+    """
+    Computes the forces and moments due to wave loads on the elevator
+    """
 
     # --- Wave loads ---
     ω_wave = 0.125 # Peak wave frequency
@@ -400,11 +417,11 @@ function write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftRAO, MomRAO, GenXferFc
 
     # --- Write dynamic lift ---
     fname = workingOutput * "totalLiftRAO.jld2"
-    save(fname, "data", abs.(LiftRAO))
+    save(fname, "data", (LiftRAO))
 
     # --- Write dynamic moment ---
     fname = workingOutput * "totalMomentRAO.jld2"
-    save(fname, "data", abs.(MomRAO))
+    save(fname, "data", (MomRAO))
 
     # --- General transfer function ---
     fname = workingOutput * "GenXferFcn.jld2"

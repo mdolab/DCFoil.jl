@@ -403,7 +403,8 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
             fout = moment
         end
     end
-    if costFunc in ["cd", "cdi", "cdw", "cdpr", "cdj", "cds"]
+    if costFunc in ["cd", "cdi", "cdw", "cdpr", "cdj", "cds",
+        "drag"]
 
         cdi, Di = ComputeFunctions.compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
@@ -412,6 +413,10 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
         midchords, chordLengths, _, _ = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, FEMESH.idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
         aeroSpan = Preprocessing.compute_aeroSpan(midchords, FEMESH.idxTip)
         cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord, chordLengths)
+        # if appendageOptions["config"] != "t-foil"
+        #     cdj = 0.0
+        #     cds = 0.0
+        # end
         cd = cdi + cdw + cdpr + cdj + cds
         fout = [cd, cdi, cdw, cdpr, cdj, cds]
     end
@@ -826,11 +831,11 @@ function compute_∂f∂x(
         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
     )
     appendageParams["theta_f"] -= dh
-    if costFunc != "cd"
-        ∂f∂xParams["theta_f"] = (f_f - f_i) / dh
-    else
+    if costFunc == "cd"
         # When drag coeff is the cost func, pick out the first component
         ∂f∂xParams["theta_f"] = (f_f[1] - f_i[1]) / dh
+    else
+        ∂f∂xParams["theta_f"] = (f_f - f_i) / dh
     end
     ∂f∂xParams["toc"] = zeros(DTYPE, 1, length(appendageParams["toc"]))
     for ii in eachindex(appendageParams["toc"])
@@ -839,10 +844,10 @@ function compute_∂f∂x(
             appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
         )
         appendageParams["toc"][ii] -= dh
-        if costFunc != "cd"
-            ∂f∂xParams["toc"][1, ii] = (f_f - f_i) / dh
-        else
+        if costFunc == "cd"
             ∂f∂xParams["toc"][1, ii] = (f_f[1] - f_i[1]) / dh
+        else
+            ∂f∂xParams["toc"][1, ii] = (f_f - f_i) / dh
         end
     end
     appendageParams["alfa0"] += dh
@@ -850,11 +855,11 @@ function compute_∂f∂x(
         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
     )
     appendageParams["alfa0"] -= dh
-    if costFunc != "cd"
-        ∂f∂xParams["alfa0"] = (f_f - f_i) / dh
-    else
+    if costFunc == "cd"
         # When drag coeff is the cost func, pick out the first component
         ∂f∂xParams["alfa0"] = (f_f[1] - f_i[1]) / dh
+    else
+        ∂f∂xParams["alfa0"] = (f_f - f_i) / dh
     end
 
 
@@ -923,7 +928,10 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         aeroSpan = Preprocessing.compute_aeroSpan(midchords, FEMESH.idxTip)
         cdw, cdpr, cdj, cds, dw, dpr, dj, ds = ComputeFunctions.compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions, qdyn, areaRef, aeroSpan, cl, meanChord, rootChord, chordLengths)
-
+        # if appendageOptions["config"] != "t-foil"
+        #     cdj = 0.0
+        #     cds = 0.0
+        # end
         return vec([cdw, cdpr, cdj, cds, dw, dpr, dj, ds])
     end
 
@@ -932,17 +940,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
     #         costFunc, SOL, x, nodeConn, appendageParams, appendageOptions, solverOptions),
     #     ptVec)
     ∂f∂xPt = zeros(DTYPE, length(ptVec))
-    if costFunc != "cd"
-        f_i = costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        dh = 1e-5
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
-            f_f = costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-            ptVec[ii] -= dh
-
-            ∂f∂xPt[ii] = (f_f - f_i) / dh
-        end
-    elseif costFunc == "cd"
+    if costFunc in ["cd", "drag"]
 
         #dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
         dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="ADJOINT") # DIRECT and ADJOINT agree and are good
@@ -962,7 +960,15 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         ∂f∂xPt = dcdidXpt + reshape(dcddxpt, 1, length(dcddxpt))
     else
-        error("Why are you here?")
+        f_i = costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+        dh = 1e-5
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = costFuncFromXpt(costFunc, SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+            ptVec[ii] -= dh
+
+            ∂f∂xPt[ii] = (f_f - f_i) / dh
+        end
     end
 
 
@@ -979,13 +985,13 @@ function compute_∂costFunc∂fhydro(costFunc, SOL, ptVec, nodeConn, qdyn, area
     # backend = AD.FiniteDifferencesBackend() #SUPER SLOW
     # backend = AD.ZygoteBackend()
 
-    if costFunc != "cd"
+    if costFunc == "cd"
         ∂f∂fhydro, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH),
+                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH)[1],
             SOL.fHydro)
     else
         ∂f∂fhydro, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH)[1],
+                costFunc, SOL.structStates, x, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH),
             SOL.fHydro)
     end
 
@@ -1000,13 +1006,13 @@ function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, are
     backend = AD.ForwardDiffBackend() # works
     # backend = AD.ZygoteBackend()
 
-    if costFunc != "cd"
+    if costFunc == "cd"
         ∂f∂udirect, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH),
+                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH)[1],
             SOL.structStates)
     else
         ∂f∂udirect, = AD.gradient(backend, x -> compute_funcsFromfhydro(
-                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH)[1],
+                costFunc, x, SOL.fHydro, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, qdyn, areaRef, meanChord, rootChord, SOL.FEMESH),
             SOL.structStates)
     end
 

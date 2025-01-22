@@ -31,10 +31,10 @@ debug = false
 tipMass = false
 
 # Uncomment here
-run_static = true
-# run_forced = true
-run_modal = true
-run_flutter = true
+# run_static = true
+run_forced = true
+# run_modal = true
+# run_flutter = true
 # debug = true
 # tipMass = true
 
@@ -47,8 +47,9 @@ nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
-fSweep = range(1e-4, 100.0, 1000) # forcing frequency sweep [Hz]
-uRange = [10.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
+fSweep = [1e-4, 10.0] # forcing frequency sweep [Hz]
+# fSweep = [1e-4, 10.0] # forcing frequency sweep [Hz] SMALLER TEST
+uRange = [20.0, 60.0] / 1.9438 # flow speed [m/s] sweep for flutter
 # uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -80,7 +81,6 @@ paramsRudder = Dict(
     "alfa0" => 2.0, # initial angle of attack [deg] (angle of flow vector)
     # "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
-    # "c" => 0.14 * ones(nNodes), # chord length [m]
     # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
     "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
     "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
@@ -123,7 +123,7 @@ solverOptions = Dict(
     #   I/O
     # ---------------------------
     # "name" => "R3E6",
-    "name" => "mothrudder-fs",
+    "name" => "mothrudder-nofs",
     "debug" => debug,
     # "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
     "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf"], #, "./INPUT/mothrudder_foil_strut_mesh.dcf"],
@@ -138,9 +138,10 @@ solverOptions = Dict(
     # ---------------------------
     "Uinf" => 18.0, # free stream velocity [m/s]
     # "Uinf" => 11.0, # free stream velocity [m/s]
+    # "Uinf" => 1.0, # free stream velocity [m/s]
     "rhof" => 1025.0, # fluid density [kg/m³]
     "use_nlll" => true, # use non-linear lifting line code
-    "use_freeSurface" => true,
+    # "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,
     # "use_dwCorrection" => true,
@@ -156,6 +157,7 @@ solverOptions = Dict(
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fRange" => [fSweep[1], fSweep[end]], # forcing frequency sweep [Hz]
+    # "df" => 0.05, # frequency step size
     "df" => 0.005, # frequency step size
     "tipForceMag" => tipForceMag,
     # --- p-k (Eigen) solve ---
@@ -203,7 +205,7 @@ LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruc
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
-@profview costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
+costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
     mode="ADJOINT",
     # mode="FiDi",
 )

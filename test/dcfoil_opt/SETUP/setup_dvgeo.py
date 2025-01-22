@@ -227,8 +227,8 @@ def setup(args, comm, files: dict):
             "taper",
             value=np.ones(2) * 1.0,
             func=taper,
-            lower=[0.1, 0.1],
-            upper=[1.5, 1.5],
+            lower=[-0.1, -0.1],
+            upper=[0.1, 0.1],
             scale=1.0,
         )
 
@@ -249,7 +249,7 @@ def setup(args, comm, files: dict):
                 C[nSpan - ii - 1, 1] += -val.item() * s[ii + nSpan - 1]
             geo.restoreCoef(C, "global")
 
-        DVGeo.addGlobalDV(dvName="span", value=0.0, func=span, lower=-10.0, upper=20.0, scale=0.1)
+        DVGeo.addGlobalDV(dvName="span", value=0.0, func=span, lower=-0.1, upper=0.1, scale=1 / 0.2)
 
     # def airfoilThickness(val, geo):
     #     # Set airfoil thickness values
