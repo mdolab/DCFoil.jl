@@ -8,7 +8,7 @@ using Printf
 
 include("../src/DCFoil.jl")
 using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO, ComputeFunctions
-using Plots, Printf, Profile
+using Plots, Printf
 using DelimitedFiles
 
 # ==============================================================================

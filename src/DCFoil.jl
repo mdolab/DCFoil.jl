@@ -477,6 +477,15 @@ function evalFuncsSens(
         end
     end
 
+
+    if solverOptions["run_forced"]
+        for evalFuncSens in evalFuncSensList
+            if evalFuncSens in forcedCostFuncs
+                push!(forcedFuncList, evalFuncSens)
+            end
+        end
+    end
+
     if solverOptions["run_flutter"]
         flutterFuncList = []
         for evalFuncSensKey in evalFuncSensList
