@@ -525,7 +525,9 @@ class DCFOIL:
         Very specific
         """
 
-        # self.DCFoil.write
+        outDir = self.solverOptions["outputDir"]
+
+        self.DCFoil.write_solution(self.SOLDICT, self.solverOptions, self.appendageParamsList)
 
         if number is None:
             number = self.callCounter
@@ -536,7 +538,6 @@ class DCFOIL:
         print("Writing curves to tecplot...")
         from pyspline.utils import writeTecplot1D, openTecplot, closeTecplot
 
-        outDir = self.solverOptions["outputDir"]
         f = openTecplot(f"{outDir}/{baseName}_mesh_{number:03d}.dat", 3)
         writeTecplot1D(f, "LE", self.LEcoords)
         writeTecplot1D(f, "TE", self.TEcoords)
