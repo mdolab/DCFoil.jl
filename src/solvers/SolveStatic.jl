@@ -35,7 +35,7 @@ using ..FEMMethods: FEMMethods, StructMesh
 using ..BeamProperties
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..HydroStrip: HydroStrip
-using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, DCFoilSolverParams
+using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, DCFoilSolverParams, ELEMTYPE
 using ..DesignConstants: DesignConstants, SORTEDDVS, DynamicFoil, CONFIGS
 using ..SolverRoutines: SolverRoutines
 using ..Utilities: Utilities
@@ -47,7 +47,6 @@ using ..ComputeFunctions
 # ==============================================================================
 #                         COMMON TERMS
 # ==============================================================================
-const ELEMTYPE = "COMP2"
 const loadType = "force"
 
 # ==============================================================================
@@ -118,7 +117,6 @@ function solveFromCoords(
 
     appendageParams = appendageParamsList[iComp]
     appendageOptions = solverOptions["appendageList"][iComp]
-    outputDir = solverOptions["outputDir"]
 
     # Initial guess on unknown deflections (excluding BC nodes)
     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
@@ -155,9 +153,6 @@ function solveFromCoords(
     fHydro, _, _ = HydroStrip.integrate_hydroLoads(uSol, SOLVERPARAMS.AICmat, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
     # global Kf = AIC
-
-
-    write_sol(uSol, fHydro, ELEMTYPE, outputDir)
 
     STATSOL = DCFoilSolution.StaticSolution(uSol, fHydro, FEMESH, SOLVERPARAMS, FOIL, STRUT)
 
@@ -232,13 +227,16 @@ end
 
 
 function write_sol(
-    states::Vector{DTYPE}, fHydro::Vector{DTYPE}, elemType="bend", outputDir="./OUTPUT/"
+    STATSOL, elemType="bend", outputDir="./OUTPUT/"
 )
     """
     Inputs
     ------
     states: vector of structural states from the [K]{u} = {f}
     """
+
+    states = STATSOL.structStates
+    fHydro = STATSOL.fHydro
 
     # --- Make output directory ---
     workingOutputDir = outputDir * "static/"

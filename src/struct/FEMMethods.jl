@@ -237,11 +237,9 @@ function fill_mesh(
             LinRange(0.0, span, nElem + 1), #Y
             zeros(nElem + 1) #Z
         )
-        @ignore_derivatives() do
-            for ee in 1:nElem
-                elemConn[ee, 1] = ee
-                elemConn[ee, 2] = ee + 1
-            end
+        for ee in 1:nElem
+            elemConn[ee, 1] = ee
+            elemConn[ee, 2] = ee + 1
         end
     elseif config == "full-wing"
         # Simple meshes starting from junction at zero

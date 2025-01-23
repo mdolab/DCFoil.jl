@@ -32,7 +32,7 @@ using ..SolverRoutines
 using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
 using ..GlauertLL: GlauertLL
 using ..LiftingLine: LiftingLine, Δα
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..DCFoil: RealOrComplex, DTYPE
 using ..DesignConstants: CONFIGS
@@ -41,7 +41,6 @@ using ..Utilities
 using ..FEMMethods
 using ..Interpolation
 
-const ELEMTYPE = "COMP2"
 # ==============================================================================
 #                         Free surface effects
 # ==============================================================================
@@ -488,6 +487,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         # CDi = LLOutputs.CDi
 
     else
+        span = appendageParams["s"] * 2
         cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α0 + rake), solverOptions["Uinf"];
             h=depth0,
             useFS=solverOptions["use_freeSurface"],
@@ -496,8 +496,13 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
             debug=solverOptions["debug"]
         )
         F = [Fxind, 0.0, 0.0, 0.0, 0.0, 0.0]
-        LLSystem = nothing
-        FlowCond = nothing
+        uinf = solverOptions["Uinf"]
+        ZM = zeros(2, 2)
+        ZA = zeros(2)
+        ZH = zeros(2, 2, 2)
+        LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ZH, ZH, ZA, ZM, ZA)
+        FlowCond = LiftingLine.FlowConditions([uinf, 0.0, 0.0], uinf, [uinf, 0.0, 0.0], appendageParams["alfa0"], 0.0, solverOptions["rhof"], appendageParams["depth0"])
+        LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), real(cla), zeros(3), F, 0.0, CDi, 0.0)
     end
 
     return LLOutputs, LLSystem, FlowCond
@@ -878,7 +883,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         p_i = 1.0
         if solverOptions["use_freeSurface"]
             if appendageOptions["config"] == "full-wing"
-                localspan = 0.5 * LLSystem.span - abs_cs_safe(yⁿ) 
+                localspan = 0.5 * LLSystem.span - abs_cs_safe(yⁿ)
             end
             p_i = compute_pFactor(localchord, localspan)
             # println("local span:\t $(localspan)\nyn:\t$(yⁿ)\np factor:\t$(p_i)")

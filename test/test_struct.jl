@@ -91,104 +91,6 @@ end
 # ==============================================================================
 #                         Test elemental matrices
 # ==============================================================================
-function test_BT2_stiff()
-    """
-    Test the second order beam matrix with unit values
-    """
-    constitutive = "orthotropic"
-    # ************************************************
-    #     BT2 element stiff
-    # ************************************************
-    elemType = "BT2"
-
-    Ktest = BeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
-    # show(stdout, "text/plain", Ktest[1:end, 1:end])
-
-    # --- Reference value ---
-    # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
-    ref_sol = vec(
-        [
-            3.0000 3.0000 -3.0000 -5.0000 -3.0000 3.0000 3.0000 -1.0000
-            3.0000 4.0000 -1.0000 -6.0000 -3.0000 2.0000 1.0000 0
-            -3.0000 -1.0000 8.8000 4.8000 3.0000 -5.0000 -8.8000 4.8000
-            -5.0000 -6.0000 4.8000 11.4667 5.0000 -4.0000 -4.8000 2.1333
-            -3.0000 -3.0000 3.0000 5.0000 3.0000 -3.0000 -3.0000 1.0000
-            3.0000 2.0000 -5.0000 -4.0000 -3.0000 4.0000 5.0000 -2.0000
-            3.0000 1.0000 -8.8000 -4.8000 -3.0000 5.0000 8.8000 -4.8000
-            -1.0000 0 4.8000 2.1333 1.0000 -2.0000 -4.8000 3.4667
-        ],
-    )
-
-    # # --- Relative error ---
-    answers = vec(Ktest) # put computed solutions here
-    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-
-    if det(Ktest) >= 1e-16
-        print("Your stiffness matrix is not singular...it's wrong")
-        rel_err += 1 # make test fail
-    end
-
-    if Ktest' != Ktest
-        print("Your stiffness matrix is not symmetric...it's wrong")
-        rel_err += 1 # make test fail
-    end
-
-    return rel_err
-end
-
-# test_BT2_stiff()
-
-function test_BT2_mass()
-    """
-    Test the second order beam matrix with unit values
-    """
-    # ************************************************
-    #     BT2 element mass
-    # ************************************************
-    elemType = "BT2"
-    # INPUTS
-    ms = 4
-    isea = 16 / 3
-    le = 2
-    xalphab = -1
-    # Test
-    Mtest = BeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
-    # show(stdout, "text/plain", Mtest[5:end, 5:end])
-
-    totalMass = ms * le
-    totalInertia = isea * le
-
-    # --- Sum values over translational DOFs ---
-    massSum = sum(Mtest[1, 1]) + sum(Mtest[1, 5]) + sum(Mtest[5, 1]) + sum(Mtest[5, 5])
-    momentSum = sum(Mtest[3, 3]) + sum(Mtest[3, 7]) + sum(Mtest[7, 3]) + sum(Mtest[7, 7])
-
-    # --- Reference value ---
-    # These were obtained from the matlab symbolic script plugging 2 for rho, 2 for the chord, and 1 for everything else
-    ref_sol = vec(
-        [
-            2.9714 0.8381 -2.9714 -0.8381 1.0286 -0.4952 -1.0286 0.4952
-            0.8381 0.3048 -0.8381 -0.3048 0.4952 -0.2286 -0.4952 0.2286
-            -2.9714 -0.8381 3.9619 1.1175 -1.0286 0.4952 1.3714 -0.6603
-            -0.8381 -0.3048 1.1175 0.4063 -0.4952 0.2286 0.6603 -0.3048
-            1.0286 0.4952 -1.0286 -0.4952 2.9714 -0.8381 -2.9714 0.8381
-            -0.4952 -0.2286 0.4952 0.2286 -0.8381 0.3048 0.8381 -0.3048
-            -1.0286 -0.4952 1.3714 0.6603 -2.9714 0.8381 3.9619 -1.1175
-            0.4952 0.2286 -0.6603 -0.3048 0.8381 -0.3048 -1.1175 0.4063
-        ],
-    )
-
-    # # --- Relative error ---
-    answers = vec(Mtest) # put computed solutions here
-    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-
-    if minimum(eigvals(Mtest)) < 0.0
-        print("Your mass matrix is not positive definite...it's wrong")
-        rel_err += 1 # make test fail
-    end
-
-    return rel_err
-end
-
 function test_COMP2_stiff()
     """
     Test the second order beam matrix with unit values
@@ -908,6 +810,7 @@ function test_FECOMP2()
         "material" => "test-comp", # preselect from material library
         "config" => "wing",
         "nNodes" => nNodes,
+        "xMount" => 0.0,
     )
     solverOptions = Dict(
         "appendageList" => [wingOptions],
@@ -916,6 +819,7 @@ function test_FECOMP2()
         "use_freeSurface" => false,
         "run_body" => false,
         "debug" => false,
+        "use_nlll" => false,
     )
 
 
@@ -924,7 +828,7 @@ function test_FECOMP2()
 
     axisDefault = "z"
 
-    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions, wingOptions)
+    FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, wingOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -939,10 +843,9 @@ function test_FECOMP2()
     x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], zeros(2, 2))
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], length(chordVec), zeros(2, 2))
     globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    # T = T1
     T = I(3)
     transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -1024,8 +927,6 @@ function test_FECOMP2()
 
     return rel_err
 end
-
-# test_FECOMP2()
 
 function test_fullwing(DVDict, solverOptions)
 

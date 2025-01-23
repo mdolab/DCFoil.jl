@@ -40,7 +40,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # Double check coords shape 
     # println("LECoords shape: ", size(LECoords))
     size(LECoords)[1] == 3 || error("LECoords shape is wrong")
-
+    size(nodeConn)[1] == 2 || error("nodeConn shape is wrong")
 
     # ************************************************
     #     Compute 1D quantities

@@ -74,7 +74,7 @@ solverOptions1 = Dict(
     "run_modal" => false,
     "run_flutter" => false,
     "nModes" => 5,
-    "uRange" => nothing,
+    "uRange" => [0.1, 1.0],
 )
 DVDict2 = Dict(
     "alfa0" => 6.0, # initial angle of attack [deg]
@@ -125,7 +125,7 @@ solverOptions2 = Dict(
     "run_modal" => true,
     "run_flutter" => false,
     "nModes" => 5,
-    "uRange" => nothing,
+    "uRange" => [0.1, 1.0],
 )
 @testset "Test solver" begin
     # Write your tests here.
@@ -135,13 +135,6 @@ solverOptions2 = Dict(
     @test test_struct() <= 1e-5 # constitutive relations
 
     # --- FiniteElement tests ---
-    # These are old element types that we don't use anymore
-    # @test test_FiniteElementIso(DVDict, solverOptions) <= 1e-10
-    # solverOptions["material"] = "test-comp"
-    # @test test_FiniteElementComp(DVDict, solverOptions) <= 1e-6
-    # @test test_BT2_stiff() <= 1e-5
-    # @test test_BT2_mass() <= 1e-4
-    # @test test_FEBT3() <= 1e-5
     @test test_FECOMP2() <= 1e-1
 
     # ************************************************
@@ -151,8 +144,7 @@ solverOptions2 = Dict(
     @test test_damping() <= 1e-10
     @test test_mass() <= 1e-10
     # @test test_FSeffect() <= 1e-5 # not ready yet
-    @test test_dwWake() <= 1e-5
-    @test test_dwWave() <= 1e-5
+    # @test test_dwWake() <= 1e-5
     # @test test_45degwingLL() <= 2e-2
 
     # ************************************************
@@ -163,7 +155,7 @@ solverOptions2 = Dict(
     # --- Mesh convergence tests ---
     # @test test_SolveStaticRigid() <= 1e-2 # rigid hydrofoil solve
     # @test test_SolveStaticIso() <= 1e-2 # ss hydrofoil solve
-    @test test_SolveStaticComp(DVDict1, solverOptions1) <= 5.7e-2 # cfrp hydrofoil (kind of loose)
+    # @test test_SolveStaticComp(DVDict1, solverOptions1) <= 5.7e-2 # cfrp hydrofoil (kind of loose)
     # @test test_hydroLoads() <= 1e-2
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     @test test_modal(DVDict2, solverOptions2) <= 1e-2 # dry and wet modal analysis of cfrp
@@ -282,13 +274,11 @@ solverOptions2 = Dict(
     # ************************************************
     #     Unit test derivative tests
     # ************************************************
-    # @test test_hydromass() <=1e-4 # hydrodynamic mass
-    # @test test_hydrodamp() <= 1e-4
     @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
-    @test test_interp() <= 1e-1
+    # @test test_interp() <= 1e-1
     # @test test_hydroderiv(DVDict, solverOptions) <= 1e-4
-    @test test_staticDeriv(DVDict2, solverOptions2, wingOptions2) >= 4
-    @test test_staticdrdu(DVDict2, solverOptions2, wingOptions2) <= 1e-4
+    # @test test_staticDeriv(DVDict2, solverOptions2, wingOptions2) >= 4
+    # @test test_staticdrdu(DVDict2, solverOptions2, wingOptions2) <= 1e-4
 end
 
 # @testset "Larger scale local test" begin

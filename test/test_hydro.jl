@@ -552,12 +552,13 @@ function test_wavedrag()
     qdyn = 1.0 # doesn't matter for this test
     AR = appendageParams["s"] / chord
     vals = []
+    aeroSpan = appendageParams["s"]
     for Fnc in FncRange
 
         solverOptions["Uinf"] = Fnc * sqrt(9.81 * chord)
 
-        Cdw, _ = ComputeFunctions.compute_wavedrag(CL, chord, qdyn, areaRef, appendageParams, solverOptions)
-        CDi = Cdw + 1/(π*AR)
+        Cdw, _ = ComputeFunctions.compute_wavedrag(CL, chord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
+        CDi = Cdw + 1 / (π * AR)
         push!(vals, CDi / CL^2)
     end
     return vals, FncRange
@@ -1105,7 +1106,7 @@ end
 # ==============================================================================
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
-vals, FncRange = test_wavedrag()
-test_45degwingLL()
+# vals, FncRange = test_wavedrag()
+# test_45degwingLL()
 # TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
 # TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")

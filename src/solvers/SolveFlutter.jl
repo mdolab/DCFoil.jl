@@ -36,15 +36,13 @@ using ..Interpolation
 using ..DCFoilSolution
 using ..DesignConstants: SORTEDDVS
 using ..DesignVariables: allDesignVariables
-using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM
+using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
 using ..Utilities: Utilities, compute_KS
 using ..TecplotIO
 
 # ==============================================================================
 #                         MODULE CONSTANTS
 # ==============================================================================
-const ELEMTYPE = "COMP2"
-#const elemType = "BT2"
 const loadType = "force"
 const derivMode = "RAD"
 
@@ -93,7 +91,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
     )
 
     # --- Store solution in struct ---
-    global FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank, p_r)
+    FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank, p_r)
 
 
     # ************************************************
@@ -102,11 +100,6 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
     ρKS = solverOptions["rhoKS"]
     obj, pmG = postprocess_damping(FLUTTERSOL.N_MAX_Q_ITER, FLUTTERSOL.flowHistory, FLUTTERSOL.NTotalModesFound, FLUTTERSOL.nFlow, p_r, FLUTTERSOL.iblank, ρKS)
 
-
-    # --- Write the solution to file ---
-    ChainRulesCore.ignore_derivatives() do
-        write_sol(FLUTTERSOL, solverOptions["outputDir"])
-    end
 
     return obj, pmG, FLUTTERSOL
 end # end solve
@@ -302,7 +295,7 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function solve_frequencies(LECoords, TECoords, nodeConn, FEMESH, appendageParams::Dict, solverOptions::Dict, appendageOptions::Dict)
+function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Dict, solverOptions::Dict, appendageOptions::Dict)
     """
     System natural frequencies
     """

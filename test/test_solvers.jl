@@ -89,7 +89,7 @@ function test_SolveStaticRigid()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 5,
-        "uRange" => nothing,
+        "uRange" => [0.1, 1.0],
     )
     mkpath(solverOptions["outputDir"])
 
@@ -113,9 +113,9 @@ function test_SolveStaticRigid()
         DVDict["ab"] = 0.0 * ones(RealOrComplex, nNodes)
         DVDict["x_ab"] = 0.0 * ones(RealOrComplex, nNodes)
 
-        DCFoil.setup_model([DVDict], evalFuncs; solverOptions=solverOptions)
-        DCFoil.init_model(zeros(10,10), zeros(10,10), zeros(10,10); solverOptions=solverOptions, appendageParamsList=[DVDict])
-        DCFoil.run_model(zeros(10,10), zeros(10,10), zeros(10,10), evalFuncs; solverOptions=solverOptions, appendageParamsList=[DVDict])
+        DCFoil.setup_model([DVDict]; solverOptions=solverOptions)
+        DCFoil.init_model(zeros(10, 10), zeros(10, 10), zeros(10, 10); solverOptions=solverOptions, appendageParamsList=[DVDict])
+        DCFoil.run_model(zeros(10, 10), zeros(10, 10), zeros(10, 10), evalFuncs; solverOptions=solverOptions, appendageParamsList=[DVDict])
         # DCFoil.run_model(DVDict, evalFuncs; solverOptions)
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
@@ -156,7 +156,7 @@ function test_SolveStaticRigid()
 
 end # test_SolveStaticRigid
 
-test_SolveStaticRigid()
+# test_SolveStaticRigid()
 
 function test_SolveStaticIso()
     """
@@ -208,7 +208,7 @@ function test_SolveStaticIso()
         "run_modal" => false,
         "run_flutter" => false,
         "nModes" => 5,
-        "uRange" => nothing,
+        "uRange" => [0.1, 1.0],
         "config" => "wing",
     )
     mkpath(solverOptions["outputDir"])
@@ -292,6 +292,7 @@ function test_SolveStaticComp(DVDict, solverOptions)
     appendageOptions = solverOptions["appendageList"][1]
     appendageOptions["nNodes"] = nNodes # number of nodes on foil half wing
     solverOptions["appendageList"] = [appendageOptions]
+    solverOptions["gridFile"] = nothing
     mkpath(solverOptions["outputDir"])
 
     # ************************************************
@@ -318,9 +319,21 @@ function test_SolveStaticComp(DVDict, solverOptions)
         DVDictList::Vector = [DVDict]
 
         # FIX THESE TESTS AND FIGURE OUT WHY THE FSI SOLVE NOW TAKES A BUNCH OF ITERATIONS...
-        DCFoil.init_model(DVDictList, evalFuncs; solverOptions=solverOptions)
-        SOLDICT = DCFoil.run_model(DVDictList, evalFuncs; solverOptions=solverOptions)
-        costFuncs = DCFoil.evalFuncs(SOLDICT, DVDictList, evalFuncs, solverOptions)
+        # DCFoil.init_model(DVDictList, evalFuncs; solverOptions=solverOptions)
+        # SOLDICT = DCFoil.run_model(DVDictList, evalFuncs; solverOptions=solverOptions)
+        c = DVDict["c"]
+        span = DVDict["s"] * 2
+        spanCoord = LinRange(0, span / 2, length(c))
+        LECoords = transpose(cat(-c * 0.5, spanCoord, zeros(length(c)), dims=2))
+        TECoords = transpose(cat(c * 0.5, spanCoord, zeros(length(c)), dims=2))
+        nodeConn = zeros(Int, 2, length(c) - 1)
+        for ii in 1:length(c)-1
+            nodeConn[1, ii] = ii
+            nodeConn[2, ii] = ii + 1
+        end
+        DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=DVDictList)
+        SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=DVDictList)
+        costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncs, solverOptions)
 
         tipBendData[meshlvl] = costFuncs["wtip-"*appendageOptions["compName"]]
         tipTwistData[meshlvl] = costFuncs["psitip-"*appendageOptions["compName"]]
@@ -391,12 +404,23 @@ function test_modal(DVDict, solverOptions)
 
     # --- Mesh ---
     DCFoil.set_defaultOptions!(solverOptions)
+    solverOptions["gridFile"] = nothing
     appendageOptions = solverOptions["appendageList"][1]
-    FOIL = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
+    FOIL, _, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 1.0, zeros(2, 2))
-    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
+    # structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
+    c = DVDict["c"]
+    span = DVDict["s"] * 2
+    spanCoord = LinRange(0, span / 2, length(c))
+    LECoords = transpose(cat(-c * 0.5, spanCoord, zeros(length(c)), dims=2))
+    TECoords = transpose(cat(c * 0.5, spanCoord, zeros(length(c)), dims=2))
+    nodeConn = zeros(Int, 2, length(c) - 1)
+    for ii in 1:length(c)-1
+        nodeConn[1, ii] = ii
+        nodeConn[2, ii] = ii + 1
+    end
+    structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, DVDict, solverOptions, appendageOptions)
 
     # ************************************************
     #     Relative error

@@ -25,7 +25,7 @@ using FileIO
 using ..InitModel, ..HydroStrip, ..BeamProperties
 using ..FEMMethods
 using ..SolveStatic
-using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM
+using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
 using ..SolverRoutines
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..DCFoilSolution
@@ -36,7 +36,6 @@ using Debugger
 # ==============================================================================
 #                         COMMON VARIABLES
 # ==============================================================================
-const ELEMTYPE = "COMP2"
 const loadType = "force"
 
 # ==============================================================================
@@ -245,8 +244,8 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     GenXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList), length(u) - length(DOFBlankingList))
 
     # These RAOs describe the outputs relation wrt an input wave amplitude
-    LiftXFERfcn = zeros(ComplexF64, length(fSweep))
-    MomXferFcn = zeros(ComplexF64, length(fSweep))
+    LiftRAO = zeros(ComplexF64, length(fSweep))
+    MomRAO = zeros(ComplexF64, length(fSweep))
     DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
     DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
 
@@ -338,15 +337,10 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
         end
     end
 
-    LiftXFERfcn = LiftDyn ./ Aw
-    MomXferFcn = MomDyn ./ Aw
+    LiftRAO = LiftDyn ./ Aw
+    MomRAO = MomDyn ./ Aw
 
-    # ************************************************
-    #     Write solution out to files
-    # ************************************************
-    write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftXFERfcn, MomXferFcn, GenXferFcn, outputDir)
-
-    SOL = DCFoilSolution.ForcedVibSolution(LiftDyn, MomDyn, GenXferFcn)
+    SOL = DCFoilSolution.ForcedVibSolution(fSweep, ũout, Aw, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn)
 
     return SOL
 end
@@ -383,11 +377,19 @@ function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond
     return extForceVec, Aw
 end
 
-
-function write_sol(fSweep, Aw, ũout, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn, outputDir="./OUTPUT/")
+function write_sol(SOL, outputDir="./OUTPUT/")
     """
     Write out the dynamic results
     """
+
+    fSweep = SOL.fSweep
+    Aw = SOL.Awave
+    ũout = SOL.dynStructStates
+    DeflectionRAO = SOL.Zdeflection
+    LiftRAO = SOL.Zlift
+    MomRAO = SOL.Zmom
+    GenXferFcn = SOL.RAO
+
     workingOutput = outputDir * "forced/"
     mkpath(workingOutput)
 

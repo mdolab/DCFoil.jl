@@ -63,7 +63,7 @@ using .TecplotIO: TecplotIO
 using .InitModel: InitModel
 using .FEMMethods: FEMMethods
 using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs, allCostFuncs
-
+using .SolutionConstants: ELEMTYPE
 
 # ==============================================================================
 #                         API functions
@@ -72,7 +72,7 @@ using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs, allCos
 export init_model, run_model, evalFuncs, evalFuncsSens
 
 
-function setup_model(DVDictList, evalFuncsList; solverOptions)
+function setup_model(DVDictList; solverOptions)
     """
     Code to make mesh and other things if you're not starting from coordinates
     Global vars are used in run_model
@@ -170,9 +170,7 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
     # ---------------------------
     global FOILList = []
     global STRUTList = []
-    if !isnothing(solverOptions["gridFile"])
-        global FEMESHList = []
-    end
+    global FEMESHList = []
 
     for iComp in eachindex(appendageParamsList)
         DVDict = appendageParamsList[iComp]
@@ -251,25 +249,23 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
             println("|  Running static solve for ", appendageOptions["compName"])
             println("+--------------------------------------------------------+")
 
-            FEMESH = FEMESHList[iComp]
-            DVDict = appendageParamsList[iComp]
+            # FEMESH = FEMESHList[iComp]
+            appendageParams = appendageParamsList[iComp]
 
             # STATSOL = SolveStatic.solve(FEMESH, DVDict, solverOptions, appendageOptions)
-            if isnothing(solverOptions["gridFile"])
-                STATSOL = SolveStatic.compute_solFromDVDict(appendageParamsList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
-            else
+            # if isnothing(solverOptions["gridFile"])
+            #     STATSOL = SolveStatic.compute_solFromDVDict(appendageParamsList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
+            # else
                 tStatic = @elapsed begin
                     STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
                 end
-            end
-            if solverOptions["writeTecplotSolution"]
-                SolveStatic.write_tecplot(DVDict, STATSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
-            end
+            # end
+
             push!(STATSOLLIST, STATSOL)
 
             # --- Need to compute main hydrofoil CL ---
             if iComp == 1 && solverOptions["use_dwCorrection"] && !solverOptions["use_nlll"]
-                DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+                DVVec, DVLengths = Utilities.unpack_dvdict(appendageParams)
                 CLMain = SolveStatic.evalFuncs("cl", STATSOL.structStates, STATSOL, DVVec, DVLengths;
                     appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp, DVDictList=appendageParamsList, CLMain=0.0)
             end
@@ -280,7 +276,7 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
     if length(solverOptions["appendageList"]) > 1
         println("Dynamic solver does not work for multiple components")
     elseif length(solverOptions["appendageList"]) == 1
-        FEMESH = FEMESHList[1]
+        # FEMESH = FEMESHList[1]
         appendageOptions = solverOptions["appendageList"][1]
         appendageParams = appendageParamsList[1]
         # ==============================================================================
@@ -298,7 +294,7 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
         if solverOptions["run_modal"]
             appendageParams = appendageParamsList[1]
             # structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
-            structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, FEMESH, appendageParams, solverOptions, appendageOptions)
+            structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
             if solverOptions["writeTecplotSolution"]
                 SolveFlutter.write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, FEMESH.mesh, FEMESH.chord, outputDir; solverOptions=solverOptions)
             end
@@ -311,9 +307,7 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
             else
                 @time FLUTTERSOL = SolveFlutter.compute_solFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
             end
-            if solverOptions["writeTecplotSolution"]
-                SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
-            end
+
             SOLDICT["FLUTTER"] = FLUTTERSOL
         end
     end
@@ -329,12 +323,12 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
     return SOLDICT
 end
 
-function write_solution(SOLDICT, solverOptions, appendageParamsList)
+function write_solution(SOLDICT, solverOptions, appendageParamsList; callNumber=0)
     """
     Actually write solutions to files
     """
 
-    outputDir = solverOptions["outputDir"]
+    outputDir = solverOptions["outputDir"] * @sprintf("/call_%03d/", callNumber)
 
     println("="^80)
     println("Writing solution files...")
