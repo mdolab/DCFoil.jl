@@ -23,20 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
     - uses: julia-actions/setup-julia@v2
       with:
-          version: '1.9.3'
-    - uses: julia-actions/julia-buildpkg@master
-    - run: julia --project=. test/run_tests.jl
+          version: '1.10'
+    - uses: julia-actions/julia-buildpkg@v1
+    - uses: julia-actions/julia-runtest@v1
+    # - run: julia --project=.  test/run_tests.jl
     
   build-macOS:
     runs-on: macos-latest
     
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
     - uses: julia-actions/setup-julia@v2
       with:
-          version: '1.9.3'
-    - uses: julia-actions/julia-buildpkg@master
-    - run: julia --project=. test/run_tests.jl
+          version: '1.10'
+    - uses: julia-actions/julia-buildpkg@v1
+    - uses: julia-actions/julia-runtest@v1
+    # - run: julia --project=.  test/run_tests.jl

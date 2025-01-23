@@ -31,10 +31,10 @@ debug = false
 tipMass = false
 
 # Uncomment here
-# run_static = true
+run_static = true
 run_forced = true
-# run_modal = true
-# run_flutter = true
+run_modal = true
+run_flutter = true
 # debug = true
 # tipMass = true
 
@@ -176,7 +176,7 @@ evalFuncs = ["wtip", "psitip", "cl", "cd", "cmy", "lift", "moment", "ksflutter",
 evalFuncSens = [
     # "wtip",
     "cd",
-    "cl", "lift", 
+    "cl", "lift",
     "ksflutter", "kscl",
 ]
 
@@ -191,7 +191,7 @@ outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f/",
     solverOptions["name"],
     rudderOptions["material"],
     rad2deg(paramsList[1]["theta_f"]),
-    )
+)
 mkpath(outputDir)
 
 solverOptions["outputDir"] = outputDir
@@ -204,6 +204,7 @@ GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("juncti
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
     mode="ADJOINT",
