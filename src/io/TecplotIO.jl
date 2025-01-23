@@ -13,7 +13,7 @@ module TecplotIO
 using Printf
 using PyCall
 
-BASECLASSES = pyimport("baseclasses") # This gives a weird 'shmem' error FYI
+# BASECLASSES = pyimport("baseclasses") # This gives a weird 'shmem' error FYI
 
 # --- DCFoil modules ---
 using ..SolverRoutines: get_rotate3dMat
