@@ -21,6 +21,17 @@ struct StaticSolution{TF}
     STRUT::DynamicFoil#{TF,TI,TA}
 end
 
+struct ForcedVibSolution{TF,TC}
+    # fSweep::Vector{TF} # forcing frequency sweep [Hz]
+    fSweep::StepRangeLen{TF} # forcing frequency sweep [Hz]
+    dynStructStates::Matrix{TC} # dynamic state variables (nfreq, u)
+    Awave::Vector{TF} # wave amplitudes
+    Zdeflection::Matrix{TC} # deflection RAO
+    Zlift::Vector{TC} # lift forces RAO
+    Zmom::Vector{TC} # moments RAO
+    RAO::Array{TC,3} # RAOs (nFreq, nDOF, nDOF) in the sens of deflection output from an input force
+end
+
 struct BodyStaticSolution{TF,TA<:AbstractVector{TF}}
     deltaC::TA # control inputs
 end

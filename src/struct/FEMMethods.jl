@@ -19,7 +19,7 @@ module FEMMethods
 
 # --- PACKAGES ---
 using Zygote
-using ChainRulesCore
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using DelimitedFiles
 using LinearAlgebra
 using StaticArrays
@@ -29,22 +29,25 @@ using ..DCFoil: RealOrComplex, DTYPE
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..SolverRoutines
 using ..BeamProperties
-using ..DesignConstants: DynamicFoil
+using ..DesignConstants: DesignConstants, DynamicFoil, CONFIGS
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using ..Preprocessing
+using ..MaterialLibrary
 
-struct StructMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+struct StructMesh{TF,TC,TI}
     """
     Struct to hold the mesh, element connectivity, and node properties
     """
-    mesh::TM # node xyz coords (2D array of coordinates of nodes)
+    mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes)
     elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
-    chord::TA
-    toc::TA
-    ab::TA
-    x_αb::TA
-    θ::TF # global fiber frame orientation
-    airfoilCoords::TM # airfoil coordinates
+    chord::Vector{TC}
+    toc::Vector{TC}
+    ab::Vector{TC}
+    x_αb::Vector{TC}
+    theta_f::TC # global fiber frame orientation
+    idxTip::TI # index of the tip node
+    airfoilCoords::AbstractMatrix # airfoil coordinates
 end
 
 function make_fullMesh(DVDictList, solverOptions)
@@ -61,8 +64,6 @@ function make_fullMesh(DVDictList, solverOptions)
         appendageDict = solverOptions["appendageList"][iComp]
         DVDict = DVDictList[iComp]
         println("Meshing ", appendageDict["compName"])
-        span = DVDict["s"]
-        spanStrut = DVDict["s_strut"]
         nElem = appendageDict["nNodes"] - 1
         nElStrut = appendageDict["nNodeStrut"] - 1
         config = appendageDict["config"]
@@ -82,8 +83,82 @@ function make_fullMesh(DVDictList, solverOptions)
 
 end
 
+function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
+    """
+
+    Replaces make_componentMesh()
+
+    midchords: Location of midchords from the grid file
+    nodeConn: Connectivity of the midchords from the grid file
+
+    """
+    config = appendageOptions["config"]
+    semispan = Preprocessing.compute_structSpan(abs.(midchords), idxTip)
+    nElemWing = appendageOptions["nNodes"] - 1
+    nElemTot = nothing
+    if config == "wing"
+        nElemTot = nElemWing
+    elseif config == "full-wing"
+        nElemTot = 2 * nElemWing
+    end
+    nNodeTot = nElemTot + 1
+    nNodeWing = nElemWing + 1
+
+
+
+    # --- Spline quantities ---
+    s_loc_q = LinRange(0.0, semispan, nNodeTot)
+    if config == "full-wing"
+        dx = semispan / nElemWing
+        s_loc_q = vcat(LinRange(0, semispan, nNodeWing), LinRange(-dx, -semispan, nNodeWing - 1))
+    elseif !(config in CONFIGS)
+        error("Invalid configuration")
+    end
+
+    # Find where node connectivivity jumps and has index of 1
+    junctionIdxs = findall(x -> x == 1, nodeConn)
+
+    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
+
+
+    midchordXLocs = SolverRoutines.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
+    midchordYLocs = SolverRoutines.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
+    midchordZLocs = SolverRoutines.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
+
+    # mesh = zeros(RealOrComplex, nNodeTot, 3)
+    mesh = cat(reshape(midchordXLocs, nNodeTot, 1), reshape(midchordYLocs, nNodeTot, 1), reshape(midchordZLocs, nNodeTot, 1), dims=2)
+    # mesh[:, XDIM] = midchordXLocs
+    # mesh[:, YDIM] = midchordYLocs
+    # mesh[:, ZDIM] = midchordZLocs
+
+    elemConn = zeros(Int64, nElemWing, 2)
+    elemConn_z = Zygote.Buffer(elemConn)
+    # --- Element connectivity ---
+    for ee in 1:nElemWing
+        elemConn_z[ee, :] = [ee, ee + 1]
+    end
+    elemConn = copy(elemConn_z)
+
+    # println("span loc query", s_loc_q)
+    # for coord in eachrow(mesh)
+    #     println(coord)
+    # end
+    if config == "full-wing"
+        modifiedConn = elemConn .+ nNodeWing .- 1
+        modifiedConn_z = Zygote.Buffer(modifiedConn)
+        modifiedConn_z[:, :] = modifiedConn
+        modifiedConn_z[1, 1] = 1
+        modifiedConn = copy(modifiedConn_z)
+        elemConn = vcat(elemConn, modifiedConn)
+    end
+
+    # println("elemConn: ", elemConn)
+    return mesh, elemConn
+
+end
+
 function make_componentMesh(
-    nElem::Int64, span::DTYPE;
+    nElem::Int64, span;
     config="wing", rake=0.000, nElStrut=0, spanStrut=0.0
 )
     """
@@ -120,7 +195,7 @@ function make_componentMesh(
         nNodeTot = 2 * nElem + nElStrut + 1
         nElemTot = 2 * nElem + nElStrut
     end
-    mesh = zeros(DTYPE, nNodeTot, 3)
+    mesh = zeros(RealOrComplex, nNodeTot, 3)
     elemConn = zeros(Int64, nElemTot, 2)
 
     mesh_z = Zygote.Buffer(mesh)
@@ -133,9 +208,10 @@ function make_componentMesh(
     mesh, elemConn = fill_mesh(mesh_z, elemConn, transMat, span, nElem; config=config, nElStrut=nElStrut, spanStrut=spanStrut)
 
     mesh_z = Zygote.Buffer(mesh)
+    mesh_z[:, :] = mesh
     if config == "t-foil"
-        mesh_z[:, ZDIM] = mesh_z[:, ZDIM] .- spanStrut # translate
         for inode in 1:nNodeTot
+            mesh_z[inode, ZDIM] = mesh_z[inode, ZDIM] - spanStrut # translate
             mesh_z[inode, :] = transMat * mesh_z[inode, :]
         end
     end
@@ -161,11 +237,9 @@ function fill_mesh(
             LinRange(0.0, span, nElem + 1), #Y
             zeros(nElem + 1) #Z
         )
-        ChainRulesCore.ignore_derivatives() do
-            for ee in 1:nElem
-                elemConn[ee, 1] = ee
-                elemConn[ee, 2] = ee + 1
-            end
+        for ee in 1:nElem
+            elemConn[ee, 1] = ee
+            elemConn[ee, 2] = ee + 1
         end
     elseif config == "full-wing"
         # Simple meshes starting from junction at zero
@@ -182,7 +256,7 @@ function fill_mesh(
             # Add foil wing first
             for nodeIdx in 1:nElem
                 mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-                ChainRulesCore.ignore_derivatives() do
+                @ignore_derivatives() do
                     elemConn[nodeCtr, 1] = nodeIdx
                     elemConn[nodeCtr, 2] = nodeIdx + 1
                 end
@@ -195,13 +269,13 @@ function fill_mesh(
             nodeCtr += 1
 
             # Mirror wing nodes skipping first, but adding junction connectivity
-            ChainRulesCore.ignore_derivatives() do
+            @ignore_derivatives() do
                 elemConn[elemCtr, 1] = 1
                 elemConn[elemCtr, 2] = nodeCtr
             end
             for nodeIdx in 2:nElem
                 mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-                ChainRulesCore.ignore_derivatives() do
+                @ignore_derivatives() do
                     elemConn[nodeCtr, 1] = nodeCtr
                     elemConn[nodeCtr, 2] = nodeCtr + 1
                 end
@@ -211,7 +285,7 @@ function fill_mesh(
 
             # Grab end of wing
             mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-            ChainRulesCore.ignore_derivatives() do
+            @ignore_derivatives() do
                 elemConn[elemCtr, 1] = nodeCtr - 1
                 elemConn[elemCtr, 2] = nodeCtr
             end
@@ -219,7 +293,7 @@ function fill_mesh(
             elemCtr += 1
 
             # in the extreme case of 3 elements, elem conn is wrong
-            ChainRulesCore.ignore_derivatives() do
+            @ignore_derivatives() do
                 if (2 * nElem == 2)
                     elemConn[2, 1] = 1
                     elemConn[2, 2] = 3
@@ -247,7 +321,7 @@ function fill_mesh(
         nodeCtr = 1 # node counter traversing nodes
 
         # Add foil wing first
-        ChainRulesCore.ignore_derivatives() do
+        @ignore_derivatives() do
             for nodeIdx in 1:nElem
                 # mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
                 elemConn[nodeCtr, 1] = nodeIdx
@@ -267,7 +341,7 @@ function fill_mesh(
         nodeCtr += 1
 
         # Mirror wing nodes skipping first, but adding junction connectivity
-        ChainRulesCore.ignore_derivatives() do
+        @ignore_derivatives() do
             elemConn[elemCtr, 1] = 1
             elemConn[elemCtr, 2] = nodeCtr
             for nodeIdx in 2:nElem
@@ -282,7 +356,7 @@ function fill_mesh(
         foilMeshPort = hcat(zeros(nElem), -foilwingMesh[2:end], zeros(nElem))
         # Grab end of wing
         # mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-        ChainRulesCore.ignore_derivatives() do
+        @ignore_derivatives() do
             elemConn[elemCtr, 1] = nodeCtr - 1
             elemConn[elemCtr, 2] = nodeCtr
         end
@@ -294,7 +368,7 @@ function fill_mesh(
         # ************************************************
         # Add strut going up in z
         nodeIdx = 1
-        ChainRulesCore.ignore_derivatives() do
+        @ignore_derivatives() do
             for istrut in 1:nElStrut # loop elem, not nodes
                 # if nodeIdx <= nElStrut 
                 # mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
@@ -320,7 +394,7 @@ function fill_mesh(
         mesh[:, :] = vcat(foilMesh, foilMeshPort, strutMesh)
 
         # in the extreme case of 3 elements, elem conn is wrong
-        ChainRulesCore.ignore_derivatives() do
+        @ignore_derivatives() do
             if (2 * nElem + nElStrut == 3)
                 elemConn[2, 1] = 1
                 elemConn[2, 2] = 3
@@ -384,9 +458,9 @@ function rotate3d(dataVec, rot; axis="x")
     return transformedVec
 end
 
-function assemble(StructMesh, abVec, x_αbVec,
+function assemble(StructMesh, x_αbVec,
     FOIL, elemType="bend-twist", constitutive="isotropic";
-    config="wing", STRUT=nothing, ab_strut=nothing, x_αb_strut=nothing, verbose=true
+    config="wing", STRUT=nothing, x_αb_strut=nothing, verbose=true
 )
     """
     Generic function to assemble the global mass and stiffness matrices
@@ -401,17 +475,19 @@ function assemble(StructMesh, abVec, x_αbVec,
     """
 
     # --- Local nodal DOF vector ---
-    # Determine the number of dofs per node
-    qLocal = zeros(DTYPE, NDOF * 2)
-
     abVec = FOIL.ab
+    if config == "t-foil"
+        ab_strut = STRUT.ab
+    else
+        ab_strut = nothing
+    end
     # x_αbVec = StructMesh.x_αb
     # --- Initialize matrices ---
     nElem = size(StructMesh.elemConn)[1]
     nNodes = nElem + 1
-    globalK = zeros(DTYPE, NDOF * (nNodes), NDOF * (nNodes))
-    globalM = zeros(DTYPE, NDOF * (nNodes), NDOF * (nNodes))
-    globalF = zeros(DTYPE, NDOF * (nNodes))
+    globalK = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
+    globalM = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
+    globalF = zeros(RealOrComplex, NDOF * (nNodes))
     # Note: sparse arrays does not work through Zygote without some workarounds (that I haven't figured out yet)
     # globalK::SparseMatrixCSC{Float64,Int64} = spzeros(nnd * (nNodes), nnd * (nNodes))
 
@@ -438,14 +514,14 @@ end
 
 function populate_matrices!(
     globalK, globalM, globalF,
-    nElem::Int64, StructMesh, FOIL::DynamicFoil, STRUT, abVec, x_αbVec;
+    nElem::Int64, StructMesh, FOIL, STRUT, abVec, x_αbVec;
     config="wing", constitutive="isotropic", verbose=true, elemType="bend-twist", ab_strut=nothing, x_αb_strut=nothing
 )
     nNodes::Int64 = nElem + 1
     elemConn = StructMesh.elemConn
     coordMat = StructMesh.mesh
     # --- Debug printout for initialization ---
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         if verbose
             println("+----------------------------------------+")
             println("|        Assembling beam matrices        |")
@@ -469,7 +545,7 @@ function populate_matrices!(
         dR1 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
         dR2 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
         dR3 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
-        lᵉ = sqrt(dR1^2 + dR2^2 + dR3^2) # length of elem
+        lᵉ = √(dR1^2 + dR2^2 + dR3^2) # length of elem
         nVec = [dR1, dR2, dR3] / lᵉ # normalize
         if elemIdx <= nElemWing
             EIₛ = FOIL.EIₛ[elemIdx]
@@ -552,10 +628,11 @@ function populate_matrices!(
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
         Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, lᵉ, elemType)
-        kElem = Γ' * kLocal * Γ
-        mElem = Γ' * mLocal * Γ
-        fElem = Γ' * fLocal
-        ChainRulesCore.ignore_derivatives() do
+        ΓT = transpose(Γ)
+        kElem = ΓT * kLocal * Γ
+        mElem = ΓT * mLocal * Γ
+        fElem = ΓT * fLocal
+        @ignore_derivatives() do
             if any(isnan.(kElem))
                 println("NaN in elem stiffness matrix")
             end
@@ -587,7 +664,7 @@ function populate_matrices!(
                 end
             end
         end
-        ChainRulesCore.ignore_derivatives() do
+        @ignore_derivatives() do
             if any(isnan.(globalK))
                 println("NaN in global stiffness matrix")
             end
@@ -597,7 +674,7 @@ function populate_matrices!(
 end
 
 
-function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dict("config" => "wing"), verbose=true)
+function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dict("config" => "wing"), verbose=false)
     """
     Depending on the elemType, return the indices of fixed nodes
     """
@@ -617,7 +694,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
         error("BCCond not recognized")
     end
 
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         if verbose
             println("BCType: ", BCCond)
         end
@@ -731,7 +808,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
         error("Not implemented")
     end
 
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         println("+------------------------------------+")
         println("|    Tip mass added!                 |")
         println("+------------------------------------+")
@@ -745,11 +822,11 @@ end
 function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
     """
     Applies inertial load and modifies globalF
+    TODO: add gravity vector
     """
 
     println("Adding inertial loads to FEM with gravity vector of", gravityVector)
 
-    # TODO: add gravity vector
 end
 
 function apply_BCs(
@@ -809,9 +886,74 @@ function solve_structure(K::Matrix, M::Matrix, F::Vector)
     Solve the structural system
     """
 
-    q = (K) \ F # TODO: should probably replace this with an iterative solver
+    # q = (K) \ F # TODO: should probably replace this with an iterative solver
+    q = inv(K) * F
 
     return q
+end
+
+function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut,
+    appendageParams::Dict, appendageOptions::Dict, solverOptions::Dict)
+    """
+    similar to above but shortcircuiting the hydroside
+    """
+
+    idxTip = Preprocessing.get_tipnode(real.(LECoords))
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    # ---------------------------
+    #   Geometry
+    # ---------------------------
+    eb::Vector{RealOrComplex} = 0.25 * chordLengths .+ ab
+    t::Vector{RealOrComplex} = toc .* chordLengths
+
+    # ---------------------------
+    #   Structure
+    # ---------------------------
+    ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(appendageOptions["material"])
+
+    # --- Compute the structural properties for the foil ---
+    nNodes = appendageOptions["nNodes"]
+
+    if haskey(appendageOptions, "path_to_struct_props") && !isnothing(appendageOptions["path_to_struct_props"])
+        println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
+        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = Preprocessing.get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
+    else
+        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
+    end
+
+    # ---------------------------
+    #   Build final model
+    # ---------------------------
+    wingModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb, ab, chordLengths, appendageOptions["nNodes"], constitutive)
+
+    # ************************************************
+    #     Strut properties
+    # ************************************************
+    if appendageOptions["config"] == "t-foil" && !solverOptions["use_nlll"]
+        c_strut = chordLengths # TODO fix me later
+        # Do it again using the strut properties
+        nNodesStrut = appendageOptions["nNodeStrut"]
+        ρₛ, E₁, E₂, G₁₂, ν₁₂, constitutive = MaterialLibrary.return_constitutive(appendageOptions["strut_material"])
+        t_strut = toc_strut .* c_strut
+        eb_strut = 0.25 * c_strut .+ ab_strut
+
+        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodesStrut, c_strut, t_strut, ab_strut, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f_strut, constitutive; solverOptions=solverOptions)
+
+        # ---------------------------
+        #   Build final model
+        # ---------------------------
+        strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb_strut, ab_strut, c_strut, appendageOptions["nNodeStrut"], constitutive)
+
+    elseif appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
+        strutModel = nothing
+    elseif !(appendageOptions["config"] in CONFIGS)
+        error("Unsupported config: ", appendageOptions["config"])
+    end
+
+
+    return wingModel, strutModel
+
 end
 
 function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
@@ -826,7 +968,7 @@ function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
     # Solve [K]{x} = λ[M]{x} where λ = ω²
     eVals, eVecs = SolverRoutines.compute_eigsolve(K, M, nEig)
 
-    naturalFreqs = sqrt.(eVals) / (2π)
+    naturalFreqs = .√(eVals) / (2π)
 
     return naturalFreqs, eVecs
 end
@@ -869,6 +1011,9 @@ function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, n
     # # Mass proportional damping
     # massPropConst = 2 * ζ * ω₁
     # stiffPropConst = 0.0
+
+
+    println("Natural frequencies for struct. damping:\n$(fns)")
 
     return massPropConst, stiffPropConst
 end

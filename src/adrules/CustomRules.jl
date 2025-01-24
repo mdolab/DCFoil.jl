@@ -27,7 +27,6 @@ function ChainRulesCore.rrule(::Type{LinRange}, start::RealOrComplex, stop::Real
         # Do dot product so the output is the right structure
         startb = dot(yb, LinRange(1.0, 0.0, length(yb)))
         stopb = dot(yb, LinRange(0.0, 1.0, length(yb)))
-        # println("This is yb", yb)
 
         return NoTangent(), startb, stopb, NoTangent()
     end

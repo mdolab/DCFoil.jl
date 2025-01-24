@@ -55,7 +55,7 @@ function solve_trim(DVDictList, FEMESHLIST, HULL, solverOptions::Dict, rudderIdx
     # ************************************************
     #     Converge r(u) = 0 for vessel
     # ************************************************
-    deltaCsol = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, deltaC0)
+    deltaCsol = SolverRoutines.converge_resNonlinear(compute_residuals, compute_∂r∂u, deltaC0)
 
 
     return BODYSTATSOL, APPENDAGESTATSOL

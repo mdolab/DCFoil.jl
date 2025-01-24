@@ -10,6 +10,9 @@ module Utilities
 
 using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex
+using FLOWMath: abs_cs_safe
+
+export compute_KS
 
 function unpack_dvdict(DVDict::Dict)
 
@@ -62,5 +65,92 @@ function repack_dvdict(DVVec, DVLengths::Vector{Int64})
     return DVDict
 
 end
+
+function pack_funcsSens(funcsSens::Dict, funcKey, dvKey, dfdx)
+    """
+    We want the function sensitivities dictionary 
+    to be the same way ADflow stores its data.
+    That is,
+    funcsSens = Dict(
+    costFunc1 => Dict(
+        dv1 => array[sens1], # if DV is scalar
+        dv2 => array[sens1, sens2, ...], # if DV is vector
+        ...
+    ),
+    """
+
+    funcsSens[funcKey][dvKey] = dfdx
+
+    return funcsSens
+end
+
+function unpack_coords(LECoords, TECoords)
+    """
+    Unpack the coordinates into a vector
+    """
+    allPts = cat(LECoords, TECoords, dims=2)
+    m, n = size(allPts)
+    LineCoordsVec = vec(allPts)
+
+    return LineCoordsVec, m, n
+end
+
+function repack_coords(LineCoordsVec, m, n)
+    """
+    Repack the line coordinates into a matrix
+    """
+    LineCoords = reshape(LineCoordsVec, m, n)
+
+    LECoords = LineCoords[:, 1:div(n, 2)]
+    TECoords = LineCoords[:, div(n, 2)+1:end]
+    return LECoords, TECoords
+end
+
+function generate_naca4dig(toc)
+    """
+    Simple naca 
+    """
+    # --- Thickness distribution naca 4dig equation---
+    C5 = 0.1015  # type I equation
+    x = range(0, 1, length=50)
+
+    # Thickness distribution (upper)
+    yt = 5 * toc * (0.2969 * x .^ 0.5 - 0.126 * x - 0.3516 * x .^ 2 + 0.2843 * x .^ 3 - C5 * x .^ 4)
+    lower_yt = -yt
+    # Make CCW
+    upper_yt = reverse(yt)
+    y_coords = vcat(upper_yt, lower_yt)
+    x_coords = vcat(reverse(x), x)
+    foil_coords = hcat(x_coords, y_coords)
+    return foil_coords
+end
+
+function compute_KS(g, ρKS)
+    """
+    Compute the KS function
+
+    Inputs
+    ------
+    g - flutter constraints
+    ρKS - KS parameter. Float
+
+    Outputs
+    -------
+    gKS - KS function. Float
+    """
+
+    gmax = maximum(g)
+    # gmax = maximum(abs_cs_safe.(g)) # DON'T DO THIS
+
+    Σ = 0.0 # sum
+    for gval in g
+        Σ += exp(ρKS * (gval - gmax))
+    end
+
+    # --- Compute the KS function ---
+    gKS = gmax + 1 / ρKS * log(Σ)
+
+    return gKS
+end # compute_KS
 
 end

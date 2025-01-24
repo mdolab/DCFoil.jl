@@ -208,7 +208,7 @@ function test_FSeffect()
         cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
-        FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
+        FnhVec[uCtr] = U∞ / (√(9.81 * depth))
 
         uCtr += 1
     end
@@ -224,7 +224,7 @@ function test_FSeffect()
         cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * deg2rad(6)
 
-        FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
+        FnhVec[uCtr] = U∞ / (√(9.81 * depth))
 
         uCtr += 1
     end
@@ -240,7 +240,7 @@ function test_FSeffect()
         cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=U∞, nNodes=nNodes, h=depth, useFS=false)
         cl_rc[uCtr] = cl_α[1] * 1 # rad
 
-        FnhVec[uCtr] = U∞ / (sqrt(9.81 * depth))
+        FnhVec[uCtr] = U∞ / (√(9.81 * depth))
 
         uCtr += 1
     end
@@ -271,7 +271,7 @@ function test_sears()
     labels = []
     kPlot = 0.01:0.5:10.5
     for k in kPlot
-        Sk = HydroStrip.compute_sears(k)
+        Sk, S0k = HydroStrip.compute_sears(k)
         ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)
@@ -289,7 +289,7 @@ function test_sears()
     SkSweep = []
     CkSweep = []
     for k in kSweep
-        Sk = HydroStrip.compute_sears(k)
+        Sk,S0k = HydroStrip.compute_sears(k)
         ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)

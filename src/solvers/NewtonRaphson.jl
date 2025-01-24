@@ -9,21 +9,26 @@ export do_newton_raphson
 using LinearAlgebra, Statistics
 using FLOWMath: norm_cs_safe
 using Printf
+# using Debugger
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 
 using ..Utilities
 
 function print_solver_history(iterNum::Int64, resNorm, stepNorm)
-    if iterNum == 1
-        println("+-------+------------------------+----------+")
-        println("|  Iter |         resNorm        | stepNorm |")
-        println("+-------+------------------------+----------+")
+
+    @ignore_derivatives() do
+        if iterNum == 1
+            println("+-------+------------------------+----------+")
+            println("|  Iter |         resNorm        | stepNorm |")
+            println("+-------+------------------------+----------+")
+        end
+        @printf("   %03d    %.16e   %.2e  ", iterNum, real(resNorm), real(stepNorm))
+        println()
     end
-    @printf("   %03d    %.16e   %.2e  ", iterNum, resNorm, stepNorm)
-    println()
 end
 
 function do_newton_raphson(
-    compute_residuals, compute_∂r∂u, u0::Vector, DVDictList::Vector;
+    compute_residuals, compute_∂r∂u, u0::Vector, WorkingListOfParams=nothing;
     maxIters=200, tol=1e-12, is_verbose=true, mode="RAD", is_cmplx=false,
     appendageOptions=Dict(),
     solverOptions=Dict(),
@@ -44,7 +49,7 @@ function do_newton_raphson(
         must have signature f(u, mode; solverParams)
     u0 : array
         Initial guess
-    x0 : dict
+    x0 : dict, optional
         Dictionary of design variables (these do not change during the solve)
     maxIters : int
         Maximum number of iterations
@@ -58,17 +63,38 @@ function do_newton_raphson(
         Solve for complex roots
     """
 
-    # --- Initialize output ---
-    DVDict = DVDictList[iComp]
-    x0, DVLengths = Utilities.unpack_dvdict(DVDict)
-    res = compute_residuals(
-        u0, x0, DVLengths;
-        appendageOptions=appendageOptions,
-        solverOptions=solverOptions,
-        iComp=iComp,
-        CLMain=CLMain,
-        DVDictList=DVDictList,
-    )
+    # ************************************************
+    #     Initialize output
+    # ************************************************
+    if !isnothing(WorkingListOfParams)
+
+        if solverOptions["use_nlll"]
+            if length(WorkingListOfParams) == 4
+                appendageParamsList = WorkingListOfParams[3+iComp]
+            else
+                appendageParamsList = WorkingListOfParams[3+iComp:end]
+            end
+
+            xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+            xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
+
+            res = compute_residuals(u0, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        else
+            DVDict = WorkingListOfParams[iComp]
+            x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+            res = compute_residuals(
+                u0, x0, DVLengths;
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                iComp=iComp,
+                CLMain=CLMain,
+                DVDictList=WorkingListOfParams,
+            )
+        end
+    else
+        res = compute_residuals(u0; solverParams=solverParams)
+    end
+
 
     converged_u = copy(u0)
     converged_r = copy(res)
@@ -77,19 +103,40 @@ function do_newton_raphson(
     if !is_cmplx
         u = u0
         for ii in 1:maxIters
-            x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+            if !isnothing(WorkingListOfParams)
+                if solverOptions["use_nlll"]
+                    if length(WorkingListOfParams) == 4
+                        appendageParamsList = WorkingListOfParams[3+iComp]
+                    else
+                        appendageParamsList = WorkingListOfParams[3+iComp:end]
+                    end
 
-            res = compute_residuals(u, x0, DVLengths;
-                appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
+                    xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+                    xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
 
-            ∂r∂u = compute_∂r∂u(u, mode;
-                DVDictList=DVDictList,
-                solverParams=solverParams,
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                iComp=iComp,
-                CLMain=CLMain,
-            )
+                    res = compute_residuals(u, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+                    ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
+                        appendageParamsList=appendageParamsList,
+                        solverParams=solverParams,
+                        appendageOptions=appendageOptions, solverOptions=solverOptions)
+                else
+
+                    x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+                    res = compute_residuals(u, x0, DVLengths;
+                        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
+                    ∂r∂u = compute_∂r∂u(u, mode;
+                        DVDictList=WorkingListOfParams,
+                        solverParams=solverParams,
+                        appendageOptions=appendageOptions,
+                        solverOptions=solverOptions,
+                        iComp=iComp,
+                        CLMain=CLMain,
+                    )
+                end
+            else
+                res = compute_residuals(u; solverParams=solverParams)
+                ∂r∂u = compute_∂r∂u(u; solverParams=solverParams, mode=mode)
+            end
 
             jac = zeros(typeof(u[1]), length(u), length(u))
             jac = ∂r∂u
@@ -100,8 +147,13 @@ function do_newton_raphson(
             # show(stdout, "text/plain", jac)
             Δu = -jac \ res
 
+            # println("u before: ", u[end-9:end])
+            # println("Newton step Δu: ", Δu[end-9:end])
+
             # --- Update ---
             u = u + Δu
+            # println("u after: ", u[end-9:end])
+            # println("res: ", res[end-9:end])
 
             resNorm = norm_cs_safe(res, 2)
 
@@ -118,18 +170,26 @@ function do_newton_raphson(
             converged_r = copy(res)
             iters = copy(ii)
             if isnan(resNorm)
-                println("+--------------------------------------------")
-                println("Failed to converge. res norm is NaN")
+                @ignore_derivatives() do
+                    println("+--------------------------------------------")
+                    println("Failed to converge. res norm is NaN")
+                end
                 break
             end
-            if resNorm < tol
-                println("+--------------------------------------------")
-                println("Converged in ", ii, " iterations")
+            if real(resNorm) < tol
+                @ignore_derivatives() do
+                    if is_verbose
+                        println("+--------------------------------------------")
+                        println("Converged in ", ii, " iterations")
+                    end
+                end
                 break
             elseif ii == maxIters
-                println("+--------------------------------------------")
-                println("Failed to converge. res norm is", resNorm)
-                println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
+                @ignore_derivatives() do
+                    println("+--------------------------------------------")
+                    println("Failed to converge. res norm is $(resNorm)")
+                    println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
+                end
             end
         end
 
@@ -138,9 +198,9 @@ function do_newton_raphson(
         for ii in 1:maxIters
             # NOTE: these functions handle a complex input but return the unfolded output
             # (i.e., concatenation of real and imag)
-            res = compute_residuals(uUnfolded)
-            ∂r∂u = compute_∂r∂u(uUnfolded, mode)
-            jac = ∂r∂u[1]
+            res = compute_residuals(uUnfolded; solverParams=solverParams)
+            ∂r∂u = compute_∂r∂u(uUnfolded; solverParams=solverParams, mode=mode)
+            jac = ∂r∂u
 
             # --- Newton step ---
             Δu = -jac \ res

@@ -9,11 +9,10 @@
 module DesignConstants
 using ..DCFoil: RealOrComplex
 
-struct Foil{TF,TI,TS,TA<:AbstractVector{TF}}
+struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """
     DO NOT STORE DVS HERE
     Foil object with key properties for the system solution
-    This is a mutable struct, so it can be modified during the solution process
     Half-wing data
     """
     mₛ::TA # structural mass vector [kg/m]
@@ -24,18 +23,18 @@ struct Foil{TF,TI,TS,TA<:AbstractVector{TF}}
     Kₛ::TA # bend-twist coupling vector [N-m²]
     Sₛ::TA # warping resistance vector [N-m⁴]
     EAₛ::TA # axial stiffness vector [N-m²]
-    U∞::TF # flow speed [m/s]
-    ζ::TF # modal damping ratio at first 2 modes
-    clα::TA # lift slopes [1/rad]
-    eb::TA # distance from center of pressure ahead of elastic axis [m]
-    ab::TA # distance from midchord to EA, +ve for EA aft [m]
-    chord::TA # chord vector [m]
-    ρ_f::TF # fluid density [kg/m³]
+    # U∞::TF # flow speed [m/s]
+    # ζ::TC # modal damping ratio at first 2 modes
+    # clα::Vector # lift slopes [1/rad]
+    eb::TB # distance from center of pressure ahead of elastic axis [m]
+    ab::TB # distance from midchord to EA, +ve for EA aft [m]
+    chord::TB # chord vector [m]
+    # ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
 end
 
-struct DynamicFoil{TF,TI,TS,TA<:AbstractVector{TF}}
+struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
@@ -47,18 +46,18 @@ struct DynamicFoil{TF,TI,TS,TA<:AbstractVector{TF}}
     Kₛ::TA # bend-twist coupling vector [N-m²]
     Sₛ::TA # warping resistance vector [N-m⁴]
     EAₛ::TA # axial stiffness vector [N-m²]
-    U∞::TF # flow speed [m/s]
-    ζ::TF # modal damping ratio at first 2 modes
-    clα::TA # lift slopes [1/rad]
-    eb::TA
-    ab::TA
-    chord::TA
-    ρ_f::TF # fluid density [kg/m³]
+    # U∞::TF # flow speed [m/s]
+    # ζ::TC # modal damping ratio at first 2 modes
+    # clα::Vector # lift slopes [1/rad]
+    eb::TB
+    ab::TB
+    chord::TB
+    # ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
     # --- Only things different for the dynamic foil ---
-    fRange::TA # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
-    uRange::TA # forward speed sweep [m/s] (for flutter solution)
+    fRange::Vector # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    uRange::Vector # forward speed sweep [m/s] (for flutter solution)
 end
 
 struct Hull{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
@@ -88,13 +87,36 @@ const SORTEDDVS::Vector{String} = [
     "s_strut"
     "toc"
     "toc_strut"
-    "x_αb"
-    "x_αb_strut"
+    "x_ab"
+    "x_ab_strut"
     "zeta"
-    "Λ"
-    "α₀"
-    "θ"
-    "θ_strut"
+    "sweep"
+    "alfa0"
+    "theta_f"
+    "theta_f_strut"
 ]
+
+const SORTEDSTRUCTDVS::Vector{String} = [
+    "ab"
+    "ab_strut"
+    "beta"
+    "c"
+    "c_strut"
+    "toc"
+    "toc_strut"
+    "x_ab"
+    "x_ab_strut"
+    "theta_f"
+    "theta_f_strut"
+]
+
+
+# All possible configurations for a hydrofoil
+const CONFIGS::Vector{String} =
+    [
+        "wing",
+        "full-wing",
+        "t-foil",
+    ]
 
 end # end module

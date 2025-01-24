@@ -34,7 +34,7 @@ function test_struct()
     E₂ = 13.4e9
     G₁₂ = 3.9e9
     ν₁₂ = 0.25
-    # θ = pi / 6
+    # theta_f = pi / 6
 
     N = 100
     θₐ = range(-pi / 2, stop=pi / 2, length=N)
@@ -91,104 +91,6 @@ end
 # ==============================================================================
 #                         Test elemental matrices
 # ==============================================================================
-function test_BT2_stiff()
-    """
-    Test the second order beam matrix with unit values
-    """
-    constitutive = "orthotropic"
-    # ************************************************
-    #     BT2 element stiff
-    # ************************************************
-    elemType = "BT2"
-
-    Ktest = BeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
-    # show(stdout, "text/plain", Ktest[1:end, 1:end])
-
-    # --- Reference value ---
-    # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
-    ref_sol = vec(
-        [
-            3.0000 3.0000 -3.0000 -5.0000 -3.0000 3.0000 3.0000 -1.0000
-            3.0000 4.0000 -1.0000 -6.0000 -3.0000 2.0000 1.0000 0
-            -3.0000 -1.0000 8.8000 4.8000 3.0000 -5.0000 -8.8000 4.8000
-            -5.0000 -6.0000 4.8000 11.4667 5.0000 -4.0000 -4.8000 2.1333
-            -3.0000 -3.0000 3.0000 5.0000 3.0000 -3.0000 -3.0000 1.0000
-            3.0000 2.0000 -5.0000 -4.0000 -3.0000 4.0000 5.0000 -2.0000
-            3.0000 1.0000 -8.8000 -4.8000 -3.0000 5.0000 8.8000 -4.8000
-            -1.0000 0 4.8000 2.1333 1.0000 -2.0000 -4.8000 3.4667
-        ],
-    )
-
-    # # --- Relative error ---
-    answers = vec(Ktest) # put computed solutions here
-    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-
-    if det(Ktest) >= 1e-16
-        print("Your stiffness matrix is not singular...it's wrong")
-        rel_err += 1 # make test fail
-    end
-
-    if Ktest' != Ktest
-        print("Your stiffness matrix is not symmetric...it's wrong")
-        rel_err += 1 # make test fail
-    end
-
-    return rel_err
-end
-
-# test_BT2_stiff()
-
-function test_BT2_mass()
-    """
-    Test the second order beam matrix with unit values
-    """
-    # ************************************************
-    #     BT2 element mass
-    # ************************************************
-    elemType = "BT2"
-    # INPUTS
-    ms = 4
-    isea = 16 / 3
-    le = 2
-    xalphab = -1
-    # Test
-    Mtest = BeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
-    # show(stdout, "text/plain", Mtest[5:end, 5:end])
-
-    totalMass = ms * le
-    totalInertia = isea * le
-
-    # --- Sum values over translational DOFs ---
-    massSum = sum(Mtest[1, 1]) + sum(Mtest[1, 5]) + sum(Mtest[5, 1]) + sum(Mtest[5, 5])
-    momentSum = sum(Mtest[3, 3]) + sum(Mtest[3, 7]) + sum(Mtest[7, 3]) + sum(Mtest[7, 7])
-
-    # --- Reference value ---
-    # These were obtained from the matlab symbolic script plugging 2 for rho, 2 for the chord, and 1 for everything else
-    ref_sol = vec(
-        [
-            2.9714 0.8381 -2.9714 -0.8381 1.0286 -0.4952 -1.0286 0.4952
-            0.8381 0.3048 -0.8381 -0.3048 0.4952 -0.2286 -0.4952 0.2286
-            -2.9714 -0.8381 3.9619 1.1175 -1.0286 0.4952 1.3714 -0.6603
-            -0.8381 -0.3048 1.1175 0.4063 -0.4952 0.2286 0.6603 -0.3048
-            1.0286 0.4952 -1.0286 -0.4952 2.9714 -0.8381 -2.9714 0.8381
-            -0.4952 -0.2286 0.4952 0.2286 -0.8381 0.3048 0.8381 -0.3048
-            -1.0286 -0.4952 1.3714 0.6603 -2.9714 0.8381 3.9619 -1.1175
-            0.4952 0.2286 -0.6603 -0.3048 0.8381 -0.3048 -1.1175 0.4063
-        ],
-    )
-
-    # # --- Relative error ---
-    answers = vec(Mtest) # put computed solutions here
-    rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
-
-    if minimum(eigvals(Mtest)) < 0.0
-        print("Your mass matrix is not positive definite...it's wrong")
-        rel_err += 1 # make test fail
-    end
-
-    return rel_err
-end
-
 function test_COMP2_stiff()
     """
     Test the second order beam matrix with unit values
@@ -356,7 +258,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = "orthotropic" # NOTE: using this because the isotropic code uses an ellipse for computing GJ
@@ -367,11 +269,11 @@ function test_FiniteElementIso(DVDict, solverOptions)
     elemType = "bend"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped"; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, θ, zeros(2, 2))
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, theta_f, zeros(2, 2))
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-1] = 1.0 # 1 Newton tip force NOTE: FIX LATER bend
     u = copy(globalF)
 
@@ -388,9 +290,9 @@ function test_FiniteElementIso(DVDict, solverOptions)
     elemType = "bend-twist"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
 
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end-2] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -403,10 +305,10 @@ function test_FiniteElementIso(DVDict, solverOptions)
     #   Tip torque only
     # ---------------------------
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     globalF[end] = 1.0 # 0 Newton tip force
     u = copy(globalF)
 
@@ -431,7 +333,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
     Test the finite elements with unit loads, thickness, length, and structural moduli
     """
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -444,7 +346,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
     elemType = "BT2"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
@@ -464,7 +366,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
     #   Tip torque only
     # ---------------------------
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
@@ -495,7 +397,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
 
-    println("f_n = ", sqrt.(omegaSquared) / (2 * pi))
+    println("f_n = ", .√(omegaSquared) / (2 * pi))
 
     return rel_err
 end
@@ -507,15 +409,15 @@ function test_FiniteElementIso3D()
     nNodes = 15
     nNodesStrut = 2
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(0.0), # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => deg2rad(0.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 10, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(0.0), # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(0.0), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
         # --- Strut vars ---
         "beta" => 0.0, # yaw angle wrt flow [deg]
@@ -523,8 +425,8 @@ function test_FiniteElementIso3D()
         "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
         "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
         "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-        "θ_strut" => deg2rad(15), # fiber angle global [rad]
+        "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
     )
     solverOptions = Dict(
         # ---------------------------
@@ -545,8 +447,8 @@ function test_FiniteElementIso3D()
         # ---------------------------
         #   Flow
         # ---------------------------
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -571,7 +473,7 @@ function test_FiniteElementIso3D()
         "maxQIter" => 100, # that didn't fix the slow run time...
         "rhoKS" => 100.0,
     )
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
@@ -586,7 +488,7 @@ function test_FiniteElementIso3D()
     elemType = "BEAM3D"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
@@ -645,7 +547,7 @@ end
 # q1, K, M, F, omegaSquared, modeShapes = test_FiniteElementIso3D()
 # println("tip deflection = ", q1[end-3], " m")
 # println("tip rotation about y axis = ", q1[end-1], " rad")
-# natFreqs = sqrt.(Complex.(omegaSquared)) / (2 * pi)
+# natFreqs = .√(Complex.(omegaSquared)) / (2 * pi)
 # println("Natural frequencies = ", real.(natFreqs), " Hz")
 
 function test_FiniteElementBend()
@@ -654,15 +556,15 @@ function test_FiniteElementBend()
     """
     nNodes = 3
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => deg2rad(0.0), # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => deg2rad(0.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 1.0 * ones(nNodes), # chord length [m]
         "s" => 10, # semispan [m]
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0, # thickness-to-chord ratio
-        "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-        "θ" => deg2rad(0.0), # fiber angle global [rad]
+        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(0.0), # fiber angle global [rad]
         "s_strut" => 0.4, # from Yingqian
     )
     solverOptions = Dict(
@@ -684,8 +586,8 @@ function test_FiniteElementBend()
         # ---------------------------
         #   Flow
         # ---------------------------
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "use_cavitation" => false,
         "use_ventilation" => false,
@@ -710,7 +612,7 @@ function test_FiniteElementBend()
         "maxQIter" => 100, # that didn't fix the slow run time...
         "rhoKS" => 100.0,
     )
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
@@ -725,7 +627,7 @@ function test_FiniteElementBend()
     elemType = "bend"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped", dim)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive, dim)
@@ -788,23 +690,23 @@ function test_FEBT3()
     """
     nNodes = 20
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => 0.0 * π / 180, # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1, # thickness-to-chord ratio
-        "x_αb" => zeros(nNodes), # static imbalance [m]
-        "θ" => 0 * π / 180, # fiber angle global [rad]
+        "x_ab" => zeros(nNodes), # static imbalance [m]
+        "theta_f" => 0 * π / 180, # fiber angle global [rad]
     )
     solverOptions = Dict(
         "material" => "test-comp", # preselect from material library
         "nNodes" => nNodes,
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
     )
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -816,7 +718,7 @@ function test_FEBT3()
     elemType = "BT3"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
@@ -868,7 +770,7 @@ function test_FEBT3()
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 3)
 
-    # println("f_n = ", sqrt.(omegaSquared)/(2*pi))
+    # println("f_n = ", .√(omegaSquared)/(2*pi))
 
     return rel_err
 end
@@ -884,15 +786,15 @@ function test_FECOMP2()
     nNodesStrut = 2
 
     DVDict = Dict(
-        "α₀" => 6.0, # initial angle of attack [deg]
-        "Λ" => 0.0 * π / 180, # sweep angle [rad]
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => 0.0 * π / 180, # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
         "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
-        "x_αb" => zeros(nNodes), # static imbalance [m]
-        "θ" => deg2rad(15), # fiber angle global [rad]
+        "x_ab" => zeros(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
         "rake" => 0.0,
         "depth0" => 0.1,
@@ -901,20 +803,23 @@ function test_FECOMP2()
         "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
         "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
         "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-        "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-        "θ_strut" => deg2rad(15), # fiber angle global [rad]
+        "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
     )
     wingOptions = Dict(
         "material" => "test-comp", # preselect from material library
         "config" => "wing",
         "nNodes" => nNodes,
+        "xMount" => 0.0,
     )
     solverOptions = Dict(
         "appendageList" => [wingOptions],
-        "U∞" => 5.0, # free stream velocity [m/s]
-        "ρ_f" => 1000.0, # fluid density [kg/m³]
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
         "use_freeSurface" => false,
         "run_body" => false,
+        "debug" => false,
+        "use_nlll" => false,
     )
 
 
@@ -923,7 +828,7 @@ function test_FECOMP2()
 
     axisDefault = "z"
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions, wingOptions)
+    FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, wingOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -935,13 +840,12 @@ function test_FECOMP2()
     elemType = "COMP2"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; appendageOptions=wingOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["θ"], zeros(2, 2))
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], length(chordVec), zeros(2, 2))
+    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
     T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
-    # T = T1
     T = I(3)
     transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -980,11 +884,19 @@ function test_FECOMP2()
     # ---------------------------
     #   Tip torque only
     # ---------------------------
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    # There some weird data type bug here so we need to copy the matrices
+    globalK = zeros(Float64, size(globalKs_work))
+    globalM = zeros(Float64, size(globalMs_work))
+    globalF = zeros(Float64, size(globalF_work))
+    globalK .= globalKs_work
+    globalM .= globalMs_work
+    globalF .= globalF_work
     FEMMethods.apply_tip_load!(globalF, elemType, transMatL2G, "torque")
     u = copy(globalF)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
+
     # writedlm("DebugK-COMP2.csv", K,",")
     # writedlm("DebugF-COMP2.csv", F,",")
 
@@ -1011,12 +923,10 @@ function test_FECOMP2()
 
     omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 6)
 
-    println("f_n = ", sqrt.(omegaSquared) / (2 * pi))
+    println("f_n = ", .√(omegaSquared) / (2 * pi))
 
     return rel_err
 end
-
-# test_FECOMP2()
 
 function test_fullwing(DVDict, solverOptions)
 
@@ -1025,7 +935,7 @@ function test_fullwing(DVDict, solverOptions)
 
     axisDefault = "z"
 
-    FOIL, STRUT = InitModel.init_model_wrapper(DVDict, solverOptions)
+    FOIL, STRUT = InitModel.init_modelFromDVDict(DVDict, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
@@ -1037,7 +947,7 @@ function test_fullwing(DVDict, solverOptions)
     elemType = "COMP2"
     globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; solverOptions=solverOptions)
     abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
+    x_αbVec = DVDict["x_ab"]
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)

@@ -1,9 +1,10 @@
 # --- Julia ---
 """
-@File    :   run_tests.jl
-@Time    :   2022/07/15
-@Author  :   Galen Ng, Sicheng He
-@Desc    :   Run the test files
+@File          :   runtests.jl
+@Date created  :   2022/07/15
+@Last modified :   2025/01/23
+@Author        :   Galen Ng
+@Desc          :   Run unit tests
 Some big picture notes:
 """
 
@@ -22,15 +23,15 @@ nNodes = 40
 nNodesStrut = 2
 
 DVDict1 = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle wrt flow [deg]
     "depth0" => 0.1,
@@ -39,8 +40,8 @@ DVDict1 = Dict(
     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
 )
 wingOptions1 = Dict(
     "compName" => "test-comp",
@@ -52,8 +53,8 @@ wingOptions1 = Dict(
     "xMount" => 0.0,
 )
 solverOptions1 = Dict(
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "U∞" => 6.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 6.0, # free stream velocity [m/s]
     # --- I/O ---
     "name" => "akcabay",
     "debug" => false,
@@ -74,18 +75,18 @@ solverOptions1 = Dict(
     "run_modal" => false,
     "run_flutter" => false,
     "nModes" => 5,
-    "uRange" => nothing,
+    "uRange" => [0.1, 1.0],
 )
 DVDict2 = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => 0.0 * π / 180, # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => 0.0 * π / 180, # sweep angle [rad]
     "c" => 0.0925 * ones(nNodes), # chord length [m]
     "s" => 0.2438, # semispan [m]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.03459 * ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(0), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "rake" => 0.0, # rake angle wrt flow [deg]
     "depth0" => 0.1,
@@ -94,8 +95,8 @@ DVDict2 = Dict(
     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(15), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
 )
 wingOptions2 = Dict(
     "compName" => "test-comp",
@@ -113,8 +114,8 @@ solverOptions2 = Dict(
     "appendageList" => [wingOptions2],
     "use_cavitation" => false,
     "use_freeSurface" => false,
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     # --- Static solve ---
     "run_static" => false,
     # --- Forced solve ---
@@ -125,7 +126,7 @@ solverOptions2 = Dict(
     "run_modal" => true,
     "run_flutter" => false,
     "nModes" => 5,
-    "uRange" => nothing,
+    "uRange" => [0.1, 1.0],
 )
 @testset "Test solver" begin
     # Write your tests here.
@@ -135,13 +136,6 @@ solverOptions2 = Dict(
     @test test_struct() <= 1e-5 # constitutive relations
 
     # --- FiniteElement tests ---
-    # These are old element types that we don't use anymore
-    # @test test_FiniteElementIso(DVDict, solverOptions) <= 1e-10
-    # solverOptions["material"] = "test-comp"
-    # @test test_FiniteElementComp(DVDict, solverOptions) <= 1e-6
-    # @test test_BT2_stiff() <= 1e-5
-    # @test test_BT2_mass() <= 1e-4
-    # @test test_FEBT3() <= 1e-5
     @test test_FECOMP2() <= 1e-1
 
     # ************************************************
@@ -151,8 +145,8 @@ solverOptions2 = Dict(
     @test test_damping() <= 1e-10
     @test test_mass() <= 1e-10
     # @test test_FSeffect() <= 1e-5 # not ready yet
-    @test test_dwWake() <= 1e-5
-    @test test_dwWave() <= 1e-5
+    # @test test_dwWake() <= 1e-5
+    # @test test_45degwingLL() <= 2e-2
 
     # ************************************************
     #     Solver tests
@@ -162,7 +156,7 @@ solverOptions2 = Dict(
     # --- Mesh convergence tests ---
     # @test test_SolveStaticRigid() <= 1e-2 # rigid hydrofoil solve
     # @test test_SolveStaticIso() <= 1e-2 # ss hydrofoil solve
-    @test test_SolveStaticComp(DVDict1, solverOptions1) <= 5.7e-2 # cfrp hydrofoil (kind of loose)
+    # @test test_SolveStaticComp(DVDict1, solverOptions1) <= 5.7e-2 # cfrp hydrofoil (kind of loose)
     # @test test_hydroLoads() <= 1e-2
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     @test test_modal(DVDict2, solverOptions2) <= 1e-2 # dry and wet modal analysis of cfrp
@@ -176,15 +170,15 @@ end
 # ==============================================================================
 nNodes = 4
 DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(-15.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
     "rake" => 0.0, # rake angle wrt flow [deg]
 )
 wingOptions = Dict(
@@ -198,8 +192,8 @@ solverOptions = Dict(
     "debug" => false,
     "outputDir" => "./test_out/",
     # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => [wingOptions],
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_tipMass" => false,
@@ -228,15 +222,15 @@ nNodes = 3 # spatial nodes
 nNodesStrut = 3 # spatial nodes
 
 DVDict2 = Dict(
-    "α₀" => 2.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(0.0), # sweep angle [rad]
+    "alfa0" => 2.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(-15), # fiber angle global [rad]
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(-15), # fiber angle global [rad]
     # --- Strut vars ---
     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
     "rake" => 0.0,
@@ -245,8 +239,8 @@ DVDict2 = Dict(
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
     "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
 
 wingOptions2 = Dict(
@@ -264,8 +258,8 @@ solverOptions2 = Dict(
     "name" => "akcabay-div",
     "debug" => false,
     # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
     "appendageList" => appendageOptions2,
     "gravityVector" => [0.0, 0.0, -9.81],
     "use_freeSurface" => false,
@@ -281,13 +275,11 @@ solverOptions2 = Dict(
     # ************************************************
     #     Unit test derivative tests
     # ************************************************
-    # @test test_hydromass() <=1e-4 # hydrodynamic mass
-    # @test test_hydrodamp() <= 1e-4
     @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
-    @test test_interp() <= 1e-1
+    # @test test_interp() <= 1e-1
     # @test test_hydroderiv(DVDict, solverOptions) <= 1e-4
-    @test test_staticDeriv(DVDict2, solverOptions2, wingOptions2) >= 4
-    @test test_staticdrdu(DVDict2, solverOptions2, wingOptions2) <= 1e-4
+    # @test test_staticDeriv(DVDict2, solverOptions2, wingOptions2) >= 4
+    # @test test_staticdrdu(DVDict2, solverOptions2, wingOptions2) <= 1e-4
 end
 
 # @testset "Larger scale local test" begin

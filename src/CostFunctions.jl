@@ -3,22 +3,28 @@
 @File    :   costFunctions.jl
 @Time    :   2024/04/02
 @Author  :   Galen Ng
-@Desc    :   Store all possible cost funcs
+@Desc    :   Store all possible cost funcs, and also routines for computing the static ones
 """
 
 module CostFunctions
 
 # --- Solver cost funcs ---
 const staticCostFuncs::Vector{String} = [
+    # functions depending on structstates
     "psitip"
     "wtip"
+    # functions depending on hydrodynamic states
     "lift"
     "moment"
     "cl" # total lift coefficient
     "cmy"
+    "kscl" # KS max of spanwise lift coefficient
     # Centers
     "cofz"
     "comy"
+    # Total drag
+    "cd"
+    "drag"
     # Lift-induced drag
     "cdi"
     "fxi"

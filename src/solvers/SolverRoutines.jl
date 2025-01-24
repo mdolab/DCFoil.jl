@@ -13,9 +13,10 @@ In julia, the chainrules rrule is '_b'
 # --- PACKAGES ---
 using LinearAlgebra
 using Zygote
-using ChainRulesCore
+using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
 using FLOWMath: abs_cs_safe, atan_cs_safe
 using Printf
+# using Debugger
 
 # --- DCFoil modules ---
 using ..NewtonRaphson
@@ -30,35 +31,42 @@ using ..DCFoil: RealOrComplex, DTYPE
 # ==============================================================================
 #                         Solver routines
 # ==============================================================================
-function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
-    maxIters=200, tol=1e-6, is_verbose=false,
+function converge_resNonlinear(compute_residuals, compute_∂r∂u, u0::Vector, x0List=nothing;
+    maxIters=50, tol=1e-6, is_verbose=false,
     solverParams=nothing,
     appendageOptions=Dict(),
     solverOptions=Dict(),
     mode="Analytic",
-    # mode="CS",
-    # mode="RAD",
-    # mode="FiDi",
     is_cmplx=false,
     iComp=1, CLMain=0.0
 )
     """
     Given input u, solve the system r(u) = 0
     Tells you how many NL iters
+
+    Parameters:
+    -----------
+    compute_residuals : function handle
+    compute_∂r∂u : function handle
+        Residual Jacobian
+    mode : String
+        Analytic, CS, RAD, or FiDi
+
     """
-
-    x0 = x0List[iComp]
-
+    if !isnothing(x0List)
+        x0 = x0List[iComp]
+    end
     # ************************************************
     #     Main solver loop
     # ************************************************
-    if is_verbose
-        println("+", "-"^50, "+")
-        println("|              Beginning NL solve                  |")
-        println("+", "-"^50, "+")
-        println(@sprintf("Residual Jacobian computed via the %s mode", uppercase(mode)))
+    @ignore_derivatives() do
+        if is_verbose
+            println("+", "-"^50, "+")
+            println("|              Beginning NL solve                  |")
+            println("+", "-"^50, "+")
+            println(@sprintf("Residual Jacobian computed via the %s mode", uppercase(mode)))
+        end
     end
-
     # Somewhere here, you could do something besides Newton-Raphson if you want
     converged_u, converged_r, iters = NewtonRaphson.do_newton_raphson(
         compute_residuals, compute_∂r∂u, u0, x0List;
@@ -67,7 +75,7 @@ function converge_r(compute_residuals, compute_∂r∂u, u0::Vector, x0List;
 
     return converged_u, converged_r
 
-end # converge_r
+end
 
 function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; appendageOptions=Dict(), alphaCorrection=0.0)
     """
@@ -84,10 +92,11 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
         nDOF - number of DOF per node
     """
 
-    alfaRad = deg2rad(DVDict["α₀"]) + alphaCorrection
+    alfaRad = deg2rad(DVDict["alfa0"]) + alphaCorrection
     rakeRad = deg2rad(DVDict["rake"])
     betaRad = deg2rad(DVDict["beta"])
     nDOF = BeamElement.NDOF
+
     # Get flow angles of attack in "local" beam coords first
     #TODO: pretwist will change this
     if elemType == "BT2"
@@ -127,8 +136,11 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
             staticOffset_strut = transMatL2G * staticOffset_strut
 
             staticOffset_junctionNode = staticOffset_wing
+
         elseif appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "wing"
+
             staticOffset_junctionNode = staticOffset_wing
+
         end
     else
         angleDefault = 0.0
@@ -552,7 +564,7 @@ function cmplxStdEigValProb2(A_r, A_i, n; nEigs=10)
     return y
 end # cmplxStdEigValProb
 
-function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
+function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r::Matrix, A_i::Matrix, n::Int)
     """
     Reverse rule for the eigenvalue problem
     """
@@ -648,6 +660,29 @@ function ChainRulesCore.rrule(::typeof(cmplxStdEigValProb2), A_r, A_i, n)
     return y, cmplxStdEigen_pullback
 end
 
+function cross3D(arr1, arr2)
+    """
+    Cross product of two 3D arrays
+    where the first dimension is length 3
+    """
+    @assert size(arr1, 1) == 3
+    @assert size(arr2, 1) == 3
+    M, N = size(arr1, 2), size(arr1, 3)
+
+    arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
+    arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
+
+    for jj in 1:M
+        for kk in 1:N
+            arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+        end
+    end
+    arr1crossarr2 = copy(arr1crossarr2_z)
+
+    return arr1crossarr2
+
+end
 # ==============================================================================
 #                         Utility routines
 # ==============================================================================
@@ -841,8 +876,38 @@ function compute_anglesFromVector(V)
     V1 = V[XDIM]
     V2 = V[YDIM]
     V3 = V[ZDIM]
-    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), sqrt(V1^2 + V2^2 + V3^2)
+    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), √(V1^2 + V2^2 + V3^2)
 end
+
+function compute_vectorFromAngle(alpha, beta, Uinf)
+    """
+    Defines a flow vector from flow angles and magnitude .
+
+    Parameters
+    ----------
+    alpha : scalar , optional
+        Angle between the freestream and the x-y plane (rad ).
+    beta : scalar , optional
+        Angle between the freestream and the x-z plane (rad).
+    Uinf : scalar , optional
+        The magnitude of the freestream velocity .
+    Returns
+    -------
+    V : array_like
+        An array of size [3] containing the x, y, and z components of the
+        freestream velocity .
+    """
+
+    cosa = cos(alpha)
+    sina = sin(alpha)
+    cosb = cos(beta)
+    sinb = sin(beta)
+    sinasinb = √(1.0 - sina^2 * sinb^2)
+
+    # OLD WAY return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sinasinb
+    return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sinasinb
+end
+
 
 function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     """
@@ -856,8 +921,8 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
     """
     # This line breaks when the vector is straight up and down
     # TODO: there is probably a better angle parametrization like Rodrigues or quaternions!
-    if abs_cs_safe(dR1) < MEPSLARGE && abs_cs_safe(dR2) < MEPSLARGE # beam is straight up and down
-        rxyz_div = 1.0 / sqrt(dR1^2 + dR2^2 + dR3^2)
+    if abs_cs_safe(real(dR1)) < MEPSLARGE && abs_cs_safe(real(dR2)) < MEPSLARGE # beam is straight up and down
+        rxyz_div = 1.0 / √(dR1^2 + dR2^2 + dR3^2)
         ca = dR1 * rxyz_div
         cb = dR2 * rxyz_div
         cc = dR3 * rxyz_div
@@ -866,7 +931,7 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
         T = T2 * T1
     else
         # beta is the angle above the xy plane
-        rxy_div = 1 / sqrt(dR1^2 + dR2^2) # length of projection onto xy plane
+        rxy_div = 1 / √(dR1^2 + dR2^2) # length of projection onto xy plane
         calpha = dR1 * rxy_div
         salpha = dR2 * rxy_div
         cbeta = 1 / rxy_div / l
@@ -878,7 +943,7 @@ function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
             -sbeta 0.0 cbeta
         ]
     end
-    ChainRulesCore.ignore_derivatives() do
+    @ignore_derivatives() do
         if any(isnan.(T))
             println("NaN in transformation matrix")
             println("dR1", dR1)
@@ -936,7 +1001,7 @@ function do_linear_interp(xpt, ypt, xqvec)
     """
     npt = length(xpt)
     n = length(xqvec)
-    y = zeros(DTYPE, n)
+    y = zeros(RealOrComplex, n)
     y_z = Zygote.Buffer(y)
     if length(xpt) != length(ypt)
         throw(ArgumentError("xpt and ypt must be the same length"))
@@ -972,12 +1037,12 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
 
             # Catch cases in case we're just outside the domain
             # This extends the slope of the first/last segment
-            if xq <= xpt[1]
+            if real(xq) <= real(xpt)[1]
                 x0 = xpt[1]
                 x1 = xpt[2]
                 y0 = ypt[1]
                 y1 = ypt[2]
-            elseif xq >= xpt[npt]
+            elseif real(xq) >= real(xpt)[npt]
                 x0 = xpt[npt-1]
                 x1 = xpt[npt]
                 y0 = ypt[npt-1]
@@ -985,7 +1050,7 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
             else
                 # Perform search
                 ii = 1
-                while xq > xpt[ii+1]
+                while real(xq) > real(xpt)[ii+1]
                     ii += 1
                 end
 
@@ -998,9 +1063,20 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
 
             m = (y1 - y0) / (x1 - x0) # slope
             y[jj] = y0 + m * (xq - x0)
+
+            # # actually just use end value if we're at the end
+            # if real(xq) >= real(xpt)[npt]
+            #     y[jj] = ypt[npt]
+            # elseif real(xq) <= real(xpt)[1]
+            #     y[jj] = ypt[1]
+            # end
         end
     end
 end
 
+function normalize_3Dvector(r)
+    rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
+    return rhat
+end
 
 end # SolverRoutines

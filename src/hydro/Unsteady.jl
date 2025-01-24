@@ -39,12 +39,9 @@ function compute_theodorsen(k::DTYPE)
     Undefined for k = ωb/Ucos(Λ) = 0 (steady aero)
         """
     if k < 1.11e-16
-        println("You can't use the Theodorsen function for k = 0!")
-        #     # println(k)
-        #     k += 1.11e-16 # force it to be non-zero
-        #     #     CᵣLim = 1.0
-        #     #     Cᵢ = 0.0
-        #     #     ans = [Cᵣ, Cᵢ]
+        # println("You can't use the Theodorsen function for k = 0!")
+        ans = [1.0, 0.0]
+        return ans
     end
 
     # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
@@ -59,12 +56,6 @@ function compute_theodorsen(k::DTYPE)
     C_r_analytic = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
     C_i_analytic = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
 
-    # # --- Zero frequency limit ---
-    # Cᵣ_lim = 1.0
-    # Cᵢ_lim = 0.0
-    # kSigmoid = 1000.0 # sigmoid steepness
-    # logistic = 1 / (1 + exp(-kSigmoid * -1 * (k - 0.0))) # this is a L-R flipped sigmoid so below 0 the function is 1.0
-
     # C_r = Cᵣ_lim * logistic + C_r_analytic
     # C_i = Cᵢ_lim * logistic + C_i_analytic
     ans = [C_r_analytic, C_i_analytic]
@@ -72,7 +63,7 @@ function compute_theodorsen(k::DTYPE)
     return ans
 end
 
-function compute_sears(k::DTYPE)
+function compute_sears(k)
     """
     Sears transfer function for an airfoil subject to sinusoidal gusts.
     This is potential flow theory.
@@ -91,9 +82,14 @@ function compute_sears(k::DTYPE)
 
     H02 = H₀²ᵣ + 1im * H₀²ᵢ
     H12 = H₁²ᵣ + 1im * H₁²ᵢ
-    S = 2 * 1im / (π * k) / (H12 + 1im * H02)
+    Sk = 2 * 1im / (π * k) / (H12 + 1im * H02)
 
-    return S
+    # Leading edge Sears function
+    S0k = exp(-1im * k) * Sk
+
+    ans = [Sk, S0k]
+
+    return ans
 end
 
 function compute_pade(k)
@@ -184,6 +180,41 @@ function compute_node_stiff_faster(
            ]
 
     return K_f, K̂_f
+end
+
+function compute_node_stiff_dcla(
+    b, eb, ab, U∞, clambda, slambda, rho_f, Ck
+)
+    """
+    cla derivative of hydrodynamic stiffness force
+    """
+    qf = 0.5 * rho_f * U∞ * U∞ # Dynamic pressure
+    a = ab / b
+    Uclambda = U∞ * clambda
+    bCk = b * Ck
+
+
+    k_hα = -2 * bCk # lift due to angle of attack
+    k_αα = k_hα * eb # moment due to angle of attack (disturbing)
+    dK_f = qf * clambda * clambda *
+           [
+               0.0 k_hα
+               0.0 k_αα
+           ]
+
+    # Sweep correction to aerodynamic quasi-steady stiffness
+    e_hh = Uclambda * 2 * Ck
+    e_hα = Uclambda * (1 - a) * (-bCk)
+    e_αh = Uclambda * (1 + a) * bCk
+    e_αα = Uclambda *
+           (-bCk * eb * (1 - 2 * (a)))
+    dK̂_f = qf / U∞ * slambda * b *
+            [
+                e_hh e_hα
+                e_αh e_αα
+            ]
+
+    return dK_f, dK̂_f
 end
 
 function compute_node_stiff_faster(

@@ -11,21 +11,26 @@ When in doubt, refer to the Tecplot Data Format Guide
 module TecplotIO
 # --- PACKAGES ---
 using Printf
+using PyCall
+
+# BASECLASSES = pyimport("baseclasses") # This gives a weird 'shmem' error FYI
 
 # --- DCFoil modules ---
 using ..SolverRoutines: get_rotate3dMat
 using ..SolutionConstants: XDIM, YDIM, ZDIM
+using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
+using ..Utilities: Utilities
 
-function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::String, fname="mesh.dat")
+function write_structmesh(FEMESHLIST, solverOptions::Dict, outputDir::String, fname="structmesh.dat")
     """
-    Top level routine to write the mesh file
+    Top level routine to write the structural mesh file
     """
 
     outfile = @sprintf("%s%s", outputDir, fname)
-    @printf("Writing mesh file %s...\n", outfile)
+    @printf("Writing struct mesh file %s...\n", outfile)
 
     io = open(outfile, "w")
-    write(io, "TITLE = \"Mesh Data\"\n")
+    write(io, "TITLE = \"Structural Mesh Data\"\n")
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
 
     for icomp in eachindex(FEMESHLIST)
@@ -45,25 +50,24 @@ function write_mesh(DVDict::Dict, FEMESHLIST, solverOptions::Dict, outputDir::St
     close(io)
 end
 
-
-function generate_naca4dig(toc)
+function write_hydromesh(LLMesh, uvec, outputDir::String, fname="hydromesh.dat")
     """
-    Simple naca 
+    Write the lifting line mesh to a tecplot file
     """
-    # --- Thickness distribution naca 4dig equation---
-    C5 = 0.1015  # type I equation
-    x = range(0, 1, length=50)
+    outfile = @sprintf("%s%s", outputDir, fname)
+    @printf("Writing hydro mesh file %s...\n", outfile)
 
-    # Thickness distribution (upper)
-    yt = 5 * toc * (0.2969 * x .^ 0.5 - 0.126 * x - 0.3516 * x .^ 2 + 0.2843 * x .^ 3 - C5 * x .^ 4)
-    lower_yt = -yt
-    # Make CCW
-    upper_yt = reverse(yt)
-    y_coords = vcat(upper_yt, lower_yt)
-    x_coords = vcat(reverse(x), x)
-    foil_coords = hcat(x_coords, y_coords)
-    return foil_coords
+    io = open(outfile, "w")
+    write(io, "TITLE = \"Hydrodynamic Mesh Data\"\n")
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \n")
+
+    write_LLmesh(io, LLMesh, uvec)
+
+    close(io)
+
 end
+
+
 
 function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     """
@@ -89,7 +93,7 @@ function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     return foilCoordsXform
 end
 
-function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
+function write_airfoils(io, appendageParams::Dict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
     """
     TODO generalize to take in a normal vector in spanwise direction
     """
@@ -109,13 +113,13 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
         )
     end
 
-    foilCoords = generate_naca4dig(DVDict["toc"][1])
-    baserake = deg2rad(DVDict["α₀"])
-    rake = deg2rad(DVDict["rake"])
+    foilCoords = Utilities.generate_naca4dig(appendageParams["toc"][1])
+    baserake = deg2rad(appendageParams["alfa0"])
+    rake = deg2rad(appendageParams["rake"])
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
         for ii in 1:appendageOptions["nNodes"] # iterate over span
             nodeLoc = mesh[ii, :]
-            localChord = DVDict["c"][ii]
+            localChord = chords[ii]
             foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
             # Get u, v, w based on rotations
@@ -143,7 +147,7 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
         if appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
             for ii in appendageOptions["nNodes"]+1:2*appendageOptions["nNodes"]-1 # iterate over span
                 nodeLoc = mesh[ii, :]
-                localChord = DVDict["c"][ii-appendageOptions["nNodes"]]
+                localChord = chords[ii-appendageOptions["nNodes"]]
                 foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
 
                 # Get u, v, w based on rotations
@@ -171,10 +175,10 @@ function write_airfoils(io, DVDict::Dict, mesh, u, v, w, phi, theta, psi; append
 
         if appendageOptions["config"] == "t-foil"
 
-            foilCoords = generate_naca4dig(DVDict["toc_strut"][1])
+            foilCoords = Utilities.generate_naca4dig(appendageParams["toc_strut"][1])
             for ii in appendageOptions["nNodes"]*2:(appendageOptions["nNodes"]*2+appendageOptions["nNodeStrut"]-2) # iterate over strut
                 spanLoc = mesh[ii, :]
-                localChord = DVDict["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]
+                localChord = appendageParams["c_strut"][ii-(appendageOptions["nNodes"]*2-1)]
                 foilCoordsXform = transform_airfoil(foilCoords, localChord)
 
                 # Get u, v, w based on rotations
@@ -216,10 +220,12 @@ end
 # ==============================================================================
 #                         1D Stick Routines
 # ==============================================================================
-function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basename="static";
+function write_deflections(
+    DVDict, STATICSOL, FEMESH, outputDir::String, basename="static";
     appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1
 )
     """
+    This function writes the structural output of the 1D stick solver to a tecplot file
     """
     fTractions = STATICSOL.fHydro
     deflections = STATICSOL.structStates
@@ -237,7 +243,7 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     # ************************************************
     #     Header
     # ************************************************
-    write(io, @sprintf("TITLE = \"STATIC DEFLECTION Uinf = %.8f m/s\"\n", solverOptions["U∞"]))
+    write(io, @sprintf("TITLE = \"STATIC DEFLECTION Uinf = %.8f m/s\"\n", solverOptions["Uinf"]))
     write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
     write(io, "ZONE T = \"1D BEAM\" \n")
     write(io, @sprintf("NODES = %d, ", nNode))
@@ -250,12 +256,12 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     # ---------------------------
     #   Values
     # ---------------------------
-    u = deflections[1:9:end]
-    v = deflections[2:9:end]
-    w = deflections[3:9:end]
-    phi = deflections[4:9:end]
-    theta = deflections[5:9:end]
-    psi = deflections[6:9:end]
+    u = deflections[UIND:NDOF:end]
+    v = deflections[VIND:NDOF:end]
+    w = deflections[WIND:NDOF:end]
+    phi = deflections[ΦIND:NDOF:end]
+    theta = deflections[ΘIND:NDOF:end]
+    psi = deflections[ΨIND:NDOF:end]
     # --- Write them ---
     for ii in 1:nNode
         nodeLoc = mesh[ii, :]
@@ -273,9 +279,147 @@ function write_deflections(DVDict, STATICSOL, FEMESH, outputDir::String, basenam
     # ************************************************
     #     Airfoils
     # ************************************************
-    write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
+    write_airfoils(io, DVDict, FEMESH.chord, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
 
     close(io)
+end
+
+function write_hydroLoads(
+    LLOutputs, FlowCond, LLMesh, outputDir::String, basename="hydroloads";
+)
+    """
+    Writes the hydrodynamic loads to a tecplot file
+    """
+    ϱ = FlowCond.rhof
+    U∞ = FlowCond.Uinf
+    dimTerm = 0.5 * ϱ * U∞^2 * LLMesh.SRef
+    fTractions = LLOutputs.Fdist #* dimTerm
+    mesh = transpose(copy(LLMesh.collocationPts))
+    nNode = length(mesh[:, 1])
+
+    @printf("Writing loads to %s_<>.dat\n", basename)
+
+    outfile = @sprintf("%s%s.dat", outputDir, basename)
+    io = open(outfile, "w")
+
+    # ************************************************
+    #     Header
+    # ************************************************
+    write(io, @sprintf("TITLE = \"STATIC LOADS Uinf = %.8f m/s\"\n", U∞))
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"fx\" \"fy\" \"fz\" \n")
+    write(io, "ZONE T = \"1D BEAM\" \n")
+    write(io, @sprintf("NODES = %d, ", nNode))
+    write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    # ************************************************
+    #     Write contents
+    # ************************************************
+    # ---------------------------
+    #   Values
+    # ---------------------------
+    fx = fTractions[UIND:3:end]
+    fy = fTractions[VIND:3:end]
+    fz = fTractions[WIND:3:end]
+    # --- Write them ---
+    for ii in 1:nNode
+        nodeLoc = mesh[ii, :]
+
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+            nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM], fx[ii], fy[ii], fz[ii])
+        write(io, stringData)
+    end
+    # ---------------------------
+    #   Connectivities
+    # ---------------------------
+    for ii in 1:nNode-1
+        write(io, @sprintf("%d\t%d\n", ii, ii + 1))
+    end
+
+
+
+    close(io)
+
+end
+
+function write_LLmesh(io, LLMesh, uvec)
+    """
+    Write lifting line outline
+    Uinfvec is for TV joints
+    """
+
+    mesh = LLMesh.nodePts
+    jointPts = LLMesh.jointPts
+    nNodes = LLMesh.npt_wing + 1
+    localChords = LLMesh.localChords
+    # ************************************************
+    #     Leading edge
+    # ************************************************
+    write(io, "ZONE T = \"Leading Edges\" \n")
+    # write(io, @sprintf("NODES = %d,", nNodes))
+    # write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nNodes - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] - 0.25 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringData)
+    end
+
+
+    # ************************************************
+    #     Trailing edge
+    # ************************************************
+    write(io, "ZONE T = \"Trailing edges\" \n")
+    # write(io, @sprintf("NODES = %d,", nNodes))
+    # write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nNodes - 1))
+    write(io, "DATAPACKING = POINT\n")
+
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] + 0.75 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringData)
+    end
+
+    # ************************************************
+    #     Panel edges
+    # ************************************************
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        write(io, "ZONE T = \"Panel edge $(ii)\" \n")
+        write(io, "DATAPACKING = POINT\n")
+        stringDataLE = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] - 0.25 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        stringDataTE = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM] + 0.75 * localChords[ii], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringDataLE)
+        write(io, stringDataTE)
+    end
+
+    # ************************************************
+    #     Locus of aerodynamic centers
+    # ************************************************
+    write(io, "ZONE T = \"Aerodynamic centers\" \n")
+    write(io, "DATAPACKING = POINT\n")
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        stringData = @sprintf("%.16f\t%.16f\t%.16f\n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
+        write(io, stringData)
+    end
+
+    # ************************************************
+    #     Trailing vortices
+    # ************************************************
+    distance = 1.5 * LLMesh.rootChord * uvec
+    # println("Distance: ", distance)
+    for (ii, nodeLoc) in enumerate(eachcol(mesh))
+        jointLoc = jointPts[:, ii]
+        write(io, "ZONE T = \"Trailing vortex $(ii)\" \n")
+        write(io, "DATAPACKING = POINT\n")
+        stringDataA = @sprintf("%.16f\t%.16f\t%.16f\n",
+            nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
+        stringDataB = @sprintf("%.16f\t%.16f\t%.16f\n",
+            jointLoc[XDIM], jointLoc[YDIM], jointLoc[ZDIM])
+        stringDataC = @sprintf("%.16f\t%.16f\t%.16f\n",
+            jointLoc[XDIM] + distance[XDIM], jointLoc[YDIM] + distance[YDIM], jointLoc[ZDIM] + distance[ZDIM])
+        write(io, stringDataA)
+        write(io, stringDataB)
+        write(io, stringDataC)
+    end
 end
 
 function write_1Dfemmesh(io, FEMESH)
@@ -284,12 +428,14 @@ function write_1Dfemmesh(io, FEMESH)
     """
 
     mesh = FEMESH.mesh
-    nNodes = length(mesh[:, 1])
-    nElem = length(FEMESH.elemConn[:, 1])
+    nNodes = size(mesh)[1]
+    elemConn = FEMESH.elemConn
+    nElem = size(elemConn)[1]
+    # println("elemConn: ", elemConn)
     # ************************************************
     #     Header
     # ************************************************
-    write(io, "ZONE T = \"Mesh\"\n")
+    write(io, "ZONE T = \"Beam Mesh\"\n")
     write(io, @sprintf("NODES = %d,", nNodes))
     write(io, @sprintf("ELEMENTS = %d ZONETYPE=FELINESEG\n", nElem))
     write(io, "DATAPACKING = POINT\n")
@@ -317,9 +463,9 @@ function write_1Dfemmesh(io, FEMESH)
         end
     end
 
-end # end write_mesh
+end
 
-function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, basename="mode"; solverOptions=Dict("config" => "wing"))
+function write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir::String, basename="mode"; appendageOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
     Currently writes out a NACA 4-digit airfoil
@@ -394,12 +540,12 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
                     psi_r = [0; R_eigs_r[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
                     psi_i = [0; R_eigs_i[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
                     for ii in 1:size(mesh)[dim]
-                        u[ii] = sqrt(u_r[ii]^2 + u_i[ii]^2)
-                        v[ii] = sqrt(v_r[ii]^2 + v_i[ii]^2)
-                        w[ii] = sqrt(w_r[ii]^2 + w_i[ii]^2)
-                        phi[ii] = sqrt(phi_r[ii]^2 + phi_i[ii]^2)
-                        theta[ii] = sqrt(theta_r[ii]^2 + theta_i[ii]^2)
-                        psi[ii] = sqrt(psi_r[ii]^2 + psi_i[ii]^2)
+                        u[ii] = √(u_r[ii]^2 + u_i[ii]^2)
+                        v[ii] = √(v_r[ii]^2 + v_i[ii]^2)
+                        w[ii] = √(w_r[ii]^2 + w_i[ii]^2)
+                        phi[ii] = √(phi_r[ii]^2 + phi_i[ii]^2)
+                        theta[ii] = √(theta_r[ii]^2 + theta_i[ii]^2)
+                        psi[ii] = √(psi_r[ii]^2 + psi_i[ii]^2)
                     end
                 end
                 # --- Write them ---
@@ -418,15 +564,15 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, mesh, outputDir::String, ba
                 # ************************************************
                 #     Airfoils
                 # ************************************************
-                write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+                write_airfoils(io, DVDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
 
                 close(io)
             end
         end
     end
-end # end write_hydroelastic_mode
+end
 
-function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, outputDir::String; solverOptions=Dict("config" => "wing"))
+function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir::String; solverOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
     Currently writes out a NACA 4-digit airfoil
@@ -494,7 +640,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+        write_airfoils(io, DVDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=solverOptions["appendageList"][1])
 
         close(io)
     end
@@ -550,16 +696,19 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Airfoils
         # ************************************************
-        write_airfoils(io, DVDict, mesh, u, v, w, phi, theta, psi; solverOptions=solverOptions)
+        write_airfoils(io, DVDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=solverOptions["appendageList"][1])
 
         close(io)
     end
-end # end write_natural_mode
+end
 
 # ==============================================================================
 #                         Hydro Routines
 # ==============================================================================
 function write_strips(io, DVDict, FEMESH; config="wing", nNodeWing=10)
+    """
+    Write lifting line
+    """
     # ************************************************
     #     Header
     # ************************************************

@@ -68,7 +68,17 @@ cd postprocessing
 # ************************************************
 #     t-foil paper plots
 # ************************************************
-python ./plot_polar.py --cases 2024-04-26_t-foil_cfrp_polar 2024-04-26_t-foil_ss_polar --is_paper
+# python ./plot_polar.py --cases 2024-04-26_t-foil_cfrp_polar 2024-04-26_t-foil_ss_polar --is_paper
+
+# ************************************************
+#     Final T-foil cases
+# ************************************************
+# python ./run_postprocessing.py --cases 2024-12-16_mothrudder_cfrp_f0.0_w0.0 --is_forced --is_paper
+# python ./run_postprocessing.py --cases 2024-12-30_mothrudder_cfrp_f0.0 --is_flutter --is_paper
+# python ./run_postprocessing.py --cases 2025-01-05_mothrudder-fs_cfrp_f0.0 2025-01-05_mothrudder-nofs_cfrp_f0.0 --is_flutter --is_paper
+
+# python ./run_postprocessing.py --cases 2025-01-07_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper
+python ./run_postprocessing.py --cases 2025-01-15_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper --is_flutter
 
 cd ..
 

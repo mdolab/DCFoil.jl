@@ -81,6 +81,14 @@ cm, fs_lgd, fs, ls, markers = set_my_plot_settings(args.is_paper)
 alphas = [1.0, 0.5]
 
 # ==============================================================================
+#                         Hydrofoil params
+# ==============================================================================
+meanChord = 1.0
+sweepAng = 0.0  # rad
+
+print("Mean chord:\t", meanChord)
+print("Sweep angle:\t", np.rad2deg(sweepAng))
+# ==============================================================================
 #                         Main driver
 # ==============================================================================
 if __name__ == "__main__":
@@ -125,7 +133,11 @@ if __name__ == "__main__":
         key = args.cases[ii]
 
         # --- Read in DVDict ---
-        DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        try:
+            DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict.json"))
+        except FileNotFoundError:
+            # There's a chance it's the multicomp case
+            DVDictDict[key] = json.load(open(f"{caseDir}/init_DVDict-comp001.json"))
         SolverOptions[key] = json.load(open(f"{caseDir}/solverOptions.json"))
 
         # --- Read in funcs ---
@@ -135,13 +147,18 @@ if __name__ == "__main__":
             funcs = None
             print("No funcs.json file found...")
 
-        try:
-            nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
-        except KeyError:
-            try:
-                nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
-            except KeyError:
-                nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
+        # try:
+        #     nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["nNodes"], endpoint=True)
+        # except KeyError:
+        #     try:
+        #         nodes = np.linspace(0, DVDictDict[key]["s"], DVDictDict[key]["neval"], endpoint=True)
+        #     except KeyError:
+        #         try:
+        #             nodes = np.linspace(0, DVDictDict[key]["s"], SolverOptions[key]["nNodes"], endpoint=True)
+        #         except KeyError:
+        #             nodes = np.linspace(
+        #                 0, DVDictDict[key]["s"], SolverOptions[key]["appendageList"][0]["nNodes"], endpoint=True
+        #             )
 
     if args.secondset:
         for ii, caseDir in enumerate(caseDirs):
@@ -227,13 +244,18 @@ if __name__ == "__main__":
             # --- Read tip twisting ---
             dynTipTwisting = np.rad2deg(np.asarray(load_jld(f"{caseDir}/forced/tipTwistDyn.jld2")["data"]).T)
 
-            # --- Read tip lift ---
-            dynLift = np.asarray(load_jld(f"{caseDir}/forced/totalLiftDyn.jld2")["data"]).T
+            # --- Read lift ---
+            dynLiftRAO = np.asarray(load_jld(f"{caseDir}/forced/totalLiftRAO.jld2")["data"]).T
 
-            # --- Read tip moment ---
-            dynMoment = np.asarray(load_jld(f"{caseDir}/forced/totalMomentDyn.jld2")["data"]).T
+            # --- Read moment ---
+            dynMomentRAO = np.asarray(load_jld(f"{caseDir}/forced/totalMomentRAO.jld2")["data"]).T
 
-            rao = np.asarray(load_jld(f"{caseDir}/forced/RAO.jld2")["data"]).T
+            # --- Read wave amp ---
+            waveAmpSpectrum = np.asarray(load_jld(f"{caseDir}/forced/waveAmpSpectrum.jld2")["data"]).T
+
+            # --- Read RAO (general xfer fcn for deflections) ---
+            rao = np.asarray(load_jld(f"{caseDir}/forced/GenXferFcn.jld2")["data"]).T
+            deflectionRAO = np.asarray(load_jld(f"{caseDir}/forced/deflectionRAO.jld2")["data"]).T
 
     # ************************************************
     #     Flutter and modal solutions
@@ -409,154 +431,156 @@ if __name__ == "__main__":
     for key in args.cases:
         fname = f"{outputDir}/wing-geom-{key}.pdf"
         DVDict = DVDictDict[key]
-        fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"], cm=cm)
+        try:
+            fig, axes = plot_wingPlanform(DVDict, nNodes=SolverOptions[key]["nNodes"], cm=cm)
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()
+        except KeyError:
+            print("Skipping wing planform plot")
 
-        dosave = not not fname
-        plt.show(block=(not dosave))
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+    # if args.is_static:
+    # # ---------------------------
+    # #   2D plots
+    # # ---------------------------
+    # fname = f"{outputDir}/static-spanwise.pdf"
+    # dosave = not not fname
 
-    if args.is_static:
-        # ---------------------------
-        #   2D plots
-        # ---------------------------
-        fname = f"{outputDir}/static-spanwise.pdf"
-        dosave = not not fname
+    # # Create figure object
+    # fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, constrained_layout=True, figsize=(18, 8))
+    # lpad = 40
+    # ytickBend = []
+    # ytickTwist = []
 
-        # Create figure object
-        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, constrained_layout=True, figsize=(18, 8))
-        lpad = 40
-        ytickBend = []
-        ytickTwist = []
+    # for iic, key in enumerate(args.cases):
+    #     funcs = funcsDict[key]
+    #     bending = bendingDict[key]
+    #     twisting = np.rad2deg(twistingDict[key])
+    #     spanLift = liftDict[key]
+    #     spanMoment = momentDict[key]
 
-        for iic, key in enumerate(args.cases):
-            funcs = funcsDict[key]
-            bending = bendingDict[key]
-            twisting = np.rad2deg(twistingDict[key])
-            spanLift = liftDict[key]
-            spanMoment = momentDict[key]
+    #     # If you used a half strip on the root, we're doubling the lift and moment there
+    #     spanLift[0] *= 2
+    #     spanMoment[0] *= 2
 
-            # If you used a half strip on the root, we're doubling the lift and moment there
-            spanLift[0] *= 2
-            spanMoment[0] *= 2
+    #     if iic < 1:
+    #         ytickBend.append(np.max(np.abs(bending)))
+    #         ytickTwist.append(np.max(np.abs(twisting)))
 
-            if iic < 1:
-                ytickBend.append(np.max(np.abs(bending)))
-                ytickTwist.append(np.max(np.abs(twisting)))
+    #     fig, axes = plot_static2d(
+    #         fig,
+    #         axes,
+    #         nodes,
+    #         bending,
+    #         twisting,
+    #         spanLift,
+    #         spanMoment,
+    #         funcs,
+    #         labels[iic],
+    #         cm[iic],
+    #         fs_lgd,
+    #         iic,
+    #         solverOptions=SolverOptions[key],
+    #     )
 
-            fig, axes = plot_static2d(
-                fig,
-                axes,
-                nodes,
-                bending,
-                twisting,
-                spanLift,
-                spanMoment,
-                funcs,
-                labels[iic],
-                cm[iic],
-                fs_lgd,
-                iic,
-                solverOptions=SolverOptions[key],
-            )
+    # fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
+    # flowSpeed = SolverOptions[key]["Uinf"]
+    # AOA = DVDictDict[key]["alfa0"]
+    # sweepAngle = np.rad2deg(DVDictDict[key]["sweep"])
+    # flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
+    # alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
+    # sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
+    # fiberString = "$\\theta_f$ = " + f"{fiberAngle:.1f}" + "$^{\\circ}$"
+    # titleTxt = flowString + ", " + alfaString + ", " + sweepString + ", " + fiberString
 
-        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
-        flowSpeed = SolverOptions[key]["U∞"]
-        AOA = DVDictDict[key]["α₀"]
-        sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
-        flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
-        alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
-        sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
-        fiberString = "$\\theta_f$ = " + f"{fiberAngle:.1f}" + "$^{\\circ}$"
-        titleTxt = flowString + ", " + alfaString + ", " + sweepString + ", " + fiberString
+    # fig.suptitle(titleTxt)
 
-        fig.suptitle(titleTxt)
+    # axes[0, 0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
-        axes[0, 0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+    # # --- Put second set after legend call so it's not labeled ---
+    # if args.secondset:
+    #     for iic, key in enumerate(args.cases):
+    #         newkey = key.replace("t-foil", "t-foil-fs")
+    #         funcs = funcsDict[newkey]
+    #         bending = bendingDict[newkey]
+    #         twisting = np.rad2deg(twistingDict[newkey])
+    #         spanLift = liftDict[newkey]
+    #         spanMoment = momentDict[newkey]
 
-        # --- Put second set after legend call so it's not labeled ---
-        if args.secondset:
-            for iic, key in enumerate(args.cases):
-                newkey = key.replace("t-foil", "t-foil-fs")
-                funcs = funcsDict[newkey]
-                bending = bendingDict[newkey]
-                twisting = np.rad2deg(twistingDict[newkey])
-                spanLift = liftDict[newkey]
-                spanMoment = momentDict[newkey]
+    #         # If you used a half strip on the root, we're doubling the lift and moment there
+    #         spanLift[0] *= 2
+    #         spanMoment[0] *= 2
 
-                # If you used a half strip on the root, we're doubling the lift and moment there
-                spanLift[0] *= 2
-                spanMoment[0] *= 2
+    #         fig, axes = plot_static2d(
+    #             fig,
+    #             axes,
+    #             nodes,
+    #             bending,
+    #             twisting,
+    #             spanLift,
+    #             spanMoment,
+    #             funcs,
+    #             labels[iic],
+    #             cm[iic],
+    #             fs_lgd,
+    #             iic,
+    #             solverOptions=SolverOptions[key],
+    #             ls="--",
+    #         )
 
-                fig, axes = plot_static2d(
-                    fig,
-                    axes,
-                    nodes,
-                    bending,
-                    twisting,
-                    spanLift,
-                    spanMoment,
-                    funcs,
-                    labels[iic],
-                    cm[iic],
-                    fs_lgd,
-                    iic,
-                    solverOptions=SolverOptions[key],
-                    ls="--",
-                )
+    # yticks = np.array(ytickBend)
+    # # ytickBend = np.concatenate((yticks, -yticks)).tolist()
+    # ytickBend = yticks.tolist()
+    # axes[0, 0].set_yticks(ytickBend + [0.0])
+    # axes[0, 0].set_ylim(-0.2 * np.max(ytickBend), 1.1 * np.max(ytickBend))
 
-        yticks = np.array(ytickBend)
-        # ytickBend = np.concatenate((yticks, -yticks)).tolist()
-        ytickBend = yticks.tolist()
-        axes[0, 0].set_yticks(ytickBend + [0.0])
-        axes[0, 0].set_ylim(-0.2 * np.max(ytickBend), 1.1 * np.max(ytickBend))
+    # yticks = np.array(ytickTwist)
+    # # ytickTwist = np.concatenate((yticks, -yticks)).tolist()
+    # ytickTwist = yticks.tolist()
+    # axes[0, 1].set_yticks(ytickTwist + [0.0])
+    # axes[0, 1].set_ylim(-0.1 * np.max(ytickTwist), 1.1 * np.max(ytickTwist))
 
-        yticks = np.array(ytickTwist)
-        # ytickTwist = np.concatenate((yticks, -yticks)).tolist()
-        ytickTwist = yticks.tolist()
-        axes[0, 1].set_yticks(ytickTwist + [0.0])
-        axes[0, 1].set_ylim(-0.1 * np.max(ytickTwist), 1.1 * np.max(ytickTwist))
+    # xticks = [0.0, DVDictDict[key]["s"]]
+    # axes[0, 0].set_xticks(xticks)
 
-        xticks = [0.0, DVDictDict[key]["s"]]
-        axes[0, 0].set_xticks(xticks)
+    # plt.show(block=(not dosave))
+    # for ii, ax in enumerate(axes.flatten()):
+    #     # niceplots.adjust_spines(ax, ["left", "bottom"], outward=True)
+    #     # if ii < 2:
+    #     ax.yaxis.set_label_position("right")
+    #     niceplots.adjust_spines(ax, ["right", "bottom"], outward=True)
+    # if dosave:
+    #     plt.savefig(fname, format="pdf")
+    #     print("Saved to:", fname)
+    # plt.close()
 
-        plt.show(block=(not dosave))
-        for ii, ax in enumerate(axes.flatten()):
-            # niceplots.adjust_spines(ax, ["left", "bottom"], outward=True)
-            # if ii < 2:
-            ax.yaxis.set_label_position("right")
-            niceplots.adjust_spines(ax, ["right", "bottom"], outward=True)
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+    # # ---------------------------
+    # #   3D visualization
+    # # ---------------------------
+    # fname = f"{outputDir}/static-3Dshape.pdf"
+    # dosave = not not fname
 
-        # # ---------------------------
-        # #   3D visualization
-        # # ---------------------------
-        # fname = f"{outputDir}/static-3Dshape.pdf"
-        # dosave = not not fname
+    # # Create figure object
+    # fig = plt.figure(constrained_layout=True, figsize=(14, 8))
 
-        # # Create figure object
-        # fig = plt.figure(constrained_layout=True, figsize=(14, 8))
+    # for iic, key in enumerate(args.cases):
+    #     DVDict = DVDictDict[key]
+    #     funcs = funcsDict[key]
+    #     bending = bendingDict[key]
+    #     twisting = np.rad2deg(twistingDict[key])
 
-        # for iic, key in enumerate(args.cases):
-        #     DVDict = DVDictDict[key]
-        #     funcs = funcsDict[key]
-        #     bending = bendingDict[key]
-        #     twisting = np.rad2deg(twistingDict[key])
+    #     # TODO: figure out how to get the proper ax for plot_surface()
+    #     ax = plot_deformedShape(fig, ax, DVDict, bending, twisting)
 
-        #     # TODO: figure out how to get the proper ax for plot_surface()
-        #     ax = plot_deformedShape(fig, ax, DVDict, bending, twisting)
-
-        # plt.show(block=(not dosave))
-        # niceplots.adjust_spines(ax, outward=True)
-        # if dosave:
-        #     plt.savefig(fname, format="pdf")
-        #     print("Saved to:", fname)
-        # plt.close()
+    # plt.show(block=(not dosave))
+    # niceplots.adjust_spines(ax, outward=True)
+    # if dosave:
+    #     plt.savefig(fname, format="pdf")
+    #     print("Saved to:", fname)
+    # plt.close()
 
     if args.drag_buildup:
         fname = f"{outputDir}/drag-buildup.pdf"
@@ -594,10 +618,10 @@ if __name__ == "__main__":
                     solverOptions=SolverOptions[key],
                 )
 
-        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
-        flowSpeed = SolverOptions[key]["U∞"]
-        AOA = DVDictDict[key]["α₀"]
-        sweepAngle = np.rad2deg(DVDictDict[key]["Λ"])
+        fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
+        flowSpeed = SolverOptions[key]["Uinf"]
+        AOA = DVDictDict[key]["alfa0"]
+        sweepAngle = np.rad2deg(DVDictDict[key]["sweep"])
         flowString = "$U_{\\infty} = " + f"{flowSpeed*1.9438:.1f}$" + "\,kts"
         alfaString = "$\\alpha_0$ = " + f"{AOA:.1f}" + "$^{\\circ}$"
         sweepString = "$\\Lambda$ = " + f"{sweepAngle:.1f}" + "$^{\\circ}$"
@@ -617,28 +641,28 @@ if __name__ == "__main__":
         fname = f"{outputDir}/forced-dynamics.pdf"
 
         # Create figure object
-        nrows = 2
-        ncols = 2
-        figsize = (6 * ncols, 6 * nrows)
+        nrows = 3
+        ncols = 6
+        figsize = (8 * ncols, 6 * nrows)
         fig, axes = plt.subplots(
             nrows=nrows,
             ncols=ncols,
-            sharex=True,
+            sharex="col",
             constrained_layout=True,
             figsize=figsize,
         )
 
-        fiberAngle = np.rad2deg(DVDictDict[key]["θ"])
-        flowSpeed = SolverOptions[key]["U∞"]
+        fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
+        flowSpeed = SolverOptions[key]["Uinf"]
         # --- Plot ---
         fig, axes = plot_forced(
             fig,
             axes,
             fExtSweep,
-            dynTipBending,
-            dynTipTwisting,
-            dynLift,
-            dynMoment,
+            waveAmpSpectrum,
+            deflectionRAO,
+            dynLiftRAO,
+            dynMomentRAO,
             rao,
             flowSpeed,
             fs_lgd,
@@ -646,9 +670,14 @@ if __name__ == "__main__":
             cm,
         )
 
-        fig.suptitle("Tip frequency response spectra")
+        fig.suptitle("Frequency response spectra")
 
-        axes[0, 0].set_xlim(right=600)
+        # axes[0, 0].set_xlim(left=0.0, right=250)
+        for ax in axes[:, 1:5].flatten():
+            ax.set_xlim(left=0.0, right=2.0)
+
+        for ax in axes[0, :].flatten():
+            ax.set_ylim(bottom=0.0)
 
         dosave = not not fname
         plt.show(block=(not dosave))
@@ -732,13 +761,17 @@ if __name__ == "__main__":
                 annotateModes = True
             else:
                 annotateModes = False
+
+            # can force to see modes in legend label
+            annotateModes = False
+
             # --- Plot ---
             fig, axes = plot_vg_vf_rl(
                 fig,
                 axes,
                 flutterSol=flutterSolDict[key],
                 cm=cm,
-                # ls=ls[ii],
+                ls=ls[ii],
                 alpha=alphas[ii],
                 units=units,
                 # marker="o",
@@ -755,12 +788,12 @@ if __name__ == "__main__":
             instabFreqTicks.append(instabPtsDict[key][0][-1])
 
         # --- Set limits ---
-        # IMOCA60 paper
-        axes[0, 0].set_ylim(top=0.5, bottom=-4)
-        axes[1, 0].set_ylim(top=22.0)
-        axes[1, 0].set_yticks([0, 10, 15, 20] + instabFreqTicks)
+        # # IMOCA60 paper
+        # axes[0, 0].set_ylim(top=0.5, bottom=-4)
+        # axes[1, 0].set_ylim(top=22.0)
+        # axes[1, 0].set_yticks([0, 10, 15, 20] + instabFreqTicks)
         axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
-        # axes[0, 0].set_xticks([10, 60])
+        # # axes[0, 0].set_xticks([10, 60])
 
         # # akcabay limits
         # # swept flutter
@@ -798,8 +831,8 @@ if __name__ == "__main__":
                 axes,
                 flutterSol=flutterSolDict[key],
                 cm=cm,
-                semichord=0.5 * np.mean(DVDictDict[key]["c"]),
-                sweepAng=DVDictDict[key]["Λ"],
+                semichord=0.5 * meanChord,
+                sweepAng=sweepAng,
                 ls=ls[ii],
                 units="kts",
                 nShift=500,

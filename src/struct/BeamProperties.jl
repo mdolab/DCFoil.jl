@@ -3,7 +3,7 @@ module BeamProperties
 @File    :   BeamProperties.jl
 @Time    :   2024/01/30
 @Author  :   Galen Ng
-@Desc    :   Module for computing sectional properties of composite beams
+@Desc    :   Module for computing sectional properties of composite beams or reading from FEM file
 """
 
 using Zygote
@@ -16,13 +16,13 @@ export compute_section_property
 struct SectionProperty{TF,TC}
     c::TC # chord length
     t::TC # thickness (only needed if not using an airfoil section)
-    ab::TC # dist from midchord to EA, +ve for EA aft
+    ab # dist from midchord to EA, +ve for EA aft
     ρₛ::TF # density
     E₁::TF # Young's modulus in-plane fiber longitudinal direction (x)
     E₂::TF # Young's modulus in-plane fiber normal direction (y)
     G₁₂::TF # In-plane Shear modulus
     ν₁₂::TF # Poisson ratio
-    θ::TC # global fiber frame orientation
+    theta_f # global fiber frame orientation
     airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 
@@ -66,7 +66,7 @@ function compute_section_property(section::SectionProperty, constitutive::String
     E₂ = section.E₂
     G₁₂ = section.G₁₂
     ν₁₂ = section.ν₁₂
-    θ = section.θ
+    theta_f = section.theta_f
 
     # Compute nu_21 by E2 * nu12 = E1 * nu12
     ν₂₁ = (E₂ / E₁) * ν₁₂
@@ -90,8 +90,8 @@ function compute_section_property(section::SectionProperty, constitutive::String
         q₆₆ = G₁₂
 
         # Convert to physical frame
-        m = cos(θ)
-        n = sin(θ)
+        m = cos(theta_f)
+        n = sin(theta_f)
         q₁₁ₚ = q₁₁ * m^4 + q₂₂ * n^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
         q₂₂ₚ = q₁₁ * n^4 + q₂₂ * m^4 + 2 * (q₁₂ + 2 * q₆₆) * m^2 * n^2
         q₁₂ₚ = (q₁₁ + q₂₂ - 4 * q₆₆) * m^2 * n^2 + q₁₂ * (m^4 + n^4)
@@ -151,15 +151,15 @@ function compute_section_property(section::SectionProperty, constitutive::String
 end
 
 function compute_beam(nNodes::Int64,
-    chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θ,
-    constitutive::String
+    chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f,
+    constitutive::String; solverOptions=nothing
 )
-    EIₛ = zeros(DTYPE, nNodes)
-    Kₛ = zeros(DTYPE, nNodes)
-    GJₛ = zeros(DTYPE, nNodes)
-    Sₛ = zeros(DTYPE, nNodes)
-    Iₛ = zeros(DTYPE, nNodes)
-    mₛ = zeros(DTYPE, nNodes)
+    EIₛ = zeros(RealOrComplex, nNodes)
+    Kₛ = zeros(RealOrComplex, nNodes)
+    GJₛ = zeros(RealOrComplex, nNodes)
+    Sₛ = zeros(RealOrComplex, nNodes)
+    Iₛ = zeros(RealOrComplex, nNodes)
+    mₛ = zeros(RealOrComplex, nNodes)
     # --- Loop over the span ---
     EI_z = Zygote.Buffer(EIₛ)
     EIIP_z = Zygote.Buffer(EIₛ)
@@ -179,7 +179,7 @@ function compute_beam(nNodes::Int64,
     m_z[:] = mₛ
 
     for ii in 1:nNodes
-        section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, θ, zeros(20, 2))
+        section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, zeros(20, 2))
 
         # TODO: should probably redo this to be element-based, not node-based
         EI, EIIP, K, GJ, S, EA, I, m = compute_section_property(section, constitutive)

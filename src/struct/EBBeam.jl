@@ -53,7 +53,7 @@ using ..DCFoil: DTYPE
 
 
 function compute_elem_stiff(
-    EIᵉ::DTYPE, EIIPᵉ::DTYPE, GJᵉ::DTYPE, BTᵉ::DTYPE, Sᵉ::DTYPE, EAᵉ::DTYPE, lᵉ::DTYPE, abᵉ::DTYPE,
+    EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ,
     elemType="bend-twist", constitutive="isotropic", useTimoshenko=false
 )
     """
@@ -354,7 +354,7 @@ function compute_elem_stiff(
             00 iy 00 00 00 -jy 00 00 ly
         ]
         Ktop = hcat(K11, K12)
-        Kbot = hcat(K12', K22)
+        Kbot = hcat(transpose(K12), K22)
         Kᵉ = vcat(Ktop, Kbot)
     end
 
@@ -362,7 +362,7 @@ function compute_elem_stiff(
 end
 
 function compute_elem_mass(
-    mᵉ::DTYPE, iᵉ::DTYPE, lᵉ::DTYPE, x_αbᵉ::DTYPE, elemType="bend-twist"
+    mᵉ, iᵉ, lᵉ, x_αbᵉ, elemType="bend-twist"
 )
     """
     Outputs

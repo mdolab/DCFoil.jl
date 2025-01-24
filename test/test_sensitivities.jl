@@ -82,7 +82,7 @@ end
 function test_interp()
     """Test the my linear interpolation"""
     mesh = collect(0:0.1:2)
-    yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0, length(mesh))
+    yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0)
     xq = 0.5
 
     derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
@@ -110,10 +110,10 @@ function test_hydroderiv(DVDict, solverOptions)
     nElem = solverOptions["nNodes"] - 1
     mesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     mesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, _, DOFBlankingList, _, nModes, _, _ = SolveFlutter.setup_solver(
-        DVDict["α₀"], DVDict["Λ"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_αb"], DVDict["zeta"], DVDict["θ"], solverOptions
+        DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions
     )
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, θ, zeros(2, 2))
-    globalKs, _, _ = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, "BT2", "orthotropic")
+    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, toc, abVec, x_αbVec, theta_f, zeros(2, 2))
+    globalKs, _, _ = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, "BT2", "orthotropic")
 
     dim = size(globalKs, 1) # big problem
     ω = 0.1
@@ -253,7 +253,7 @@ function test_theodorsenDeriv()
     # ---------------------------
     #   Test glauert lift distribution
     # ---------------------------
-    cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0, nNodes=nNodes)
+    cl_α, _, _ = HydroStrip.compute_glauert_circ(semispan=2.7, chordVec=chordVec, α₀=6.0, U∞=1.0)
     pGlauert = plot(LinRange(0, 2.7, 250), cl_α)
     plot!(title="lift slope")
 
@@ -378,8 +378,8 @@ function test_staticDeriv(DVDict, solverOptions, wingOptions)
     outputDir = @sprintf("./test_out/%s_%s_f%.1f_w%.1f/",
         solverOptions["name"],
         wingOptions["material"],
-        rad2deg(DVDict["θ"]),
-        rad2deg(DVDict["Λ"]))
+        rad2deg(DVDict["theta_f"]),
+        rad2deg(DVDict["sweep"]))
     mkpath(outputDir)
     # ************************************************
     #     Cost functions
@@ -393,10 +393,10 @@ function test_staticDeriv(DVDict, solverOptions, wingOptions)
     #                         Call DCFoil
     # ==============================================================================
     steps = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16] # step sizes
-    # dvKey = "θ" # dv to test deriv
-    # dvKey = "Λ" # dv to test deriv
+    # dvKey = "theta_f" # dv to test deriv
+    # dvKey = "sweep" # dv to test deriv
     dvKey = "rake" # dv to test deriv
-    # dvKey = "α₀" # dv to test deriv
+    # dvKey = "alfa0" # dv to test deriv
     # dvKey = "toc" # dv to test deriv
     # evalFunc = "ksflutter"
     evalFunc = "lift"
@@ -511,71 +511,71 @@ function test_pkprofile(DVDict, solverOptions)
     # SolveFlutter.compute_costFuncs(DVDict, solverOptions)
     funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
 end
-# ==============================================================================
-#                         MAIN DRIVER
-# ==============================================================================
-nNodes = 4
-DVDict = Dict(
-    "α₀" => 6.0, # initial angle of attack [deg]
-    "Λ" => deg2rad(-15.0), # sweep angle [rad]
-    "zeta" => 0.04, # modal damping ratio at first 2 modes
-    "c" => 0.1 * ones(nNodes), # chord length [m]
-    "s" => 0.3, # semispan [m]
-    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12, # thickness-to-chord ratio
-    "x_αb" => 0 * ones(nNodes), # static imbalance [m]
-    "θ" => deg2rad(15), # fiber angle global [rad]
-    # --- Strut vars ---
-    "rake" => 0.0,
-    "beta" => 0.0, # yaw angle wrt flow [deg]
-    "s_strut" => 0.4, # from Yingqian
-    "c_strut" => 0.14 * ones(nNodes), # chord length [m]
-    "toc_strut" => 0.095, # thickness-to-chord ratio (mean)
-    "ab_strut" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "x_αb_strut" => 0 * ones(nNodes), # static imbalance [m]
-    "θ_strut" => deg2rad(0), # fiber angle global [rad]
-)
+# # ==============================================================================
+# #                         MAIN DRIVER
+# # ==============================================================================
+# nNodes = 4
+# DVDict = Dict(
+#     "alfa0" => 6.0, # initial angle of attack [deg]
+#     "sweep" => deg2rad(-15.0), # sweep angle [rad]
+#     "zeta" => 0.04, # modal damping ratio at first 2 modes
+#     "c" => 0.1 * ones(nNodes), # chord length [m]
+#     "s" => 0.3, # semispan [m]
+#     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+#     "toc" => 0.12, # thickness-to-chord ratio
+#     "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+#     "theta_f" => deg2rad(15), # fiber angle global [rad]
+#     # --- Strut vars ---
+#     "rake" => 0.0,
+#     "beta" => 0.0, # yaw angle wrt flow [deg]
+#     "s_strut" => 0.4, # from Yingqian
+#     "c_strut" => 0.14 * ones(nNodes), # chord length [m]
+#     "toc_strut" => 0.095, # thickness-to-chord ratio (mean)
+#     "ab_strut" => 0 * ones(nNodes), # dist from midchord to EA [m]
+#     "x_ab_strut" => 0 * ones(nNodes), # static imbalance [m]
+#     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
+# )
 
-appendageDict = Dict(
-    "nNodes" => nNodes,
-    "config" => "wing",
-    "rotation" => 0.0, # deg
-    "gravityVector" => [0.0, 0.0, -9.81],
-    "use_tipMass" => false,
-    "material" => "cfrp", # preselect from material library
-    "config" => "wing",
-)
-solverOptions = Dict(
-    # --- I/O ---
-    "name" => "test",
-    "debug" => false,
-    "outputDir" => "./test_out/",
-    # --- General solver options ---
-    "U∞" => 5.0, # free stream velocity [m/s]
-    "ρ_f" => 1000.0, # fluid density [kg/m³]
-    "use_freeSurface" => false,
-    "use_cavitation" => false,
-    "use_ventilation" => false,
-    "appendageList" => [appendageDict],
-    # --- Static solve ---
-    "run_static" => false,
-    # --- Forced solve ---
-    "run_forced" => false,
-    "fRange" => [0.0, 1.0],
-    "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
-    # --- Eigen solve ---
-    "run_modal" => false,
-    "run_flutter" => true,
-    "nModes" => 4,
-    "uRange" => [185, 190.0],
-    "maxQIter" => 100,
-    "rhoKS" => 100.0,
-)
+# appendageDict = Dict(
+#     "nNodes" => nNodes,
+#     "config" => "wing",
+#     "rotation" => 0.0, # deg
+#     "gravityVector" => [0.0, 0.0, -9.81],
+#     "use_tipMass" => false,
+#     "material" => "cfrp", # preselect from material library
+#     "config" => "wing",
+# )
+# solverOptions = Dict(
+#     # --- I/O ---
+#     "name" => "test",
+#     "debug" => false,
+#     "outputDir" => "./test_out/",
+#     # --- General solver options ---
+#     "Uinf" => 5.0, # free stream velocity [m/s]
+#     "rhof" => 1000.0, # fluid density [kg/m³]
+#     "use_freeSurface" => false,
+#     "use_cavitation" => false,
+#     "use_ventilation" => false,
+#     "appendageList" => [appendageDict],
+#     # --- Static solve ---
+#     "run_static" => false,
+#     # --- Forced solve ---
+#     "run_forced" => false,
+#     "fRange" => [0.0, 1.0],
+#     "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
+#     # --- Eigen solve ---
+#     "run_modal" => false,
+#     "run_flutter" => true,
+#     "nModes" => 4,
+#     "uRange" => [185, 190.0],
+#     "maxQIter" => 100,
+#     "rhoKS" => 100.0,
+# )
 
-# Profiling code
-using BenchmarkTools
-using TimerOutputs
-using Profile
+# # Profiling code
+# using BenchmarkTools
+# using TimerOutputs
+# using Profile
 
 # test_pkflutterderiv(DVDict, solverOptions) # primal
 # @profview test_pkprofile(DVDict, solverOptions) #deriv

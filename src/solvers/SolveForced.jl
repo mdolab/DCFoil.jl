@@ -17,26 +17,31 @@ export solve
 # --- PACKAGES ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote, ChainRulesCore
+using Zygote
+using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using FileIO
 
 # --- DCFoil modules ---
 using ..InitModel, ..HydroStrip, ..BeamProperties
 using ..FEMMethods
 using ..SolveStatic
-using ..SolutionConstants
+using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
 using ..SolverRoutines
+using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
+using ..DCFoilSolution
+using ..OceanWaves
+
+using Debugger
 
 # ==============================================================================
 #                         COMMON VARIABLES
 # ==============================================================================
-const elemType = "COMP2"
 const loadType = "force"
 
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
+function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions::Dict, appendageOptions::Dict)
     """
     Solve
         (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
@@ -46,159 +51,186 @@ function solve(FEMESH, DVDict, solverOptions::Dict, appendageOptions::Dict)
     #   Initialize
     # ---------------------------
     outputDir = solverOptions["outputDir"]
-    fRange = solverOptions["fRange"]
     tipForceMag = solverOptions["tipForceMag"]
-    global FOIL, STRUT, _ = InitModel.init_model_wrapper(DVDict, solverOptions, appendageOptions; fRange=fRange)
 
+    WING, STRUT, SOLVERPARAMS, FEMESH, LLSystem, LLOutputs, FlowCond = setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
+    sweepAng = LLSystem.sweepAng
+    DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped")
     println("====================================================================================")
     println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
     println("====================================================================================")
 
-    # ************************************************
-    #     Assemble structural matrices
-    # ************************************************
-    
-    abVec = DVDict["ab"]
-    x_αbVec = DVDict["x_αb"]
-    chordVec = DVDict["c"]
-    ebVec = 0.25 * chordVec .+ abVec
-    Λ = DVDict["Λ"]
-    U∞ = solverOptions["U∞"]
-    α₀ = DVDict["α₀"]
-    rake = DVDict["rake"]
-    zeta = DVDict["zeta"]
-    structMesh = FEMESH.mesh
-    elemConn = FEMESH.elemConn
-    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
 
-    # ---------------------------
-    #   Apply BC blanking
-    # ---------------------------
-    globalDOFBlankingList = 0
-    ChainRulesCore.ignore_derivatives() do
-        globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType, "clamped")
-    end 
-    Ks, Ms, F = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
-
-    # ---------------------------
-    #   Get damping
-    # ---------------------------
-    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, zeta, solverOptions["nModes"])
-    Cs = alphaConst * Ms .+ betaConst * Ks
 
     # --- Initialize stuff ---
-    u = copy(globalF)
-    globalMf = copy(globalMs) * 0
-    globalCf_r = copy(globalKs) * 0
-    globalKf_r = copy(globalKs) * 0
-    globalKf_i = copy(globalKs) * 0
-    globalCf_i = copy(globalKs) * 0
-    extForceVec = copy(F) * 0 # this is a vector excluded the BC nodes
-    extForceVec[end-1] = tipForceMag # this is applying a tip twist
-    extForceVec[end-3] = tipForceMag # this is applying a tip lift
-    LiftDyn = zeros(length(fSweep)) # * 0im
-    MomDyn = zeros(length(fSweep)) # * 0im
-    TipBendDyn = zeros(length(fSweep)) # * 0im
-    TipTwistDyn = zeros(length(fSweep)) # * 0im
-    RAO = zeros(ComplexF64, length(fSweep), length(F), length(F))
+    u = zeros(size(SOLVERPARAMS.Kmat)[1])
+    fSweep = solverOptions["fRange"][1]:solverOptions["df"]:solverOptions["fRange"][end]
 
-    # ---------------------------
-    #   Pre-solve system
-    # ---------------------------
-    q = FEMMethods.solve_structure(Ks, Ms, F)
+    # # --- Tip twist approach ---
+    # extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
+    # @ignore_derivatives() do
+    #     extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
+    #     extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
+    # end
+    # --- Wave-induced forces ---
+    extForceVec, Aw = compute_fextwave(fSweep * 2π, FEMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
 
-    # --- Populate displacement vector ---
-    u[globalDOFBlankingList] .= 0.0
-    idxNotBlanked = [x for x ∈ eachindex(u) if x ∉ globalDOFBlankingList] # list comprehension
-    u[idxNotBlanked] .= q
+    LiftDyn = zeros(ComplexF64, length(fSweep)) # * 0im
+    MomDyn = zeros(ComplexF64, length(fSweep)) # * 0im
+
+    ũout = zeros(ComplexF64, length(fSweep), length(u))
+
+    # --- Initialize transfer functions ---
+    # These describe the output deflection relation wrt an input force vector
+    GenXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList), length(u) - length(DOFBlankingList))
+
+    # These RAOs describe the outputs relation wrt an input wave amplitude
+    LiftRAO = zeros(ComplexF64, length(fSweep))
+    MomRAO = zeros(ComplexF64, length(fSweep))
+    DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
+    DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
+
+    dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
+    Ms = SOLVERPARAMS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Ks = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Cs = SOLVERPARAMS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+
+    maxK = fSweep[end] * 2π / FlowCond.Uinf
+    nK = 22
+    globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(
+        maxK, nK, FlowCond.Uinf, 1.0, dim, FEMESH, LLSystem.sweepAng, WING, LLSystem, LLOutputs, FlowCond.rhof, ELEMTYPE;
+        appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     # ************************************************
     #     For every frequency, solve the system
     # ************************************************
-    f_ctr = 1
-    @time for f in fSweep
+    tFreq = @elapsed begin
+        for (f_ctr, f) in enumerate(fSweep)
+            if f_ctr % 20 == 1 # header every 10 iterations
+                println("Forcing: ", f, "Hz")
+            end
 
-        if f_ctr % 20 == 1 # header every 10 iterations
-            println("Forcing: ", f, "Hz")
+            ω = 2π * f # circular frequency
+
+            # ---------------------------
+            #   Assemble hydro matrices
+            # ---------------------------
+            # TODO: PICKUP HERE to accelerate forced solution
+            # # --- Interpolate AICs ---
+            k = ω / FlowCond.Uinf
+            globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
+            globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
+            # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, ω, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
+
+            Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
+            Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
+
+            Cf = Cf_r + 1im * Cf_i
+            Kf = Kf_r + 1im * Kf_i
+
+            #  Dynamic matrix. also written as Λ_ij in na520 notes
+            D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
+            # Rows are outputs "i" and columns are inputs "j"
+
+            # # Complex AIC
+            # AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)
+
+            # Store constants
+            # global CONSTANTS = SolutionConstants.DCFoilDynamicConstants(D, AIC, extForceVec)
+            # global DFOIL = FOIL
+
+            # ---------------------------
+            #   Solve for dynamic states
+            # ---------------------------
+            # The below way is the numerical way to do it but might skip if this doesntwork
+            # qSol, _ = SolverRoutines.converge_resNonlinear(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
+
+            fextω = extForceVec[:, f_ctr]
+            H = inv(D) # system transfer function matrix for a force
+            # qSol = real(H * extForceVec)
+            qSol = H * fextω[1:end.∉[DOFBlankingList]]
+            ũSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE)
+            # uSol = real(ũSol)
+            uSol = abs.(ũSol) # proper way to do it
+
+            ũout[f_ctr, :] = ũSol
+
+            # ---------------------------
+            #   Get hydroloads at freq
+            # ---------------------------
+            fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
+
+            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+                appendageOptions=appendageOptions, solverOptions=solverOptions)
+
+            # --- Store total force and tip deflection values ---
+            LiftDyn[f_ctr] = L̃
+            MomDyn[f_ctr] = M̃
+
+            GenXferFcn[f_ctr, :, :] = H
+
+            DeflectionRAO[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+            # DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+
+            # # DEBUG QUIT ON FIRST FREQ
+            # break
+            f_ctr += 1
         end
-
-        ω = 2π * f # circular frequency
-
-        # ---------------------------
-        #   Assemble hydro matrices
-        # ---------------------------
-        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf_0, globalCf_r_0, globalCf_i_0, globalKf_r_0, globalKf_i_0, structMesh, FOIL, FOIL.U∞, ω, elemType)
-        # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i, structMesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(FEMESH, size(globalMs)[1], Λ, chordVec, abVec, ebVec, FOIL, U∞, ω, elemType)
-        Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, globalDOFBlankingList)
-        Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, globalDOFBlankingList)
-
-        Cf = Cf_r + 1im * Cf_i
-        Kf = Kf_r + 1im * Kf_i
-
-        #  Dynamic matrix
-        D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
-
-        # Complex AIC
-        AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)
-
-        # Store constants
-        global CONSTANTS = SolutionConstants.DCFoilDynamicConstants(elemType, structMesh, D, AIC, extForceVec)
-        global DFOIL = FOIL
-
-        # ---------------------------
-        #   Solve for dynamic states
-        # ---------------------------
-        # The below way is the numerical way to do it but might skip if this doesntwork
-        # qSol, _ = SolverRoutines.converge_r(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
-        H = inv(D) # RAO
-        qSol = real(H * extForceVec)
-        uSol, _ = FEMMethods.put_BC_back(qSol, CONSTANTS.elemType)
-
-        # ---------------------------
-        #   Get hydroloads at freq
-        # ---------------------------
-        fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-        fDynamic, DynLift, DynMoment = HydroStrip.integrate_hydroLoads(uSol, fullAIC, α₀, rake, CONSTANTS.elemType; solverOptions=solverOptions)#compute_hydroLoads(uSol, fullAIC)
-
-        # --- Store total force and tip deflection values ---
-        LiftDyn[f_ctr] = (DynLift)
-        MomDyn[f_ctr] = (DynMoment)
-        RAO[f_ctr, :, :] = H
-        if elemType == "BT2"
-            TipBendDyn[f_ctr] = (uSol[end-3])
-            TipTwistDyn[f_ctr] = (uSol[end-1])
-            phaseAngle = angle(uSol[end-3])
-        elseif elemType == "COMP2"
-            TipBendDyn[f_ctr] = (uSol[end-6])
-            TipTwistDyn[f_ctr] = (uSol[end-4])
-            phaseAngle = angle(uSol[end-6])
-        else
-            println("Invalid element type")
-        end
-
-        # # DEBUG QUIT ON FIRST FREQ
-        # break
-        f_ctr += 1
     end
 
+    LiftRAO = LiftDyn ./ Aw
+    MomRAO = MomDyn ./ Aw
 
-    # ************************************************
-    #     Write solution out to files
-    # ************************************************
-    write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO, outputDir)
+    SOL = DCFoilSolution.ForcedVibSolution(fSweep, ũout, Aw, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn)
 
-    # TODO:
-    costFuncs = nothing
-    # costFuncs = SolverRoutines.compute_costFuncs()
-
-    return costFuncs
+    return SOL
 end
 
-function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO, outputDir="./OUTPUT/")
+function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
+    """
+    Computes the forces and moments due to wave loads on the elevator
+    """
+
+    # --- Wave loads ---
+    ω_wave = 0.125 # Peak wave frequency
+    Awsig = 0.5 # Wave amplitude [m]
+    ωe = OceanWaves.compute_encounterFreq(π, ω_wave, FlowCond.Uinf)
+
+    stripVecs = HydroStrip.get_strip_vecs(AEROMESH, appendageOptions)
+    spanLocs = AEROMESH.mesh[:, YDIM]
+    nVec = stripVecs
+    stripWidths = .√(nVec[:, XDIM] .^ 2 + nVec[:, YDIM] .^ 2 + nVec[:, ZDIM] .^ 2) # length of elem
+    xeval = LLSystem.collocationPts[YDIM, :]
+    claVec = SolverRoutines.do_linear_interp(xeval, LLOutputs.cla, spanLocs)
+
+    # Elevator chord lengths
+    chordLengths = vcat(WING.chord, WING.chord[2:end])
+    fAey, mAey, Aw = OceanWaves.compute_waveloads(chordLengths, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, appendageParams["depth0"], stripWidths, claVec)
+
+    extForceVec = zeros(ComplexF64, length(spanLocs) * NDOF, length(ωRange))
+
+    # --- Populate the force vector ---
+    # println("shape:$(size(fAey))")
+    # println("shape:$(size(extForceVec[WIND:NDOF:end, :]))")
+    extForceVec[WIND:NDOF:end, :] .= transpose(fAey)
+    extForceVec[ΘIND:NDOF:end, :] .= transpose(mAey)
+
+    return extForceVec, Aw
+end
+
+function write_sol(SOL, outputDir="./OUTPUT/")
     """
     Write out the dynamic results
     """
+
+    fSweep = SOL.fSweep
+    Aw = SOL.Awave
+    ũout = SOL.dynStructStates
+    DeflectionRAO = SOL.Zdeflection
+    LiftRAO = SOL.Zlift
+    MomRAO = SOL.Zmom
+    GenXferFcn = SOL.RAO
+
     workingOutput = outputDir * "forced/"
     mkpath(workingOutput)
 
@@ -212,109 +244,78 @@ function write_sol(fSweep, TipBendDyn, TipTwistDyn, LiftDyn, MomDyn, RAO, output
 
     # --- Write tip bending ---
     fname = workingOutput * "tipBendDyn.jld2"
+    WVec = ũout[:, WIND:NDOF:end] # bend
+    TipBendDyn = abs.(WVec[:, end])
     save(fname, "data", TipBendDyn)
 
     # --- Write tip twist ---
     fname = workingOutput * "tipTwistDyn.jld2"
+    ΦVec = ũout[:, ΦIND:NDOF:end] # bend
+    TipTwistDyn = abs.(ΦVec[:, end])
     save(fname, "data", TipTwistDyn)
 
+    # --- Deflection RAO ---
+    fname = workingOutput * "deflectionRAO.jld2"
+    save(fname, "data", DeflectionRAO)
+
     # --- Write dynamic lift ---
-    fname = workingOutput * "totalLiftDyn.jld2"
-    save(fname, "data", LiftDyn)
+    fname = workingOutput * "totalLiftRAO.jld2"
+    save(fname, "data", (LiftRAO))
 
     # --- Write dynamic moment ---
-    fname = workingOutput * "totalMomentDyn.jld2"
-    save(fname, "data", MomDyn)
+    fname = workingOutput * "totalMomentRAO.jld2"
+    save(fname, "data", (MomRAO))
 
-    fname = workingOutput * "RAO.jld2"
-    save(fname, "data", RAO)
+    # --- General transfer function ---
+    fname = workingOutput * "GenXferFcn.jld2"
+    save(fname, "data", GenXferFcn)
+
+    # --- Wave amplitude spectrum A(ω) ---
+    fname = workingOutput * "waveAmpSpectrum.jld2"
+    save(fname, "data", Aw)
 
 end
 
-# # ==============================================================================
-# #                         Solver routines
-# # ==============================================================================
-# function do_newton_rhapson_cmplx(u, maxIters=200, tol=1e-12, verbose=true, mode="RAD")
-#     """
-#     Simple complex data type Newton-Rhapson solver
+function setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions; verbose=false)
 
-#     Inputs
-#     ------
-#     u : complex vector
-#         Initial guess
-#     Outputs
-#     -------
-#     converged_u : complex vector
-#         Converged solution
-#     converged_r : complex vector
-#         Converged residual
-#     """
+    tipForceMag = solverOptions["tipForceMag"]
 
-#     uUnfolded = [real(u); imag(u)]
-#     for ii in 1:maxIters
-#         # println(u)
-#         # NOTE: these functions handle a complex input but return the unfolded output
-#         # (i.e., concatenation of real and imag)
-#         res = compute_residuals(uUnfolded)
-#         ∂r∂u = compute_∂r∂u(uUnfolded, mode)
-#         jac = ∂r∂u[1]
+    WING, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    # ************************************************
+    #     Assemble structural matrices
+    # ************************************************
 
-#         # --- Newton step ---
-#         # show(stdout, "text/plain", jac)
-#         Δu = -jac \ res
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, appendageParams["x_ab"], WING, ELEMTYPE, WING.constitutive; config=appendageOptions["config"], STRUT=STRUT, x_αb_strut=appendageParams["x_ab_strut"], verbose=verbose)
 
-#         # --- Update ---
-#         uUnfolded = uUnfolded + Δu
+    # ---------------------------
+    #   Apply BC blanking
+    # ---------------------------
+    DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped")
+    Ks, Ms, _ = FEMMethods.apply_BCs(globalKs, globalMs, globalF, DOFBlankingList)
 
-#         resNorm = norm(res, 2)
+    # ---------------------------
+    #   Get damping
+    # ---------------------------
+    alphaConst, betaConst = FEMMethods.compute_proportional_damping(real(Ks), real(Ms), appendageParams["zeta"], solverOptions["nModes"])
+    Cs = alphaConst * Ms .+ betaConst * Ks
+    globalCs = alphaConst * globalMs .+ betaConst * globalKs
 
-#         # --- Printout ---
-#         if verbose
-#             if ii == 1
-#                 println("resNorm | stepNorm ")
-#             end
-#             println(resNorm, "|", norm(Δu, 2))
-#         end
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, 0.0)
 
-#         # --- Check norm ---
-#         # Note to self, the for and while loop in Julia introduce a new scope...this is pretty stupid
-#         if resNorm < tol
-#             println("Converged in ", ii, " iterations")
-#             global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
-#             global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
-#             break
-#         elseif ii == maxIters
-#             println("Failed to converge. res norm is", resNorm)
-#             println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
-#             global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
-#             global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
-#         else
-#             global converged_u = uUnfolded[1:end÷2] + 1im * uUnfolded[end÷2+1:end]
-#             global converged_r = res[1:end÷2] + 1im * res[end÷2+1:end]
-#         end
-#     end
-
-#     # println("Size of state vector")
-#     # print(size(converged_u))
-
-#     return converged_u, converged_r
-# end
-
-# function converge_r(u0, maxIters=200, tol=1e-6, verbose=true, mode="RAD")
-#     """
-#     Given initial input u0, solve system r(u) = 0 with complex Newton
-#     """
-#     # ************************************************
-#     #     Main solver loop
-#     # ************************************************
-#     converged_u, converged_r = do_newton_rhapson_cmplx(u0, maxIters, tol, verbose, mode)
-
-#     return converged_u, converged_r
-# end
+    return WING, STRUT, SOLVERPARAMS, FEMESH, LLSystem, LLOutputs, FlowCond
+end
 
 # ==============================================================================
-#                         Sensitivity routines
+#                         Cost func and sensitivity routines
 # ==============================================================================
+function compute_funcs(evalFunc)
+    
+end
+
+function evalFuncsSens(VIBSOL)
+    
+end
+
 function compute_residuals(unfoldedStructuralStates)
     """
     Compute residual for every node that is not the clamped root node
@@ -337,8 +338,8 @@ function compute_residuals(unfoldedStructuralStates)
     # --- Fold them ---
     structuralStates = unfoldedStructuralStates[1:end÷2] + 1im * unfoldedStructuralStates[end÷2+1:end]
 
-    if CONSTANTS.elemType == "BT2"
-        foilDynamicStates, _ = FEMMethods.put_BC_back(structuralStates, CONSTANTS.elemType)
+    if ELEMTYPE == "BT2"
+        foilDynamicStates, _ = FEMMethods.put_BC_back(structuralStates, ELEMTYPE)
     else
         println("Invalid element type")
     end
@@ -380,5 +381,6 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
     return ∂r∂u
 
 end
+
 
 end # end module
