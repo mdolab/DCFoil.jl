@@ -4,7 +4,7 @@ Test to verify that the static solve works without failing
 
 using Printf
 using LinearAlgebra
-using Dates
+# using Dates
 # using Debugger: @run
 
 include("../src/DCFoil.jl")
