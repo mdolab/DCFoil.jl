@@ -46,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fRange = [0.0, 1000.0]  # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [150.0, 210.0] # flow speed [m/s] sweep for flutter
+uRange = [160.0, 180.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************

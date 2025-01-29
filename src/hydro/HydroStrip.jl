@@ -501,7 +501,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         ZM = zeros(2, 2)
         ZA = zeros(2)
         ZH = zeros(2, 2, 2)
-        LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ZH, ZH, ZA, ZM, ZA)
+        LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, sweepAng, 0.0, ZH, ZH, ZA, ZM, ZA)
         FlowCond = LiftingLine.FlowConditions([uinf, 0.0, 0.0], uinf, [uinf, 0.0, 0.0], appendageParams["alfa0"], 0.0, solverOptions["rhof"], appendageParams["depth0"])
         LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), real(cla), zeros(3), F, 0.0, CDi, 0.0)
     end
