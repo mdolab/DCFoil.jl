@@ -122,6 +122,11 @@ function init_staticHydro(LECoords, TECoords, nodeConn, appendageParams,
     foil: struct
   """
 
+  # Quick error check
+  if !haskey(appendageParams, "depth0")
+    appendageParams["depth0"] = 20.0
+  end
+
   ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
   LLOutputs, LLSystem, FlowCond = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 

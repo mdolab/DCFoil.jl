@@ -755,15 +755,15 @@ if __name__ == "__main__":
         instabSpeedTicks = []
         instabFreqTicks = []
         units = "kts"
-        # units = "m/s"
+        units = "m/s"
         for ii, key in enumerate(args.cases):
             if ii == 0:
                 annotateModes = True
             else:
                 annotateModes = False
 
-            # can force to see modes in legend label
-            annotateModes = False
+            # # can force to see modes in legend label
+            # annotateModes = False
 
             # --- Plot ---
             fig, axes = plot_vg_vf_rl(
@@ -777,15 +777,17 @@ if __name__ == "__main__":
                 # marker="o",
                 showRLlabels=True,
                 annotateModes=annotateModes,
-                nShift=62,
+                # nShift=62,
                 instabPts=instabPtsDict[key],
             )
             if units == "kts":
                 unitFactor = 1.9438
             else:
                 unitFactor = 1.0
-            instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
-            instabFreqTicks.append(instabPtsDict[key][0][-1])
+
+            if len(instabPtsDict[key]) != 0:
+                instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
+                instabFreqTicks.append(instabPtsDict[key][0][-1])
 
         # --- Set limits ---
         # # IMOCA60 paper
@@ -795,17 +797,17 @@ if __name__ == "__main__":
         axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
         # # axes[0, 0].set_xticks([10, 60])
 
-        # # akcabay limits
-        # # swept flutter
-        # axes[0, 0].set_ylim(top=30,bottom=-400)
-        # axes[0, 0].set_xlim(left=160,right=175)
-        # axes[0, 0].set_xticks([160, 175] + instabSpeedTicks)
+        # akcabay limits
+        # swept flutter
+        axes[0, 0].set_ylim(top=30,bottom=-400)
+        axes[0, 0].set_xlim(left=160,right=175)
+        axes[0, 0].set_xticks([150, 210] + instabSpeedTicks)
         # axes[1,0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
         # # static div
         # axes[0, 0].set_ylim(top=20, bottom=-80)
-        # axes[0, 0].set_xlim(right=35)
-        # axes[0, 0].set_xticks([20, 35] + [instabPtsDict[key][0][0]])
-        # axes[1, 0].set_ylim(top=510)
+        # axes[0, 0].set_xlim(left=20, right=35)
+        # axes[0, 0].set_xticks([20, 35] + instabSpeedTicks)
+        # axes[1, 0].set_ylim(bottom=0,top=510)
 
         dosave = not not fname
         plt.show(block=(not dosave))

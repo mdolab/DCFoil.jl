@@ -29,9 +29,9 @@ tipMass = false
 # Uncomment here
 run_static = true
 # run_forced = true
-# run_modal = true
+run_modal = true
 run_flutter = true
-debug = true
+# debug = true
 # tipMass = true
 
 # ************************************************
@@ -46,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fRange = [0.0, 1000.0]  # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [165.0, 175.0] # flow speed [m/s] sweep for flutter
+uRange = [150.0, 210.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************
@@ -73,6 +73,7 @@ DVDict = Dict(
     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
+paramsList = [DVDict]
 wingOptions = Dict(
     "compName" => "akcabay-swept",
     "config" => "wing",
@@ -88,7 +89,7 @@ solverOptions = Dict(
     "name" => "akcabay-swept",
     "debug" => debug,
     "writeTecplotSolution" => false,
-    "gridFile" => "./INPUT/akcabay_swept.dcf",
+    "gridFile" => ["$(@__DIR__)/akcabay_swept_stbd_mesh.dcf"],
     # --- General solver options ---
     "appendageList" => appendageOptions,
     "use_freeSurface" => false,
@@ -102,6 +103,7 @@ solverOptions = Dict(
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fRange" => fRange,
+    "df"=> df,
     "tipForceMag" => tipForceMag,
     # --- Eigen solve ---
     "run_modal" => run_modal,
@@ -157,7 +159,7 @@ solverOptions["outputDir"] = outputDir
 GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
-solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageList[1])
+solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)

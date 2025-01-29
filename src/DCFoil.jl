@@ -197,8 +197,9 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
             push!(FEMESHList, FEMESH)
 
             # println("mesh here\n", FEMESH.mesh)
-
-            TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
+            if solverOptions["writeTecplotSolution"] && solverOptions["use_nlll"]
+                TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
+            end
         end
 
         push!(FOILList, FOIL)

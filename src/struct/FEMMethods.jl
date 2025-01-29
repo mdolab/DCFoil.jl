@@ -515,6 +515,8 @@ function populate_matrices!(
         dR1 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
         dR2 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
         dR3 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
+
+        # println("elem: $(elemIdx)\t coords", coordMat[n1, :])
         lᵉ = √(dR1^2 + dR2^2 + dR3^2) # length of elem
         # nVec = [dR1, dR2, dR3] / lᵉ # normalize
         if elemIdx <= nElemWing
