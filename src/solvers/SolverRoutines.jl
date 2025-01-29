@@ -27,6 +27,7 @@ using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 using ..EBBeam: EBBeam as BeamElement
 using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex, DTYPE
+using ..Rotations: get_rotate3dMat
 
 # ==============================================================================
 #                         Solver routines
@@ -113,7 +114,7 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
     if elemType == "COMP2"
         angleDefault = deg2rad(90) # default angle of rotation of the axes from global wing to match local beam
         axisDefault = "z"
-        T1 = get_rotate3dMat(angleDefault, axis=axisDefault)
+        T1 = get_rotate3dMat(angleDefault, axisDefault)
         T = T1
         Z = zeros(3, 3)
         transMatL2G = [
@@ -126,7 +127,7 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
         if appendageOptions["config"] == "t-foil"
             angleDefault = deg2rad(-90)
             axisDefault = "x"
-            T2 = get_rotate3dMat(angleDefault, axis=axisDefault)
+            T2 = get_rotate3dMat(angleDefault, axisDefault)
             T = T2 * T1
             transMatL2G = [
                 T Z Z
@@ -810,38 +811,6 @@ function find_signChange(x)
 
 end
 
-function get_rotate3dMat(rot; axis="x")
-    """
-    Give rotation matrix about axis by rot radians (RH rule!)
-    """
-    rotMat = zeros(DTYPE, 3, 3)
-    # rotMat = @SMatrix zeros(Float64, 3, 3)
-    c = cos(rot)
-    s = sin(rot)
-    if axis == "x"
-        rotMat = [
-            1 0 0
-            0 c -s
-            0 s c
-        ]
-    elseif axis == "y"
-        rotMat = [
-            c 0 s
-            0 1 0
-            -s 0 c
-        ]
-    elseif axis == "z"
-        rotMat = [
-            c -s 0
-            s c 0
-            0 0 1
-        ]
-    else
-        println("Only axis rotation implemented")
-    end
-    return rotMat
-end
-
 function transform_euler_ang(phi, theta, psi; rotType=1)
     """
     Parameters
@@ -854,9 +823,9 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
         1 - This is 3-2-1 rotation (yaw, pitch, roll)
         2 - This is 1-2-3 rotation (roll, pitch, yaw)
     """
-    taux = get_rotate3dMat(phi, axis="x")
-    tauy = get_rotate3dMat(theta, axis="y")
-    tauz = get_rotate3dMat(psi, axis="z")
+    taux = get_rotate3dMat(phi, "x")
+    tauy = get_rotate3dMat(theta, "y")
+    tauz = get_rotate3dMat(psi, "z")
 
     if rotType == 1
         RMat = taux * tauy * tauz
@@ -872,6 +841,7 @@ end
 function compute_anglesFromVector(V)
     """
     Compute angles from a vector where V1 is streamwise
+    For lifting line code
     """
     V1 = V[XDIM]
     V2 = V[YDIM]
@@ -908,91 +878,6 @@ function compute_vectorFromAngle(alpha, beta, Uinf)
     return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sinasinb
 end
 
-
-function get_transMat(dR1, dR2, dR3, l, elemType="BT2")
-    """
-    Returns the transformation matrix for a given element type into 3D space
-
-    Inputs
-    -------
-        dR: vector along beam length
-        l: length of element
-        elemType: element type
-    """
-    # This line breaks when the vector is straight up and down
-    # TODO: there is probably a better angle parametrization like Rodrigues or quaternions!
-    if abs_cs_safe(real(dR1)) < MEPSLARGE && abs_cs_safe(real(dR2)) < MEPSLARGE # beam is straight up and down
-        rxyz_div = 1.0 / √(dR1^2 + dR2^2 + dR3^2)
-        ca = dR1 * rxyz_div
-        cb = dR2 * rxyz_div
-        cc = dR3 * rxyz_div
-        T1 = get_rotate3dMat(-deg2rad(90); axis="x")
-        T2 = get_rotate3dMat(-deg2rad(90); axis="z")
-        T = T2 * T1
-    else
-        # beta is the angle above the xy plane
-        rxy_div = 1 / √(dR1^2 + dR2^2) # length of projection onto xy plane
-        calpha = dR1 * rxy_div
-        salpha = dR2 * rxy_div
-        cbeta = 1 / rxy_div / l
-        sbeta = dR3 / l
-        # Direction cosine matrix to get from 3d space to having x-axis be the long dimension
-        T = [
-            calpha*cbeta salpha calpha*sbeta
-            -salpha*cbeta calpha -salpha*sbeta
-            -sbeta 0.0 cbeta
-        ]
-    end
-    @ignore_derivatives() do
-        if any(isnan.(T))
-            println("NaN in transformation matrix")
-            println("dR1", dR1)
-            println("dR2", dR2)
-            # show(stdout, "text/plain", T)
-        end
-    end
-
-    Z = zeros(DTYPE, 3, 3)
-
-    if elemType == "BT2"
-        # Because BT2 had reduced DOFs, we need to transform the reduced DOFs into 3D space which results in storing more numbers
-        Γ = Matrix(I, 8, 8)
-    elseif elemType == "bend-twist"
-        Γ = Matrix(I, 6, 6)
-    elseif elemType == "BT3"
-        Γ = Matrix(I, 10, 10)
-    elseif elemType == "bend"
-        # 4x12
-        Γ = [
-            T Z Z Z
-            Z T Z Z
-            Z Z T Z
-            Z Z Z T
-        ]
-        # Γ = Matrix(I, 4, 4)
-    elseif elemType == "BEAM3D"
-        # 12x12
-        Γ = [
-            T Z Z Z
-            Z T Z Z
-            Z Z T Z
-            Z Z Z T
-        ]
-    elseif elemType == "COMP2"
-        Γ = [
-            T Z Z Z Z Z
-            Z T Z Z Z Z
-            Z Z T Z Z Z
-            Z Z Z T Z Z
-            Z Z Z Z T Z
-            Z Z Z Z Z T
-        ]
-    else
-        error("Unsupported element type")
-    end
-
-    return Γ
-end
 
 
 function do_linear_interp(xpt, ypt, xqvec)

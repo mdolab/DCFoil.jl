@@ -40,6 +40,7 @@ using ..Preprocessing
 using ..Utilities
 using ..FEMMethods
 using ..Interpolation
+using ..Rotations
 
 # ==============================================================================
 #                         Free surface effects
@@ -895,7 +896,8 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         #   Transformation of AIC
         # ---------------------------
         # Aerodynamics need to happen in global reference frame
-        Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
+        # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
+        Γ = Rotations.get_transMat(dR1, dR2, dR3, 1.0)
         ΓT = transpose(Γ)
         KLocal_trans = ΓT[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
         CLocal_trans = ΓT[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]

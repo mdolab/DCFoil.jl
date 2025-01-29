@@ -30,6 +30,7 @@ using ..Utilities: Utilities, compute_KS
 using ..Preprocessing: Preprocessing
 using ..DCFoil: DTYPE
 using ..SolverRoutines: SolverRoutines, compute_anglesFromVector, compute_vectorFromAngle, normalize_3Dvector, cross3D
+using ..Rotations
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
 
@@ -212,7 +213,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     Uvec = [cos(deg2rad(α0)), 0.0, sin(deg2rad(α0))] * solverOptions["Uinf"]
 
     # Rotate by RH rule by leeway angle
-    Tz = SolverRoutines.get_rotate3dMat(deg2rad(β0); axis="z")
+    Tz = Rotations.get_rotate3dMat(deg2rad(β0), "z")
     Uvec = Tz * Uvec
 
     if solverOptions["use_freeSurface"]

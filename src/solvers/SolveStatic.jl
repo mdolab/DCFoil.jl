@@ -1695,6 +1695,20 @@ function compute_residualsFromCoords(
     return resVec
 end
 
+function compute_structResiduals(structStates, hydroStates, xVec)
+    
+    
+    resVec = Kss * structStates - Fhydro
+    
+    return resVec    
+end
+
+function compute_∂rs∂γTψ()
+    """
+    Partial derivative of the structural residuals wrt the flow states
+    """
+end
+
 function compute_directMatrix(
     ∂r∂u::Matrix, ∂r∂x::Matrix;
     solverParams=nothing)

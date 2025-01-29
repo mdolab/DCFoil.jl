@@ -9,7 +9,7 @@ using LinearAlgebra
 using Plots, DelimitedFiles
 
 include("../src/DCFoil.jl")
-using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods
+using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, Rotations
 
 # ==============================================================================
 #                         BEAM PROPERTIES
@@ -845,7 +845,7 @@ function test_FECOMP2()
     ebVec = 0.25 * chordVec .+ abVec
     FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], length(chordVec), zeros(2, 2))
     globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    T1 = Rotations.get_rotate3dMat(angleDefault, axisDefault)
     T = I(3)
     transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -951,7 +951,7 @@ function test_fullwing(DVDict, solverOptions)
     chordVec = DVDict["c"]
     ebVec = 0.25 * chordVec .+ abVec
     globalK, globalM, globalF = FEMMethods.assemble(structMesh, elemConn, abVec, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault)
+    T1 = Rotations.get_rotate3dMat(angleDefault, axisDefault)
     # T = T1
     T = I(3)
     transMatL2G = [

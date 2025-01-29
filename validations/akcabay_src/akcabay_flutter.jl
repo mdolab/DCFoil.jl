@@ -88,6 +88,7 @@ solverOptions = Dict(
     "name" => "akcabay-swept",
     "debug" => debug,
     "writeTecplotSolution" => false,
+    "gridFile" => "./INPUT/akcabay_swept.dcf",
     # --- General solver options ---
     "appendageList" => appendageOptions,
     "use_freeSurface" => false,
@@ -143,15 +144,27 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-SOL = DCFoil.run_model(
-    [DVDict],
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
+# DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+# SOL = DCFoil.run_model(
+#     [DVDict],
+#     evalFuncs;
+#     # --- Optional args ---
+#     solverOptions=solverOptions
+# )
+# costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
+# costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")
+
+GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageList[1])
+SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
+costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
+    mode="ADJOINT",
+    # mode="FiDi",
 )
-costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")
 
 # Manual FD
 dh = 8e-3

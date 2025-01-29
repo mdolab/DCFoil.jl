@@ -115,7 +115,7 @@ def setup(args, comm, files: dict):
             dvName="sweep",
             value=0.0,
             func=sweep_rot_func,
-            lower=-30.0,
+            lower=0.0,
             upper=30.0,
             scale=1,
         )

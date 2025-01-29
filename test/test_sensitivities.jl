@@ -511,6 +511,121 @@ function test_pkprofile(DVDict, solverOptions)
     # SolveFlutter.compute_costFuncs(DVDict, solverOptions)
     funcsSensAD = SolveFlutter.evalFuncsSens(DVDict, solverOptions; mode="RAD")
 end
+
+nNodes = 4
+DVDict = Dict(
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(-15.0), # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12, # thickness-to-chord ratio
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
+    "rake" => 0.0, # rake angle wrt flow [deg]
+)
+wingOptions = Dict(
+    "material" => "cfrp", # preselect from material library
+    "nNodes" => nNodes,
+    "config" => "wing",
+)
+solverOptions = Dict(
+    # --- I/O ---
+    "name" => "test",
+    "debug" => false,
+    "outputDir" => "./test_out/",
+    # --- General solver options ---
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
+    "appendageList" => [wingOptions],
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_tipMass" => false,
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # --- Static solve ---
+    "run_static" => false,
+    # --- Forced solve ---
+    "run_forced" => false,
+    "fRange" => [0.0, 1000.0],
+    "tipForceMag" => 0.5 * 0.5 * 1000 * 100 * 0.03,
+    # --- Eigen solve ---
+    "run_modal" => false,
+    "run_flutter" => true,
+    "nModes" => 4,
+    "uRange" => [187.0, 190.0],
+    "maxQIter" => 100,
+    "rhoKS" => 100.0,
+)
+
+# ************************************************
+#     DV Dictionaries (see INPUT directory)
+# ************************************************
+nNodes = 3 # spatial nodes
+nNodesStrut = 3 # spatial nodes
+
+DVDict2 = Dict(
+    "alfa0" => 2.0, # initial angle of attack [deg]
+    "sweep" => deg2rad(0.0), # sweep angle [rad]
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "c" => 0.1 * ones(nNodes), # chord length [m]
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(-15), # fiber angle global [rad]
+    # --- Strut vars ---
+    "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
+    "rake" => 0.0,
+    "beta" => 0.0, # yaw angle wrt flow [deg]
+    "s_strut" => 0.4, # from Yingqian
+    "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+    "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+    "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+    "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
+)
+
+wingOptions2 = Dict(
+    "compName" => "akcabay-div",
+    "material" => "cfrp", # preselect from material library
+    "nNodes" => nNodes,
+    "nNodeStrut" => nNodesStrut,
+    "config" => "wing",
+    "use_tipMass" => false,
+    "xMount" => 0.0,
+)
+appendageOptions2 = [wingOptions2]
+solverOptions2 = Dict(
+    # --- I/O ---
+    "name" => "akcabay-div",
+    "debug" => false,
+    # --- General solver options ---
+    "Uinf" => 5.0, # free stream velocity [m/s]
+    "rhof" => 1000.0, # fluid density [kg/m³]
+    "appendageList" => appendageOptions2,
+    "gravityVector" => [0.0, 0.0, -9.81],
+    "use_freeSurface" => false,
+    "use_cavitation" => false,
+    "use_ventilation" => false,
+    # --- Static solve ---
+    "run_static" => true,
+    "run_body" => false,
+)
+
+@testset "Test sensitivities" begin
+    # Write your tests here.
+    # ************************************************
+    #     Unit test derivative tests
+    # ************************************************
+    @test test_eigenvalueAD() <= 1e-5 # eigenvalue dot product
+    # @test test_interp() <= 1e-1
+    # @test test_hydroderiv(DVDict, solverOptions) <= 1e-4
+    # @test test_staticDeriv(DVDict2, solverOptions2, wingOptions2) >= 4
+    # @test test_staticdrdu(DVDict2, solverOptions2, wingOptions2) <= 1e-4
+end
+
 # # ==============================================================================
 # #                         MAIN DRIVER
 # # ==============================================================================

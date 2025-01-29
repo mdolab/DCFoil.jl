@@ -285,12 +285,20 @@ class DCFOIL:
 
     def set_structDamping(self):
         """
-        When running optimization, the alpha and beta parameters in the proportional damping model have to be held constant for a fair optimization
+        When running optimization, the alpha and beta parameters in the proportional damping model
+        have to be held constant for a fair optimization otherwise we might exploit natural frequencies
         """
 
-        alphaConst, betaConst = self.DCFoil.FEMMethods.compute_proportional_damping(
-            Ks, Ms, appendageParams["zeta"], solverOptions["nModes"]
-        )
+        # Check if the solverOptions has the damping parameters
+        if "alphaConst" in self.solverOptions.keys() or "betaConst" in self.solverOptions.keys():
+            DCFOILWarning("The structural damping constants are already set")
+
+        else:
+            # Set the damping parameters
+            solverOptions = self.DCFoil.set_structDamping(self.LEcoords, self.TEcoords, self.nodeConn, self.appendageParamsList[0], self.solverOptions, self.solverOptions["appendageList"][0])
+
+            # Update solver options
+            self.solverOptions = solverOptions
 
     def solve(self):
         """

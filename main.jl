@@ -5,12 +5,12 @@
 # @Desc    :   Main executable for running DCFoil
 
 using Printf, Dates, Profile
-# using Debugger: @run
+using Debugger: @run
 
 
 # This is the way to import it manually in dev mode
 include("src/DCFoil.jl")
-using .DCFoil: RealOrComplex
+using .DCFoil
 # Import static package
 # using DCFoil
 
@@ -31,9 +31,9 @@ debug = false
 tipMass = false
 
 # Uncomment here
-run_static = true
+# run_static = true
 run_forced = true
-run_modal = true
+# run_modal = true
 run_flutter = true
 # debug = true
 # tipMass = true
@@ -203,6 +203,7 @@ solverOptions["outputDir"] = outputDir
 GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageList[1])
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
@@ -210,3 +211,4 @@ costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TE
     mode="ADJOINT",
     # mode="FiDi",
 )
+# TODO COMMIT THIS CODE at home 

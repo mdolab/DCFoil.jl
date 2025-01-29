@@ -294,9 +294,13 @@ function setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageO
     Ks, Ms, _ = FEMMethods.apply_BCs(globalKs, globalMs, globalF, DOFBlankingList)
 
     # ---------------------------
-    #   Get damping
+    #   Get structural damping
     # ---------------------------
-    alphaConst, betaConst = FEMMethods.compute_proportional_damping(real(Ks), real(Ms), appendageParams["zeta"], solverOptions["nModes"])
+    # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
+    haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
+    # alphaConst, betaConst = FEMMethods.compute_proportional_damping(real(Ks), real(Ms), appendageParams["zeta"], solverOptions["nModes"])
+    alphaConst = solverOptions["alphaConst"]
+    betaConst = solverOptions["betaConst"]
     Cs = alphaConst * Ms .+ betaConst * Ks
     globalCs = alphaConst * globalMs .+ betaConst * globalKs
 
