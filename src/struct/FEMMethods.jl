@@ -1005,7 +1005,10 @@ function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, n
     # stiffPropConst = 0.0
 
 
-    println("Natural frequencies for struct. damping:\n$(fns)")
+    println("Natural frequencies for struct. damping:\nMode\t[Hz]")
+    for (ii, fn) in enumerate(fns)
+        println("$(ii)\t$(fn)")
+    end
 
     return massPropConst, stiffPropConst
 end
