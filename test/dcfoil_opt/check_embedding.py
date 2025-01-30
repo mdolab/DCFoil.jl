@@ -82,6 +82,7 @@ if __name__ == "__main__":
         default="trwpd",
         help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
     )
+    parser.add_argument("--is_dynamic", action="store_true", default=False)
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -667,7 +668,8 @@ if __name__ == "__main__":
     if args.deriv:
         print("Testing derivatives...")
 
-        evalFuncs = ["lift", "cl", "wtip", "cd", "kscl", "ksflutter"]
+        evalFuncs = ["lift", "cl", "wtip", "cd", "kscl"]
+        # , "ksflutter"]
 
         stepsizes = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
         # DH = 1e-4

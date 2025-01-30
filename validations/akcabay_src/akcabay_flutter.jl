@@ -29,9 +29,9 @@ tipMass = false
 # Uncomment here
 run_static = true
 # run_forced = true
-# run_modal = true
+run_modal = true
 run_flutter = true
-debug = true
+# debug = true
 # tipMass = true
 
 # ************************************************
@@ -46,7 +46,7 @@ nModes = 4 # number of modes to solve for;
 df = 1
 fRange = [0.0, 1000.0]  # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
-uRange = [165.0, 175.0] # flow speed [m/s] sweep for flutter
+uRange = [160.0, 180.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
 # ************************************************
@@ -73,6 +73,7 @@ DVDict = Dict(
     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
+paramsList = [DVDict]
 wingOptions = Dict(
     "compName" => "akcabay-swept",
     "config" => "wing",
@@ -88,6 +89,7 @@ solverOptions = Dict(
     "name" => "akcabay-swept",
     "debug" => debug,
     "writeTecplotSolution" => false,
+    "gridFile" => ["$(@__DIR__)/akcabay_swept_stbd_mesh.dcf"],
     # --- General solver options ---
     "appendageList" => appendageOptions,
     "use_freeSurface" => false,
@@ -101,6 +103,7 @@ solverOptions = Dict(
     # --- Forced solve ---
     "run_forced" => run_forced,
     "fRange" => fRange,
+    "df"=> df,
     "tipForceMag" => tipForceMag,
     # --- Eigen solve ---
     "run_modal" => run_modal,
@@ -143,30 +146,25 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
-SOL = DCFoil.run_model(
-    [DVDict],
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
-)
-costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")
+# DCFoil.init_model([DVDict], evalFuncs; solverOptions=solverOptions)
+# SOL = DCFoil.run_model(
+#     [DVDict],
+#     evalFuncs;
+#     # --- Optional args ---
+#     solverOptions=solverOptions
+# )
+# costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
+# costFuncsSens = DCFoil.evalFuncsSens(DVDict, evalFuncs, solverOptions; mode="RAD")
 
-# Manual FD
-dh = 8e-3
+GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
+SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
+costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+using Test
+@testset "test flutter" begin
 
-# dvKey = "sweep"
-# dvKey = "theta_f"
-# dvKey = "s" # not working for this case :/
-
-DVDict[dvKey] += dh
-SOLDICT = DCFoil.run_model(
-    DVDict,
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
-)
-costFuncs_d = DCFoil.evalFuncs(evalFuncs, solverOptions)
-costFuncsSensFD = (costFuncs_d["ksflutter"] - costFuncs["ksflutter"]) / dh
-DVDict[dvKey] -= dh
+    @test abs(costFuncs["ksflutter"] - 0.0507) < 1e-2
+end

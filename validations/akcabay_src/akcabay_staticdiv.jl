@@ -28,7 +28,7 @@ tipMass = false
 
 # Uncomment here
 run_static = true
-run_forced = true
+# run_forced = true
 run_modal = true
 run_flutter = true
 # debug = true
@@ -44,7 +44,7 @@ nModes = 4 # number of modes to solve for;
 # This is because poles bifurcate
 # nModes is really the starting number of structural modes you want to solve for
 df = 1
-fRange = [0.0,1000.0], # forcing and search frequency sweep [Hz]
+fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
 # uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [20.0, 40.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -60,9 +60,10 @@ DVDict = Dict(
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12*ones(nNodes), # thickness-to-chord ratio
+    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
     "x_ab" => 0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(-15), # fiber angle global [rad]
+    "rake" => 0.0,
     # --- Strut vars ---
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
@@ -72,7 +73,17 @@ DVDict = Dict(
     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 )
-
+paramsList = [DVDict]
+wingOptions = Dict(
+    "compName" => "akcabay",
+    "config" => "wing",
+    "nNodes" => nNodes,
+    "nNodeStrut" => 10,
+    "material" => "cfrp", # preselect from material library
+    "use_tipMass" => tipMass,
+    "xMount" => 0.0,
+)
+appendageOptions = [wingOptions]
 solverOptions = Dict(
     # ---------------------------
     #   I/O
@@ -80,9 +91,11 @@ solverOptions = Dict(
     "name" => "akcabay",
     "debug" => debug,
     "writeTecplotSolution" => false,
+    "gridFile" => ["$(@__DIR__)/akcabay_stbd_mesh.dcf"],
     # ---------------------------
     #   General appendage options
     # ---------------------------
+    "appendageList" => appendageOptions,
     "config" => "wing",
     "nNodes" => nNodes,
     "nNodeStrut" => 10,
@@ -137,11 +150,25 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-DCFoil.init_model(DVDict, evalFuncs; solverOptions = solverOptions)
-SOL = DCFoil.run_model(
-    DVDict,
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
-)
-costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
+# DCFoil.init_model(DVDict, evalFuncs; solverOptions = solverOptions)
+# SOL = DCFoil.run_model(
+#     DVDict,
+#     evalFuncs;
+#     # --- Optional args ---
+#     solverOptions=solverOptions
+# )
+# costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
+GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
+SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
+costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+using Test
+
+@testset "test static div" begin
+
+    @test abs(costFuncs["ksflutter"] - 0.361) < 1e-2
+end
+

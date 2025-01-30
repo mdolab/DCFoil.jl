@@ -43,7 +43,7 @@ nNodesStrut = 10 # spatial nodes
 nModes = 5 # number of flutter and system modes to solve for
 df = 1
 dU = 1
-fRange = [0.0,1000.0], # forcing frequency [Hz] sweep
+fRange = [0.0, 1000.0] # forcing frequency [Hz] sweep
 fSearch = 0.01:df:1000.0 # frequency search range [Hz] for flutter modes
 uSweep = 5:dU:30.0 # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
@@ -59,10 +59,11 @@ DVDict = Dict(
     "c" => 0.0925 * ones(nNodes), # chord length [m]
     "s" => 0.2438, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.03459*ones(nNodes), # thickness-to-chord ratio
+    "toc" => 0.03459 * ones(nNodes), # thickness-to-chord ratio
     "x_ab" => 0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     "s_strut" => 0.4, # from Yingqian
+    "rake" => 0.0, # rake angle [deg]
     # --- Strut vars ---
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
@@ -115,7 +116,7 @@ solverOptions = Dict(
     "run_modal" => run_modal,
     "run_flutter" => run_flutter,
     "nModes" => nModes,
-    "uRange" => [1.0,2.0],
+    "uRange" => [1.0, 2.0],
     "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 100.0,
 )
@@ -128,11 +129,17 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment"]
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
+GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 for theta in theta_f_sweep
     DVDict["theta_f"] = theta
     outputDir = @sprintf("./OUTPUT/kramer_theta%02.1f/", rad2deg(theta))
     mkpath(outputDir)
     solverOptions["outputDir"] = outputDir
-    DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    DCFoil.run_model(DVDict, evalFuncs;solverOptions=solverOptions)
+    # DCFoil.init_model(DVDict, evalFuncs; solverOptions=solverOptions)
+    # DCFoil.run_model(DVDict, evalFuncs;solverOptions=solverOptions)
+    DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+    solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
+    SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+    DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
 end

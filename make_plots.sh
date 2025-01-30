@@ -65,6 +65,9 @@ cd postprocessing
 # python ./run_postprocessing.py --cases 2024-02-24_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_paper
 # python ./run_postprocessing.py --cases 2024-02-24_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
 
+python ./run_postprocessing.py --cases 2025-01-29_akcabay-swept_cfrp_f15.0_w-15.0 --is_flutter --is_paper
+# python ./run_postprocessing.py --cases 2025-01-29_akcabay_cfrp_f-15.0_w0.0 --is_flutter --is_paper
+
 # ************************************************
 #     t-foil paper plots
 # ************************************************
@@ -78,7 +81,7 @@ cd postprocessing
 # python ./run_postprocessing.py --cases 2025-01-05_mothrudder-fs_cfrp_f0.0 2025-01-05_mothrudder-nofs_cfrp_f0.0 --is_flutter --is_paper
 
 # python ./run_postprocessing.py --cases 2025-01-07_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper
-python ./run_postprocessing.py --cases 2025-01-15_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper --is_flutter
+# python ./run_postprocessing.py --cases 2025-01-15_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper --is_flutter
 
 cd ..
 

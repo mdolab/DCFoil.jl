@@ -187,7 +187,8 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
-        transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -256,7 +257,8 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     # ************************************************
     #     FEM assembly
     # ************************************************
-    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; config=appendageOptions["config"])
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; 
+    config=appendageOptions["config"])
 
     # ---------------------------
     #   Apply BC blanking
@@ -265,9 +267,11 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     Ks, Ms, F = FEMMethods.apply_BCs(real.(globalKs), real.(globalMs), real.(globalF), ChainRulesCore.ignore_derivatives(DOFBlankingList))
 
     # ---------------------------
-    #   Get damping
+    #   Get structural damping
     # ---------------------------
-    alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
+    # alphaConst, betaConst = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
+    alphaConst = solverOptions["alphaConst"]
+    betaConst = solverOptions["betaConst"]
     Cs = alphaConst * Ms .+ betaConst * Ks
     globalCs = alphaConst * globalMs .+ betaConst * globalKs
 
@@ -280,7 +284,8 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
-        transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -346,7 +351,8 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Dict, 
         x_αbBulb = -0.1 # [m]
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
-        transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -2008,7 +2014,6 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-
 function get_sol(DVDict::Dict, solverOptions::Dict)
     """
     Wrapper function
@@ -2035,6 +2040,10 @@ function compute_solFromCoords(LECoords, TECoords, nodeConn, appendageParams, so
     alfa0 = appendageParams["alfa0"]
     theta_f = appendageParams["theta_f"]
     toc = appendageParams["toc"]
+
+    # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
+    haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
+
     obj, SOL = cost_funcsFromCoordsDVs(ptVec, nodeConn, alfa0, theta_f, toc, appendageParams, solverOptions; return_all=true)
     return SOL
 end
@@ -2109,6 +2118,10 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, sol
 
     LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
     ptVec, mm, NPT = Utilities.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
+
+    # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
+    haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
+
     funcsSensOut = Dict()
 
     for evalFuncSensKey in evalFuncsSensList

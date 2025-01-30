@@ -28,7 +28,7 @@ for headerName in [
     # "../dcfoil/mach",
     # --- Not used in this script but needed for submodules ---
     "constants/SolutionConstants", "constants/DesignConstants",
-    "utils/Utilities", "utils/Interpolation",
+    "utils/Utilities", "utils/Interpolation", "utils/Rotations",
     "struct/EBBeam",
     "CostFunctions", "DesignVariables",
     "struct/MaterialLibrary", "bodydynamics/HullLibrary",
@@ -49,8 +49,8 @@ for headerName in [
     "InitModel",
     "solvers/DCFoilSolution",
     "io/TecplotIO", "io/MeshIO",
+    # "solvers/SolveBodyDynamics"
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
-    # include("./solvers/SolveBodyDynamics.jl")
 ]
     include(headerName * ".jl")
 end
@@ -69,7 +69,7 @@ using .SolutionConstants: ELEMTYPE
 #                         API functions
 # ==============================================================================
 # --- Public functions ---
-export init_model, run_model, evalFuncs, evalFuncsSens
+export init_model, run_model, evalFuncs, evalFuncsSens, RealOrComplex
 
 
 function setup_model(DVDictList; solverOptions)
@@ -135,6 +135,21 @@ function setup_model(DVDictList; solverOptions)
 
 end
 
+function set_structDamping(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    """
+    Run this routine at the beginning of any dynamic analysis or optimization to fix the damping
+    """
+
+    FOIL, STRUT, _, FEMESH, _, _, _ = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    x_αbVec = appendageParams["x_ab"]
+    αStruct, βStruct = FEMMethods.compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, ELEMTYPE, appendageParams, appendageOptions, solverOptions)
+
+    solverOptions["alphaConst"] = αStruct
+    solverOptions["betaConst"] = βStruct
+
+    return solverOptions
+end
+
 function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParamsList)
     """
     Things that need to be done before running the model.
@@ -182,8 +197,9 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
             push!(FEMESHList, FEMESH)
 
             # println("mesh here\n", FEMESH.mesh)
-
-            TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
+            if solverOptions["writeTecplotSolution"] && solverOptions["use_nlll"]
+                TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
+            end
         end
 
         push!(FOILList, FOIL)
@@ -256,9 +272,9 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
             # if isnothing(solverOptions["gridFile"])
             #     STATSOL = SolveStatic.compute_solFromDVDict(appendageParamsList, solverOptions, evalFuncsList; iComp=iComp, CLMain=CLMain)
             # else
-                tStatic = @elapsed begin
-                    STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
-                end
+            tStatic = @elapsed begin
+                STATSOL = SolveStatic.compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
+            end
             # end
 
             push!(STATSOLLIST, STATSOL)
@@ -295,9 +311,9 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
             appendageParams = appendageParamsList[1]
             # structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
             structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
-            if solverOptions["writeTecplotSolution"]
-                SolveFlutter.write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, FEMESH.mesh, FEMESH.chord, outputDir; solverOptions=solverOptions)
-            end
+            # if solverOptions["writeTecplotSolution"]
+            #     SolveFlutter.write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, FEMESH.mesh, FEMESH.chord, outputDir; solverOptions=solverOptions)
+            # end
         end
 
         if solverOptions["run_flutter"]
@@ -358,7 +374,7 @@ function write_solution(SOLDICT, solverOptions, appendageParamsList; callNumber=
         FLUTTERSOL = SOLDICT["FLUTTER"]
         SolveFlutter.write_sol(FLUTTERSOL, outputDir)
 
-        if solverOptions["writeTecplotSolution"]
+        if solverOptions["writeTecplotSolution"] && solverOptions["run_static"]
             STATSOL = STATSOLLIST[iComp]
             FEMESH = STATSOL.FEMESH
             SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
@@ -418,10 +434,10 @@ function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsL
         end
 
     end
-    if solverOptions["run_forced"]
-        forcedEvalFuncs = [key for key in evalFuncsList if key in forcedCostFuncs]
-        SolveForced.evalFuncs()
-    end
+    # if solverOptions["run_forced"]
+    #     forcedEvalFuncs = [key for key in evalFuncsList if key in forcedCostFuncs]
+    #     SolveForced.evalFuncs()
+    # end
     if solverOptions["run_flutter"]
 
         FLUTTERSOL = SOLDICT["FLUTTER"]

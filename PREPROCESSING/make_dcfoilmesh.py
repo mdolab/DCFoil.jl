@@ -2,7 +2,7 @@
 """
 @File          :   make_dcfoilmesh.py
 @Date created  :   2024/10/14
-@Last modified :   2024/10/14
+@Last modified :   2025/01/29
 @Author        :   Galen Ng
 @Desc          :   Write mesh for dcfoil
 """
@@ -20,10 +20,35 @@ from pathlib import Path
 # ==============================================================================
 import numpy as np
 
+# ==============================================================================
+#                         Helper functions
+# ==============================================================================
+def get_rotationMatrix(ang):
+    """
+    Rotation about z-axis by RH rule
+
+    Parameters
+    ----------
+    ang : float
+        Rotation angle in deg
+
+    Returns
+    -------
+    ndarray
+        Rotation matrix 3x3
+    """
+
+    rotMat = np.array([
+        [np.cos(np.radians(ang)), -np.sin(np.radians(ang)), 0.0],
+        [np.sin(np.radians(ang)), np.cos(np.radians(ang)), 0.0],
+        [0.0, 0.0, 1.0]
+    ])
+
+    return rotMat
 
 n_span = 20  # Number of spanwise points (foil)
 n_strut = 20  # Number of spanwise points (strut)
-xMidchord = 0.0
+xMidchord = 0.0 # Midchord location
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -37,6 +62,7 @@ if __name__ == "__main__":
     parser.add_argument("--strutspan", type=float, default=0.400, help="length of strut [m]")
     parser.add_argument("--rootChord", type=float, default=0.140, help="Root chord [m]")
     parser.add_argument("--tipChord", type=float, default=0.095, help="Tip chord [m]")
+    parser.add_argument("--sweep", type=float, default=0.0, help="Rotation sweep of the midchord line [deg]")
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -72,9 +98,17 @@ if __name__ == "__main__":
         # s_dist = SPAN * (jj + 1) / n_span
         s_frac = s_dist[jj]
         c_frac = c_dist[jj]
-        xLE = xMidchord - c_frac * 0.5
-        f.write(f"{xLE:.8f} {s_frac:.8f} {0.0:.8f}\n")
-        fTecplot.write(f"{xLE:.8f} {s_frac:.8f} {0.0:.8f}\n")
+
+        # Apply rotation
+        rotMat = get_rotationMatrix(-args.sweep)
+        vec = np.array([xMidchord, s_frac, 0.0])
+        vec = rotMat @ vec
+
+        # Compute LE based on rotated midchord
+        xLE = vec[0] - c_frac * 0.5
+
+        f.write(f"{xLE:.8f} {vec[1]:.8f} {vec[2]:.8f}\n")
+        fTecplot.write(f"{xLE:.8f} {vec[1]:.8f} {vec[2]:.8f}\n")
 
     # ---------------------------
     #   Trailing Edge
@@ -87,9 +121,17 @@ if __name__ == "__main__":
         # s_dist = SPAN * (jj + 1) / n_span
         s_frac = s_dist[jj]
         c_frac = c_dist[jj]
-        xTE = xMidchord + c_frac * 0.5
-        f.write(f"{xTE:.8f} {s_frac:.8f} {0.0:.8f}\n")
-        fTecplot.write(f"{xTE:.8f} {s_frac:.8f} {0.0:.8f}\n")
+
+        # Apply rotation
+        rotMat = get_rotationMatrix(-args.sweep)
+        vec = np.array([xMidchord, s_frac, 0.0])
+        vec = rotMat @ vec
+
+        # Compute LE based on rotated midchord
+        xTE = vec[0] + c_frac * 0.5
+
+        f.write(f"{xTE:.8f} {vec[1]:.8f} {vec[2]:.8f}\n")
+        fTecplot.write(f"{xTE:.8f} {vec[1]:.8f} {vec[2]:.8f}\n")
 
     f.close()
     fTecplot.close()

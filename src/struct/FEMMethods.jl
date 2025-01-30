@@ -30,9 +30,10 @@ using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..SolverRoutines
 using ..BeamProperties
 using ..DesignConstants: DesignConstants, DynamicFoil, CONFIGS
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
+using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, ELEMTYPE
 using ..Preprocessing
 using ..MaterialLibrary
+using ..Rotations
 
 struct StructMesh{TF,TC,TI}
     """
@@ -184,7 +185,8 @@ function make_componentMesh(
         (nElem, nNodesPerElem) array saying which elements hold which nodes
     """
     rot = deg2rad(rake)
-    transMat = SolverRoutines.get_rotate3dMat(rot; axis="y")
+    # transMat = SolverRoutines.get_rotate3dMat(rot; axis="y")
+    transMat = Rotations.get_rotate3dMat(rot, "y")
     if config == "wing"
         nNodeTot = nElem + 1
         nElemTot = nElem
@@ -425,38 +427,6 @@ function fill_mesh(
 end
 
 
-function rotate3d(dataVec, rot; axis="x")
-    """
-    Rotates a 3D vector about axis by rot radians (RH rule!)
-    """
-    # rotMat = zeros(Float64, 3, 3)
-    # rotMat = @SMatrix zeros(Float64, 3, 3)
-    c = cos(rot)
-    s = sin(rot)
-    if axis == "x"
-        rotMat = [
-            1 0 0
-            0 c -s
-            0 s c
-        ]
-    elseif axis == "y"
-        rotMat = [
-            c 0 s
-            0 1 0
-            -s 0 c
-        ]
-    elseif axis == "z"
-        rotMat = [
-            c -s 0
-            s c 0
-            0 0 1
-        ]
-    else
-        println("Only axis rotation implemented")
-    end
-    transformedVec = rotMat * dataVec
-    return transformedVec
-end
 
 function assemble(StructMesh, x_αbVec,
     FOIL, elemType="bend-twist", constitutive="isotropic";
@@ -545,8 +515,10 @@ function populate_matrices!(
         dR1 = (coordMat[n2, XDIM] - coordMat[n1, XDIM])
         dR2 = (coordMat[n2, YDIM] - coordMat[n1, YDIM])
         dR3 = (coordMat[n2, ZDIM] - coordMat[n1, ZDIM])
+
+        # println("elem: $(elemIdx)\t coords", coordMat[n1, :])
         lᵉ = √(dR1^2 + dR2^2 + dR3^2) # length of elem
-        nVec = [dR1, dR2, dR3] / lᵉ # normalize
+        # nVec = [dR1, dR2, dR3] / lᵉ # normalize
         if elemIdx <= nElemWing
             EIₛ = FOIL.EIₛ[elemIdx]
             EIIPₛ = FOIL.EIIPₛ[elemIdx]
@@ -602,6 +574,8 @@ function populate_matrices!(
                     ab = abVec[wingElem]
                     x_αb = x_αbVec[wingElem]
                 end
+            else
+                error("config not recognized")
             end
         end
 
@@ -627,7 +601,8 @@ function populate_matrices!(
         # The local coordinate system is {u} while the global is {U}
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
-        Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, lᵉ, elemType)
+        # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, lᵉ, elemType)
+        Γ = Rotations.get_transMat(dR1, dR2, dR3, lᵉ)
         ΓT = transpose(Γ)
         kElem = ΓT * kLocal * Γ
         mElem = ΓT * mLocal * Γ
@@ -681,6 +656,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
     if BCCond == "clamped"
         if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
             fixedDOFs = Vector(1:BeamElement.NDOF)
+
         elseif appendageOptions["config"] == "t-foil"
             nElemTot = (appendageOptions["nNodes"] - 1) * 2 + appendageOptions["nNodeStrut"] - 1
             nNodeTot = nElemTot + 1
@@ -973,6 +949,24 @@ function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
     return naturalFreqs, eVecs
 end
 
+
+function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, appendageParams, appendageOptions, solverOptions)
+    """
+    A routine to be called in flutter initialization to set α and β for proportional damping
+    """
+
+    globalKs, globalMs, globalF = assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive; config=appendageOptions["config"])
+
+    # It's OK to assume clamped BCs for the damping computation
+    globalDOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+
+    Ks, Ms, _ = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+
+    αStruct, βStruct = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
+
+    return αStruct, βStruct
+end
+
 function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, nMode::Int64)
     """
     TODO: MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
@@ -1013,10 +1007,14 @@ function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, n
     # stiffPropConst = 0.0
 
 
-    println("Natural frequencies for struct. damping:\n$(fns)")
+    println("Natural frequencies for struct. damping:\nMode\t[Hz]")
+    for (ii, fn) in enumerate(fns)
+        println("$(ii)\t$(fn)")
+    end
 
     return massPropConst, stiffPropConst
 end
+
 
 
 end # end module

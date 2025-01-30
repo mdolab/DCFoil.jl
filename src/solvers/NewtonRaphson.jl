@@ -68,7 +68,7 @@ function do_newton_raphson(
     # ************************************************
     if !isnothing(WorkingListOfParams)
 
-        if solverOptions["use_nlll"]
+        # if solverOptions["use_nlll"]
             if length(WorkingListOfParams) == 4
                 appendageParamsList = WorkingListOfParams[3+iComp]
             else
@@ -79,18 +79,18 @@ function do_newton_raphson(
             xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
 
             res = compute_residuals(u0, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
-        else
-            DVDict = WorkingListOfParams[iComp]
-            x0, DVLengths = Utilities.unpack_dvdict(DVDict)
-            res = compute_residuals(
-                u0, x0, DVLengths;
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                iComp=iComp,
-                CLMain=CLMain,
-                DVDictList=WorkingListOfParams,
-            )
-        end
+        # else
+        #     DVDict = WorkingListOfParams[iComp]
+        #     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+        #     res = compute_residuals(
+        #         u0, x0, DVLengths;
+        #         appendageOptions=appendageOptions,
+        #         solverOptions=solverOptions,
+        #         iComp=iComp,
+        #         CLMain=CLMain,
+        #         DVDictList=WorkingListOfParams,
+        #     )
+        # end
     else
         res = compute_residuals(u0; solverParams=solverParams)
     end
@@ -104,7 +104,7 @@ function do_newton_raphson(
         u = u0
         for ii in 1:maxIters
             if !isnothing(WorkingListOfParams)
-                if solverOptions["use_nlll"]
+                # if solverOptions["use_nlll"]
                     if length(WorkingListOfParams) == 4
                         appendageParamsList = WorkingListOfParams[3+iComp]
                     else
@@ -119,20 +119,20 @@ function do_newton_raphson(
                         appendageParamsList=appendageParamsList,
                         solverParams=solverParams,
                         appendageOptions=appendageOptions, solverOptions=solverOptions)
-                else
+                # else
 
-                    x0, DVLengths = Utilities.unpack_dvdict(DVDict)
-                    res = compute_residuals(u, x0, DVLengths;
-                        appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
-                    ∂r∂u = compute_∂r∂u(u, mode;
-                        DVDictList=WorkingListOfParams,
-                        solverParams=solverParams,
-                        appendageOptions=appendageOptions,
-                        solverOptions=solverOptions,
-                        iComp=iComp,
-                        CLMain=CLMain,
-                    )
-                end
+                #     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+                #     res = compute_residuals(u, x0, DVLengths;
+                #         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
+                #     ∂r∂u = compute_∂r∂u(u, mode;
+                #         DVDictList=WorkingListOfParams,
+                #         solverParams=solverParams,
+                #         appendageOptions=appendageOptions,
+                #         solverOptions=solverOptions,
+                #         iComp=iComp,
+                #         CLMain=CLMain,
+                #     )
+                # end
             else
                 res = compute_residuals(u; solverParams=solverParams)
                 ∂r∂u = compute_∂r∂u(u; solverParams=solverParams, mode=mode)

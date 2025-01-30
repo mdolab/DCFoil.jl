@@ -40,6 +40,7 @@ using ..Preprocessing
 using ..Utilities
 using ..FEMMethods
 using ..Interpolation
+using ..Rotations
 
 # ==============================================================================
 #                         Free surface effects
@@ -500,7 +501,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         ZM = zeros(2, 2)
         ZA = zeros(2)
         ZH = zeros(2, 2, 2)
-        LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ZH, ZH, ZA, ZM, ZA)
+        LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, sweepAng, 0.0, ZH, ZH, ZA, ZM, ZA)
         FlowCond = LiftingLine.FlowConditions([uinf, 0.0, 0.0], uinf, [uinf, 0.0, 0.0], appendageParams["alfa0"], 0.0, solverOptions["rhof"], appendageParams["depth0"])
         LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), real(cla), zeros(3), F, 0.0, CDi, 0.0)
     end
@@ -895,7 +896,8 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         #   Transformation of AIC
         # ---------------------------
         # Aerodynamics need to happen in global reference frame
-        Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
+        # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
+        Γ = Rotations.get_transMat(dR1, dR2, dR3, 1.0)
         ΓT = transpose(Γ)
         KLocal_trans = ΓT[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
         CLocal_trans = ΓT[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
