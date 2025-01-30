@@ -166,6 +166,7 @@ SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOption
 DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 using Test
+
 @testset "test static div" begin
 
     @test abs(costFuncs["ksflutter"] - 0.361) < 1e-2

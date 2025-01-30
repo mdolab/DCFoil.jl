@@ -163,6 +163,12 @@ solverOptions2 = Dict(
 
 end
 
+# ==============================================================================
+#                         Verification cases
+# ==============================================================================
+# These are verification studies published in the 2024 Composite Structures journal paper
+include("../validations/akcabay_src/akcabay_staticdiv.jl")
+include("../validations/akcabay_src/akcabay_flutter.jl")
 
 # ==============================================================================
 #                         Common input for sensitivity tests

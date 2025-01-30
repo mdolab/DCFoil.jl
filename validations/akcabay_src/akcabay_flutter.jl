@@ -163,25 +163,8 @@ solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsLis
 SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
 DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
 costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
-costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TECoords, evalFuncSens, solverOptions;
-    mode="ADJOINT",
-    # mode="FiDi",
-)
+using Test
+@testset "test flutter" begin
 
-# Manual FD
-dh = 8e-3
-
-# dvKey = "sweep"
-# dvKey = "theta_f"
-# dvKey = "s" # not working for this case :/
-
-DVDict[dvKey] += dh
-SOLDICT = DCFoil.run_model(
-    DVDict,
-    evalFuncs;
-    # --- Optional args ---
-    solverOptions=solverOptions
-)
-costFuncs_d = DCFoil.evalFuncs(evalFuncs, solverOptions)
-costFuncsSensFD = (costFuncs_d["ksflutter"] - costFuncs["ksflutter"]) / dh
-DVDict[dvKey] -= dh
+    @test abs(costFuncs["ksflutter"] - 0.0507) < 1e-2
+end
