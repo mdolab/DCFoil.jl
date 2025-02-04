@@ -1703,7 +1703,7 @@ function compute_structResiduals(structStates, hydroStates, xVec)
     return resVec    
 end
 
-function compute_∂rs∂γTψ()
+function compute_∂rs∂γ()
     """
     Partial derivative of the structural residuals wrt the flow states
     """
