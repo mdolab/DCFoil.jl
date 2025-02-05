@@ -10,7 +10,7 @@
 include("../src/hydro/HydroStrip.jl")
 # include("src/hydro/HydroStrip.jl")
 using .HydroStrip # Using the Hydro module
-# using PyCall
+using PythonCall
 using LinearAlgebra
 using Plots, Printf
 

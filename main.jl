@@ -211,4 +211,3 @@ costFuncsSens = DCFoil.evalFuncsSens(SOLDICT, paramsList, LECoords, nodeConn, TE
     mode="ADJOINT",
     # mode="FiDi",
 )
-# TODO COMMIT THIS CODE at home 

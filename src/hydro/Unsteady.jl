@@ -20,7 +20,8 @@ using Printf, DelimitedFiles
 
 # --- Globals ---
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
-using ..DCFoil: DTYPE
+
+const DTYPE = AbstractFloat
 
 function compute_theodorsen(k::DTYPE)
     """

@@ -11,7 +11,7 @@
 module LDTransfer
 
 using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
-using ..SolverRoutines
+using ..Interpolation
 
 
 function transfer_LD(inputVector, XStruct, XHydro; mode="D")
@@ -55,7 +55,7 @@ function compute_transferMatrix(XStruct, XHydro)
         sEval is the vector of locations we have
 
         """
-        valq = SolverRoutines.do_linear_interp(sEval, vals, sLoc)
+        valq = Interpolation.do_linear_interp(sEval, vals, sLoc)
         return valq
     end
 

@@ -20,7 +20,7 @@ using AbstractDifferentiation: AbstractDifferentiation as AD
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
 using Zygote
 using FiniteDifferences
-using PyCall
+using PythonCall
 # using Debugger
 
 # --- DCFoil modules ---
@@ -29,8 +29,8 @@ using ..SolutionConstants: XDIM, YDIM, ZDIM
 using ..Utilities: Utilities, compute_KS
 using ..Preprocessing: Preprocessing
 using ..DCFoil: DTYPE
-using ..SolverRoutines: SolverRoutines, compute_anglesFromVector, compute_vectorFromAngle, normalize_3Dvector, cross3D
-using ..Rotations
+using ..SolverRoutines: SolverRoutines, normalize_3Dvector, cross3D
+using ..Rotations: Rotations, compute_vectorFromAngles, compute_cartAnglesFromVector
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
 
@@ -303,7 +303,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     # Blending parameter for the LAC
     σ = 4 * cos(sweepAng)^2 / (blend^2 * aeroWingSpan^2)
 
-    alpha, beta, Uinf = compute_anglesFromVector(Uvec)
+    alpha, beta, Uinf = compute_cartAnglesFromVector(Uvec)
     uvec = Uvec / Uinf
 
     # Wing area
@@ -1467,9 +1467,9 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
 
 
     angles = [deg2rad(-5), 0.0, deg2rad(5)] # three angles to average properties over...
-    V1 = compute_vectorFromAngle(angles[1], 0.0, 1.0)
-    V2 = compute_vectorFromAngle(angles[2], 0.0, 1.0)
-    V3 = compute_vectorFromAngle(angles[3], 0.0, 1.0)
+    V1 = compute_vectorFromAngles(angles[1], 0.0, 1.0)
+    V2 = compute_vectorFromAngles(angles[2], 0.0, 1.0)
+    V3 = compute_vectorFromAngles(angles[3], 0.0, 1.0)
 
     # println("airfoil x orig:", airfoil_xy_orig[XDIM, :])
     # println("airfoil y orig:", airfoil_xy_orig[YDIM, :])

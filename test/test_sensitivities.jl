@@ -9,7 +9,7 @@ using LinearAlgebra
 using JLD2
 
 include("../src/DCFoil.jl")
-using .DCFoil: DCFoil, SolverRoutines, HydroStrip, SolveFlutter, SolveStatic, FEMMethods
+using .DCFoil: DCFoil, SolverRoutines, HydroStrip, SolveFlutter, SolveStatic, FEMMethods, Interpolation
 # ==============================================================================
 #                         Aero-node tests
 # ==============================================================================
@@ -85,14 +85,14 @@ function test_interp()
     yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0)
     xq = 0.5
 
-    derivs = Zygote.jacobian((x1, x2, x3) -> SolverRoutines.do_linear_interp(x1, x2, x3),
+    derivs = Zygote.jacobian((x1, x2, x3) -> Interpolation.do_linear_interp(x1, x2, x3),
         mesh, yVec, xq)
 
-    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolverRoutines.do_linear_interp(x, yVec, xq),
+    fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Interpolation.do_linear_interp(x, yVec, xq),
         mesh)
-    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolverRoutines.do_linear_interp(mesh, x, xq),
+    fdderivs2, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Interpolation.do_linear_interp(mesh, x, xq),
         yVec)
-    fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> SolverRoutines.do_linear_interp(mesh, yVec, x),
+    fdderivs3, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Interpolation.do_linear_interp(mesh, yVec, x),
         xq)
 
     test1 = derivs[1] - fdderivs1

@@ -157,7 +157,12 @@ julia.install()
 in the Python REPL. You need to do this everytime you update Julia -->
 
 `PythonCall` is the package for wrapping the Julia code.
-We opted for this over PyCall because it's what's used in the OpenMDAO examples
+We opted for this over PyCall because it's what's used in the OpenMDAO examples.
+
+The package `juliapkg` handles the Julia packages.
+A juliapkg.json file is in your python environment (e.g., venv or conda).
+For the first time running, run the `update_juliapkg.py` script.
+For any other problems arising, look at the [juliapkg documentation](https://github.com/JuliaPy/PyJuliaPkg)
 
 <!-- On MacOS, I have only gotten the Conda.jl method to work which requires these runs
 ```

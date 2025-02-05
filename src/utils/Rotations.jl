@@ -2,17 +2,18 @@
 """
 @File          :   Rotations.jl
 @Date created  :   2025/01/26
-@Last modified :   2025/01/28
+@Last modified :   2025/02/05
 @Author        :   Galen Ng
-@Desc          :   Better rotations for the finite element beam solver
+@Desc          :   Better rotations for the finite element beam solver and lifting line routines
 """
 
 module Rotations
 
 using LinearAlgebra
-using FLOWMath: abs_cs_safe
-using ..DCFoil: RealOrComplex, DTYPE
+using FLOWMath: abs_cs_safe, atan_cs_safe
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
+
+const DTYPE = AbstractFloat
 
 function get_rotate3dMat(ψ, axis="x")
     """
@@ -107,7 +108,7 @@ function get_transMat(dR1, dR2, dR3, l)
 
         T = I(3) # Identity matrix
 
-    elseif abs_cs_safe(real(ψ)) < 1e-6 
+    elseif abs_cs_safe(real(ψ)) < 1e-6
         T = I(3) + ψ̃ + 0.5 * ψ̃^2 # Cartesian rotation vector O(ψ³) because we truncated it for small angles
     else
         T = I(3) + sinψ / ψ * ψ̃ + (1 - cosψ) / ψ^2 * ψ̃^2 # Cayley-Hamilton's theorem
@@ -125,6 +126,46 @@ function get_transMat(dR1, dR2, dR3, l)
     ]
 
     return Γ
+end
+
+function compute_cartAnglesFromVector(V)
+    """
+    Compute angles from a vector where V1 is streamwise
+    For lifting line code
+    """
+    V1 = V[XDIM]
+    V2 = V[YDIM]
+    V3 = V[ZDIM]
+    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), √(V1^2 + V2^2 + V3^2)
+end
+
+function compute_vectorFromAngles(alpha, beta, Uinf)
+    """
+    Defines a flow vector from flow angles and magnitude .
+
+    Parameters
+    ----------
+    alpha : scalar , optional
+        Angle between the freestream and the x-y plane (rad ).
+    beta : scalar , optional
+        Angle between the freestream and the x-z plane (rad).
+    Uinf : scalar , optional
+        The magnitude of the freestream velocity .
+    Returns
+    -------
+    V : array_like
+        An array of size [3] containing the x, y, and z components of the
+        freestream velocity .
+    """
+
+    cosa = cos(alpha)
+    sina = sin(alpha)
+    cosb = cos(beta)
+    sinb = sin(beta)
+    sinasinb = √(1.0 - sina^2 * sinb^2)
+
+    # OLD WAY return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sinasinb
+    return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sinasinb
 end
 
 end

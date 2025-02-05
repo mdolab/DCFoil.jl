@@ -59,5 +59,5 @@ if __name__ == "__main__":
     x.add_output("fluttersolver", (r"\text{Flutter}", r"\text{mode evolution}"), side="left")
 
     # TODO:
-    
+
     x.write("dcfoil")

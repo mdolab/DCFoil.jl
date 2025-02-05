@@ -28,6 +28,7 @@ using StaticArrays
 using ..DCFoil: RealOrComplex, DTYPE
 using ..EBBeam: EBBeam as BeamElement, NDOF
 using ..SolverRoutines
+using ..Interpolation
 using ..BeamProperties
 using ..DesignConstants: DesignConstants, DynamicFoil, CONFIGS
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, ELEMTYPE
@@ -123,9 +124,9 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
 
 
-    midchordXLocs = SolverRoutines.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
-    midchordYLocs = SolverRoutines.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
-    midchordZLocs = SolverRoutines.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
+    midchordXLocs = Interpolation.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
+    midchordYLocs = Interpolation.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
+    midchordZLocs = Interpolation.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
 
     # mesh = zeros(RealOrComplex, nNodeTot, 3)
     mesh = cat(reshape(midchordXLocs, nNodeTot, 1), reshape(midchordYLocs, nNodeTot, 1), reshape(midchordZLocs, nNodeTot, 1), dims=2)

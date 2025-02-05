@@ -9,7 +9,7 @@
 module Utilities
 
 using ..DesignConstants: SORTEDDVS
-using ..DCFoil: RealOrComplex
+# using ..DCFoil: RealOrComplex
 using FLOWMath: abs_cs_safe
 
 export compute_KS
