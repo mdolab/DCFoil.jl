@@ -34,7 +34,7 @@ struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     constitutive::TS # constitutive model
 end
 
-struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
+struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC},TV<:AbstractVector}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
@@ -56,8 +56,8 @@ struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
     # --- Only things different for the dynamic foil ---
-    fRange::Vector # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
-    uRange::Vector # forward speed sweep [m/s] (for flutter solution)
+    fRange::TV # forcing frequency sweep [Hz] for harmonically forced solution AND search frequency for flutter
+    uRange::TV # forward speed sweep [m/s] (for flutter solution)
 end
 
 struct Hull{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}

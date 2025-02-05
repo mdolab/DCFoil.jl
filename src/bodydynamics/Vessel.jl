@@ -76,7 +76,7 @@ function compute_cm(STATSOLLIST::Vector, rho_s, chordVec, xAreaVec, hullCM, hull
 
 end
 
-function compute_gravloads(HULL, solverOptions::Dict)
+function compute_gravloads(HULL, solverOptions::AbstractDict)
     """
     compute f_gB  (m_gB = 0)
     """

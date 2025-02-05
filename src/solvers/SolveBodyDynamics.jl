@@ -20,7 +20,7 @@ using ..SolveStatic
 using ..SolverRoutines
 using ..DCFoilSolution
 
-function solve_trim(DVDictList, FEMESHLIST, HULL, solverOptions::Dict, rudderIdx=2)
+function solve_trim(DVDictList, FEMESHLIST, HULL, solverOptions::AbstractDict, rudderIdx=2)
     """
     This routine solves for the steady-state trim condition of the foiling craft
 
@@ -61,7 +61,7 @@ function solve_trim(DVDictList, FEMESHLIST, HULL, solverOptions::Dict, rudderIdx
     return BODYSTATSOL, APPENDAGESTATSOL
 end
 
-function compute_fhb(deltaC::Vector, HULL, DVDictList::Vector, FEMESHLIST::Vector, solverOptions::Dict, evalFuncs)
+function compute_fhb(deltaC::Vector, HULL, DVDictList::Vector, FEMESHLIST::Vector, solverOptions::AbstractDict, evalFuncs)
     """
     Compute hydrofoil loads in the body frame about the COG
 

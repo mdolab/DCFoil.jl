@@ -8,7 +8,7 @@
 
 module VLM
 
-function init(dvdict::Dict, solverOptions::Dict)
+function init(dvdict::AbstractDict, solverOptions::AbstractDict)
     """
     Initialize the VLM module
 

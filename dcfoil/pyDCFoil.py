@@ -17,7 +17,10 @@ from pathlib import Path
 # External Python modules
 # ==============================================================================
 import numpy as np
-from julia import Main, Pkg
+# from julia import Main, Pkg
+from juliacall import Main, Pkg 
+import juliacall
+import openmdao.api as om
 
 
 class DCFOILWarning(object):
@@ -73,9 +76,15 @@ class DCFOIL:
                 # Pull from local directory
                 repoDir = Path(__file__).parent.parent
                 Pkg.activate(f"{repoDir}")
+                # --- This was for PyCall ---
                 Main.include(f"{repoDir}/src/DCFoil.jl")
-                Main.using(".DCFoil")
+                # Main.using(".DCFoil")
+                # DCFoil = Main.DCFoil
+                # --- PythonCall ---
+                # jl = juliacall.newmodule("DCFoil")
+                Main.seval("using .DCFoil")
                 DCFoil = Main.DCFoil
+
             else:
                 # Pull from Julia package registry (online)
                 Pkg.add("DCFoil")
@@ -253,7 +262,7 @@ class DCFOIL:
         if len(gridFiles) > 1:
             Grid = self.DCFoil.MeshIO.add_meshfiles(gridFiles, meshOptions)
 
-        LE_X, node_conn, TE_X = Grid.LEMesh.T, Grid.nodeConn.T, Grid.TEMesh.T
+        LE_X, node_conn, TE_X = np.transpose(Grid.LEMesh), np.transpose(Grid.nodeConn), np.transpose(Grid.TEMesh)
         # Check shape
         assert LE_X.shape[1] == 3
 
@@ -309,9 +318,9 @@ class DCFOIL:
         evalFuncs = self.evalFuncs
 
         # --- Julia is transposed! ---
-        LECoords = self.LEcoords.T
-        nodeConn = self.nodeConn.T
-        TECoords = self.TEcoords.T
+        LECoords = np.transpose(self.LEcoords)
+        nodeConn = np.transpose(self.nodeConn)
+        TECoords = np.transpose(self.TEcoords)
 
         solverOptions = self.solverOptions
 
@@ -381,9 +390,9 @@ class DCFOIL:
 
         costFuncs = self.DCFoil.evalFuncs(
             self.SOLDICT,
-            self.LEcoords.T,
-            self.nodeConn.T,
-            self.TEcoords.T,
+            np.transpose(self.LEcoords),
+            np.transpose(self.nodeConn),
+            np.transpose(self.TEcoords),
             self.appendageParamsList,
             evalFuncs,
             self.solverOptions,
@@ -447,9 +456,9 @@ class DCFOIL:
         costFuncsSensDict = self.DCFoil.evalFuncsSens(
             self.SOLDICT,
             self.appendageParamsList,
-            self.LEcoords.T,
-            self.nodeConn.T,
-            self.TEcoords.T,
+            np.transpose(self.LEcoords),
+            np.transpose(self.nodeConn),
+            np.transpose(self.TEcoords),
             evalFuncs,
             self.solverOptions,
             mode="ADJOINT",
@@ -460,7 +469,7 @@ class DCFOIL:
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
             try:
-                self.Xb = costFuncsSensDict[f"{obj}"]["mesh"].T
+                self.Xb = np.transpose(costFuncsSensDict[f"{obj}"]["mesh"])
                 self.paramSens = costFuncsSensDict[f"{obj}"]["params"]
             except KeyError:
                 print(f"Could not find {obj} in costFuncsSensDict")

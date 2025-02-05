@@ -104,7 +104,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
     return obj, pmG, FLUTTERSOL
 end # end solve
 
-function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, solverOptions::Dict)
+function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, solverOptions::AbstractDict)
     """
     Setup function to be called before solve()
     """
@@ -203,7 +203,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions::Dict)
+function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
     """
     Setup function to be called before solve()
     """
@@ -300,7 +300,7 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Dict, solverOptions::Dict, appendageOptions::Dict)
+function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict)
     """
     System natural frequencies
     """
@@ -2014,7 +2014,7 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function get_sol(DVDict::Dict, solverOptions::Dict)
+function get_sol(DVDict::AbstractDict, solverOptions::AbstractDict)
     """
     Wrapper function
     This does the primal solve and returns the solution
@@ -2101,7 +2101,7 @@ function cost_funcsFromCoordsDVs(
     end
 end
 
-function evalFuncsSens(evalFuncsSensList, appendageParams::Dict, GridStruct, solverOptions::Dict; mode="FiDi")
+function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStruct, solverOptions::AbstractDict; mode="FiDi")
     """
     Wrapper to compute the total sensitivities for this evalFunc
 

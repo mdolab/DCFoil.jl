@@ -160,7 +160,7 @@ function solveFromCoords(
 end
 
 # function setup_problemFromDVDict(
-#     DVDictList, appendageOptions::Dict, solverOptions::Dict;
+#     DVDictList, appendageOptions::AbstractDict, solverOptions::AbstractDict;
 #     iComp=1, CLMain=0.0, verbose=false
 # )
 #     """
@@ -302,11 +302,11 @@ function write_sol(
 end
 
 function write_tecplot(
-    appendageParams::Dict, STATICSOL, FEMESH, outputDir="./OUTPUT/";
+    appendageParams::AbstractDict, STATICSOL, FEMESH, outputDir="./OUTPUT/";
     appendageOptions=Dict("config" => "wing"), solverOptions=Dict(), iComp=1
 )
     """
-    General purpose tecplot writer wrapper for flutter solution
+    General purpose tecplot writer wrapper for static solution
     """
     TecplotIO.write_deflections(appendageParams, STATICSOL, FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
 
@@ -431,7 +431,7 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
 end
 
 # function compute_solFromDVDict(
-#     DVDictList, solverOptions::Dict, evalFuncs::Vector{String};
+#     DVDictList, solverOptions::AbstractDict, evalFuncs::Vector{String};
 #     iComp=1, CLMain=0.0
 # )
 #     """
@@ -455,7 +455,7 @@ function compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList
 end
 
 # function cost_funcsFromDVs(
-#     DVDict::Dict, iComp::Int64, solverOptions::Dict, evalFuncsList::Vector{String};
+#     DVDict::AbstractDict, iComp::Int64, solverOptions::AbstractDict, evalFuncsList::Vector{String};
 #     DVDictList=[], CLMain=0.0
 # )
 #     """
@@ -478,7 +478,7 @@ end
 # end
 
 function cost_funcsFromPtVec(
-    ptVec, nodeConn, appendageParams, iComp::Int64, solverOptions::Dict, evalFunc::String;
+    ptVec, nodeConn, appendageParams, iComp::Int64, solverOptions::AbstractDict, evalFunc::String;
     DVDictList=[], CLMain=0.0
 )
     """
@@ -505,7 +505,7 @@ function cost_funcsFromPtVec(
 end
 
 function evalFuncsSens(
-    STATSOLLIST::Vector, evalFuncSensList, DVDictList::Vector, GridStruct, FEMESHLIST::Vector, solverOptions::Dict;
+    STATSOLLIST, evalFuncSensList, appendageParamsList, GridStruct, FEMESHLIST, solverOptions::AbstractDict;
     mode="FiDi", CLMain=0.0
 )
     """
@@ -529,7 +529,7 @@ function evalFuncsSens(
     # for iComp in eachindex(DVDictList)
     iComp = 1
 
-    DVDict = DVDictList[iComp]
+    DVDict = appendageParamsList[iComp]
 
     dfdxstruct = Dict()
 
@@ -546,7 +546,7 @@ function evalFuncsSens(
             dfdxPt = zeros(DTYPE, length(ptVec))
 
             f_i = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
-                DVDictList=DVDictList, CLMain=CLMain
+                DVDictList=appendageParamsList, CLMain=CLMain
             )
             if !solverOptions["onlyStructDerivs"]
 
@@ -554,7 +554,7 @@ function evalFuncsSens(
                     ptVecwork = copy(ptVec)
                     ptVecwork[ii] += dh
                     f_f = cost_funcsFromPtVec(ptVecwork, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
-                        DVDictList=DVDictList, CLMain=CLMain
+                        DVDictList=appendageParamsList, CLMain=CLMain
                     )
                     ptVecwork[ii] -= dh
                     if evalFuncSensKey == "cd"
@@ -571,7 +571,7 @@ function evalFuncsSens(
 
             DVDict["theta_f"] += dh
             f_f = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
-                DVDictList=DVDictList, CLMain=CLMain
+                DVDictList=appendageParamsList, CLMain=CLMain
             )
             DVDict["theta_f"] -= dh
 
@@ -585,7 +585,7 @@ function evalFuncsSens(
             for ii in eachindex(DVDict["toc"])
                 DVDict["toc"][ii] += dh
                 f_f = cost_funcsFromPtVec(ptVec, nodeConn, DVDict, iComp, solverOptions, evalFuncSensKey;
-                    DVDictList=DVDictList, CLMain=CLMain
+                    DVDictList=appendageParamsList, CLMain=CLMain
                 )
                 DVDict["toc"][ii] -= dh
                 if evalFuncSensKey == "cd"
@@ -614,7 +614,7 @@ function evalFuncsSens(
         backend = AD.ZygoteBackend()
         funcsSens, = AD.gradient(backend, (x) -> cost_funcsFromPtVec(
                 x, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
-                DVDictList=DVDictList, CLMain=CLMain),
+                DVDictList=appendageParamsList, CLMain=CLMain),
             ptVec)
 
     elseif uppercase(mode) == "ADJOINT"
@@ -626,7 +626,7 @@ function evalFuncsSens(
         u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
         tX = @elapsed begin
-            ∂r∂xPt, ∂r∂xParams = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
+            ∂r∂xPt, ∂r∂xParams = compute_∂r∂x(STATSOL.structStates, appendageParamsList, LECoords, TECoords, nodeConn;
                 # mode="FiDi", # about 981 sec
                 # mode="RAD", # about 282 sec
                 mode="ANALYTIC", # 10 sec
@@ -635,7 +635,7 @@ function evalFuncsSens(
 
         tStiff = @elapsed begin
             ∂r∂u = compute_∂r∂u(u, LECoords, TECoords, nodeConn, "Analytic";
-                appendageParamsList=DVDictList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
+                appendageParamsList=appendageParamsList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
         end
 
         println("∂r∂X:\t$(tX) sec\n∂r∂u:\t$(tStiff) sec")
@@ -645,7 +645,7 @@ function evalFuncsSens(
                     # mode="FiDi", # 200 sec
                     # mode="RAD", # 100 sec
                     mode="ANALYTIC", # 2 sec
-                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=appendageParamsList, CLMain=CLMain, iComp=iComp
                 )
             end
             tFuncX = @elapsed begin
@@ -653,7 +653,7 @@ function evalFuncsSens(
                     # mode="RAD", # 100 sec
                     # mode="FiDi", # 79
                     mode="ANALYTIC", # 15 sec
-                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                    appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=appendageParamsList, CLMain=CLMain, iComp=iComp
                 )
             end
             println("∂f∂u:\t$(tFuncU) sec\n∂f∂x:\t$(tFuncX) sec")
@@ -708,11 +708,11 @@ function evalFuncsSens(
         DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
         u = STATSOL.structStates[1:end.∉[DOFBlankingList]]
 
-        ∂r∂xPt = compute_∂r∂x(STATSOL.structStates, DVDictList, LECoords, TECoords, nodeConn;
+        ∂r∂xPt = compute_∂r∂x(STATSOL.structStates, appendageParamsList, LECoords, TECoords, nodeConn;
             mode="ANALYTIC",
             appendageOptions=appendageOptions, solverOptions=solverOptions, CLMain=CLMain, iComp=iComp)
         ∂r∂u = compute_∂r∂u(u, LECoords, TECoords, nodeConn, "Analytic";
-            appendageParamsList=DVDictList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
+            appendageParamsList=appendageParamsList, solverParams=solverParams, solverOptions=solverOptions, appendageOptions=appendageOptions, iComp=iComp)
         println("+---------------------------------+")
         println("| Computing direct: $(evalFuncSens)")
         println("+---------------------------------+")
@@ -721,10 +721,10 @@ function evalFuncsSens(
 
         for evalFuncSens in evalFuncSensList
             ∂f∂u = compute_∂f∂u(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
-                mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=appendageParamsList, CLMain=CLMain, iComp=iComp
             )
             ∂f∂xPt = compute_∂f∂x(evalFuncSens, STATSOL, ptVec, nodeConn, DVDict;
-                mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, CLMain=CLMain, iComp=iComp
+                mode="RAD", appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=appendageParamsList, CLMain=CLMain, iComp=iComp
             )
 
             # --- Compute total sensitivities ---
@@ -747,7 +747,7 @@ function evalFuncsSens(
 end
 
 function compute_∂f∂x(
-    costFunc::String, SOL::StaticSolution, ptVec, nodeConn, appendageParams::Dict;
+    costFunc::String, SOL::StaticSolution, ptVec, nodeConn, appendageParams::AbstractDict;
     mode="RAD", appendageOptions=Dict(), solverOptions=Dict(), DVDictList=[], CLMain=0.0, iComp=1
 )
 
@@ -1017,9 +1017,8 @@ function compute_∂costFunc∂udirect(costFunc, SOL, ptVec, nodeConn, qdyn, are
     return ∂f∂udirect
 end
 
-
 function compute_∂f∂u(
-    costFunc::String, SOL::StaticSolution, ptVec, nodeConn, appendageParams::Dict;
+    costFunc::String, SOL::StaticSolution, ptVec, nodeConn, appendageParams::AbstractDict;
     mode="RAD", appendageOptions=Dict(), solverOptions=Dict(), DVDictList=[], CLMain=0.0, iComp=1
 )
     """
@@ -1703,9 +1702,15 @@ function compute_structResiduals(structStates, hydroStates, xVec)
     return resVec    
 end
 
-function compute_∂rs∂γTψ()
+function compute_∂rs∂γ()
     """
-    Partial derivative of the structural residuals wrt the flow states
+    Off-diagonal partial derivative of the structural residuals wrt the flow states
+    """
+end
+
+function compute_∂rf∂u()
+    """
+    Off-diagonal partial derivative of the flow residuals wrt the flow states
     """
 end
 
