@@ -21,7 +21,7 @@ using ..SolutionConstants: XDIM, YDIM, ZDIM
 using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
 using ..Utilities: Utilities
 
-function write_structmesh(FEMESHLIST, solverOptions::Dict, outputDir::String, fname="structmesh.dat")
+function write_structmesh(FEMESHLIST, solverOptions::AbstractDict, outputDir::String, fname="structmesh.dat")
     """
     Top level routine to write the structural mesh file
     """
@@ -93,7 +93,7 @@ function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     return foilCoordsXform
 end
 
-function write_airfoils(io, appendageParams::Dict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
+function write_airfoils(io, appendageParams::AbstractDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
     """
     TODO generalize to take in a normal vector in spanwise direction
     """

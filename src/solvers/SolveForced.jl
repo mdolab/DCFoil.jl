@@ -41,7 +41,7 @@ const loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions::Dict, appendageOptions::Dict)
+function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict, appendageOptions::AbstractDict)
     """
     Solve
         (-ω²[M]-jω[C]+[K]){ũ} = {f̃}

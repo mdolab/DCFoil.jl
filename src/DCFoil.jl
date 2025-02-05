@@ -461,7 +461,7 @@ end # evalFuncs
 
 
 function evalFuncsSens(
-    SOLDICT::Dict, appendageParamsList::Vector, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
+    SOLDICT::AbstractDict, appendageParamsList, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
     mode="FiDi", CLMain=0.0
 )
     """
@@ -533,7 +533,7 @@ function set_defaultOptions!(solverOptions)
     Set default options
     """
 
-    function check_key!(solverOptions::Dict, key::String, default)
+    function check_key!(solverOptions, key, default)
         if !haskey(solverOptions, key)
             println("Setting default option: $(key) to ", default)
             solverOptions[key] = default

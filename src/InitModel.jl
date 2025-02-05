@@ -29,7 +29,7 @@ function init_static(
   α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f,
   beta, span_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut,
   depth0,
-  appendageOptions::Dict, solverOptions::Dict
+  appendageOptions::AbstractDict, solverOptions::AbstractDict
 )
   """
   Initialize a static hydrofoil model
@@ -110,7 +110,7 @@ function init_static(
 end
 
 function init_staticHydro(LECoords, TECoords, nodeConn, appendageParams,
-  appendageOptions::Dict, solverOptions::Dict
+  appendageOptions::AbstractDict, solverOptions::AbstractDict
 )
   """
   Initialize a static hydrofoil model
@@ -134,8 +134,8 @@ function init_staticHydro(LECoords, TECoords, nodeConn, appendageParams,
 
 end
 
-function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams::Dict,
-  appendageOptions::Dict, solverOptions::Dict; fRange=[0.1, 1], uRange=[0.0, 1.0]
+function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams,
+  appendageOptions::AbstractDict, solverOptions::AbstractDict; fRange=[0.1, 1], uRange=[0.0, 1.0]
 )
   """
   Perform much of the same initializations as init_static() except with other features
@@ -165,7 +165,7 @@ function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_
   return WingStructModel, StrutStructModel, LLOutputs, LLSystem, FlowCond
 end
 
-function init_hull(solverOptions::Dict)
+function init_hull(solverOptions::AbstractDict)
   """
   Initialize the hull model
   """
@@ -174,7 +174,7 @@ function init_hull(solverOptions::Dict)
   return HullModel
 end
 
-function init_modelFromDVDict(DVDict::Dict, solverOptions::Dict, appendageOptions::Dict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
+function init_modelFromDVDict(DVDict::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict; fRange=[0.1, 1.0], uRange=[0.0, 1.0])
   """
   This is a wrapper for init_dynamic() that unpacks a DV dictionary
   """

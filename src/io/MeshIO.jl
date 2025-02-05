@@ -17,7 +17,7 @@ struct Grid{TF,TI}
     Struct to hold the top-level grid data for the program
     """
     LEMesh::AbstractMatrix{TF} # Mesh for the LE; 2D (3 x npts) array of (x,y,z) coordinates
-    nodeConn::Matrix{TI} # Connectivity for the LE mesh; 
+    nodeConn::AbstractMatrix{TI} # Connectivity for the LE mesh; 
     TEMesh::AbstractMatrix{TF}
 end
 

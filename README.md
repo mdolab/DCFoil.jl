@@ -141,7 +141,7 @@ When there is a new version of Julia and you use `juliaup update`, make sure to 
 
 #### Python dependencies from the MACH framework
 
-We use `PyCall` to use some modules from MACH, but this highly depends on what Python environment you are using.
+<!-- We use `PyCall` to use some modules from MACH, but this highly depends on what Python environment you are using.
 If you're building `PyCall` for the first time, it depends on the PYTHON environment variable so if you build with the wrong python, don't forget to do a clean uninstall before rebuilding.
 Once the package is built, the `venv` method of getting this to work requires running this in the Julia REPL
 ```
@@ -154,7 +154,10 @@ For a Linux / Docker workflow (preferred), it is as simple as running
 import julia
 julia.install()
 ```
-in the Python REPL. You need to do this everytime you update Julia
+in the Python REPL. You need to do this everytime you update Julia -->
+
+`PythonCall` is the package for wrapping the Julia code.
+We opted for this over PyCall because it's what's used in the OpenMDAO examples
 
 <!-- On MacOS, I have only gotten the Conda.jl method to work which requires these runs
 ```

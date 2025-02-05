@@ -14,7 +14,7 @@ using FLOWMath: abs_cs_safe
 
 export compute_KS
 
-function unpack_dvdict(DVDict::Dict)
+function unpack_dvdict(DVDict::AbstractDict)
 
     nDVs::Int64 = 0
 
@@ -66,7 +66,7 @@ function repack_dvdict(DVVec, DVLengths::Vector{Int64})
 
 end
 
-function pack_funcsSens(funcsSens::Dict, funcKey, dvKey, dfdx)
+function pack_funcsSens(funcsSens::AbstractDict, funcKey, dvKey, dfdx)
     """
     We want the function sensitivities dictionary 
     to be the same way ADflow stores its data.

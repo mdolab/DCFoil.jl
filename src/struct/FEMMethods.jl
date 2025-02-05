@@ -41,6 +41,7 @@ struct StructMesh{TF,TC,TI}
     """
     mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes)
     elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
+    # sectionVectors::TM
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
     chord::Vector{TC}
     toc::Vector{TC}
@@ -869,7 +870,7 @@ function solve_structure(K::Matrix, M::Matrix, F::Vector)
 end
 
 function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut,
-    appendageParams::Dict, appendageOptions::Dict, solverOptions::Dict)
+    appendageParams, appendageOptions, solverOptions)
     """
     similar to above but shortcircuiting the hydroside
     """
