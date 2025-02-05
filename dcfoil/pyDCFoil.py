@@ -390,9 +390,9 @@ class DCFOIL:
 
         costFuncs = self.DCFoil.evalFuncs(
             self.SOLDICT,
-            self.LEcoords.T,
-            self.nodeConn.T,
-            self.TEcoords.T,
+            np.transpose(self.LEcoords),
+            np.transpose(self.nodeConn),
+            np.transpose(self.TEcoords),
             self.appendageParamsList,
             evalFuncs,
             self.solverOptions,
@@ -456,9 +456,9 @@ class DCFOIL:
         costFuncsSensDict = self.DCFoil.evalFuncsSens(
             self.SOLDICT,
             self.appendageParamsList,
-            self.LEcoords.T,
-            self.nodeConn.T,
-            self.TEcoords.T,
+            np.transpose(self.LEcoords),
+            np.transpose(self.nodeConn),
+            np.transpose(self.TEcoords),
             evalFuncs,
             self.solverOptions,
             mode="ADJOINT",
@@ -469,7 +469,7 @@ class DCFOIL:
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
             try:
-                self.Xb = costFuncsSensDict[f"{obj}"]["mesh"].T
+                self.Xb = np.transpose(costFuncsSensDict[f"{obj}"]["mesh"])
                 self.paramSens = costFuncsSensDict[f"{obj}"]["params"]
             except KeyError:
                 print(f"Could not find {obj} in costFuncsSensDict")
