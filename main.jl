@@ -78,7 +78,7 @@ tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 #     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
 # )
 paramsRudder = Dict(
-    "alfa0" => 2.0, # initial angle of attack [deg] (angle of flow vector)
+    "alfa0" => 6.0, # initial angle of attack [deg] (angle of flow vector)
     # "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]

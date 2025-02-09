@@ -128,6 +128,8 @@ function init_staticHydro(LECoords, TECoords, nodeConn, appendageParams,
   end
 
   ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
+  # println("ptVec: ", ptVec)
+  # println("nodeConn", nodeConn)
   LLOutputs, LLSystem, FlowCond = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
   return LLOutputs, LLSystem, FlowCond

@@ -762,6 +762,7 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
         mode="FiDi" # this is the fastest
         # mode="Analytic"
     )
+    # println(Gconv)
     # println("Secondary solve for lift slope")
     ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
         solverParams=∂LLNLParams, is_verbose=is_verbose,

@@ -11,8 +11,11 @@
 \usepackage{svg}
 \usepackage{indentfirst}
 \usepackage[compact]{titlesec}
+\usepackage{pdflscape}
 \usepackage[]{acronym} % provides \acronym 
+
 \graphicspath{{../figures/}}
+
 % --- Math ---
 \newcommand{\diff}{\mathop{}\!\tn{d}} % total derivative
 \newcommand{\magnitude}[1]{\left| #1 \right|} % magnitude
@@ -1861,6 +1864,17 @@ The overall data flow in the program is in \Cref{fig:DataFlow}.
 	\caption{\label{fig:DataFlow}Data flow in the program.}
 \end{figure}
 Appendage setup is through dictionaries.
+\begin{landscape}
+	
+	\begin{figure}[htb!]
+		\centering
+		% reference: trim={<left> <lower> <right> <upper>}
+		\includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dcfoil.pdf}
+		\caption{\label{fig:XDSM}
+		DCFoil's solver hierarchy
+		}
+	\end{figure}
+\end{landscape}
 
 \section{Writing derivative routines}
 % 

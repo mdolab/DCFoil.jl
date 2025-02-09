@@ -25,8 +25,10 @@ using ..EigenvalueProblem
 # --- Globals ---
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 using ..EBBeam: EBBeam as BeamElement
-using ..DesignConstants: SORTEDDVS
+# using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex, DTYPE
+# const RealOrComplex = Union{Real, Complex}
+# const DTYPE = AbstractFloat
 using ..Rotations: get_rotate3dMat
 
 # ==============================================================================
