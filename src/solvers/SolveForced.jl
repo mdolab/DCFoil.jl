@@ -27,6 +27,7 @@ using ..FEMMethods
 using ..SolveStatic
 using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
 using ..SolverRoutines
+using ..Interpolation
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..DCFoilSolution
 using ..OceanWaves
@@ -201,7 +202,7 @@ function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond
     nVec = stripVecs
     stripWidths = .√(nVec[:, XDIM] .^ 2 + nVec[:, YDIM] .^ 2 + nVec[:, ZDIM] .^ 2) # length of elem
     xeval = LLSystem.collocationPts[YDIM, :]
-    claVec = SolverRoutines.do_linear_interp(xeval, LLOutputs.cla, spanLocs)
+    claVec = Interpolation.do_linear_interp(xeval, LLOutputs.cla, spanLocs)
 
     # Elevator chord lengths
     chordLengths = vcat(WING.chord, WING.chord[2:end])

@@ -25,8 +25,10 @@ using ..EigenvalueProblem
 # --- Globals ---
 using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 using ..EBBeam: EBBeam as BeamElement
-using ..DesignConstants: SORTEDDVS
+# using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex, DTYPE
+# const RealOrComplex = Union{Real, Complex}
+# const DTYPE = AbstractFloat
 using ..Rotations: get_rotate3dMat
 
 # ==============================================================================
@@ -838,67 +840,28 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
     return RMat
 end
 
-function compute_anglesFromVector(V)
-    """
-    Compute angles from a vector where V1 is streamwise
-    For lifting line code
-    """
-    V1 = V[XDIM]
-    V2 = V[YDIM]
-    V3 = V[ZDIM]
-    return atan_cs_safe(V3, V1), atan_cs_safe(V2, V1), √(V1^2 + V2^2 + V3^2)
-end
-
-function compute_vectorFromAngle(alpha, beta, Uinf)
-    """
-    Defines a flow vector from flow angles and magnitude .
-
-    Parameters
-    ----------
-    alpha : scalar , optional
-        Angle between the freestream and the x-y plane (rad ).
-    beta : scalar , optional
-        Angle between the freestream and the x-z plane (rad).
-    Uinf : scalar , optional
-        The magnitude of the freestream velocity .
-    Returns
-    -------
-    V : array_like
-        An array of size [3] containing the x, y, and z components of the
-        freestream velocity .
-    """
-
-    cosa = cos(alpha)
-    sina = sin(alpha)
-    cosb = cos(beta)
-    sinb = sin(beta)
-    sinasinb = √(1.0 - sina^2 * sinb^2)
-
-    # OLD WAY return Uinf * [cosa * cosb, sina * cosb, cosa * sinb] / sinasinb
-    return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sinasinb
-end
 
 
 
-function do_linear_interp(xpt, ypt, xqvec)
-    """
-    KNOWN BUG, DOES NOT LIKE NEGATIVE DOMAINS
-    """
-    npt = length(xpt)
-    n = length(xqvec)
-    y = zeros(RealOrComplex, n)
-    y_z = Zygote.Buffer(y)
-    if length(xpt) != length(ypt)
-        throw(ArgumentError("xpt and ypt must be the same length"))
-    end
-    loop_interp!(y_z, xpt, ypt, xqvec, n, npt)
-    y = copy(y_z)
-    if n == 1 # need it returned as a float
-        return y[1]
-    else
-        return y
-    end
-end
+# function do_linear_interp(xpt, ypt, xqvec)
+#     """
+#     KNOWN BUG, DOES NOT LIKE NEGATIVE DOMAINS
+#     """
+#     npt = length(xpt)
+#     n = length(xqvec)
+#     y = zeros(RealOrComplex, n)
+#     y_z = Zygote.Buffer(y)
+#     if length(xpt) != length(ypt)
+#         throw(ArgumentError("xpt and ypt must be the same length"))
+#     end
+#     loop_interp!(y_z, xpt, ypt, xqvec, n, npt)
+#     y = copy(y_z)
+#     if n == 1 # need it returned as a float
+#         return y[1]
+#     else
+#         return y
+#     end
+# end
 
 # function do_linear_interp(xpt::Vector, ypt::Vector, xqvec)
 #     npt = length(xpt)
@@ -915,49 +878,49 @@ end
 #     end
 # end
 
-function loop_interp!(y, xpt, ypt, xqvec, n, npt)
-    for jj in 1:n
-        @inbounds @fastmath begin
-            xq = xqvec[jj]
+# function loop_interp!(y, xpt, ypt, xqvec, n, npt)
+#     for jj in 1:n
+#         @inbounds @fastmath begin
+#             xq = xqvec[jj]
 
-            # Catch cases in case we're just outside the domain
-            # This extends the slope of the first/last segment
-            if real(xq) <= real(xpt)[1]
-                x0 = xpt[1]
-                x1 = xpt[2]
-                y0 = ypt[1]
-                y1 = ypt[2]
-            elseif real(xq) >= real(xpt)[npt]
-                x0 = xpt[npt-1]
-                x1 = xpt[npt]
-                y0 = ypt[npt-1]
-                y1 = ypt[npt]
-            else
-                # Perform search
-                ii = 1
-                while real(xq) > real(xpt)[ii+1]
-                    ii += 1
-                end
+#             # Catch cases in case we're just outside the domain
+#             # This extends the slope of the first/last segment
+#             if real(xq) <= real(xpt)[1]
+#                 x0 = xpt[1]
+#                 x1 = xpt[2]
+#                 y0 = ypt[1]
+#                 y1 = ypt[2]
+#             elseif real(xq) >= real(xpt)[npt]
+#                 x0 = xpt[npt-1]
+#                 x1 = xpt[npt]
+#                 y0 = ypt[npt-1]
+#                 y1 = ypt[npt]
+#             else
+#                 # Perform search
+#                 ii = 1
+#                 while real(xq) > real(xpt)[ii+1]
+#                     ii += 1
+#                 end
 
-                x0 = xpt[ii]
-                x1 = xpt[ii+1]
-                y0 = ypt[ii]
-                y1 = ypt[ii+1]
+#                 x0 = xpt[ii]
+#                 x1 = xpt[ii+1]
+#                 y0 = ypt[ii]
+#                 y1 = ypt[ii+1]
 
-            end
+#             end
 
-            m = (y1 - y0) / (x1 - x0) # slope
-            y[jj] = y0 + m * (xq - x0)
+#             m = (y1 - y0) / (x1 - x0) # slope
+#             y[jj] = y0 + m * (xq - x0)
 
-            # # actually just use end value if we're at the end
-            # if real(xq) >= real(xpt)[npt]
-            #     y[jj] = ypt[npt]
-            # elseif real(xq) <= real(xpt)[1]
-            #     y[jj] = ypt[1]
-            # end
-        end
-    end
-end
+#             # # actually just use end value if we're at the end
+#             # if real(xq) >= real(xpt)[npt]
+#             #     y[jj] = ypt[npt]
+#             # elseif real(xq) <= real(xpt)[1]
+#             #     y[jj] = ypt[1]
+#             # end
+#         end
+#     end
+# end
 
 function normalize_3Dvector(r)
     rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)

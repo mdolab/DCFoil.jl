@@ -49,8 +49,6 @@ const ΦIND = 4
 const ΘIND = 5
 const ΨIND = 6
 
-using ..DCFoil: DTYPE
-
 
 function compute_elem_stiff(
     EIᵉ, EIIPᵉ, GJᵉ, BTᵉ, Sᵉ, EAᵉ, lᵉ, abᵉ,

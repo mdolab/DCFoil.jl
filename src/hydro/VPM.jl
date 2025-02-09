@@ -19,8 +19,8 @@ using ChainRulesCore
 
 # --- DCFoil modules ---
 using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..DCFoil: DTYPE
-using ..SolverRoutines: compute_anglesFromVector
+using ..Rotations: Rotations, compute_cartAnglesFromVector
+const DTYPE = AbstractFloat
 
 struct AirfoilMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     """
@@ -244,7 +244,7 @@ function compute_sweepCorr(angle, V)
     angle - Sweep angle [rad]
     V - Velocity vector [U, V, W]
     """
-    alpha, beta, Vinf = compute_anglesFromVector(V)
+    alpha, beta, Vinf = compute_cartAnglesFromVector(V)
     Ca = cos(alpha)
     Sa = sin(alpha)
     Cb = cos(beta)

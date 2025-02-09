@@ -11,7 +11,7 @@ When in doubt, refer to the Tecplot Data Format Guide
 module TecplotIO
 # --- PACKAGES ---
 using Printf
-using PyCall
+using PythonCall
 
 # BASECLASSES = pyimport("baseclasses") # This gives a weird 'shmem' error FYI
 

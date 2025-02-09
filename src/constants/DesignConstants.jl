@@ -7,7 +7,6 @@
 
 
 module DesignConstants
-using ..DCFoil: RealOrComplex
 
 struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """

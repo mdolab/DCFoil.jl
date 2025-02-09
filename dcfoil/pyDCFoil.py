@@ -17,8 +17,9 @@ from pathlib import Path
 # External Python modules
 # ==============================================================================
 import numpy as np
+
 # from julia import Main, Pkg
-from juliacall import Main, Pkg 
+from juliacall import Main, Pkg
 import juliacall
 import openmdao.api as om
 
@@ -304,7 +305,14 @@ class DCFOIL:
 
         else:
             # Set the damping parameters
-            solverOptions = self.DCFoil.set_structDamping(self.LEcoords, self.TEcoords, self.nodeConn, self.appendageParamsList[0], self.solverOptions, self.solverOptions["appendageList"][0])
+            solverOptions = self.DCFoil.set_structDamping(
+                self.LEcoords,
+                self.TEcoords,
+                self.nodeConn,
+                self.appendageParamsList[0],
+                self.solverOptions,
+                self.solverOptions["appendageList"][0],
+            )
 
             # Update solver options
             self.solverOptions = solverOptions

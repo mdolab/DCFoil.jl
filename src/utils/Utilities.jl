@@ -9,8 +9,13 @@
 module Utilities
 
 using ..DesignConstants: SORTEDDVS
-using ..DCFoil: RealOrComplex
+# using ..DCFoil: RealOrComplex
 using FLOWMath: abs_cs_safe
+using LinearAlgebra
+using Zygote
+
+const RealOrComplex = Union{Real, Complex}
+const DTYPE = AbstractFloat
 
 export compute_KS
 
@@ -152,5 +157,35 @@ function compute_KS(g, ρKS)
 
     return gKS
 end # compute_KS
+
+function normalize_3Dvector(r)
+    rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
+    return rhat
+end
+
+
+function cross3D(arr1, arr2)
+    """
+    Cross product of two 3D arrays
+    where the first dimension is length 3
+    """
+    @assert size(arr1, 1) == 3
+    @assert size(arr2, 1) == 3
+    M, N = size(arr1, 2), size(arr1, 3)
+
+    arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
+    arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
+
+    for jj in 1:M
+        for kk in 1:N
+            arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+        end
+    end
+    arr1crossarr2 = copy(arr1crossarr2_z)
+
+    return arr1crossarr2
+
+end
 
 end

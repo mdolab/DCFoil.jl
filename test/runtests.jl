@@ -119,7 +119,7 @@ solverOptions2 = Dict(
     "run_static" => false,
     # --- Forced solve ---
     "run_forced" => false,
-    "fRange" => [0, 10],
+    "fRange" => [0.0, 10.0],
     "tipForceMag" => 0.0,
     # --- Eigen solve ---
     "run_modal" => true,

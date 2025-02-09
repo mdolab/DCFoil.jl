@@ -38,17 +38,20 @@ def get_rotationMatrix(ang):
         Rotation matrix 3x3
     """
 
-    rotMat = np.array([
-        [np.cos(np.radians(ang)), -np.sin(np.radians(ang)), 0.0],
-        [np.sin(np.radians(ang)), np.cos(np.radians(ang)), 0.0],
-        [0.0, 0.0, 1.0]
-    ])
+    rotMat = np.array(
+        [
+            [np.cos(np.radians(ang)), -np.sin(np.radians(ang)), 0.0],
+            [np.sin(np.radians(ang)), np.cos(np.radians(ang)), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
 
     return rotMat
 
+
 n_span = 20  # Number of spanwise points (foil)
 n_strut = 20  # Number of spanwise points (strut)
-xMidchord = 0.0 # Midchord location
+xMidchord = 0.0  # Midchord location
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================

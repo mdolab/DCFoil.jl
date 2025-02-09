@@ -799,8 +799,8 @@ if __name__ == "__main__":
 
         # akcabay limits
         # swept flutter
-        axes[0, 0].set_ylim(top=30,bottom=-400)
-        axes[0, 0].set_xlim(left=160,right=175)
+        axes[0, 0].set_ylim(top=30, bottom=-400)
+        axes[0, 0].set_xlim(left=160, right=175)
         axes[0, 0].set_xticks([150, 210] + instabSpeedTicks)
         # axes[1,0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
         # # static div
