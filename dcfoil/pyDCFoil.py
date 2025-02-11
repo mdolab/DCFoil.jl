@@ -2,7 +2,7 @@
 """
 @File    :   pyDCFoil.py
 @Time    :   2024/01/22
-@Author  :   Galen Ng, Prof. Sicheng He
+@Author  :   Galen Ng, Sicheng He
 @Desc    :   Python interface to DCFoil containing two classes
 """
 

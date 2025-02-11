@@ -17,15 +17,17 @@ import os
 # ==============================================================================
 import numpy as np
 import time
+import argparse
 # ==============================================================================
 # Extension modules
 # ==============================================================================
 import openmdao.api as om
 import juliacall
 
-jl = juliacall.newmodule("LiftingLine")
+jl = juliacall.newmodule("DCFoil")
 
-jl.include("../src/hydro/OMLiftingLine.jl")
+jl.include("../src/struct/beam_om.jl") # discipline 1
+jl.include("../src/hydro/liftingline_om.jl") # discipline 2
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
@@ -240,10 +242,10 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-# comp = JuliaExplicitComp(jlcomp=jl.OMLiftingLine())
-# comp = JuliaExplicitComp(jlcomp=jl.OMLiftingLine(1.0, 1.0, 1.0, 1.0))
-
-
+parser = argparse.ArgumentParser()
+parser.add_argument("--run_struct", help="use serif", action="store_true", default=False)
+parser.add_argument("--rhoKS", help="Aggregation factors", type=float, nargs="+", default=[80.0, 100.0])
+args = parser.parse_args()
 comp = JuliaImplicitComp(jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions))
 
 
@@ -279,10 +281,7 @@ optOptions = {
 }
 
 prob.model.add_design_var("liftingline.ptVec")
-# prob.model.add_design_var("liftingline.x")
-# prob.model.add_design_var("liftingline.y")
-# prob.model.add_objective("liftingline.f_xy")
-
+# prob.model.add_objective("liftingline.F_x")
 
 # prob.model.nonlinear_solver = om.NewtonSolver(
 #     solve_subsystems=True,
@@ -295,34 +294,34 @@ prob.model.add_design_var("liftingline.ptVec")
 prob.setup()
 
 prob.set_val("liftingline.ptVec", ptVec)
-# prob.set_val("liftingline.x", 3.0)
-# prob.set_val("liftingline.y", -4.0)
 prob.set_val("liftingline.gammas", np.zeros(40))
 
-# # --- Check partials ---
-# print(prob.check_partials(method="fd"))
-# # print(prob.check_partials(method="cs", compact_print=True))
-# breakpoint()
 
-print("running model...\n"+'-'*50)
+print("running model...\n" + "-" * 50)
 starttime = time.time()
 prob.final_setup()
 midtime = time.time()
 prob.run_model()
 endtime = time.time()
-print("model run complete\n"+'-'*50)
+print("model run complete\n" + "-" * 50)
 print(f"Time taken to run model: {endtime-midtime:.2f} s")
 
-print("running model again...\n"+'-'*50)
+print("running model again...\n" + "-" * 50)
 starttime = time.time()
 prob.run_model()
 endtime = time.time()
-print("model run complete\n"+'-'*50)
+print("model run complete\n" + "-" * 50)
 print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
 # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
 print(prob.get_val("liftingline.gammas"))
+# print("drag force", prob.get_val("liftingline.F_x"))
 
+# --- Check partials after you've solve the system!! ---
+# prob.set_check_partial_options(wrt=[""],)
+print(prob.check_partials(method="fd", compact_print=True))
+# # print(prob.check_partials(method="cs", compact_print=True))
+# breakpoint()
 
 # --- Testing other values ---
 # prob.set_val("liftingline.x", 5.0)

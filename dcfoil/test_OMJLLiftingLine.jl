@@ -234,20 +234,6 @@ prob.driver = om.ScipyOptimizeDriver(optimizer="SLSQP")
 # TODO: Install pyoptsparse!!
 # prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
 outputDir = "output"
-# optOptions = Dict(
-#     "Major feasibility tolerance" => 1e-4,
-#     "Major optimality tolerance" => 1e-4,
-#     "Difference interval" => 1e-4,
-#     "Hessian full memory" => None,
-#     "Function precision" => 1e-8,
-#     "Print file" => outputDir * "SNOPT_print.out",
-#     "Summary file" => outputDir * "SNOPT_summary.out",
-#     "Verify level" => -1,  # NOTE=> verify level 0 is pretty useless; just use level 1--3 when testing a new feature
-#     # "Linesearch tolerance"=> 0.99,  # all gradients are known so we can do less accurate LS
-#     # "Nonderivative linesearch"=> None,  # Comment out to specify yes nonderivative (nonlinear problem)
-#     # "Major Step Limit"=> 5e-3,
-#     # "Major iterations limit"=> 1,  # NOTE=> for debugging; remove before runs if left active by accident
-# )
 
 prob.setup()
 
