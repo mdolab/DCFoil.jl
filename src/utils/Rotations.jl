@@ -7,13 +7,6 @@
 @Desc          :   Better rotations for the finite element beam solver and lifting line routines
 """
 
-module Rotations
-
-using LinearAlgebra
-using FLOWMath: abs_cs_safe, atan_cs_safe
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
-
-const DTYPE = AbstractFloat
 
 function get_rotate3dMat(ψ, axis="x")
     """
@@ -168,7 +161,6 @@ function compute_vectorFromAngles(alpha, beta, Uinf)
     return Uinf * [cosa * cosb, cosa * sinb, sina * cosb] / sinasinb
 end
 
-end
 
 # using .Rotations
 # Rotations.get_transMat(1, 0, 0, 1)

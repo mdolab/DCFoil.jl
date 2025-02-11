@@ -7,26 +7,6 @@
 @Desc          :   Routines to derive 1D quantities from a mesh
 """
 
-module Preprocessing
-
-# # --- PACKAGES ---
-# using Zygote
-# using ChainRulesCore
-# using DelimitedFiles
-# using LinearAlgebra
-# using StaticArrays
-
-# --- DCFoil modules ---
-# using ..DCFoil: RealOrComplex
-const RealOrComplex = Union{Real,Complex}
-# using ..EBBeam: EBBeam as BeamElement, NDOF
-using ..Interpolation: Interpolation
-# using ..BeamProperties
-# using ..DesignConstants: DynamicFoil
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
-using FLOWMath: atan_cs_safe, abs_cs_safe
-using ..Utilities: Utilities
-using Zygote
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions, appendageParams)
     """
@@ -247,6 +227,4 @@ function compute_areas(LECoords, TECoords, nodeConn)
     # println("Planform area: $(areaRef) m^2")
 
     return areaRef
-end
-
 end

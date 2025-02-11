@@ -23,7 +23,6 @@ using ..NewtonRaphson
 using ..EigenvalueProblem
 
 # --- Globals ---
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
 using ..EBBeam: EBBeam as BeamElement
 # using ..DesignConstants: SORTEDDVS
 using ..DCFoil: RealOrComplex, DTYPE

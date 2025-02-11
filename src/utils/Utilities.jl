@@ -6,18 +6,12 @@
 """
 
 
-module Utilities
 
-using ..DesignConstants: SORTEDDVS
-# using ..DCFoil: RealOrComplex
 using FLOWMath: abs_cs_safe
 using LinearAlgebra
 using Zygote
 
-const RealOrComplex = Union{Real, Complex}
-const DTYPE = AbstractFloat
 
-export compute_KS
 
 function unpack_dvdict(DVDict::AbstractDict)
 
@@ -185,7 +179,5 @@ function cross3D(arr1, arr2)
     arr1crossarr2 = copy(arr1crossarr2_z)
 
     return arr1crossarr2
-
-end
 
 end

@@ -6,22 +6,8 @@
 @Desc    :   Contains the unsteady hydrodynamics routines
 """
 
-module Unsteady
-
-# --- Public functions ---
-export compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
-
 # --- PACKAGES ---
 using SpecialFunctions
-using LinearAlgebra
-using Statistics
-using Zygote, ChainRulesCore
-using Printf, DelimitedFiles
-
-# --- Globals ---
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
-
-const DTYPE = AbstractFloat
 
 function compute_theodorsen(k::DTYPE)
     """
@@ -338,5 +324,3 @@ end
 #     precompile(Unsteady.compute_node_mass, (Float64, Float64, Float64))
 #     precompile(Unsteady.compute_node_damp_faster, (Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64))
 # end
-
-end # module

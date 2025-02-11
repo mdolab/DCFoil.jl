@@ -1,18 +1,7 @@
-module NewtonRaphson
 """
 Newton-Raphson solver
 """
 
-export do_newton_raphson
-
-# --- PACKAGES ---
-using LinearAlgebra, Statistics
-using FLOWMath: norm_cs_safe
-using Printf
-# using Debugger
-using ChainRulesCore: ChainRulesCore, @ignore_derivatives
-
-using ..Utilities
 
 function print_solver_history(iterNum::Int64, resNorm, stepNorm)
 
@@ -76,12 +65,12 @@ function do_newton_raphson(
             end
 
             xLE, nodeConn, xTE = WorkingListOfParams[1:3]
-            xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
+            xVec, mm, nn =  unpack_coords(xLE, xTE)
 
             res = compute_residuals(u0, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
         # else
         #     DVDict = WorkingListOfParams[iComp]
-        #     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+        #     x0, DVLengths =  unpack_dvdict(DVDict)
         #     res = compute_residuals(
         #         u0, x0, DVLengths;
         #         appendageOptions=appendageOptions,
@@ -112,7 +101,7 @@ function do_newton_raphson(
                     end
 
                     xLE, nodeConn, xTE = WorkingListOfParams[1:3]
-                    xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
+                    xVec, mm, nn =  unpack_coords(xLE, xTE)
 
                     res = compute_residuals(u, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
                     ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
@@ -121,7 +110,7 @@ function do_newton_raphson(
                         appendageOptions=appendageOptions, solverOptions=solverOptions)
                 # else
 
-                #     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+                #     x0, DVLengths =  unpack_dvdict(DVDict)
                 #     res = compute_residuals(u, x0, DVLengths;
                 #         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
                 #     ∂r∂u = compute_∂r∂u(u, mode;
@@ -242,4 +231,3 @@ function do_newton_raphson(
     return converged_u, converged_r, iters
 end
 
-end

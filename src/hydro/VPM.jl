@@ -9,18 +9,6 @@
              "nonlinear" lift slope into the nonlinear lifting line
 """
 
-module VPM
-
-# --- PACKAGES ---
-using LinearAlgebra
-using Plots
-using FLOWMath: atan_cs_safe
-using ChainRulesCore
-
-# --- DCFoil modules ---
-using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..Rotations: Rotations, compute_cartAnglesFromVector
-const DTYPE = AbstractFloat
 
 struct AirfoilMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     """
@@ -33,7 +21,7 @@ struct AirfoilMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     sweep::TF           # sweep angle [rad]
 end
 
-function setup(xx, yy, control_xy, sweep=0.0)
+function setup_VPM(xx, yy, control_xy, sweep=0.0)
     """
     Discretize the airfoil into panels and setup the VPM linear systems to solve
 
@@ -98,7 +86,7 @@ function setup(xx, yy, control_xy, sweep=0.0)
     return AIRFOIL, Amat
 end
 
-function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
+function solve_VPM(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
     """
     Solve vortex strength and lift and moment
 
@@ -254,6 +242,4 @@ function compute_sweepCorr(angle, V)
     VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / SaSb
 
     return alphaCorr, VinfCorr
-end
-
 end
