@@ -4,12 +4,9 @@
 # @File    :   SolutionConstants.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
-# @Desc    :   Module to store used in the solution
+# @Desc    :   File to store used in the solution
 
 
-module SolutionConstants
-
-# using SparseArrays: SparseMatrixCSC
 # ==============================================================================
 #                         CONSTANTS
 # ==============================================================================
@@ -50,5 +47,3 @@ struct DCFoilDynamicConstants{TF,TC,TI,TS,TA<:AbstractVector{TF}}
     AICmat::Matrix{TC} # just the aero part of Dmat 
     extForceVec::TA # external force vector excluding BC nodes
 end
-
-end # end module

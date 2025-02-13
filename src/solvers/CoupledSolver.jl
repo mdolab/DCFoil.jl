@@ -24,7 +24,7 @@ function do_GSIter(solve_hydro, solve_structure, structStates, hydroStates)
     fHydro = LDTransfer.transfer_LD(fLL)
 
     # --- Solve Structure ---
-    structStates_GS = solve_structure(K, M, fHydro)
+    structStates_GS = solve_structure(K, fHydro)
 
     return structStates_GS, hydroStates_GS
 end

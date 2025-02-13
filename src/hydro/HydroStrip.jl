@@ -238,7 +238,6 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
         #     Second time with perturbed angle of attack
         # ************************************************
 
-
         LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
         f_i = LLOutputs_i.cl
         for ii in eachindex(ptVec)

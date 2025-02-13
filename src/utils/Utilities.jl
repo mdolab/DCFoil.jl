@@ -105,6 +105,42 @@ function repack_coords(LineCoordsVec, m, n)
     return LECoords, TECoords
 end
 
+function unpack_appendageParams(appendageParams, appendageOptions)
+
+    if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
+        print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+
+        α₀ = appendageParams["alfa0"]
+        rake = appendageParams["rake"]
+        # span = appendageParams["s"] * 2
+        zeta = appendageParams["zeta"]
+        theta_f = appendageParams["theta_f"]
+        beta = appendageParams["beta"]
+        s_strut = appendageParams["s_strut"]
+        c_strut = appendageParams["c_strut"]
+        theta_f_strut = appendageParams["theta_f_strut"]
+
+        toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+    else
+        rake = appendageParams["rake"]
+        # span = appendageParams["s"] * 2
+        toc::Vector{RealOrComplex} = appendageParams["toc"]
+        ab::Vector{RealOrComplex} = appendageParams["ab"]
+        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+        zeta = appendageParams["zeta"]
+        theta_f = appendageParams["theta_f"]
+        beta = appendageParams["beta"]
+        s_strut = appendageParams["s_strut"]
+        c_strut = appendageParams["c_strut"]
+        toc_strut = appendageParams["toc_strut"]
+        ab_strut = appendageParams["ab_strut"]
+        x_ab_strut = appendageParams["x_ab_strut"]
+        theta_f_strut = appendageParams["theta_f_strut"]
+    end
+
+    return rake, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut
+end
+
 function generate_naca4dig(toc)
     """
     Simple naca 
@@ -156,7 +192,6 @@ function normalize_3Dvector(r)
     rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
     return rhat
 end
-
 
 function cross3D(arr1, arr2)
     """

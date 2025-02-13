@@ -279,7 +279,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q1 = FEMMethods.solve_structure(K, M, F)
+    q1 = FEMMethods.solve_structure(K,F)
 
     # ************************************************
     #     bend-twist
@@ -299,7 +299,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q2 = FEMMethods.solve_structure(K, M, F)
+    q2 = FEMMethods.solve_structure(K, F)
 
     # ---------------------------
     #   Tip torque only
@@ -315,7 +315,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q3 = FEMMethods.solve_structure(K, M, F)
+    q3 = FEMMethods.solve_structure(K, F)
 
     # --- Reference value ---
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
@@ -358,7 +358,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
     writedlm("DebugK-BT2.csv", K, ",")
     writedlm("DebugF-BT2.csv", F, ",")
 
-    q3 = FEMMethods.solve_structure(K, M, F)
+    q3 = FEMMethods.solve_structure(K, F)
     BT2_Ftip_wtip = q3[end-3]
     BT2_Ftip_psitip = q3[end-1]
 
@@ -376,7 +376,7 @@ function test_FiniteElementComp(DVDict, solverOptions)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q4 = FEMMethods.solve_structure(K, M, F)
+    q4 = FEMMethods.solve_structure(K, F)
     BT2_Ttip_wtip = q4[end-3]
     BT2_Ttip_psitip = q4[end-1]
 
@@ -529,7 +529,7 @@ function test_FiniteElementIso3D()
     # println("F = ")
     # println(F)
     # # return K, F
-    q1 = FEMMethods.solve_structure(K, M, F)
+    q1 = FEMMethods.solve_structure(K, F)
 
     # writedlm("DebugKGlobMatrix.csv", globalK, ',')
     # writedlm("DebugMGlobMatrix.csv", globalM, ',')
@@ -671,7 +671,7 @@ function test_FiniteElementBend()
     # println("F = ")
     # println(F)
     # # return K, F
-    q1 = FEMMethods.solve_structure(K, M, F)
+    q1 = FEMMethods.solve_structure(K, F)
 
 
     # ************************************************
@@ -728,7 +728,7 @@ function test_FEBT3()
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q3 = FEMMethods.solve_structure(K, M, F)
+    q3 = FEMMethods.solve_structure(K, F)
     BT2_Ftip_wtip = q3[end-4]
     BT2_Ftip_psitip = q3[end-1]
 
@@ -745,7 +745,7 @@ function test_FEBT3()
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q4 = FEMMethods.solve_structure(K, M, F)
+    q4 = FEMMethods.solve_structure(K, F)
     BT2_Ttip_wtip = q4[end-4]
     BT2_Ttip_psitip = q4[end-1]
 
@@ -862,7 +862,7 @@ function test_FECOMP2()
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    u3 = FEMMethods.solve_structure(K, M, F)
+    u3 = FEMMethods.solve_structure(K, F)
     # transform back to local coordinates
     # T1 = SolverRoutines.get_rotate3dMat(angleDefault, axis=axisDefault) # question remaining why this is not the negative angle
     # T = T1
@@ -900,7 +900,7 @@ function test_FECOMP2()
     # writedlm("DebugK-COMP2.csv", K,",")
     # writedlm("DebugF-COMP2.csv", F,",")
 
-    u4 = FEMMethods.solve_structure(K, M, F)
+    u4 = FEMMethods.solve_structure(K, F)
     q4 = transMatG2L[1:9, 1:9] * u4[end-8:end] # transform back to local coordinates
     BT2_Ttip_wtip = q4[end-6]
     BT2_Ttip_psitip = q4[end-5]
@@ -969,5 +969,5 @@ function test_fullwing(DVDict, solverOptions)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    u3 = FEMMethods.solve_structure(K, M, F)
+    u3 = FEMMethods.solve_structure(K, F)
 end

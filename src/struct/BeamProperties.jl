@@ -1,4 +1,3 @@
-module BeamProperties
 """
 @File    :   BeamProperties.jl
 @Time    :   2024/01/30
@@ -8,10 +7,6 @@ module BeamProperties
 
 using Zygote
 
-using ..DCFoil: RealOrComplex, DTYPE
-
-# --- Public functions ---
-export compute_section_property
 
 struct SectionProperty{TF,TC}
     c::TC # chord length
@@ -286,4 +281,3 @@ function compute_CLT_multilayer()
     # TODO: 
 end
 
-end # end of module

@@ -30,6 +30,7 @@ using ..SolverRoutines
 using ..Interpolation
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..DCFoilSolution
+
 using ..OceanWaves
 
 using Debugger
@@ -386,6 +387,5 @@ function compute_∂r∂u(structuralStates, mode="FiDi")
     return ∂r∂u
 
 end
-
 
 end # end module

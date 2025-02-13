@@ -93,6 +93,9 @@ function solve_VPM(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
     Airfoil: AirfoilMesh struct
     Amat: Panel matrix of influences
     V: Freestream velocity vector [U, V, W]
+    Outputs:
+    cℓ: Sectional lift coefficient
+    cm: Moment coefficient about leading edge
     """
 
     if length(V) != 3

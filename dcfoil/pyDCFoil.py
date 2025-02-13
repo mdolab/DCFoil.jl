@@ -77,10 +77,12 @@ class DCFOIL:
                 # Pull from local directory
                 repoDir = Path(__file__).parent.parent
                 Pkg.activate(f"{repoDir}")
+                
                 # --- This was for PyCall ---
                 Main.include(f"{repoDir}/src/DCFoil.jl")
                 # Main.using(".DCFoil")
                 # DCFoil = Main.DCFoil
+
                 # --- PythonCall ---
                 # jl = juliacall.newmodule("DCFoil")
                 Main.seval("using .DCFoil")
@@ -90,6 +92,7 @@ class DCFOIL:
                 # Pull from Julia package registry (online)
                 Pkg.add("DCFoil")
                 from julia import DCFoil
+
             self.DCFoil = DCFoil
 
         except Exception:

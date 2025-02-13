@@ -6,7 +6,6 @@
 @Desc    :   Module with the linear beam elements
 """
 
-module EBBeam
 """
     ELEMENTS THAT WORK IN 3D SPACE
      - BEAM3D
@@ -691,4 +690,3 @@ function compute_elem_mass(
     return Mᵉ
 end
 
-end # end module

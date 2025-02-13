@@ -7,23 +7,18 @@
 # @Desc    :   Module to initialize the hydrofoil model and store data
 
 
-module InitModel
 
-# --- PACKAGES ---
-using Zygote
-using ChainRulesCore: ChainRulesCore, @ignore_derivatives
-# using Debugger
 
 # --- DCFoil modules ---
-using ..DCFoil: RealOrComplex
-using ..HydroStrip: HydroStrip
-using ..BeamProperties: BeamProperties
-using ..DesignConstants: DesignConstants, SORTEDDVS, CONFIGS
-using ..MaterialLibrary: MaterialLibrary
-using ..HullLibrary: HullLibrary
-using ..Preprocessing: Preprocessing
-using ..FEMMethods: FEMMethods
-using ..Utilities: Utilities
+# using ..DCFoil: RealOrComplex
+# using ..HydroStrip: HydroStrip
+# using ..BeamProperties: BeamProperties
+# using ..DesignConstants: DesignConstants, SORTEDDVS, CONFIGS
+# using ..MaterialLibrary: MaterialLibrary
+# using ..HullLibrary: HullLibrary
+# using ..Preprocessing: Preprocessing
+# using ..FEMMethods: FEMMethods
+# using ..Utilities: Utilities
 
 function init_static(
   α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f,
@@ -291,7 +286,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   WingModel, StrutModel, LLOutputs, LLSystem, FlowCond = init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
   idxTip = Preprocessing.get_tipnode(LECoords)
-  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), idxTip, appendageParams, appendageOptions)
+  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, ChainRulesCore.@ignore_derivatives(nodeConn), idxTip, appendageParams, appendageOptions)
   FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
 
@@ -303,5 +298,3 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   return WingModel, StrutModel, HullModel, FEMESH, LLOutputs, LLSystem, FlowCond
 end
-
-end # end module

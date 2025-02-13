@@ -122,7 +122,7 @@ function solveFromCoords(
     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
     fTractions, _, _ = HydroStrip.integrate_hydroLoads(zeros(length(SOLVERPARAMS.Kmat[1, :])), SOLVERPARAMS.AICmat, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
-    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
+    q_ss0 = FEMMethods.solve_structure(SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], fTractions[1:end.∉[DOFBlankingList]])
 
     if lowercase(solverOptions["res_jacobian"]) == "cs"
         mode = "CS"
@@ -430,21 +430,6 @@ function compute_funcsFromfhydro(costFunc, states, forces, ptVec, nodeConn, appe
     return fout
 end
 
-# function compute_solFromDVDict(
-#     DVDictList, solverOptions::AbstractDict, evalFuncs::Vector{String};
-#     iComp=1, CLMain=0.0
-# )
-#     """
-#     Wrapper function to do primal solve and return solution struct
-#     """
-
-#     appendageOptions = solverOptions["appendageList"][iComp]
-#     WING, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions; iComp=iComp, CLMain=CLMain, verbose=true)
-
-#     SOL = solveFromDVs(SOLVERPARAMS, FEMESH, WING, STRUT, DVDictList, solverOptions; iComp=iComp, CLMain=CLMain)
-
-#     return SOL
-# end
 
 function compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, solverOptions)
 
@@ -453,29 +438,6 @@ function compute_solFromCoords(LECoords, nodeConn, TECoords, appendageParamsList
 
     return SOL
 end
-
-# function cost_funcsFromDVs(
-#     DVDict::AbstractDict, iComp::Int64, solverOptions::AbstractDict, evalFuncsList::Vector{String};
-#     DVDictList=[], CLMain=0.0
-# )
-#     """
-#     Do primal solve with function signature compatible with Zygote
-#     """
-
-#     appendageOptions = solverOptions["appendageList"][iComp]
-#     # Setup
-#     DVDictList[iComp] = DVDict
-#     FOIL, STRUT, SOLVERPARAMS, FEMESH = setup_problemFromDVDict(DVDictList, appendageOptions, solverOptions;
-#         verbose=false, iComp=iComp, CLMain=CLMain)
-#     # Solve
-#     SOL = solveFromDVs(SOLVERPARAMS, FEMESH, FOIL, STRUT, DVDictList, appendageOptions, solverOptions;
-#         iComp=iComp, CLMain=CLMain)
-#     DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-#     costFuncs = get_evalFunc(
-#         evalFuncsList, SOL.structStates, SOL, DVVec, DVLengths;
-#         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain)
-#     return costFuncs
-# end
 
 function cost_funcsFromPtVec(
     ptVec, nodeConn, appendageParams, iComp::Int64, solverOptions::AbstractDict, evalFunc::String;
@@ -1686,20 +1648,15 @@ function compute_residualsFromCoords(
     resVec = Felastic - FOut
 
 
-    # println("u states: ", structStates[end-NDOF:end])
-    # println("hydroforces: ", FOut[end-NDOF:end])
-    # println("elastic forces: ", Felastic[end-NDOF:end])
-    # println("residuals: ", resVec[end-NDOF:end])
-
     return resVec
 end
 
 function compute_structResiduals(structStates, hydroStates, xVec)
-    
-    
+
+
     resVec = Kss * structStates - Fhydro
-    
-    return resVec    
+
+    return resVec
 end
 
 function compute_∂rs∂γ()

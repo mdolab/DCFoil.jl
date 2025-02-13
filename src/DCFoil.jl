@@ -17,7 +17,6 @@ using Printf
 
 # Set the default data type
 include("constants/DataTypes.jl")
-const DTYPE = DblPrec # Cmplx
 
 # ==============================================================================
 #                         HEADER FILES

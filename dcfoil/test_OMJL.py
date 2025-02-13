@@ -18,6 +18,7 @@ import os
 import numpy as np
 import time
 import argparse
+
 # ==============================================================================
 # Extension modules
 # ==============================================================================
@@ -26,8 +27,8 @@ import juliacall
 
 jl = juliacall.newmodule("DCFoil")
 
-jl.include("../src/struct/beam_om.jl") # discipline 1
-jl.include("../src/hydro/liftingline_om.jl") # discipline 2
+jl.include("../src/struct/beam_om.jl")  # discipline 1
+jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
@@ -243,20 +244,37 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
 #                         MAIN DRIVER
 # ==============================================================================
 parser = argparse.ArgumentParser()
-parser.add_argument("--run_struct", help="use serif", action="store_true", default=False)
-parser.add_argument("--rhoKS", help="Aggregation factors", type=float, nargs="+", default=[80.0, 100.0])
+parser.add_argument("--run_struct", action="store_true", default=False)
+parser.add_argument("--test_partials", action="store_true", default=False)
 args = parser.parse_args()
-comp = JuliaImplicitComp(jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions))
 
+# --- Echo the args ---
+print(30 * "-")
+print("Arguments are", flush=True)
+for arg in vars(args):
+    print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+print(30 * "-", flush=True)
+
+
+comp_struct = JuliaImplicitComp(jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions))
+comp_LL = JuliaImplicitComp(jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions))
 
 model = om.Group()
 
-model.add_subsystem(
-    "liftingline",
-    comp,
-    # promotes_inputs=["x", "y"],
-    # promotes_outputs=["f_xy"],
-)
+if args.run_struct:
+    model.add_subsystem(
+        "beamstruct",
+        comp_struct,
+        promotes_inputs=["ptVec"],
+    )
+else:
+
+    model.add_subsystem(
+        "liftingline",
+        comp_LL,
+        promotes_inputs=["ptVec"],
+        # promotes_outputs=["f_xy"],
+    )
 
 
 prob = om.Problem(model)
@@ -280,7 +298,7 @@ optOptions = {
     # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
 }
 
-prob.model.add_design_var("liftingline.ptVec")
+prob.model.add_design_var("ptVec")
 # prob.model.add_objective("liftingline.F_x")
 
 # prob.model.nonlinear_solver = om.NewtonSolver(
@@ -293,8 +311,14 @@ prob.model.add_design_var("liftingline.ptVec")
 
 prob.setup()
 
-prob.set_val("liftingline.ptVec", ptVec)
-prob.set_val("liftingline.gammas", np.zeros(40))
+prob.set_val("ptVec", ptVec)
+
+if args.run_struct:
+    tractions = prob.get_val("beamstruct.traction_forces")
+    tractions[-6] = 10.0
+    prob.set_val("beamstruct.traction_forces", tractions)
+else:
+    prob.set_val("liftingline.gammas", np.zeros(40))
 
 
 print("running model...\n" + "-" * 50)
@@ -313,15 +337,20 @@ endtime = time.time()
 print("model run complete\n" + "-" * 50)
 print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
-# print(prob["liftingline.f_xy"])  # Should print `[-15.]`
-print(prob.get_val("liftingline.gammas"))
-# print("drag force", prob.get_val("liftingline.F_x"))
+if args.run_struct:
+    print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
+    print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+else:
+    print("nondimensional gammas", prob.get_val("liftingline.gammas"))
+    # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
+    # print("drag force", prob.get_val("liftingline.F_x"))
 
 # --- Check partials after you've solve the system!! ---
-# prob.set_check_partial_options(wrt=[""],)
-print(prob.check_partials(method="fd", compact_print=True))
-# # print(prob.check_partials(method="cs", compact_print=True))
-# breakpoint()
+if args.test_partials:
+    # prob.set_check_partial_options(wrt=[""],)
+    print(prob.check_partials(method="fd", compact_print=True))
+    # # print(prob.check_partials(method="cs", compact_print=True))
+    # breakpoint()
 
 # --- Testing other values ---
 # prob.set_val("liftingline.x", 5.0)

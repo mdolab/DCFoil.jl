@@ -38,7 +38,7 @@ end
 
 function OpenMDAOCore.setup(self::OMLiftingLine)
     """
-    Setup
+    Setup OpenMDAO data
     """
 
     # Number of mesh points
@@ -85,7 +85,7 @@ end
 # If the discipline can solve itself, use this
 function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
 
-    println("solving nonlinear!")
+    # println("solving nonlinear!")
 
     ptVec = inputs["ptVec"]
 
@@ -95,7 +95,9 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
 
-    # --- Lifting line setup stuff ---    
+    # ************************************************
+    #     Core solver
+    # ************************************************
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
     idxTip = LiftingLine.get_tipnode(LECoords)
@@ -123,7 +125,6 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     #   Calculate influence matrix
     # ---------------------------
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
-
 
     # ---------------------------
     #   Solve for circulation
@@ -171,7 +172,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     This defines the derivatives of outputs
     """
 
-    println("running linearize...")
+    # println("running linearize...")
 
     ptVec = inputs["ptVec"]
     gammas = outputs["gammas"]
@@ -416,7 +417,11 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     return nothing
 end
 
+# ==============================================================================
+#                         Lifting line cost functions
+# ==============================================================================
 # Use the explicit component to handle lifting line cost functions like CL, CDi, etc.
+# after the system is solved
 struct OMLLOutputs <: OpenMDAOCore.AbstractExplicitComp
     """
     These are all the options
