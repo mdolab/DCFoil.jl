@@ -32,24 +32,48 @@ if __name__ == "__main__":
         # x.add_system("opt", opt, r"\text{Optimizer}")
         # x.add_system("geo", func, (r"\text{Geometry}", r"\text{parametrization}"))
         x.add_system("solver", solver, (r"\text{Static hydroelastic}", r"\text{MDA}"))
-        x.add_system("febeam", func, (r"\text{Composite beam}", r"\text{solver}"))
-        x.add_system("liftingline", func, (r"\text{Lifting line}", r"\text{solver}"))
-        x.add_system("dynamicsolver", solver, (r"\text{Dynamic}", r"\text{solvers}"),stack=True)
+        x.add_system("febeam", func, (r"\text{Composite beam}", r"\text{implicit component}"))
+        x.add_system("febeamoutput", func, (r"\text{Structural}", r"\text{functions}"))
+        x.add_system("liftingline", func, (r"\text{Lifting line}", r"\text{implicit component}"))
+        x.add_system("liftinglineoutput", func, (r"\text{Hydrodynamic}", r"\text{functions}"))
+        x.add_system("dynamicsolver", solver, (r"\text{Dynamic}", r"\text{solvers}"), stack=True)
 
         # --- draw data connection ---
-        x.connect("febeam", "liftingline", r"\text{Displacements}")
-        x.connect("solver","febeam",  r"\text{Surface loads}")
-        x.connect("febeam","solver",  r"\mathbf{r}_s(\mathbf{u})")
-        x.connect("liftingline","solver",  r"\mathbf{r}_f(\boldsymbol{\gamma})")
-        x.connect("solver","dynamicsolver",  (r"\text{Static states and linearized quantities }",r"\text{about static equilibrium for dynamics analysis:}",r"c_{\ell_\alpha}'s, \mathbf{M}_{ss}, \mathbf{C}_{ss}, \mathbf{K}_{ss}, \text{etc.}"))
+        x.connect("febeam", "liftingline", r"\text{Displacements } \mathbf{u}")
+        x.connect("liftinglineoutput", "febeam", r"\text{Surface loads}")
+        x.connect("liftingline", "liftinglineoutput", r"\text{Vortex strengths }\boldsymbol{\gamma}")
+        x.connect("febeam", "solver", r"\mathbf{r}_s(\mathbf{u})")
+        x.connect("febeam", "febeamoutput", r"\text{Displacements } \mathbf{u}")
+        x.connect("liftingline", "solver", r"\mathbf{r}_f(\boldsymbol{\gamma})")
+        x.connect(
+            "febeamoutput",
+            "dynamicsolver",
+            (
+                r"\text{Linearized quantities }",
+                r"\text{about static equilibrium for dynamics analysis:}",
+                r"\mathbf{M}_{ss}, \mathbf{C}_{ss}, \mathbf{K}_{ss}",
+            ),
+        )
+        x.connect(
+            "liftinglineoutput",
+            "dynamicsolver",
+            (
+                r"\text{Linearized quantities }",
+                r"\text{about static equilibrium for dynamics analysis:}",
+                r"c_{\ell_\alpha}'s, \mathbf{M}_{ff}, \mathbf{C}_{ff}, \mathbf{K}_{ff}",
+            ),
+        )
         # x.connect("opt", "geo", (r"\text{Geometric}", r"\text{variables}"))
         # x.connect("opt", "solver", (r"\text{Flow \&}", r"\text{structural}", r"\text{variables}"))
 
         # --- draw process connection ---
-        x.add_process(["solver", "febeam"], arrow=True)
+        x.add_process(["liftinglineoutput", "febeam"], arrow=True)
         x.add_process(["febeam", "liftingline"], arrow=True)
+        x.add_process(["febeam", "febeamoutput"], arrow=True)
         x.add_process(["liftingline", "solver"], arrow=True)
-        x.add_process(["solver", "dynamicsolver"], arrow=True)
+        x.add_process(["liftingline", "liftinglineoutput"], arrow=True)
+        x.add_process(["febeamoutput", "dynamicsolver"], arrow=True)
+        x.add_process(["liftinglineoutput", "dynamicsolver"], arrow=True)
 
         x.write("statichydroelastic")
 
@@ -101,6 +125,5 @@ if __name__ == "__main__":
         x.add_output("solver", (r"\text{Final}", r"\text{states}"), side="left")
         x.add_output("forcedsolver", (r"\text{Final dynamic}", r"\text{states}"), side="left")
         x.add_output("fluttersolver", (r"\text{Flutter}", r"\text{mode evolution}"), side="left")
-
 
         x.write("dcfoil")

@@ -48,34 +48,14 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(npt * 3 * 2)),
     ]
-    # inputs = [OpenMDAOCore.VarData("x", val=0.0), OpenMDAOCore.VarData("y", val=0.0)]
     outputs = [
-        OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
-        # OpenMDAOCore.VarData("CL", val=0.0),
-        # OpenMDAOCore.VarData("CDi", val=0.0),
-        # OpenMDAOCore.VarData("F_x", val=0.0),
-        # OpenMDAOCore.VarData("F_y", val=0.0),
-        # OpenMDAOCore.VarData("F_z", val=0.0),
-        # OpenMDAOCore.VarData("forces_dist", val=zeros(3, LiftingLine.NPT_WING)),
-        # OpenMDAOCore.VarData("M_x", val=0.0),
-        # OpenMDAOCore.VarData("M_y", val=0.0),
-        # OpenMDAOCore.VarData("M_z", val=0.0),
-        # OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)),
-    ]
+        OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),]
 
     partials = [
         # OpenMDAOCore.PartialsData("*", "*", method="fd"),
         # --- Residuals ---
         OpenMDAOCore.PartialsData("gammas", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("gammas", "gammas", method="exact"),
-        # --- Output type functions ---
-        # OpenMDAOCore.PartialsData("gammas", "forces", rows=nothing, cols=nothing), # this is the same idea as dependent=false
-        # OpenMDAOCore.PartialsData("CL", "ptVec", method="exact"),
-        # OpenMDAOCore.PartialsData("CDi", "ptVec", method="exact"),
-        # OpenMDAOCore.PartialsData("F_x", "ptVec", method="exact"),
-        # OpenMDAOCore.PartialsData("F_y", "ptVec", method="exact"),
-        # OpenMDAOCore.PartialsData("F_z", "ptVec", method="exact"),
-        # OpenMDAOCore.PartialsData("forces_dist", "ptVec", method="fd"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="exact")] # define the partials
 
@@ -152,17 +132,6 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     for (ii, gamma) in enumerate(Gconv)
         outputs["gammas"][ii] = gamma
     end
-
-    # DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
-    # for (ii, DimForce) in enumerate(eachcol(DimForces))
-    #     outputs["forces_dist"][:, ii] = DimForce
-    # end
-
-    # outputs["F_x"][1] = IntegratedForces[XDIM]
-    # outputs["F_y"][1] = IntegratedForces[YDIM]
-    # outputs["F_z"][1] = IntegratedForces[ZDIM]
-    # outputs["CL"][1] = CL
-    # outputs["CDi"][1] = CDi
 
     return nothing
 end
@@ -422,7 +391,7 @@ end
 # ==============================================================================
 # Use the explicit component to handle lifting line cost functions like CL, CDi, etc.
 # after the system is solved
-struct OMLLOutputs <: OpenMDAOCore.AbstractExplicitComp
+struct OMLiftingLineFuncs <: OpenMDAOCore.AbstractExplicitComp
     """
     These are all the options
     """
@@ -430,4 +399,117 @@ struct OMLLOutputs <: OpenMDAOCore.AbstractExplicitComp
     appendageParams
     appendageOptions
     solverOptions
+end
+
+function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
+
+    # Number of mesh points
+    npt = size(self.nodeConn, 2) + 1
+
+    inputs = [
+        OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
+        OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
+    ]
+
+    outputs = [
+        OpenMDAOCore.VarData("CL", val=0.0),
+        OpenMDAOCore.VarData("CDi", val=0.0),
+        OpenMDAOCore.VarData("F_x", val=0.0),
+        OpenMDAOCore.VarData("F_y", val=0.0),
+        OpenMDAOCore.VarData("F_z", val=0.0),
+        OpenMDAOCore.VarData("forces_dist", val=zeros(3, LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("M_x", val=0.0),
+        OpenMDAOCore.VarData("M_y", val=0.0),
+        OpenMDAOCore.VarData("M_z", val=0.0),
+        OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)),
+    ]
+
+    partials = [
+        # WRT ptVec
+        OpenMDAOCore.PartialsData("CL", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("CDi", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("F_x", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("F_y", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("F_z", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("forces_dist", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("M_x", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("M_y", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("M_z", "ptVec", method="exact"),
+        # WRT gammas
+        OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("F_x", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("F_y", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("F_z", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("forces_dist", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("M_x", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("M_y", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("M_z", "gammas", method="exact"),
+    ]
+    # partials = [OpenMDAOCore.PartialsData("*", "*", method="fd")] # define the partials
+
+    return inputs, outputs, partials
+end
+
+function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
+
+    Gconv = inputs["gammas"]
+    ptVec = inputs["ptVec"]
+
+    # --- Deal with options here ---
+    nodeConn = self.nodeConn
+    appendageParams = self.appendageParams
+    solverOptions = self.solverOptions
+    appendageOptions = self.appendageOptions
+
+    # ************************************************
+    #     Core solver
+    # ************************************************
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    idxTip = LiftingLine.get_tipnode(LECoords)
+    midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    # ---------------------------
+    #   Hydrodynamics
+    # ---------------------------
+    α0 = appendageParams["alfa0"]
+    β0 = appendageParams["beta"]
+    rake = appendageParams["rake"]
+    depth0 = appendageParams["depth0"]
+    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+        npt_wing=npt_wing,
+        npt_airfoil=npt_airfoil,
+        rhof=solverOptions["rhof"],
+        # airfoilCoordFile=airfoilCoordFile,
+        airfoil_ctrl_xy=airfoilCtrlXY,
+        airfoil_xy=airfoilXY,
+        options=options,
+    )
+
+    # ---------------------------
+    #   Calculate influence matrix
+    # ---------------------------
+    TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+
+    DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
+    for (ii, DimForce) in enumerate(eachcol(DimForces))
+        outputs["forces_dist"][:, ii] = DimForce
+    end
+
+    outputs["F_x"][1] = IntegratedForces[XDIM]
+    outputs["F_y"][1] = IntegratedForces[YDIM]
+    outputs["F_z"][1] = IntegratedForces[ZDIM]
+    outputs["CL"][1] = CL
+    outputs["CDi"][1] = CDi
+
+    return nothing
+end
+
+function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partials)
+    """
+    TODO:
+    """
+    return nothing
 end
