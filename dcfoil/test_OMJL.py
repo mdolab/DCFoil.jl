@@ -245,6 +245,7 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
 # ==============================================================================
 parser = argparse.ArgumentParser()
 parser.add_argument("--run_struct", action="store_true", default=False)
+parser.add_argument("--run_flow", action="store_true", default=False)
 parser.add_argument("--test_partials", action="store_true", default=False)
 args = parser.parse_args()
 
@@ -256,26 +257,57 @@ for arg in vars(args):
 print(30 * "-", flush=True)
 
 
-comp_struct = JuliaImplicitComp(jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions))
-comp_LL = JuliaImplicitComp(jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions))
+impcomp_struct_solver = JuliaImplicitComp(jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions))
+impcomp_LL_solver = JuliaImplicitComp(jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions))
+expcomp_LL_func = JuliaExplicitComp(jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions))
 
 model = om.Group()
 
+# ************************************************
+#     Setup components
+# ************************************************
 if args.run_struct:
     model.add_subsystem(
         "beamstruct",
-        comp_struct,
+        impcomp_struct_solver,
         promotes_inputs=["ptVec"],
     )
-else:
+elif args.run_flow:
 
+    # --- Do nonlinear liftingline ---
     model.add_subsystem(
         "liftingline",
-        comp_LL,
+        impcomp_LL_solver,
         promotes_inputs=["ptVec"],
-        # promotes_outputs=["f_xy"],
+        promotes_outputs=["gammas"],
     )
-
+    model.add_subsystem(
+        "liftingline_funcs",
+        expcomp_LL_func,
+        promotes_inputs=["gammas", "ptVec"], # promotion auto connects these variables
+        )
+else:
+    # --- Combined hydroelastic ---
+    model.add_subsystem(
+        "beamstruct",
+        impcomp_struct_solver,
+        promotes_inputs=["ptVec"],
+    )
+    model.add_subsystem(
+        "liftingline",
+        impcomp_LL_solver,
+        promotes_inputs=["ptVec"],
+        promotes_outputs=["gammas"],
+    )
+    model.add_subsystem(
+        "liftingline_funcs",
+        expcomp_LL_func,
+        promotes_inputs=["gammas", "ptVec"], # promotion auto connects these variables
+        )
+    
+# ************************************************
+#     Setup problem
+# ************************************************
 
 prob = om.Problem(model)
 
@@ -320,7 +352,9 @@ if args.run_struct:
 else:
     prob.set_val("liftingline.gammas", np.zeros(40))
 
-
+# ************************************************
+#     Evaluate model
+# ************************************************
 print("running model...\n" + "-" * 50)
 starttime = time.time()
 prob.final_setup()
