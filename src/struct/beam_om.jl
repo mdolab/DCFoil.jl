@@ -66,7 +66,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     """
     Solve the FEM model
     """
-    println("Solving nonlinear")
+    println("Solving nonlinear beam")
 
     ptVec = inputs["ptVec"]
     traction_forces = inputs["traction_forces"]
@@ -115,7 +115,8 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     globalK, globalM, globalC, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
     ∂rs∂xPt, ∂rs∂xParams = FEMMethods.compute_∂r∂x(allStructStates, traction_forces, [appendageParams], LECoords, TECoords, nodeConn;
-        mode="analytic",
+        mode="analytic", # better
+        # mode="FiDi",
         # mode="RAD",
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
@@ -123,9 +124,12 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     ∂rs∂us[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] =
         globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] # - ∂F∂u looking for direct dependence
 
+    # partials["deflections", "ptVec"][:, :] .= 0.0
+    # partials["deflections", "ptVec"][1:end.∉[DOFBlankingList], :] = ∂rs∂xPt
     partials["deflections", "ptVec"][:, :] = ∂rs∂xPt
     partials["deflections", "deflections"][:, :] = ∂rs∂us
-    partials["deflections", "traction_forces"][:, :] = -I(size(partials["deflections", "traction_forces"]))
+    partials["deflections", "traction_forces"][1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] =
+        -I(length(traction_forces) - length(DOFBlankingList))
 
     return nothing
 end
@@ -135,7 +139,6 @@ function OpenMDAOCore.apply_nonlinear!(self::OMFEBeam, inputs, outputs, residual
     """
     Apply the nonlinear model
     """
-    println("Applying nonlinear febeam")
 
     ptVec = inputs["ptVec"]
     traction_forces = inputs["traction_forces"]
@@ -173,10 +176,43 @@ struct OMFEBeamFuncs <: OpenMDAOCore.AbstractExplicitComp
     solverOptions
 end
 
-function OpenMDAOCore.setup()
+function OpenMDAOCore.setup(self::OMFEBeamFuncs)
 
+    # Number of mesh points
+    npt = size(self.nodeConn, 2) + 1
+    nNodeTot, nNodeWing, nElemTot, nElemWing = FEMMethods.get_numnodes(self.appendageOptions["config"], self.appendageOptions["nNodes"], self.appendageOptions["nNodeStrut"])
+
+    inputs = [
+        OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
+        OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
+    ]
+
+    outputs = [
+        OpenMDAOCore.VarData("wtip", val=0.0),
+        OpenMDAOCore.VarData("thetatip", val=0.0),
+    ]
+
+    partials = [
+        # WRT ptVec
+        OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"),
+        # WRT deflections
+        OpenMDAOCore.PartialsData("wtip", "deflections", method="exact"),
+        OpenMDAOCore.PartialsData("thetatip", "deflections", method="exact"),
+    ]
+    # partials = [OpenMDAOCore.PartialsData("*", "*", method="fd")] # define the partials
+
+    return inputs, outputs, partials
 end
 
-function OpenMDAOCore.compute!()
+function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
+    # TODO: IMPLEMENT These
+    inputs[]
+    return nothing
+end
 
+function OpenMDAOCore.compute_partials!(self::OMFEBeamFuncs, inputs, partials)
+    # TODO: IMPLEMENT These
+    inputs[]
+    return nothing
 end

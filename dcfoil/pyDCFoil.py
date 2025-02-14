@@ -77,7 +77,7 @@ class DCFOIL:
                 # Pull from local directory
                 repoDir = Path(__file__).parent.parent
                 Pkg.activate(f"{repoDir}")
-                
+
                 # --- This was for PyCall ---
                 Main.include(f"{repoDir}/src/DCFoil.jl")
                 # Main.using(".DCFoil")

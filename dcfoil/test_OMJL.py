@@ -257,9 +257,18 @@ for arg in vars(args):
 print(30 * "-", flush=True)
 
 
-impcomp_struct_solver = JuliaImplicitComp(jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions))
-impcomp_LL_solver = JuliaImplicitComp(jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions))
-expcomp_LL_func = JuliaExplicitComp(jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions))
+impcomp_struct_solver = JuliaImplicitComp(
+    jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
+)
+expcomp_struct_func = JuliaExplicitComp(
+    jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
+)
+impcomp_LL_solver = JuliaImplicitComp(
+    jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
+)
+expcomp_LL_func = JuliaExplicitComp(
+    jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
+)
 
 model = om.Group()
 
@@ -271,6 +280,13 @@ if args.run_struct:
         "beamstruct",
         impcomp_struct_solver,
         promotes_inputs=["ptVec"],
+        promotes_outputs=["deflections"],
+    )
+    model.add_subsystem(
+        "beamstruct_funcs",
+        expcomp_struct_func,
+        promotes_inputs=["deflections","ptVec"],
+        promotes_outputs=["*"], # everything!
     )
 elif args.run_flow:
 
@@ -284,15 +300,22 @@ elif args.run_flow:
     model.add_subsystem(
         "liftingline_funcs",
         expcomp_LL_func,
-        promotes_inputs=["gammas", "ptVec"], # promotion auto connects these variables
-        promotes_outputs=["*"], # everything!
-        )
+        promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+        promotes_outputs=["*"],  # everything!
+    )
 else:
     # --- Combined hydroelastic ---
     model.add_subsystem(
         "beamstruct",
         impcomp_struct_solver,
         promotes_inputs=["ptVec"],
+        promotes_outputs=["deflections"],
+    )
+    model.add_subsystem(
+        "beamstruct_funcs",
+        expcomp_struct_func,
+        promotes_inputs=["deflections","ptVec"],
+        promotes_outputs=["*"], # everything!
     )
     model.add_subsystem(
         "liftingline",
@@ -303,10 +326,10 @@ else:
     model.add_subsystem(
         "liftingline_funcs",
         expcomp_LL_func,
-        promotes_inputs=["gammas", "ptVec"], # promotion auto connects these variables
-        promotes_outputs=["*"], # everything!
-        )
-    
+        promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+        promotes_outputs=["*"],  # everything!
+    )
+
 # ************************************************
 #     Setup problem
 # ************************************************
@@ -403,11 +426,21 @@ if args.test_partials:
     f.write("=" * 50)
     f.write(" liftingline partials ")
     f.write("=" * 50)
-    prob.check_partials(out_stream=f,includes=["liftingline"], method="fd")
+    prob.check_partials(
+        out_stream=f,
+        includes=["liftingline"],
+        method="fd",
+        compact_print=True,
+    )
     f.write("=" * 50)
     f.write(" structural partials ")
     f.write("=" * 50)
-    prob.check_partials(out_stream=f,includes=["beamstruct"], method="fd")
+    prob.check_partials(
+        out_stream=f,
+        includes=["beamstruct"],
+        method="fd",
+        compact_print=True,
+    )
     # # print(prob.check_partials(method="cs", compact_print=True))
     # breakpoint()
     f.close()

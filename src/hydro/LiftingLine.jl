@@ -1267,7 +1267,18 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
             ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
         end
         # end
-    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to 4 sec in pure julia
+    elseif uppercase(mode) == "CS" # does not work
+        dh = 1e-100
+
+        ptVecCS = complex(copy(ptVec))
+
+        for ii in eachindex(ptVec)
+            ptVecCS[ii] += 1im * dh
+            resVec_f = compute_resFromXpt(ptVecCS)
+            ptVecCS[ii] -= 1im * dh
+            ∂r∂Xpt[:, ii] = imag(resVec_f) / dh
+        end
+    elseif uppercase(mode) == "RAD" # It's broken # This takes nearly 15 seconds compared to 4 sec in pure julia
         # backend = AD.ReverseDiffBackend()
         backend = AD.ZygoteBackend()
         ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)

@@ -1227,41 +1227,60 @@ function compute_∂r∂x(
 
     # println("Computing ∂r∂x in $(mode) mode...")
     DOFBlankingList = get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
-    u = allStructStates
+    u = allStructStates[1:end.∉[DOFBlankingList]]
 
     ptVec, mm, nn = unpack_coords(LECoords, TECoords)
     appendageParams = appendageParamsList[iComp]
 
-    ∂r∂xPt = zeros(DTYPE, length(u), length(ptVec))
+    ∂r∂xPt = zeros(DTYPE, length(allStructStates), length(ptVec))
     ∂r∂xParams = Dict()
 
     if uppercase(mode) == "FIDI" # Finite difference
 
-        backend = AD.FiniteDifferencesBackend()
-        ∂r∂xPt, = AD.jacobian(
-            backend,
-            x -> compute_residualsFromCoords(
-                u,
-                x,
-                nodeConn,
-                fu,
-                appendageParamsList,
-                appendageOptions=appendageOptions,
-                solverOptions=solverOptions,
-                iComp=iComp,
-            ),
-            ptVec, # compute deriv at this DV
-        )
+        dh = 1e-4
+        # backend = AD.FiniteDifferencesBackend()
+        # ∂r∂xPt, = AD.jacobian(
+        #     backend,
+        #     x -> compute_residualsFromCoords(
+        #         allStructStates,
+        #         x,
+        #         nodeConn,
+        #         fu,
+        #         appendageParamsList,
+        #         appendageOptions=appendageOptions,
+        #         solverOptions=solverOptions,
+        #         iComp=iComp,
+        #     ),
+        #     ptVec, # compute deriv at this DV
+        # )
+        f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            ptVec[ii] -= dh
+            ∂r∂xPt[:, ii] = (f_f - f_i) / dh
+        end
+
 
         # ************************************************
-        #     Struct
+        #     Params derivatives
         # ************************************************
-        dh = 1e-4
-        f_i = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] += dh
-        f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
-        ∂r∂xParams = (f_f - f_i) / 1e-4
+        ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+
+        ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
+        for ii in eachindex(appendageParamsList[iComp]["toc"])
+            appendageParamsList[iComp]["toc"][ii] += dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            appendageParamsList[iComp]["toc"][ii] -= dh
+            ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+        end
+        appendageParamsList[iComp]["alfa0"] += dh
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["alfa0"] -= dh
+        ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
 
     elseif uppercase(mode) == "CS" # works but slow (4 sec)
         dh = 1e-100
@@ -1274,6 +1293,7 @@ function compute_∂r∂x(
     elseif uppercase(mode) == "ANALYTIC"
 
         # This seems good
+
         ∂Kss∂x_u = compute_∂KssU∂x(u, ptVec, nodeConn, appendageOptions, appendageParamsList[1], solverOptions;
             # mode="CS" # 4 sec but accurate
             # mode="FAD" # 5 sec
@@ -1282,27 +1302,27 @@ function compute_∂r∂x(
         )
 
         # ∂r∂x = u ∂K∂X 
-        ∂r∂xPt = ∂Kss∂x_u
+        ∂r∂xPt[1:end.∉[DOFBlankingList], :] .= ∂Kss∂x_u
 
         # ************************************************
         #     Params derivatives
         # ************************************************
         dh = 1e-4
-        f_i = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] += dh
-        f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
         ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
 
         ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
         for ii in eachindex(appendageParamsList[iComp]["toc"])
             appendageParamsList[iComp]["toc"][ii] += dh
-            f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
             appendageParamsList[iComp]["toc"][ii] -= dh
             ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
         end
         appendageParamsList[iComp]["alfa0"] += dh
-        f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["alfa0"] -= dh
         ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
 
@@ -1314,7 +1334,7 @@ function compute_∂r∂x(
         ∂r∂xPt, = AD.jacobian(
             backend,
             x -> compute_residualsFromCoords(
-                u,
+                allStructStates,
                 x,
                 nodeConn,
                 fu,
@@ -1330,21 +1350,21 @@ function compute_∂r∂x(
         #     Params derivatives
         # ************************************************
         dh = 1e-4
-        f_i = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] += dh
-        f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
         ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
 
         ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
         for ii in eachindex(appendageParamsList[iComp]["toc"])
             appendageParamsList[iComp]["toc"][ii] += dh
-            f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
             appendageParamsList[iComp]["toc"][ii] -= dh
             ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
         end
         appendageParamsList[iComp]["alfa0"] += dh
-        f_f = compute_residualsFromCoords(u, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["alfa0"] -= dh
         ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
     else

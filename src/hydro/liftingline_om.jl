@@ -66,7 +66,7 @@ end
 # If the discipline can solve itself, use this
 function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
 
-    # println("solving nonlinear!")
+    println("solving nonlinear lifting line")
 
     ptVec = inputs["ptVec"]
 
@@ -193,7 +193,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     # ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="FiDi")
     ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="CS") # use very accurate derivatives only when necessary
 
-    ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+    ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
 
     # This definition really breaks my head but it's basically ∂r / ∂ <second-var>
