@@ -34,13 +34,16 @@ if __name__ == "__main__":
         x.add_system("solver", solver, (r"\text{Static hydroelastic}", r"\text{MDA}"))
         x.add_system("febeam", func, (r"\text{Composite beam}", r"\text{implicit component}"))
         x.add_system("febeamoutput", func, (r"\text{Structural}", r"\text{functions}"))
+        x.add_system("ldtransfer", func, (r"\text{Load and}", r"\text{displacement transfer}"))
         x.add_system("liftingline", func, (r"\text{Lifting line}", r"\text{implicit component}"))
         x.add_system("liftinglineoutput", func, (r"\text{Hydrodynamic}", r"\text{functions}"))
         x.add_system("dynamicsolver", solver, (r"\text{Dynamic}", r"\text{solvers}"), stack=True)
 
         # --- draw data connection ---
-        x.connect("febeam", "liftingline", r"\text{Displacements } \mathbf{u}")
-        x.connect("liftinglineoutput", "febeam", r"\text{Surface loads}")
+        x.connect("ldtransfer", "liftingline", r"\text{Deformed shape}")
+        x.connect("febeam", "ldtransfer", r"\text{Displacements } \mathbf{u}")
+        x.connect("liftinglineoutput", "ldtransfer", r"\text{Lifting line loads}")
+        x.connect("ldtransfer", "febeam", r"\text{Surface loads}")
         x.connect("liftingline", "liftinglineoutput", r"\text{Vortex strengths }\boldsymbol{\gamma}")
         x.connect("febeam", "solver", r"\mathbf{r}_s(\mathbf{u})")
         x.connect("febeam", "febeamoutput", r"\text{Displacements } \mathbf{u}")
@@ -67,8 +70,10 @@ if __name__ == "__main__":
         # x.connect("opt", "solver", (r"\text{Flow \&}", r"\text{structural}", r"\text{variables}"))
 
         # --- draw process connection ---
-        x.add_process(["liftinglineoutput", "febeam"], arrow=True)
-        x.add_process(["febeam", "liftingline"], arrow=True)
+        x.add_process(["liftinglineoutput", "ldtransfer"], arrow=True)
+        x.add_process(["ldtransfer", "liftingline"], arrow=True)
+        x.add_process(["ldtransfer", "febeam"], arrow=True)
+        x.add_process(["febeam","ldtransfer"], arrow=True)
         x.add_process(["febeam", "febeamoutput"], arrow=True)
         x.add_process(["liftingline", "solver"], arrow=True)
         x.add_process(["liftingline", "liftinglineoutput"], arrow=True)
