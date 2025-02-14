@@ -47,6 +47,7 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
     # --- Define inputs and outputs ---
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(npt * 3 * 2)),
+        # TODO: add angle of attack and other appendage params here
     ]
     outputs = [
         OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),]
@@ -194,16 +195,6 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
 
     ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
-    # # mode = "RAD"
-    # mode = "FiDi"
-    # # mode = "CS"
-    # ∂fx∂xPt = LiftingLine.compute_∂I∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, "F_x"; mode=mode)
-    # ∂fy∂xPt = LiftingLine.compute_∂I∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, "F_y"; mode=mode)
-    # ∂fz∂xPt = LiftingLine.compute_∂I∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, "F_z"; mode=mode)
-    # ∂CDi∂xPt = LiftingLine.compute_∂I∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, "CDi"; mode=mode)
-    # ∂CLi∂xPt = LiftingLine.compute_∂I∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, "CL"; mode=mode)
-
-    # println("shape:\t", size(partials["gammas","gammas"]))
 
     # This definition really breaks my head but it's basically ∂r / ∂ <second-var>
     for (ii, ∂ri∂g) in enumerate(eachrow(∂r∂g))
@@ -214,11 +205,6 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
         partials["gammas", "ptVec"][ii, :] = ∂ri∂Xpt
     end
 
-    # partials["F_x", "ptVec"][1, :] = ∂fx∂xPt[1, :]
-    # partials["F_y", "ptVec"][1, :] = ∂fy∂xPt[1, :]
-    # partials["F_z", "ptVec"][1, :] = ∂fz∂xPt[1, :]
-    # partials["CDi", "ptVec"][1, :] = ∂CDi∂xPt[1, :]
-    # partials["CL", "ptVec"][1, :] = ∂CLi∂xPt[1, :]
 
     return nothing
 end
@@ -325,48 +311,11 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
         airfoil_xy=airfoilXY,
         options=options,
     )
-    ∂α = FlowCond.alpha + LiftingLine.Δα # FD
-
-    ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
-    ∂Uinf = norm_cs_safe(∂Uinfvec)
-    ∂uvec = ∂Uinfvec / FlowCond.Uinf
-    ∂FlowCond = LiftingLine.FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
 
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
-    uinf = reshape(FlowCond.uvec, 3, 1, 1)
-    uinfMat = repeat(uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
-    ∂uinf = reshape(∂FlowCond.uvec, 3, 1, 1)
-    ∂uinfMat = repeat(∂uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
-
-    P1 = LLMesh.wing_joint_xyz_eff[:, :, 2:end]
-    P2 = LLMesh.wing_xyz_eff[:, :, 2:end]
-    P3 = LLMesh.wing_xyz_eff[:, :, 1:end-1]
-    P4 = LLMesh.wing_joint_xyz_eff[:, :, 1:end-1]
-
-    ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
-    ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
-
-
-    # Mask for the bound segment (npt_wing x npt_wing)
-    bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
-
-    influence_straightsega = LiftingLine.compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
-    influence_straightsegb = LiftingLine.compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
-    influence_straightsegc = LiftingLine.compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
-
-    ∂influence_semiinfa = LiftingLine.compute_straightSemiinfinite(P1, ∂uinfMat, ctrlPtMat, LLMesh.rc)
-    ∂influence_semiinfb = LiftingLine.compute_straightSemiinfinite(P4, ∂uinfMat, ctrlPtMat, LLMesh.rc)
-
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
-
-    ∂TV_influence = -∂influence_semiinfa +
-                    influence_straightsega +
-                    influence_straightsegb +
-                    influence_straightsegc +
-                    ∂influence_semiinfb
-
 
     # ---------------------------
     #   Solve for circulation
@@ -492,6 +441,8 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     #   Calculate influence matrix
     # ---------------------------
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+
+    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 
     DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     for (ii, DimForce) in enumerate(eachcol(DimForces))

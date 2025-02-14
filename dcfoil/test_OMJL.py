@@ -285,6 +285,7 @@ elif args.run_flow:
         "liftingline_funcs",
         expcomp_LL_func,
         promotes_inputs=["gammas", "ptVec"], # promotion auto connects these variables
+        promotes_outputs=["*"], # everything!
         )
 else:
     # --- Combined hydroelastic ---
@@ -303,6 +304,7 @@ else:
         "liftingline_funcs",
         expcomp_LL_func,
         promotes_inputs=["gammas", "ptVec"], # promotion auto connects these variables
+        promotes_outputs=["*"], # everything!
         )
     
 # ************************************************
@@ -349,7 +351,12 @@ if args.run_struct:
     tractions = prob.get_val("beamstruct.traction_forces")
     tractions[-6] = 10.0
     prob.set_val("beamstruct.traction_forces", tractions)
+elif args.run_flow:
+    prob.set_val("liftingline.gammas", np.zeros(40))
 else:
+    tractions = prob.get_val("beamstruct.traction_forces")
+    tractions[-6] = 10.0
+    prob.set_val("beamstruct.traction_forces", tractions)
     prob.set_val("liftingline.gammas", np.zeros(40))
 
 # ************************************************
@@ -374,17 +381,36 @@ print(f"Time taken to run model: {endtime-starttime:.2f} s")
 if args.run_struct:
     print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
     print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+elif args.run_flow:
+    print("nondimensional gammas", prob.get_val("gammas"))
+    print("CL", prob.get_val("CL"))
+    print("force distribution", prob.get_val("forces_dist"))
 else:
     print("nondimensional gammas", prob.get_val("liftingline.gammas"))
+    print("CL", prob.get_val("CL"))
+    print("force distribution", prob.get_val("forces_dist"))
+    print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
+    print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
     # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
     # print("drag force", prob.get_val("liftingline.F_x"))
 
 # --- Check partials after you've solve the system!! ---
 if args.test_partials:
+    fileName = "partials.out"
+    f = open(fileName, "w")
+    f.write("PARTIALS\n")
     # prob.set_check_partial_options(wrt=[""],)
-    print(prob.check_partials(method="fd", compact_print=True))
+    f.write("=" * 50)
+    f.write(" liftingline partials ")
+    f.write("=" * 50)
+    prob.check_partials(out_stream=f,includes=["liftingline"], method="fd")
+    f.write("=" * 50)
+    f.write(" structural partials ")
+    f.write("=" * 50)
+    prob.check_partials(out_stream=f,includes=["beamstruct"], method="fd")
     # # print(prob.check_partials(method="cs", compact_print=True))
     # breakpoint()
+    f.close()
 
 # --- Testing other values ---
 # prob.set_val("liftingline.x", 5.0)
@@ -394,7 +420,9 @@ if args.test_partials:
 # print(prob.get_val("liftingline.f_xy"))  # Should print `[-5.]`
 
 
-# --- Doing optimization ---
+# ************************************************
+#     Do optimization
+# ************************************************
 # prob.run_driver()
 # print(f"f_xy = {prob.get_val('liftingline.f_xy')}")  # Should print `[-27.33333333]`
 # print(f"x = {prob.get_val('liftingline.x')}")  # Should print `[6.66666633]`

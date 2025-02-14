@@ -2,7 +2,7 @@
 """
 @File          :   LDTransfer.jl
 @Date created  :   2025/01/30
-@Last modified :   2025/01/30
+@Last modified :   2025/02/14
 @Author        :   Galen Ng
 @Desc          :   Load and displacement transfer routines
 """
@@ -10,8 +10,14 @@
 
 module LDTransfer
 
-using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
-using ..Interpolation
+for headerName in [
+    "Interpolation.jl",
+    "EBBeam.jl"
+]
+    include("../$headerName")
+end
+# using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
+# using ..Interpolation
 
 
 function transfer_LD(inputVector, XStruct, XHydro; mode="D")
