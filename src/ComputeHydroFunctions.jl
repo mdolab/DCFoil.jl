@@ -7,37 +7,6 @@
 @Desc          :   Compute hydrodynamic cost functions
 """
 
-
-
-
-function compute_kscl(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-    # function compute_kscl(fHydro, qdyn, chords, solverOptions)
-    """
-    Compute the KS function for the spanwise lift coefficient
-        Needed for the ventilation constraint
-
-    2024-12-24: All of the derivatives for this are good!
-    """
-
-    # This way would be off of the lifting line directly
-    LLOutputs, _, _ = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-
-    clmax = compute_KS(LLOutputs.cl, solverOptions["rhoKS"])
-    # println("cls across span", LLOutputs.cl)
-
-    return clmax
-end
-
-function compute_vortexdrag(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-
-    LLOutputs, _, _ = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-
-    Di = LLOutputs.F[XDIM]
-    CDi = LLOutputs.CDi
-
-    return CDi, Di
-end
-
 function compute_profiledrag(aeroSpan, chordLengths, meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
     """
     This is the profile drag for the appendage; sum of skin friction and pressure
@@ -105,7 +74,7 @@ function compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParam
     # if Fnc < 2.0
     #     println("Warning: Fnc < 2.0. Not valid!")
     # end
-    # σλ, γλ = HydroStrip.compute_biplanefreesurface(λ)
+    # σλ, γλ = compute_biplanefreesurface(λ)
 
     # CDw = (
     #     σλ / (π * AR) + γλ / Fnc^2
@@ -114,8 +83,8 @@ function compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParam
     # ************************************************
     #     Arbitrary Fnc approximation
     # ************************************************
-    σλ, _ = HydroStrip.compute_biplanefreesurface(λ)
-    besselInt = HydroStrip.compute_besselint(solverOptions["Uinf"], aeroSpan, Fnh)
+    σλ, _ = compute_biplanefreesurface(λ)
+    besselInt = compute_besselInt(solverOptions["Uinf"], aeroSpan, Fnh)
     CDw = (-σλ / (π * AR) + 8 / (π * AR) * besselInt) * CL^2
 
     Dw = CDw * qdyn * areaRef
@@ -166,6 +135,49 @@ function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverO
     return CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds
 end
 
+function compute_biplanefreesurface(λ)
+    """
+    Based on Breslin 1957
+    """
+    plamsq = 1 + λ^2
+    k = 1 / √(1 + λ^2)
+    Ek = SpecialFunctions.ellipe(k^2)
+    Kk = SpecialFunctions.ellipk(k^2)
+
+    # Biplane function
+    σλ = 1 - 4 / π * λ * √(1 + λ^2) * (Kk - Ek)
+    # Free surface function
+    γλ = 4 / (3π) * ((2 / π) * plamsq^(1.5) * Ek - 1.5 * λ)
+
+    return σλ, γλ
+end
+
+function compute_besselInt(Uinf, span, Fnh)
+
+    function compute_integrand(θ)
+
+        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * 0.5 * span * (sec(θ))^2 * sin(θ))
+        exponent = exp(-2 * (sec(θ))^2 / Fnh^2)
+
+
+        int = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
+
+        return int
+    end
+
+    dθ = 0.01
+    # Starting at 0 breaks this, so start close
+    θ = 0.001:dθ:π/2
+    heights = compute_integrand.(θ)
+
+    # # Trapezoid integration seems to introduce oscillations... wrt Fnc
+    # I = 0.5 * dθ * (heights[1] + heights[end] + 2 * sum(heights[2:end-1]))
+
+    # --- Riemann integration ---
+    I = sum(heights * dθ)
+
+    return I
+end
 # ************************************************
 #     Center of force calculations
 # ************************************************

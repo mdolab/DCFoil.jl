@@ -56,7 +56,7 @@ using .DesignConstants: DesignConstants, DynamicFoil, CONFIGS, Foil
 # using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, ELEMTYPE
 using .MaterialLibrary
 
-export ELEMTYPE
+export ELEMTYPE, NDOF, UIND, VIND, WIND, ΦIND, ΘIND, ΨIND
 
 struct StructMesh{TF,TC,TI}
     """

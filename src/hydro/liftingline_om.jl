@@ -9,11 +9,13 @@
 # --- Used in this script ---
 using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 using LinearAlgebra
+using SpecialFunctions
+
 
 # --- Module to om wrap ---
 for headerName = [
     "../hydro/LiftingLine",
-    # "../ComputeHydroFunctions",
+    "../ComputeHydroFunctions",
 ]
     include(headerName * ".jl")
 end
@@ -363,6 +365,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
     outputs = [
         OpenMDAOCore.VarData("CL", val=0.0),
         OpenMDAOCore.VarData("CDi", val=0.0),
+        OpenMDAOCore.VarData("CS", val=0.0),
         OpenMDAOCore.VarData("F_x", val=0.0),
         OpenMDAOCore.VarData("F_y", val=0.0),
         OpenMDAOCore.VarData("F_z", val=0.0),
@@ -371,12 +374,15 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("M_y", val=0.0),
         OpenMDAOCore.VarData("M_z", val=0.0),
         OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("clmax", val=0.0), # KS aggregated clmax
     ]
 
     partials = [
         # WRT ptVec
         OpenMDAOCore.PartialsData("CL", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("CS", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("clmax", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("F_x", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("F_y", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("F_z", "ptVec", method="exact"),
@@ -387,6 +393,8 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         # WRT gammas
         OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("CS", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("clmax", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("F_x", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("F_y", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("F_z", "gammas", method="exact"),
@@ -445,22 +453,108 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 
     DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
+
     for (ii, DimForce) in enumerate(eachcol(DimForces))
         outputs["forces_dist"][:, ii] = DimForce
     end
+
+    ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+
+    # ---------------------------
+    #   Drag build up
+    # ---------------------------
+    meanChord = sum(chordVec) / length(chordVec)
+    areaRef = LiftingLine.compute_areas(LECoords, TECoords, nodeConn)
+    dynP = 0.5 * FlowCond.rhof * FlowCond.Uinf^2
+    aeroSpan = LiftingLine.compute_aeroSpan(midchords, idxTip)
+    CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds =
+        compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions,
+            dynP, areaRef, aeroSpan, CL, meanChord, rootChord, chordVec)
 
     outputs["F_x"][1] = IntegratedForces[XDIM]
     outputs["F_y"][1] = IntegratedForces[YDIM]
     outputs["F_z"][1] = IntegratedForces[ZDIM]
     outputs["CL"][1] = CL
     outputs["CDi"][1] = CDi
+    outputs["CS"][1] = CS
+    outputs["clmax"][1] = ksclmax
 
     return nothing
 end
 
 function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partials)
     """
-    TODO:
+    TODO: PICKUP HERE FIXING THE PTVEC DERIVS
     """
+
+    Gconv = inputs["gammas"]
+    ptVec = inputs["ptVec"]
+
+    # --- Deal with options here ---
+    nodeConn = self.nodeConn
+    appendageParams = self.appendageParams
+    solverOptions = self.solverOptions
+    appendageOptions = self.appendageOptions
+
+    # ************************************************
+    #     Derivatives wrt ptVec
+    # ************************************************
+    # mode = "FiDi"
+    # mode = "CS"
+    # mode = "RAD"
+    mode = "FAD"
+    costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist"]
+    ∂f∂x = LiftingLine.compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=mode)
+
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x[1:7, :]))
+        # println("shape: ", size(∂fi∂x))
+        partials[costFuncsInOrder[ii], "ptVec"][1, :] = ∂fi∂x
+    end
+
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8:end])
+        partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
+    end
+
+    # ************************************************
+    #     Derivatives wrt gammas
+    # ************************************************
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    idxTip = LiftingLine.get_tipnode(LECoords)
+    midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    # ---------------------------
+    #   Hydrodynamics
+    # ---------------------------
+    α0 = appendageParams["alfa0"]
+    β0 = appendageParams["beta"]
+    rake = appendageParams["rake"]
+    depth0 = appendageParams["depth0"]
+    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+        npt_wing=npt_wing,
+        npt_airfoil=npt_airfoil,
+        rhof=solverOptions["rhof"],
+        # airfoilCoordFile=airfoilCoordFile,
+        airfoil_ctrl_xy=airfoilCtrlXY,
+        airfoil_xy=airfoilXY,
+        options=options,
+    )
+
+    # ---------------------------
+    #   Calculate influence matrix
+    # ---------------------------
+    TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+
+    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+
+    ∂f∂g = LiftingLine.compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions) # Forward Diff by default
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g[1:7, :]))
+        partials[costFuncsInOrder[ii], "gammas"][1, :] = ∂fi∂g
+    end
+
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8:end])
+        partials["forces_dist", "gammas"][ii, :] = ∂fi∂g
+    end
+
     return nothing
 end

@@ -23,6 +23,7 @@ using Zygote
 using FiniteDifferences
 using PythonCall
 using Printf
+
 # using Debugger
 using DelimitedFiles
 
@@ -46,12 +47,13 @@ end
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
 const NPT_WING = 40
 
-export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian
+export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
+    compute_KS, GRAV
 
 # ==============================================================================
 #                         Structs
 # ==============================================================================
-struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:AbstractArray{TF,3}}
+struct LiftingLineMesh{T<:Number,TF<:Number,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:AbstractArray{TF,3}}
     """
     Only geometry and mesh information
     """
@@ -72,7 +74,7 @@ struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:A
     AR::TF # Aspect ratio
     rootChord::TF # Root chord [m]
     sweepAng::TF # Wing sweep angle [rad]
-    rc::TF # Finite-core vortex radius (viscous correction) [m]
+    rc::T # Finite-core vortex radius (viscous correction) [m]
     wing_xyz_eff::TH # Effective wing LAC coordinates per control point
     wing_joint_xyz_eff::TH # Effective TV joint locations per control point
     local_sweeps::TA
@@ -1222,6 +1224,38 @@ function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
     return ∂cdi∂Γ
 end
 
+function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions)
+
+    NFORCES = 3
+    NFORCECOEFFS = 3
+    NQUANTS = 1
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS)
+    ∂I∂G = zeros(DTYPE, length(outputVector), length(Gconv))
+
+    function compute_outputsFromGConv(Gconv)
+        TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+        DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
+
+        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+
+        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(DimForces))
+
+        return outputvector
+    end
+
+    # backend = AD.ReverseDiffBackend()
+    backend = AD.ForwardDiffBackend()
+    ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+
+    # Compares well with finite difference 
+    # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+    # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+    # println("∂cdi∂Γ: $(∂cdi∂Γ)")
+    # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+
+    return ∂I∂G
+end
+
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -1292,11 +1326,16 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
     return ∂r∂Xpt
 end
 
-function compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, costFunc; mode="FiDi")
+function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
     """
     Compute cost function Jacobian
     """
-    ∂I∂Xpt = zeros(DTYPE, 1, length(ptVec))
+
+    NFORCES = 3
+    NFORCECOEFFS = 3
+    NQUANTS = 1
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS)
+    ∂I∂Xpt = zeros(DTYPE, length(outputVector), length(ptVec))
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
 
@@ -1309,29 +1348,18 @@ function compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
 
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, solverParams)
 
-        if costFunc == "F_x"
-            return IntegratedForces[XDIM]
-        elseif costFunc == "F_y"
-            return IntegratedForces[YDIM]
-        elseif costFunc == "F_z"
-            return IntegratedForces[ZDIM]
-        elseif costFunc == "CL"
-            return CL
-        elseif costFunc == "CDi"
-            return CDi
-        elseif costFunc == "CS"
-            return CS
-        elseif costFunc == "forces"
-            return DimForces
-        else
-            println("Cost function not implemented yet")
-        end
+        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+
+        # THIS ORDER MATTERS
+        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(DimForces))
+
+        return outputVector
     end
     # ************************************************
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        dh = 1e-4
 
         f_i = compute_OutputFromXpt(ptVec)
 
@@ -1342,33 +1370,38 @@ function compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
 
             ptVec[ii] -= dh
 
-            ∂I∂Xpt[1, ii] = (f_f - f_i) / dh
+            ∂I∂Xpt[:, ii] = (f_f - f_i) / dh
         end
-    elseif uppercase(mode) == "CS"
+    elseif uppercase(mode) == "CS" # broken right now
 
         dh = 1e-100
-        ∂I∂Xpt = zeros(DTYPE, 1, length(ptVec))
 
         ptVecCS = complex(copy(ptVec))
         for ii in eachindex(ptVec)
             ptVecCS[ii] += 1im * dh
+
             f_f = compute_OutputFromXpt(ptVecCS)
+
             ptVecCS[ii] -= 1im * dh
-            ∂I∂Xpt[1, ii] = imag(f_f) / dh
+
+            ∂I∂Xpt[:, ii] = imag(f_f) / dh
         end
 
-    elseif uppercase(mode) == "RAD"
-        # backend = AD.ReverseDiffBackend()
-        backend = AD.ZygoteBackend()
+    elseif uppercase(mode) == "RAD" # not working
+        backend = AD.ReverseDiffBackend()
+        # backend = AD.ZygoteBackend()
         ∂I∂Xpt, = AD.jacobian(backend, x -> compute_OutputFromXpt(x), ptVec)
         println("shape", size(∂I∂Xpt))
-    elseif uppercase(mode) == "FAD"
+    elseif uppercase(mode) == "FAD" # you should try to get this one to work
         backend = AD.ForwardDiffBackend()
         ∂I∂Xpt, = AD.jacobian(backend, x -> compute_OutputFromXpt(x), ptVec)
     end
 
-    # println("writing ∂I∂Xpt-$(costFunc)-$(mode).csv")
-    # writedlm("∂I∂Xpt-$(costFunc)-$(mode).csv", ∂I∂Xpt, ",")
+    # println("writing ∂I∂Xpt-$(mode).csv")
+    # for ii in eachindex(outputVector)
+    #     
+    #     writedlm("∂I∂Xpt-$(ii)-$(mode).csv", ∂I∂Xpt[ii, :], ",")
+    # end
 
     return ∂I∂Xpt
 end
@@ -1661,7 +1694,7 @@ function compute_cm_LE(G; solverParams=nothing)
 
     hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
 
-    c_m::Vector{Number} = [
+    c_m::AbstractVector{Number} = [
         solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[2]
         for (ii, V_local) in enumerate(eachcol(Ui))
     ] # remember to only grab CM out of VPM solve

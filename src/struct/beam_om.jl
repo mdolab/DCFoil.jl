@@ -14,7 +14,8 @@ using ChainRulesCore
 # --- Module to om wrap ---
 for headerName = [
     "../struct/FEMMethods",
-    "../InitModel"
+    "../InitModel",
+    "../ComputeStructFunctions",
 ]
     include(headerName * ".jl")
 end
@@ -179,11 +180,11 @@ end
 function OpenMDAOCore.setup(self::OMFEBeamFuncs)
 
     # Number of mesh points
-    npt = size(self.nodeConn, 2) + 1
+    # npt = size(self.nodeConn, 2) + 1
     nNodeTot, nNodeWing, nElemTot, nElemWing = FEMMethods.get_numnodes(self.appendageOptions["config"], self.appendageOptions["nNodes"], self.appendageOptions["nNodeStrut"])
 
     inputs = [
-        OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
+        # OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
         OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
     ]
 
@@ -193,9 +194,9 @@ function OpenMDAOCore.setup(self::OMFEBeamFuncs)
     ]
 
     partials = [
-        # WRT ptVec
-        OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"),
-        OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"),
+        # # WRT ptVec
+        # OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"),
+        # OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"),
         # WRT deflections
         OpenMDAOCore.PartialsData("wtip", "deflections", method="exact"),
         OpenMDAOCore.PartialsData("thetatip", "deflections", method="exact"),
@@ -206,13 +207,28 @@ function OpenMDAOCore.setup(self::OMFEBeamFuncs)
 end
 
 function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
-    # TODO: IMPLEMENT These
-    inputs[]
+
+    states = inputs["deflections"]
+
+    wtip = compute_maxtipbend(states)
+    thetatip = compute_maxtiptwist(states)
+
+    outputs["wtip"][1] = wtip
+    outputs["thetatip"][1] = thetatip
+
     return nothing
 end
 
 function OpenMDAOCore.compute_partials!(self::OMFEBeamFuncs, inputs, partials)
-    # TODO: IMPLEMENT These
-    inputs[]
+
+    zv1 = zeros(length(inputs["deflections"]))
+    zv1[end-NDOF+WIND] = 1.0
+
+    zv2 = zeros(length(inputs["deflections"]))
+    zv2[end-NDOF+ΘIND] = 1.0
+
+    partials["wtip", "deflections"][1, :] = zv1
+    partials["thetatip", "deflections"][1, :] = zv2
+
     return nothing
 end
