@@ -178,6 +178,47 @@ function compute_besselInt(Uinf, span, Fnh)
 
     return I
 end
+
+function compute_dragsFromXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, CL)
+
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    idxTip = LiftingLine.get_tipnode(LECoords)
+    midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    # ---------------------------
+    #   Hydrodynamics
+    # ---------------------------
+    α0 = appendageParams["alfa0"]
+    β0 = appendageParams["beta"]
+    rake = appendageParams["rake"]
+    depth0 = appendageParams["depth0"]
+    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords;
+        npt_wing=npt_wing,
+        npt_airfoil=npt_airfoil,
+        rhof=solverOptions["rhof"],
+        # airfoilCoordFile=airfoilCoordFile,
+        airfoil_ctrl_xy=airfoilCtrlXY,
+        airfoil_xy=airfoilXY,
+        options=options,
+    )
+
+    meanChord = sum(chordVec) / length(chordVec)
+    areaRef = LiftingLine.compute_areas(LECoords, TECoords, nodeConn)
+    dynP = 0.5 * FlowCond.rhof * FlowCond.Uinf^2
+    aeroSpan = LiftingLine.compute_aeroSpan(midchords, idxTip)
+    CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds =
+        compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions,
+            dynP, areaRef, aeroSpan, CL, meanChord, rootChord, chordVec)
+
+    return CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds
+end
+function compute_∂Drag()
+
+    return ∂Drag∂Xpt, ∂Drag∂G
+end
+
 # ************************************************
 #     Center of force calculations
 # ************************************************

@@ -2,7 +2,8 @@
 # TODO: now do this whole wrapping in julia to see if it is faster
 
 using OpenMDAO: om, make_component
-include("../src/hydro/OMLiftingLine.jl")
+include("../src/hydro/LiftingLine.jl")
+include("../src/hydro/liftingline_om.jl")
 # const RealOrComplex = Union{Real, Complex}
 const RealOrComplex = AbstractFloat
 
@@ -189,6 +190,7 @@ solverOptions = Dict(
     # "Uinf" => 11.0, # free stream velocity [m/s]
     # "Uinf" => 1.0, # free stream velocity [m/s]
     "rhof" => 1025.0, # fluid density [kg/m³]
+    "nu" => 1.1892E-06,
     "use_nlll" => true, # use non-linear lifting line code
     "use_freeSurface" => false,
     "use_cavitation" => false,
@@ -219,6 +221,17 @@ solverOptions = Dict(
 )
 
 # ==============================================================================
+#                         Derivatives
+# ==============================================================================
+using .LiftingLine
+gconv = vec([0.0322038 0.03231678 0.03253403 0.03284775 0.03324736 0.03371952 0.03425337 0.03484149 0.03547895 0.03616117 0.03688162 0.03762993 0.03839081 0.03914407 0.03986539 0.04052803 0.04110476 0.04156866 0.04189266 0.04205787 0.04205787 0.04189266 0.04156866 0.04110476 0.04052803 0.03986539 0.03914407 0.03839081 0.03762993 0.03688162 0.03616117 0.03547895 0.03484149 0.03425337 0.03371952 0.03324736 0.03284775 0.03253403 0.03231678 0.0322038])
+
+# LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+# LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+
+# ans1, ans2 = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="RAD")
+@time ans1fad, ans2fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+# ==============================================================================
 #                         OpenMDAO executables
 # ==============================================================================
 
@@ -239,7 +252,7 @@ prob.setup()
 
 
 prob.set_val("liftingline.ptVec", ptVec)
-prob.set_val("liftingline.gammas", zeros(AbstractFloat,100))
+prob.set_val("liftingline.gammas", zeros(AbstractFloat, 100))
 
 @time prob.run_model()
 @time prob.run_model()

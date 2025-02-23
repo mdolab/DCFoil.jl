@@ -12,7 +12,7 @@ function get_rotate3dMat(ψ, axis="x")
     """
     Give rotation matrix about axis by ψ radians (RH rule!)
     """
-    rotMat = zeros(DTYPE, 3, 3)
+    rotMat::AbstractMatrix = zeros(DTYPE, 3, 3)
 
     cosψ = cos(ψ)
     sinψ = sin(ψ)
@@ -84,7 +84,8 @@ function get_transMat(dR1, dR2, dR3, l)
     vB = [1.0, 0.0, 0.0] # reference vector
 
 
-    nVec = cross(vA, vB) # normal vector to plane of rotation
+    # nVec = cross(vA, vB) # normal vector to plane of rotation
+    nVec = myCrossProd(vA, vB) # normal vector to plane of rotation
     n̂ = nVec / √(nVec[XDIM]^2 + nVec[YDIM]^2 + nVec[ZDIM]^2) # normalize
     cosψ = dot(vA, vB) # cosine of angle between vA and vB
     ψ = acos(cosψ) # angle between vA and vB

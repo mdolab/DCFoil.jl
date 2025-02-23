@@ -15,7 +15,6 @@ using SpecialFunctions
 # --- Module to om wrap ---
 for headerName = [
     "../hydro/LiftingLine",
-    "../ComputeHydroFunctions",
 ]
     include(headerName * ".jl")
 end
@@ -23,7 +22,7 @@ end
 
 using .LiftingLine
 # ==============================================================================
-#                         OpenMDAO operations for the lifting line
+#                         OpenMDAO operations for the lifting line NL solver
 # ==============================================================================
 using OpenMDAOCore: OpenMDAOCore
 
@@ -374,11 +373,21 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("M_y", val=0.0),
         OpenMDAOCore.VarData("M_z", val=0.0),
         OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
         OpenMDAOCore.VarData("clmax", val=0.0), # KS aggregated clmax
+        # Empirical drag build up
+        OpenMDAOCore.VarData("CDw", val=0.0),
+        OpenMDAOCore.VarData("CDpr", val=0.0),
+        OpenMDAOCore.VarData("CDj", val=0.0),
+        OpenMDAOCore.VarData("CDs", val=0.0),
+        OpenMDAOCore.VarData("Dw", val=0.0),
+        OpenMDAOCore.VarData("Dpr", val=0.0),
+        OpenMDAOCore.VarData("Dj", val=0.0),
+        OpenMDAOCore.VarData("Ds", val=0.0),
     ]
 
     partials = [
-        # WRT ptVec
+        # --- WRT ptVec ---
         OpenMDAOCore.PartialsData("CL", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("CS", "ptVec", method="exact"),
@@ -390,7 +399,16 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("M_x", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("M_y", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("M_z", "ptVec", method="exact"),
-        # WRT gammas
+        # Empirical drag build up
+        OpenMDAOCore.PartialsData("CDw", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("CDpr", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("CDj", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("CDs", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Dw", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Dpr", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Dj", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Ds", "ptVec", method="exact"),
+        # --- WRT gammas ---
         OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CS", "gammas", method="exact"),
@@ -402,6 +420,9 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("M_x", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("M_y", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("M_z", "gammas", method="exact"),
+        # Empirical drag build up
+        OpenMDAOCore.PartialsData("CDw", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("Dw", "gammas", method="exact"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="fd")] # define the partials
 
@@ -463,13 +484,8 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     # ---------------------------
     #   Drag build up
     # ---------------------------
-    meanChord = sum(chordVec) / length(chordVec)
-    areaRef = LiftingLine.compute_areas(LECoords, TECoords, nodeConn)
-    dynP = 0.5 * FlowCond.rhof * FlowCond.Uinf^2
-    aeroSpan = LiftingLine.compute_aeroSpan(midchords, idxTip)
-    CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds =
-        compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions,
-            dynP, areaRef, aeroSpan, CL, meanChord, rootChord, chordVec)
+    dragOutputs = LiftingLine.compute_dragsFromX(ptVec, Gconv, nodeConn, appendageParams, appendageOptions, solverOptions)
+    CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds = dragOutputs
 
     outputs["F_x"][1] = IntegratedForces[XDIM]
     outputs["F_y"][1] = IntegratedForces[YDIM]
@@ -478,13 +494,24 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["CDi"][1] = CDi
     outputs["CS"][1] = CS
     outputs["clmax"][1] = ksclmax
+    outputs["forces_dist"][:] = DimForces
+
+    outputs["collocationPts"][:] = LLMesh.collocationPts
+
+    outputs["CDw"][1] = CDw
+    outputs["CDpr"][1] = CDpr
+    outputs["CDj"][1] = CDj
+    outputs["CDs"][1] = CDs
+    outputs["Dw"][1] = Dw
+    outputs["Dpr"][1] = Dpr
+    outputs["Dj"][1] = Dj
+    outputs["Ds"][1] = Ds
 
     return nothing
 end
 
 function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partials)
     """
-    TODO: PICKUP HERE FIXING THE PTVEC DERIVS
     """
 
     Gconv = inputs["gammas"]
@@ -500,8 +527,8 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #     Derivatives wrt ptVec
     # ************************************************
     # mode = "FiDi"
-    # mode = "CS"
-    # mode = "RAD"
+    # mode = "CS" # broken
+    # mode = "RAD" # broken
     mode = "FAD"
     costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist"]
     ∂f∂x = LiftingLine.compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=mode)
@@ -514,6 +541,20 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8:end])
         partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
     end
+
+    # ---------------------------
+    #   Drag build up derivatives
+    # --------------------------- 
+    ∂Drag∂Xpt, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    partials["CDw", "ptVec"][1, :] = ∂Drag∂Xpt[1, :]
+    partials["CDpr", "ptVec"][1, :] = ∂Drag∂Xpt[2, :]
+    partials["CDj", "ptVec"][1, :] = ∂Drag∂Xpt[3, :]
+    partials["CDs", "ptVec"][1, :] = ∂Drag∂Xpt[4, :]
+    partials["Dw", "ptVec"][1, :] = ∂Drag∂Xpt[5, :]
+    partials["Dpr", "ptVec"][1, :] = ∂Drag∂Xpt[6, :]
+    partials["Dj", "ptVec"][1, :] = ∂Drag∂Xpt[7, :]
+    partials["Ds", "ptVec"][1, :] = ∂Drag∂Xpt[8, :]
+
 
     # ************************************************
     #     Derivatives wrt gammas
@@ -555,6 +596,15 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8:end])
         partials["forces_dist", "gammas"][ii, :] = ∂fi∂g
     end
+
+    partials["CDw", "gammas"][1, :] = ∂Drag∂G[1, :]
+    # partials["CDpr", "gammas"][1, :] = ∂Drag∂G[2, :]
+    # partials["CDj", "gammas"][1, :] = ∂Drag∂G[3, :]
+    # partials["CDs", "gammas"][1, :] = ∂Drag∂G[4, :]
+    partials["Dw", "gammas"][1, :] = ∂Drag∂G[5, :]
+    # partials["Dpr", "gammas"][1, :] = ∂Drag∂G[6, :]
+    # partials["Dj", "gammas"][1, :] = ∂Drag∂G[7, :]
+    # partials["Ds", "gammas"][1, :] = ∂Drag∂G[8, :]
 
     return nothing
 end

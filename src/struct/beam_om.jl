@@ -180,23 +180,26 @@ end
 function OpenMDAOCore.setup(self::OMFEBeamFuncs)
 
     # Number of mesh points
-    # npt = size(self.nodeConn, 2) + 1
+    npt = size(self.nodeConn, 2) + 1
     nNodeTot, nNodeWing, nElemTot, nElemWing = FEMMethods.get_numnodes(self.appendageOptions["config"], self.appendageOptions["nNodes"], self.appendageOptions["nNodeStrut"])
 
     inputs = [
-        # OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
+        OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
         OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
     ]
 
     outputs = [
         OpenMDAOCore.VarData("wtip", val=0.0),
         OpenMDAOCore.VarData("thetatip", val=0.0),
+        OpenMDAOCore.VarData("nodes", val=zeros(3, nNodeTot)),
+        OpenMDAOCore.VarData("elemConn", val=zeros(2, nElemTot)),
     ]
 
     partials = [
         # # WRT ptVec
-        # OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"),
-        # OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"),
+        # OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"), # this is zero
+        # OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"), # this is zero
+        OpenMDAOCore.PartialsData("nodes", "ptVec", method="fd"),
         # WRT deflections
         OpenMDAOCore.PartialsData("wtip", "deflections", method="exact"),
         OpenMDAOCore.PartialsData("thetatip", "deflections", method="exact"),
@@ -209,12 +212,32 @@ end
 function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
 
     states = inputs["deflections"]
+    ptVec = inputs["ptVec"]
+
+    # --- Deal with options here ---
+    nodeConn = self.nodeConn
+    appendageParams = self.appendageParams
+    appendageOptions = self.appendageOptions
+    solverOptions = self.solverOptions
 
     wtip = compute_maxtipbend(states)
     thetatip = compute_maxtiptwist(states)
 
     outputs["wtip"][1] = wtip
     outputs["thetatip"][1] = thetatip
+
+
+    LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    _, _, _, _, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+
+    # println(size(outputs["nodes"]))
+    # println(size(outputs["elemConn"]))
+    # for (ii, node) in enumerate(eachcol(FEMESH.mesh))
+    #     outputs["nodes"][:, ii] = node
+    # end
+
+    outputs["nodes"][:] = FEMESH.mesh
+    outputs["elemConn"][:] = FEMESH.elemConn
 
     return nothing
 end

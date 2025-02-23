@@ -29,6 +29,7 @@ jl = juliacall.newmodule("DCFoil")
 
 jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
+jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
@@ -267,7 +268,15 @@ impcomp_LL_solver = JuliaImplicitComp(
     jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
 )
 expcomp_LL_func = JuliaExplicitComp(
-    jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
+    jlcomp=jl.OMLiftingLineFuncs(
+        nodeConn, appendageParams, appendageOptions, solverOptions
+    )
+)
+expcomp_load = JuliaExplicitComp(
+    jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
+)
+expcomp_displacement = JuliaExplicitComp(
+    jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
 )
 
 model = om.Group()
@@ -279,14 +288,14 @@ if args.run_struct:
     model.add_subsystem(
         "beamstruct",
         impcomp_struct_solver,
-        promotes_inputs=["ptVec"],
+        promotes_inputs=["ptVec", "traction_forces"],
         promotes_outputs=["deflections"],
     )
     model.add_subsystem(
         "beamstruct_funcs",
         expcomp_struct_func,
-        promotes_inputs=["deflections","ptVec"],
-        promotes_outputs=["*"], # everything!
+        promotes_inputs=["ptVec","deflections"],
+        promotes_outputs=["*"],  # everything!
     )
 elif args.run_flow:
 
@@ -314,8 +323,8 @@ else:
     model.add_subsystem(
         "beamstruct_funcs",
         expcomp_struct_func,
-        promotes_inputs=["deflections","ptVec"],
-        promotes_outputs=["*"], # everything!
+        promotes_inputs=["ptVec","deflections"],
+        promotes_outputs=["*"],  # everything!
     )
     model.add_subsystem(
         "liftingline",
@@ -329,6 +338,10 @@ else:
         promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
         promotes_outputs=["*"],  # everything!
     )
+    # # --- Now add load transfer capabilities ---
+    # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
+    # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
+
 
 # ************************************************
 #     Setup problem
@@ -411,11 +424,14 @@ elif args.run_flow:
 else:
     print("nondimensional gammas", prob.get_val("liftingline.gammas"))
     print("CL", prob.get_val("CL"))
-    print("force distribution", prob.get_val("forces_dist"))
+    # print("force distribution", prob.get_val("forces_dist"))
     print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
     print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
     # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
-    # print("drag force", prob.get_val("liftingline.F_x"))
+    print("induced drag force", prob.get_val("F_x"))
+    print("lift force", prob.get_val("F_z"))
+    print("spray drag:", prob.get_val("Ds"), f"\tprofile drag: {prob.get_val('Dpr')}\t wavedrag: {prob.get_val('Dw')}\t junctiondrag: {prob.get_val('Dj')}")
+    print("spray drag coeff:", prob.get_val("CDs"), f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}")
 
 # --- Check partials after you've solve the system!! ---
 if args.test_partials:
@@ -426,21 +442,34 @@ if args.test_partials:
     f.write("=" * 50)
     f.write(" liftingline partials ")
     f.write("=" * 50)
+    # prob.check_partials(
+    #     out_stream=f,
+    #     includes=["liftingline"],
+    #     method="fd",
+    #     compact_print=True,
+    # )
     prob.check_partials(
         out_stream=f,
-        includes=["liftingline"],
+        includes=["liftingline_funcs"],
         method="fd",
-        compact_print=True,
+        step=1e-4,  # now we're cooking :)
+        # compact_print=True,
     )
     f.write("=" * 50)
     f.write(" structural partials ")
     f.write("=" * 50)
-    prob.check_partials(
-        out_stream=f,
-        includes=["beamstruct"],
-        method="fd",
-        compact_print=True,
-    )
+    # prob.check_partials(
+    #     out_stream=f,
+    #     includes=["beamstruct"],
+    #     method="fd",
+    #     compact_print=True,
+    # )
+    # prob.check_partials(
+    #     out_stream=f,
+    #     includes=["beamstruct_funcs"],
+    #     method="fd",
+    #     # compact_print=True,
+    # ) # THESE ARE GOOD
     # # print(prob.check_partials(method="cs", compact_print=True))
     # breakpoint()
     f.close()
