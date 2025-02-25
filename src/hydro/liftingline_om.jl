@@ -384,6 +384,8 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("Dpr", val=0.0),
         OpenMDAOCore.VarData("Dj", val=0.0),
         OpenMDAOCore.VarData("Ds", val=0.0),
+        # --- lift slopes for dynamic solution ---
+        OpenMDAOCore.VarData("cla", val=zeros(LiftingLine.NPT_WING)),
     ]
 
     partials = [
@@ -408,6 +410,8 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("Dpr", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("Dj", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("Ds", "ptVec", method="exact"),
+        # --- lift slopes for dynamic solution ---
+        OpenMDAOCore.PartialsData("cla", "ptVec", method="exact"),
         # --- WRT gammas ---
         OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
@@ -423,6 +427,8 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         # Empirical drag build up
         OpenMDAOCore.PartialsData("CDw", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("Dw", "gammas", method="exact"),
+        # --- lift slopes for dynamic solution ---
+        OpenMDAOCore.PartialsData("cla", "gammas", method="exact"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="fd")] # define the partials
 
@@ -506,6 +512,11 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["Dpr"][1] = Dpr
     outputs["Dj"][1] = Dj
     outputs["Ds"][1] = Ds
+
+    # ---------------------------
+    #   Lift slope solution
+    # ---------------------------
+    # TODO: PICKUP HERE
 
     return nothing
 end

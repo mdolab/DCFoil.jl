@@ -11,13 +11,11 @@
 module LDTransfer
 
 for headerName in [
-    "Interpolation.jl",
-    "EBBeam.jl"
+    "../utils/Interpolation",
+    "../struct/EBBeam"
 ]
-    include("../$headerName")
+    include("$(headerName).jl")
 end
-# using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
-# using ..Interpolation
 
 
 function transfer_LD(inputVector, XStruct, XHydro; mode="D")
