@@ -19,7 +19,7 @@ using LinearAlgebra
 using Statistics
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
-using Zygote
+using Zygote, ReverseDiff
 using FiniteDifferences
 using PythonCall
 using Printf
@@ -31,6 +31,7 @@ using DelimitedFiles
 for headerName in [
     "../constants/DataTypes",
     "../constants/SolutionConstants",
+    "../adrules/CustomRules",
     "../constants/DesignConstants",
     "../utils/Utilities",
     "../utils/Interpolation",
@@ -39,7 +40,8 @@ for headerName in [
     "../hydro/Unsteady",
     "../utils/Preprocessing",
     "../hydro/VPM",
-    "../solvers/NewtonRaphson"
+    "../solvers/NewtonRaphson",
+    "../ComputeHydroFunctions",
 ]
     include(headerName * ".jl")
 end
@@ -59,10 +61,10 @@ struct LiftingLineMesh{T<:Number,TF<:Number,TI,TA<:AbstractVector{TF},TM<:Abstra
     """
     nodePts::TM # LL node points
     collocationPts::TM # Control points
-    jointPts::TM # TV joint points
+    jointPts::AbstractMatrix # TV joint points
     npt_wing::TI # Number of wing points
-    localChords::TA # Local chord lengths of the panel edges [m]
-    localChordsCtrl::TA # Local chord lengths of the control points [m]
+    localChords::AbstractVector # Local chord lengths of the panel edges [m]
+    localChordsCtrl::AbstractVector # Local chord lengths of the control points [m]
     sectionVectors::TM # Nondimensional section vectors, "dζi" in paper
     sectionLengths::TA # Section lengths
     sectionAreas::TA # Section areas
@@ -72,14 +74,14 @@ struct LiftingLineMesh{T<:Number,TF<:Number,TI,TA<:AbstractVector{TF},TM<:Abstra
     planformArea::TF
     SRef::TF # Reference area [m^2]
     AR::TF # Aspect ratio
-    rootChord::TF # Root chord [m]
+    rootChord::Number # Root chord [m]
     sweepAng::TF # Wing sweep angle [rad]
     rc::T # Finite-core vortex radius (viscous correction) [m]
     wing_xyz_eff::TH # Effective wing LAC coordinates per control point
     wing_joint_xyz_eff::TH # Effective TV joint locations per control point
-    local_sweeps::TA
+    local_sweeps::AbstractVector
     local_sweeps_eff::TM
-    local_sweeps_ctrl::TA
+    local_sweeps_ctrl::AbstractVector
 end
 
 struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
@@ -812,8 +814,15 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     # This is the Biot--Savart law but nondimensional
     # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
-    uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-    uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+    # uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+    # uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+    
+    uicrossζi_z = Zygote.Buffer(zeros(Number, 3, LLMesh.npt_wing))
+    for ii in 1:LLMesh.npt_wing
+        uicrossζi_z[:, ii] = -myCrossProd(ui[:, ii], ζi[:, ii])
+    end
+    uicrossζi = copy(uicrossζi_z)
+
     coeff = 2.0 / LLMesh.SRef
     NondimForces = coeff * (uicrossζi .* Gi) .* dAi
 
@@ -1694,11 +1703,18 @@ function compute_cm_LE(G; solverParams=nothing)
 
     hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
 
-    c_m::AbstractVector{Number} = [
+
+    # c_m::AbstractVector{Number} = [
+    #     solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[2]
+    #     for (ii, V_local) in enumerate(eachcol(Ui))
+    # ] # remember to only grab CM out of VPM solve
+
+    c_m_z = Zygote.Buffer(zeros(size(Airfoils)))
+    c_m_z = [
         solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[2]
         for (ii, V_local) in enumerate(eachcol(Ui))
     ] # remember to only grab CM out of VPM solve
-
+    c_m = copy(c_m_z)
 
     return c_m
 end

@@ -10,15 +10,15 @@
 """
 
 
-struct AirfoilMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+struct AirfoilMesh{TI, T<:Number, TM<:AbstractMatrix}
     """
     Struct to hold the airfoil geometry discretization
     """
     vortexXY::TM        # vortex points [x,y] for each panel, size [2, n] where n is the number of vertices
     controlXY::TM       # control points [x,y] for each panel, size [2, n-1] where n is the number of vertices
-    panelLengths::TA    # panel lengths [m]
+    panelLengths::AbstractVector    # panel lengths [m]
     n::TI               # number of panel vertices
-    sweep::TF           # sweep angle [rad]
+    sweep::T           # sweep angle [rad]
 end
 
 function setup_VPM(xx, yy, control_xy, sweep=0.0)

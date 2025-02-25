@@ -201,7 +201,7 @@ function get_tipnode(LECoords)
     Need unaltered ones for differentiation purposes
     """
 
-    idxTip = argmax(LECoords[YDIM, :])
+    idxTip = argmax(real(LECoords)[YDIM, :])
     # if idxTip != 10
     #     println("Tip node index (hopefully not changing): ", idxTip)
     # end

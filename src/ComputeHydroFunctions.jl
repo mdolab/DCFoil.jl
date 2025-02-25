@@ -123,7 +123,6 @@ function compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverO
     All pieces of calmwater drag
     """
 
-
     CDw, Dw = compute_wavedrag(CL, meanChord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
 
     CDpr, Dpr = compute_profiledrag(aeroSpan, chordLengths, meanChord, qdyn, areaRef, appendageParams, appendageOptions, solverOptions)
@@ -179,7 +178,7 @@ function compute_besselInt(Uinf, span, Fnh)
     return I
 end
 
-function compute_dragsFromXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, CL)
+function compute_dragsFromX(ptVec, gammas, nodeConn, appendageParams, appendageOptions, solverOptions)
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
@@ -203,6 +202,13 @@ function compute_dragsFromXpt(ptVec, nodeConn, appendageParams, appendageOptions
         airfoil_xy=airfoilXY,
         options=options,
     )
+    # ---------------------------
+    #   Calculate influence matrix
+    # ---------------------------
+    TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+
+    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    _, _, _, _, _, CL, _, _ = LiftingLine.compute_outputs(gammas, TV_influence, FlowCond, LLMesh, LLNLParams)
 
     meanChord = sum(chordVec) / length(chordVec)
     areaRef = LiftingLine.compute_areas(LECoords, TECoords, nodeConn)
@@ -212,9 +218,31 @@ function compute_dragsFromXpt(ptVec, nodeConn, appendageParams, appendageOptions
         compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions,
             dynP, areaRef, aeroSpan, CL, meanChord, rootChord, chordVec)
 
-    return CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds
+    return vec([CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds])
 end
-function compute_∂Drag()
+
+function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
+    # backend = AD.ReverseDiffBackend()
+
+    # backend = AD.ZygoteBackend()
+
+    if uppercase(mode) == "RAD" # don't use this because it gives NaNs at the root and tip of the mesh
+        ∂I∂xDV = Zygote.jacobian((xPt, xGamma) -> compute_dragsFromX(xPt, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), ptVec, gammas)
+        # ∂I∂xDV = ReverseDiff.jacobian((xPt, xGamma) -> compute_dragsFromX(xPt, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), ptVec, gammas) # Reverse Diff is bugging out...
+        ∂Drag∂Xpt = ∂I∂xDV[1]
+        ∂Drag∂G = ∂I∂xDV[2]
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
+        # @time ∂Drag∂G, = ReverseDiff.jacobian((xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, appendageParams, appendageOptions, solverOptions), ptVec)
+    end
+
+    # println("size of ∂I∂xDV: ", (∂I∂xDV))
+
+    # writedlm("ddragdX-$(mode).csv", ∂Drag∂Xpt, ',')
+    # writedlm("ddragdG-$(mode).csv", ∂Drag∂G, ',')
 
     return ∂Drag∂Xpt, ∂Drag∂G
 end

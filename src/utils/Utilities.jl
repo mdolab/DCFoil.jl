@@ -208,11 +208,22 @@ function cross3D(arr1, arr2)
 
     for jj in 1:M
         for kk in 1:N
-            arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+            # arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+            arr1crossarr2_z[:, jj, kk] = myCrossProd(arr1[:, jj, kk], arr2[:, jj, kk])
         end
     end
     arr1crossarr2 = copy(arr1crossarr2_z)
 
     return arr1crossarr2
 
+end
+
+
+function myCrossProd(vec1, vec2)
+    v1crossv2 = vec([
+        vec1[1] * vec2[3] - vec1[3] * vec2[2],
+        vec1[3] * vec2[1] - vec1[1] * vec2[3],
+        vec1[1] * vec2[2] - vec1[2] * vec2[1]
+    ])
+    return v1crossv2
 end

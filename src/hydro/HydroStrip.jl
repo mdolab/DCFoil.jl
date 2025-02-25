@@ -607,50 +607,6 @@ function compute_wavePatternDWAng(clM, chordM, Fnc, Fnh, ξ)
     return αiwave
 end
 
-function compute_biplanefreesurface(λ)
-    """
-    Based on Breslin 1957
-    """
-    plamsq = 1 + λ^2
-    k = 1 / √(1 + λ^2)
-    Ek = SpecialFunctions.ellipe(k^2)
-    Kk = SpecialFunctions.ellipk(k^2)
-
-    # Biplane function
-    σλ = 1 - 4 / π * λ * √(1 + λ^2) * (Kk - Ek)
-    # Free surface function
-    γλ = 4 / (3π) * ((2 / π) * plamsq^(1.5) * Ek - 1.5 * λ)
-
-    return σλ, γλ
-end
-
-function compute_besselint(Uinf, span, Fnh)
-
-    function compute_integrand(θ)
-
-        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * 0.5 * span * (sec(θ))^2 * sin(θ))
-        exponent = exp(-2 * (sec(θ))^2 / Fnh^2)
-
-
-        int = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
-
-        return int
-    end
-
-    dθ = 0.01
-    # Starting at 0 breaks this, so start close
-    θ = 0.001:dθ:π/2
-    heights = compute_integrand.(θ)
-
-    # # Trapezoid integration seems to introduce oscillations... wrt Fnc
-    # I = 0.5 * dθ * (heights[1] + heights[end] + 2 * sum(heights[2:end-1]))
-
-    # --- Riemann integration ---
-    I = sum(heights * dθ)
-
-    return I
-end
-
 function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
     """
     Slope of the 3D lift coefficient with respect to the angle of attack considering surface-piercing vertical strut

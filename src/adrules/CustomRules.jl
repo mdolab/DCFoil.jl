@@ -11,8 +11,6 @@ This is not a module on purpose so it's in the namespace when it's first include
 using ChainRulesCore
 using LinearAlgebra
 
-# # --- DCFoil modules ---
-# using ..SolverRoutines: cmplxStdEigValProb2
 
 # ==============================================================================
 #                         Constructors
