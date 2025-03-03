@@ -241,6 +241,9 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
     "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
 }
 
+# Need to set struct damping once at the beginning
+solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
+breakpoint()
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -458,19 +461,18 @@ if args.test_partials:
     f.write("=" * 50)
     f.write(" structural partials ")
     f.write("=" * 50)
-    # prob.check_partials(
-    #     out_stream=f,
-    #     includes=["beamstruct"],
-    #     method="fd",
-    #     compact_print=True,
-    # )
-    # prob.check_partials(
-    #     out_stream=f,
-    #     includes=["beamstruct_funcs"],
-    #     method="fd",
-    #     # compact_print=True,
-    # ) # THESE ARE GOOD
-    # # print(prob.check_partials(method="cs", compact_print=True))
+    prob.check_partials(
+        out_stream=f,
+        includes=["beamstruct"],
+        method="fd",
+        compact_print=True,
+    )
+    prob.check_partials(
+        out_stream=f,
+        includes=["beamstruct_funcs"],
+        method="fd",
+        # compact_print=True,
+    ) # THESE ARE GOOD
     # breakpoint()
     f.close()
 

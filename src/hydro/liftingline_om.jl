@@ -412,6 +412,8 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("Ds", "ptVec", method="exact"),
         # --- lift slopes for dynamic solution ---
         OpenMDAOCore.PartialsData("cla", "ptVec", method="exact"),
+        # --- Hydro mesh ---
+        OpenMDAOCore.PartialsData("collocationPts", "ptVec", method="exact"), # TODO: implement this in julia
         # --- WRT gammas ---
         OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
@@ -535,13 +537,15 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     appendageOptions = self.appendageOptions
 
     # ************************************************
-    #     Derivatives wrt ptVec
+    #     Derivatives wrt ptVec (2025-03-02 agree)
     # ************************************************
     # mode = "FiDi"
     # mode = "CS" # broken
     # mode = "RAD" # broken
     mode = "FAD"
+
     costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist"]
+
     ∂f∂x = LiftingLine.compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=mode)
 
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x[1:7, :]))
@@ -566,9 +570,20 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     partials["Dj", "ptVec"][1, :] = ∂Drag∂Xpt[7, :]
     partials["Ds", "ptVec"][1, :] = ∂Drag∂Xpt[8, :]
 
+    # ---------------------------
+    #   Hydro mesh points
+    # ---------------------------
+    println("CollocationPts and cla deriv don't work") #TODO: PICKUP HERE
+    partials["collocationPts", "ptVec"][:, :] = zeros(LiftingLine.NPT_WING * 3, length(ptVec))
+
+    # ---------------------------
+    #   Lift slopes
+    # ---------------------------
+    # partials["cla", "gammas"] = 
 
     # ************************************************
-    #     Derivatives wrt gammas
+    #     Derivatives wrt gammas (2025-03-02 these are all good)
+    # clmax is off when setting FD step to 1e-4 --> agrees when using other step size
     # ************************************************
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
@@ -609,13 +624,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     end
 
     partials["CDw", "gammas"][1, :] = ∂Drag∂G[1, :]
-    # partials["CDpr", "gammas"][1, :] = ∂Drag∂G[2, :]
-    # partials["CDj", "gammas"][1, :] = ∂Drag∂G[3, :]
-    # partials["CDs", "gammas"][1, :] = ∂Drag∂G[4, :]
     partials["Dw", "gammas"][1, :] = ∂Drag∂G[5, :]
-    # partials["Dpr", "gammas"][1, :] = ∂Drag∂G[6, :]
-    # partials["Dj", "gammas"][1, :] = ∂Drag∂G[7, :]
-    # partials["Ds", "gammas"][1, :] = ∂Drag∂G[8, :]
 
     return nothing
 end

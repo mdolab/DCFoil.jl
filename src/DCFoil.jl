@@ -139,9 +139,14 @@ function set_structDamping(LECoords, TECoords, nodeConn, appendageParams, solver
     Run this routine at the beginning of any dynamic analysis or optimization to fix the damping
     """
 
-    FOIL, STRUT, _, FEMESH, _, _, _ = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
-    x_αbVec = appendageParams["x_ab"]
-    αStruct, βStruct = FEMMethods.compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, ELEMTYPE, appendageParams, appendageOptions, solverOptions)
+    # FOIL, STRUT, _, FEMESH, _, _, _ = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    # x_αbVec = appendageParams["x_ab"]
+    # αStruct, βStruct = FEMMethods.compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, ELEMTYPE, appendageParams, appendageOptions, solverOptions)
+
+    # --- Alternative way ---
+    globalKs, globalMs, globalF, globalDOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    Ks, Ms, _ = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    αStruct, βStruct = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
 
     solverOptions["alphaConst"] = αStruct
     solverOptions["betaConst"] = βStruct

@@ -17,6 +17,7 @@ function compute_maxtipbend(states)
 
     return W[end]
 end
+
 function compute_maxtiptwist(states)
     Theta = states[ΘIND:NDOF:end]
 

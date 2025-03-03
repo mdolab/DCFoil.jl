@@ -25,20 +25,27 @@ using FiniteDifferences
 using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
-# --- DCFoil modules ---
-using ..DCFoil: DTYPE
-using ..InitModel
-using ..HydroStrip
-using ..BeamProperties
-using ..FEMMethods
-using ..SolverRoutines
-using ..Interpolation
-using ..DCFoilSolution
-using ..DesignConstants: SORTEDDVS
-using ..DesignVariables: allDesignVariables
-using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
-using ..Utilities: Utilities, compute_KS
-using ..TecplotIO
+# # --- DCFoil modules ---
+for headerName in [
+    "../struct/FEMMethods",
+]
+    include("$(headerName).jl")
+end
+using .FEMMethods
+
+# using ..DCFoil: DTYPE
+# using ..InitModel
+# using ..HydroStrip
+# using ..BeamProperties
+# using ..FEMMethods
+# using ..SolverRoutines
+# using ..Interpolation
+# using ..DCFoilSolution
+# using ..DesignConstants: SORTEDDVS
+# using ..DesignVariables: allDesignVariables
+# using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
+# using ..Utilities: Utilities, compute_KS
+# using ..TecplotIO
 
 # ==============================================================================
 #                         MODULE CONSTANTS
@@ -257,8 +264,8 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     # ************************************************
     #     FEM assembly
     # ************************************************
-    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; 
-    config=appendageOptions["config"])
+    globalKs, globalMs, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive;
+        config=appendageOptions["config"])
 
     # ---------------------------
     #   Apply BC blanking

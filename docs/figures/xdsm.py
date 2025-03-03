@@ -63,7 +63,7 @@ if __name__ == "__main__":
             (
                 r"\text{Linearized quantities }",
                 r"\text{about static equilibrium for dynamics analysis:}",
-                r"c_{\ell_\alpha}'s, \mathbf{M}_{ff}, \mathbf{C}_{ff}, \mathbf{K}_{ff}",
+                r"c_{\ell_\alpha}'s",
             ),
         )
         # x.connect("opt", "geo", (r"\text{Geometric}", r"\text{variables}"))

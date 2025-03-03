@@ -9,11 +9,15 @@
 
 for headerName = [
     "../solvers/SolveForced",
+    "../hydro/LiftingLine",
+    "../struct/FEMMethods",
 ]
     include(headerName * ".jl")
 end
 
 using .SolveForced
+using .LiftingLine
+using .FEMMethods
 
 # ==============================================================================
 #                         OpenMDAO operations
@@ -32,13 +36,21 @@ end
 
 function OpenMDAOCore.setup(self::OMForced)
 
+    nNodeTot, nNodeWing, nElemTot, nElemWing = FEMMethods.get_numnodes(self.appendageOptions["config"], self.appendageOptions["nNodes"], self.appendageOptions["nNodeStrut"])
 
     inputs = [
+        # --- Mesh type ---
+        OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
+        OpenMDAOCore.VarData("nodes", val=zeros(3, nNodeTot)),
+        OpenMDAOCore.VarData("elemConn", val=zeros(2, nElemTot)),
+        # --- linearized quantities ---
+        OpenMDAOCore.VarData("cla", val=zeros(nNodeTot)),
         OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
     ]
 
     outputs = [
-        OpenMDAOCore.VarData("elemConn", val=zeros(2, nElemTot)),
+        OpenMDAOCore.VarData("vibareapsi", val=0.0),
+        OpenMDAOCore.VarData("vibareaw", val=0.0),
     ]
 
     partials = [

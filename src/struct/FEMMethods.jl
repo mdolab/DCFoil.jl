@@ -33,6 +33,7 @@ for headerName in [
     "../struct/EBBeam",
     "../utils/Preprocessing",
     "../struct/MaterialLibrary",
+    "../solvers/EigenvalueProblem",
 ]
     include(headerName * ".jl")
 end
@@ -47,13 +48,7 @@ using StaticArrays
 using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 
 # --- DCFoil modules ---
-# using ..DCFoil: RealOrComplex, DTYPE
-# using ..EBBeam: EBBeam as BeamElement, NDOF
-# using ..SolverRoutines
-# using ..Interpolation
-# using ..BeamProperties
 using .DesignConstants: DesignConstants, DynamicFoil, CONFIGS, Foil
-# using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, ELEMTYPE
 using .MaterialLibrary
 
 export ELEMTYPE, NDOF, UIND, VIND, WIND, ΦIND, ΘIND, ΨIND
@@ -988,7 +983,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
 
 end
 
-function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
+function compute_modal(K::AbstractMatrix, M::AbstractMatrix, nEig::Int64)
     """
     Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
     i.e., this is structural dynamics, not hydroelastics.
@@ -998,12 +993,25 @@ function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
 
     # use krylov method to get first few smallest eigenvalues
     # Solve [K]{x} = λ[M]{x} where λ = ω²
-    eVals, eVecs = SolverRoutines.compute_eigsolve(K, M, nEig)
+    eVals, eVecs = compute_eigsolve(K, M, nEig)
 
     naturalFreqs = .√(eVals) / (2π)
 
     return naturalFreqs, eVecs
 end
+
+function set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageOptions)
+
+    LECoords, TECoords = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    globalKs, globalMs, globalF, globalDOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    Ks, Ms, _ = apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    αStruct, βStruct = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
+
+    solverOptions["alphaConst"] = αStruct
+    solverOptions["betaConst"] = βStruct
+    return solverOptions
+end
+
 
 function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, appendageParams, appendageOptions, solverOptions)
     """
@@ -1022,9 +1030,9 @@ function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, 
     return αStruct, βStruct
 end
 
-function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, nMode::Int64)
+function compute_proportional_damping(K::AbstractMatrix, M::AbstractMatrix, ζ::RealOrComplex, nMode::Int64)
     """
-    TODO: MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
+    MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
     Compute the proportional (Rayleigh) damping matrix
 
     C = alpha [M] + beta [K]
@@ -1104,12 +1112,12 @@ function setup_FEBeamFromCoords(
     structMesh, elemConn = make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
     FEMESH = StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
-    globalK, globalM, globalC = assemble(FEMESH, x_ab, WingStructModel, ELEMTYPE, WingStructModel.constitutive; config=appendageOptions["config"], STRUT=StrutStructModel, x_αb_strut=x_ab_strut, verbose=solverOptions["debug"])
+    globalK, globalM, globalF = assemble(FEMESH, x_ab, WingStructModel, ELEMTYPE, WingStructModel.constitutive; config=appendageOptions["config"], STRUT=StrutStructModel, x_αb_strut=x_ab_strut, verbose=solverOptions["debug"])
 
     # Initial guess on unknown deflections (excluding BC nodes)
     DOFBlankingList = get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
 
-    return globalK, globalM, globalC, DOFBlankingList, FEMESH
+    return globalK, globalM, globalF, DOFBlankingList, FEMESH
 end
 
 # ************************************************
@@ -1137,7 +1145,7 @@ function compute_residualsFromCoords(
     DVDict = appendageParamsList[iComp]
     LECoords, TECoords = repack_coords(xVec, 3, length(xVec) ÷ 3)
 
-    Kmat, Mmat, Cmat, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, appendageOptions, solverOptions)
+    Kmat, _, F, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, appendageOptions, solverOptions)
 
     # --- Outputs ---
     FOut = fu[1:end.∉[DOFBlankingList]]

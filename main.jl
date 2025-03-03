@@ -199,7 +199,7 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-# TODO: PICKUP HERE ADDING IN THE STRUT/ getting derivs working to do an optimization
+# TODO: ADDING IN THE STRUT/ getting derivs working to do an optimization
 GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)

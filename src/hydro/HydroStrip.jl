@@ -382,7 +382,6 @@ function compute_dDidXpt(ptVec, nodeConn, appendageParams, appendageOptions, sol
     """
     Derivative of the induced drag wrt the design variables
     Dimensional 
-    TODO PICKUP WRITING THIS
     """
 
     npt_wing = 40 # HARDCODED IN LIFTING LINE CODE

@@ -1,7 +1,3 @@
-module EigenvalueProblem
-
-# --- PACKAGES ---
-using LinearAlgebra
 
 function compute_eigsolve(K, M, nEig; issym=true)
 
@@ -28,6 +24,3 @@ end
 # ==============================================================================
 #                         Take advantage of multiple dispatch
 # ==============================================================================
-
-
-end # end module

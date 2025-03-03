@@ -50,6 +50,9 @@ function OpenMDAOCore.setup(self::OMFEBeam)
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(npt * 3 * 2)),
         OpenMDAOCore.VarData("traction_forces", val=zeros(nNodeTot * FEMMethods.NDOF)),
+        # --- Structural variables ---
+        OpenMDAOCore.VarData("theta_f", val=0.0),
+        OpenMDAOCore.VarData("toc", val=ones(nNodeWing)),
     ]
     outputs = [
         OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
@@ -58,6 +61,8 @@ function OpenMDAOCore.setup(self::OMFEBeam)
         # --- Residuals ---
         OpenMDAOCore.PartialsData("deflections", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("deflections", "traction_forces", method="exact"),
+        OpenMDAOCore.PartialsData("deflections", "theta_f", method="exact"),
+        OpenMDAOCore.PartialsData("deflections", "toc", method="exact"),
         OpenMDAOCore.PartialsData("deflections", "deflections", method="exact"),
     ]
     return inputs, outputs, partials
@@ -82,7 +87,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     #     Core solver
     # ************************************************
     LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    globalK, globalM, globalC, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    globalK, globalM, globalF, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
     qSol = FEMMethods.solve_structure(
         globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
@@ -113,7 +118,7 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
 
     # ************************************************
     LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    globalK, globalM, globalC, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    globalK, globalM, globalF, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
     ∂rs∂xPt, ∂rs∂xParams = FEMMethods.compute_∂r∂x(allStructStates, traction_forces, [appendageParams], LECoords, TECoords, nodeConn;
         mode="analytic", # better
@@ -131,6 +136,11 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     partials["deflections", "deflections"][:, :] = ∂rs∂us
     partials["deflections", "traction_forces"][1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] =
         -I(length(traction_forces) - length(DOFBlankingList))
+
+    # println("partials toc", size(∂rs∂xParams["toc"]))
+
+    partials["deflections", "theta_f"][:, :] = ∂rs∂xParams["theta_f"]
+    partials["deflections", "toc"][:, :] = ∂rs∂xParams["toc"]
 
     return nothing
 end
@@ -186,6 +196,9 @@ function OpenMDAOCore.setup(self::OMFEBeamFuncs)
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
         OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
+        # --- Structural variables ---
+        OpenMDAOCore.VarData("theta_f", val=0.0),
+        OpenMDAOCore.VarData("toc", val=ones(nNodeWing)),
     ]
 
     outputs = [
@@ -193,16 +206,25 @@ function OpenMDAOCore.setup(self::OMFEBeamFuncs)
         OpenMDAOCore.VarData("thetatip", val=0.0),
         OpenMDAOCore.VarData("nodes", val=zeros(3, nNodeTot)),
         OpenMDAOCore.VarData("elemConn", val=zeros(2, nElemTot)),
+        OpenMDAOCore.VarData("Mmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
+        OpenMDAOCore.VarData("Cmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
+        OpenMDAOCore.VarData("Kmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
     ]
 
     partials = [
         # # WRT ptVec
         # OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"), # this is zero
         # OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"), # this is zero
-        OpenMDAOCore.PartialsData("nodes", "ptVec", method="fd"),
+        OpenMDAOCore.PartialsData("nodes", "ptVec", method="exact"), #TODO: do this in julia
         # WRT deflections
         OpenMDAOCore.PartialsData("wtip", "deflections", method="exact"),
         OpenMDAOCore.PartialsData("thetatip", "deflections", method="exact"),
+        OpenMDAOCore.PartialsData("Kmat", "theta_f", method="exact"),
+        OpenMDAOCore.PartialsData("Kmat", "toc", method="exact"),
+        OpenMDAOCore.PartialsData("Cmat", "theta_f", method="exact"),
+        OpenMDAOCore.PartialsData("Cmat", "toc", method="exact"),
+        OpenMDAOCore.PartialsData("Mmat", "theta_f", method="exact"),
+        OpenMDAOCore.PartialsData("Mmat", "toc", method="exact"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="fd")] # define the partials
 
@@ -228,16 +250,21 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
 
 
     LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    _, _, _, _, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    Kmat, Mmat, _, _, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
-    # println(size(outputs["nodes"]))
-    # println(size(outputs["elemConn"]))
-    # for (ii, node) in enumerate(eachcol(FEMESH.mesh))
-    #     outputs["nodes"][:, ii] = node
-    # end
+    alphaConst = solverOptions["alphaConst"]
+    betaConst = solverOptions["betaConst"]
+    Cmat = alphaConst * Mmat .+ betaConst * Kmat
 
     outputs["nodes"][:] = FEMESH.mesh
     outputs["elemConn"][:] = FEMESH.elemConn
+
+    # println(size(Kmat), size(outputs["Kmat"])) #GGGGGGGGGGGGGGGG
+    # println(size(Cmat), size(outputs["Cmat"])) #GGGGGGGGGGGGGGGG
+    # println(size(Mmat), size(outputs["Mmat"])) #GGGGGGGGGGGGGGGG
+    outputs["Kmat"][:] = Kmat
+    outputs["Cmat"][:] = Cmat
+    outputs["Mmat"][:] = Mmat
 
     return nothing
 end
@@ -252,6 +279,8 @@ function OpenMDAOCore.compute_partials!(self::OMFEBeamFuncs, inputs, partials)
 
     partials["wtip", "deflections"][1, :] = zv1
     partials["thetatip", "deflections"][1, :] = zv2
+
+    # partials["Kmat"] # TODO PICKUP HERE
 
     return nothing
 end
