@@ -8,10 +8,10 @@
 using Zygote
 
 
-struct SectionProperty{TF,TC}
+struct SectionProperty{TF,TC,T}
     c::TC # chord length
-    t::TC # thickness (only needed if not using an airfoil section)
-    ab # dist from midchord to EA, +ve for EA aft
+    t::T # thickness (only needed if not using an airfoil section)
+    ab::TF # dist from midchord to EA, +ve for EA aft
     ρₛ::TF # density
     E₁::TF # Young's modulus in-plane fiber longitudinal direction (x)
     E₂::TF # Young's modulus in-plane fiber normal direction (y)

@@ -75,6 +75,8 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     println("Solving nonlinear beam")
 
     ptVec = inputs["ptVec"]
+    theta_f = inputs["theta_f"][1]
+    toc = inputs["toc"]
     traction_forces = inputs["traction_forces"]
 
     # --- Deal with options here ---
@@ -82,6 +84,10 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     appendageParams = self.appendageParams
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
+
+    # --- Set struct vars ---
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
 
     # ************************************************
     #     Core solver
@@ -109,6 +115,8 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     ptVec = inputs["ptVec"]
     traction_forces = inputs["traction_forces"]
     allStructStates = outputs["deflections"]
+    theta_f = inputs["theta_f"][1]
+    toc = inputs["toc"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -116,10 +124,15 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
 
+    # --- Set struct vars ---
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
+
     # ************************************************
     LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     globalK, globalM, globalF, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
+    # Params derivatives are computed using complex step
     ∂rs∂xPt, ∂rs∂xParams = FEMMethods.compute_∂r∂x(allStructStates, traction_forces, [appendageParams], LECoords, TECoords, nodeConn;
         mode="analytic", # better
         # mode="FiDi",
@@ -153,6 +166,8 @@ function OpenMDAOCore.apply_nonlinear!(self::OMFEBeam, inputs, outputs, residual
 
     ptVec = inputs["ptVec"]
     traction_forces = inputs["traction_forces"]
+    theta_f = inputs["theta_f"][1]
+    toc = inputs["toc"]
     allStructStates = outputs["deflections"]
     residuals["deflections"] .= 0.0
 
@@ -162,6 +177,9 @@ function OpenMDAOCore.apply_nonlinear!(self::OMFEBeam, inputs, outputs, residual
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
 
+    # --- Set struct vars ---
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
 
     resVec = FEMMethods.compute_residualsFromCoords(allStructStates, ptVec, nodeConn, traction_forces, [appendageParams];
         appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -212,13 +230,17 @@ function OpenMDAOCore.setup(self::OMFEBeamFuncs)
     ]
 
     partials = [
-        # # WRT ptVec
+        # WRT ptVec
+        OpenMDAOCore.PartialsData("Kmat", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Cmat", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Mmat", "ptVec", method="exact"),
         # OpenMDAOCore.PartialsData("wtip", "ptVec", method="exact"), # this is zero
         # OpenMDAOCore.PartialsData("thetatip", "ptVec", method="exact"), # this is zero
-        OpenMDAOCore.PartialsData("nodes", "ptVec", method="exact"), #TODO: do this in julia
+        OpenMDAOCore.PartialsData("nodes", "ptVec", method="exact"),
         # WRT deflections
         OpenMDAOCore.PartialsData("wtip", "deflections", method="exact"),
         OpenMDAOCore.PartialsData("thetatip", "deflections", method="exact"),
+        # WRT struct variables
         OpenMDAOCore.PartialsData("Kmat", "theta_f", method="exact"),
         OpenMDAOCore.PartialsData("Kmat", "toc", method="exact"),
         OpenMDAOCore.PartialsData("Cmat", "theta_f", method="exact"),
@@ -235,12 +257,18 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
 
     states = inputs["deflections"]
     ptVec = inputs["ptVec"]
+    theta_f = inputs["theta_f"][1]
+    toc = inputs["toc"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
     appendageParams = self.appendageParams
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
+
+    # --- Set struct vars ---
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
 
     wtip = compute_maxtipbend(states)
     thetatip = compute_maxtiptwist(states)
@@ -259,9 +287,6 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
     outputs["nodes"][:] = FEMESH.mesh
     outputs["elemConn"][:] = FEMESH.elemConn
 
-    # println(size(Kmat), size(outputs["Kmat"])) #GGGGGGGGGGGGGGGG
-    # println(size(Cmat), size(outputs["Cmat"])) #GGGGGGGGGGGGGGGG
-    # println(size(Mmat), size(outputs["Mmat"])) #GGGGGGGGGGGGGGGG
     outputs["Kmat"][:] = Kmat
     outputs["Cmat"][:] = Cmat
     outputs["Mmat"][:] = Mmat

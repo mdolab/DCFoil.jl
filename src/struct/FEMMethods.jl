@@ -1142,7 +1142,6 @@ function compute_residualsFromCoords(
             Design variables
     """
 
-    DVDict = appendageParamsList[iComp]
     LECoords, TECoords = repack_coords(xVec, 3, length(xVec) ÷ 3)
 
     Kmat, _, F, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, appendageOptions, solverOptions)
@@ -1158,7 +1157,7 @@ function compute_residualsFromCoords(
 
     resNodes = Felastic - FOut
 
-    resVec = zeros(DTYPE, length(resNodes) + length(DOFBlankingList))
+    resVec::AbstractArray{Number} = zeros(length(resNodes) + length(DOFBlankingList))
     resVec[1:end.∉[DOFBlankingList]] = resNodes
 
     return resVec
@@ -1169,6 +1168,19 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
     Derivative of structural stiffness matrix with respect to design variables times structural 
     Matrix-vector product
     """
+
+    function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+
+        LECoords, TECoords = repack_coords(xVec, 3, length(xVec) ÷ 3)
+
+        globalK, globalM, globalC, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+
+        Kmat = globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+        f = Kmat * u
+
+        return f
+    end
+
 
     ∂KssU∂x = zeros(DTYPE, length(structStates), length(ptVec))
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -1212,16 +1224,9 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
     return ∂KssU∂x
 end
 
-function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
 
-    LECoords, TECoords = repack_coords(xVec, 3, length(xVec) ÷ 3)
 
-    globalK, globalM, globalC, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
-
-    Kmat = globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
-    f = Kmat * u
-
-    return f
+function compute_∂outputs∂Xpt(str)
 end
 
 function compute_∂r∂x(
@@ -1315,20 +1320,34 @@ function compute_∂r∂x(
         # ************************************************
         #     Params derivatives
         # ************************************************
-        dh = 1e-4
+        # dh = 1e-4
+        dh = 1e-100
+
         f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
-        appendageParamsList[iComp]["theta_f"] += dh
+
+        # appendageParamsList[iComp]["theta_f"] += dh
+        appendageParamsList[iComp]["theta_f"] += 1im * dh
+
         f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
-        appendageParamsList[iComp]["theta_f"] -= dh
-        ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+        appendageParamsList[iComp]["theta_f"] -= 1im * dh
+
+        # ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+        ∂r∂xParams["theta_f"] = imag(f_f) / dh
 
         ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
+        appendageParamsListCS = copy(appendageParamsList)
+        appendageParamsListCS[iComp]["toc"] = complex.(appendageParamsList[iComp]["toc"])
         for ii in eachindex(appendageParamsList[iComp]["toc"])
-            appendageParamsList[iComp]["toc"][ii] += dh
-            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
-            appendageParamsList[iComp]["toc"][ii] -= dh
-            ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+            # appendageParamsList[iComp]["toc"][ii] += dh
+            appendageParamsListCS[iComp]["toc"][ii] += 1im * dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsListCS; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            # appendageParamsList[iComp]["toc"][ii] -= dh
+            appendageParamsListCS[iComp]["toc"][ii] -= 1im * dh
+            # ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+            ∂r∂xParams["toc"][:, ii] = imag(f_f) / dh
+            # TODO: PICKUP HERE SOMETHING WRONG
         end
+
         appendageParamsList[iComp]["alfa0"] += dh
         f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["alfa0"] -= dh
