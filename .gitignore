@@ -2,6 +2,9 @@
 # Ignore these following files and directories
 ########################################################################
 
+# OpenMDAO stuff
+.CondaPkg/
+
 # Results
 OUTPUT/
 POSTPROCESSING/MOVIES/

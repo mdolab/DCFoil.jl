@@ -246,248 +246,253 @@ solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-parser = argparse.ArgumentParser()
-parser.add_argument("--run_struct", action="store_true", default=False)
-parser.add_argument("--run_flow", action="store_true", default=False)
-parser.add_argument("--test_partials", action="store_true", default=False)
-args = parser.parse_args()
+if __name__ == "__main__":
 
-# --- Echo the args ---
-print(30 * "-")
-print("Arguments are", flush=True)
-for arg in vars(args):
-    print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
-print(30 * "-", flush=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run_struct", action="store_true", default=False)
+    parser.add_argument("--run_flow", action="store_true", default=False)
+    parser.add_argument("--test_partials", action="store_true", default=False)
+    args = parser.parse_args()
 
+    # --- Echo the args ---
+    print(30 * "-")
+    print("Arguments are", flush=True)
+    for arg in vars(args):
+        print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+    print(30 * "-", flush=True)
 
-impcomp_struct_solver = JuliaImplicitComp(
-    jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
-)
-expcomp_struct_func = JuliaExplicitComp(
-    jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
-)
-impcomp_LL_solver = JuliaImplicitComp(
-    jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
-)
-expcomp_LL_func = JuliaExplicitComp(
-    jlcomp=jl.OMLiftingLineFuncs(
-        nodeConn, appendageParams, appendageOptions, solverOptions
+    impcomp_struct_solver = JuliaImplicitComp(
+        jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-)
-expcomp_load = JuliaExplicitComp(
-    jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
-)
-expcomp_displacement = JuliaExplicitComp(
-    jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
-)
-
-model = om.Group()
-
-# ************************************************
-#     Setup components
-# ************************************************
-if args.run_struct:
-    model.add_subsystem(
-        "beamstruct",
-        impcomp_struct_solver,
-        promotes_inputs=["ptVec", "traction_forces"],
-        promotes_outputs=["deflections"],
+    expcomp_struct_func = JuliaExplicitComp(
+        jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    model.add_subsystem(
-        "beamstruct_funcs",
-        expcomp_struct_func,
-        promotes_inputs=["ptVec","deflections"],
-        promotes_outputs=["*"],  # everything!
+    impcomp_LL_solver = JuliaImplicitComp(
+        jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-elif args.run_flow:
-
-    # --- Do nonlinear liftingline ---
-    model.add_subsystem(
-        "liftingline",
-        impcomp_LL_solver,
-        promotes_inputs=["ptVec"],
-        promotes_outputs=["gammas"],
+    expcomp_LL_func = JuliaExplicitComp(
+        jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    model.add_subsystem(
-        "liftingline_funcs",
-        expcomp_LL_func,
-        promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
-        promotes_outputs=["*"],  # everything!
+    expcomp_load = JuliaExplicitComp(
+        jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-else:
-    # --- Combined hydroelastic ---
-    model.add_subsystem(
-        "beamstruct",
-        impcomp_struct_solver,
-        promotes_inputs=["ptVec"],
-        promotes_outputs=["deflections"],
+    expcomp_displacement = JuliaExplicitComp(
+        jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    model.add_subsystem(
-        "beamstruct_funcs",
-        expcomp_struct_func,
-        promotes_inputs=["ptVec","deflections"],
-        promotes_outputs=["*"],  # everything!
-    )
-    model.add_subsystem(
-        "liftingline",
-        impcomp_LL_solver,
-        promotes_inputs=["ptVec"],
-        promotes_outputs=["gammas"],
-    )
-    model.add_subsystem(
-        "liftingline_funcs",
-        expcomp_LL_func,
-        promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
-        promotes_outputs=["*"],  # everything!
-    )
-    # # --- Now add load transfer capabilities ---
-    # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-    # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
 
+    model = om.Group()
 
-# ************************************************
-#     Setup problem
-# ************************************************
+    # ************************************************
+    #     Setup components
+    # ************************************************
+    if args.run_struct:
+        model.add_subsystem(
+            "beamstruct",
+            impcomp_struct_solver,
+            promotes_inputs=["ptVec", "traction_forces"],
+            promotes_outputs=["deflections"],
+        )
+        model.add_subsystem(
+            "beamstruct_funcs",
+            expcomp_struct_func,
+            promotes_inputs=["ptVec", "deflections"],
+            promotes_outputs=["*"],  # everything!
+        )
+    elif args.run_flow:
 
-prob = om.Problem(model)
+        # --- Do nonlinear liftingline ---
+        model.add_subsystem(
+            "liftingline",
+            impcomp_LL_solver,
+            promotes_inputs=["ptVec"],
+            promotes_outputs=["gammas"],
+        )
+        model.add_subsystem(
+            "liftingline_funcs",
+            expcomp_LL_func,
+            promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+            promotes_outputs=["*"],  # everything!
+        )
+    else:
+        # --- Combined hydroelastic ---
+        model.add_subsystem(
+            "beamstruct",
+            impcomp_struct_solver,
+            promotes_inputs=["ptVec"],
+            promotes_outputs=["deflections"],
+        )
+        model.add_subsystem(
+            "beamstruct_funcs",
+            expcomp_struct_func,
+            promotes_inputs=["ptVec", "deflections"],
+            promotes_outputs=["*"],  # everything!
+        )
+        model.add_subsystem(
+            "liftingline",
+            impcomp_LL_solver,
+            promotes_inputs=["ptVec"],
+            promotes_outputs=["gammas"],
+        )
+        model.add_subsystem(
+            "liftingline_funcs",
+            expcomp_LL_func,
+            promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+            promotes_outputs=["*"],  # everything!
+        )
+        # # --- Now add load transfer capabilities ---
+        # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
+        # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
 
-# prob.driver = om.ScipyOptimizeDriver()
-# prob.driver.options["optimizer"] = "SLSQP"
-prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
-outputDir = "output"
-optOptions = {
-    "Major feasibility tolerance": 1e-4,
-    "Major optimality tolerance": 1e-4,
-    "Difference interval": 1e-4,
-    "Hessian full memory": None,
-    "Function precision": 1e-8,
-    "Print file": os.path.join(outputDir, "SNOPT_print.out"),
-    "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
-    "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
-    # "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
-    # "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (nonlinear problem)
-    # "Major Step Limit": 5e-3,
-    # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
-}
+    # ************************************************
+    #     Setup problem
+    # ************************************************
 
-prob.model.add_design_var("ptVec")
-# prob.model.add_objective("liftingline.F_x")
+    prob = om.Problem(model)
 
-# prob.model.nonlinear_solver = om.NewtonSolver(
-#     solve_subsystems=True,
-#     iprint=2,
-# )
-# prob.model.nonlinear_solver.linesearch = om.ArmijoGoldsteinLS() # this is needed to get the system to converge but it sucks
-# prob.model.nonlinear_solver.linesearch.options["maxiter"] = 10
-# prob.model.nonlinear_solver.linesearch.options["iprint"] = 2
+    # prob.driver = om.ScipyOptimizeDriver()
+    # prob.driver.options["optimizer"] = "SLSQP"
+    prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
+    outputDir = "output"
+    optOptions = {
+        "Major feasibility tolerance": 1e-4,
+        "Major optimality tolerance": 1e-4,
+        "Difference interval": 1e-4,
+        "Hessian full memory": None,
+        "Function precision": 1e-8,
+        "Print file": os.path.join(outputDir, "SNOPT_print.out"),
+        "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
+        "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
+        # "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
+        # "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (nonlinear problem)
+        # "Major Step Limit": 5e-3,
+        # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
+    }
 
-prob.setup()
+    prob.model.add_design_var("ptVec")
+    # prob.model.add_objective("liftingline.F_x")
 
-prob.set_val("ptVec", ptVec)
-
-if args.run_struct:
-    tractions = prob.get_val("beamstruct.traction_forces")
-    tractions[-6] = 10.0
-    prob.set_val("beamstruct.traction_forces", tractions)
-elif args.run_flow:
-    prob.set_val("liftingline.gammas", np.zeros(40))
-else:
-    tractions = prob.get_val("beamstruct.traction_forces")
-    tractions[-6] = 10.0
-    prob.set_val("beamstruct.traction_forces", tractions)
-    prob.set_val("liftingline.gammas", np.zeros(40))
-
-# ************************************************
-#     Evaluate model
-# ************************************************
-print("running model...\n" + "-" * 50)
-starttime = time.time()
-prob.final_setup()
-midtime = time.time()
-prob.run_model()
-endtime = time.time()
-print("model run complete\n" + "-" * 50)
-print(f"Time taken to run model: {endtime-midtime:.2f} s")
-
-print("running model again...\n" + "-" * 50)
-starttime = time.time()
-prob.run_model()
-endtime = time.time()
-print("model run complete\n" + "-" * 50)
-print(f"Time taken to run model: {endtime-starttime:.2f} s")
-
-if args.run_struct:
-    print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
-    print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
-    print("all deflections", prob.get_val("beamstruct.deflections"))
-elif args.run_flow:
-    print("nondimensional gammas", prob.get_val("gammas"))
-    print("CL", prob.get_val("CL"))
-    print("force distribution", prob.get_val("forces_dist"))
-else:
-    print("nondimensional gammas", prob.get_val("liftingline.gammas"))
-    print("CL", prob.get_val("CL"))
-    # print("force distribution", prob.get_val("forces_dist"))
-    print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
-    print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
-    # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
-    print("induced drag force", prob.get_val("F_x"))
-    print("lift force", prob.get_val("F_z"))
-    print("spray drag:", prob.get_val("Ds"), f"\tprofile drag: {prob.get_val('Dpr')}\t wavedrag: {prob.get_val('Dw')}\t junctiondrag: {prob.get_val('Dj')}")
-    print("spray drag coeff:", prob.get_val("CDs"), f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}")
-
-# --- Check partials after you've solve the system!! ---
-if args.test_partials:
-    fileName = "partials.out"
-    f = open(fileName, "w")
-    f.write("PARTIALS\n")
-    # prob.set_check_partial_options(wrt=[""],)
-    f.write("=" * 50)
-    f.write("\n liftingline partials\n")
-    f.write("=" * 50)
-    # prob.check_partials(
-    #     out_stream=f,
-    #     includes=["liftingline"],
-    #     method="fd",
-    #     compact_print=True,
+    # prob.model.nonlinear_solver = om.NewtonSolver(
+    #     solve_subsystems=True,
+    #     iprint=2,
     # )
-    prob.check_partials(
-        out_stream=f,
-        includes=["liftingline_funcs"],
-        method="fd",
-        step=1e-4,  # now we're cooking :)
-        # compact_print=True,
-    )
-    f.write("=" * 50)
-    f.write("\n structural partials \n")
-    f.write("=" * 50)
-    prob.check_partials(
-        out_stream=f,
-        includes=["beamstruct"],
-        method="fd",
-        # compact_print=True,
-    )
-    prob.check_partials(
-        out_stream=f,
-        includes=["beamstruct_funcs"],
-        method="fd",
-        # compact_print=True,
-    ) # THESE ARE GOOD
-    # breakpoint()
-    f.close()
+    # prob.model.nonlinear_solver.linesearch = om.ArmijoGoldsteinLS() # this is needed to get the system to converge but it sucks
+    # prob.model.nonlinear_solver.linesearch.options["maxiter"] = 10
+    # prob.model.nonlinear_solver.linesearch.options["iprint"] = 2
 
-# --- Testing other values ---
-# prob.set_val("liftingline.x", 5.0)
-# prob.set_val("liftingline.y", -2.0)
+    prob.setup()
 
-# prob.run_model()
-# print(prob.get_val("liftingline.f_xy"))  # Should print `[-5.]`
+    prob.set_val("ptVec", ptVec)
 
+    if args.run_struct:
+        tractions = prob.get_val("beamstruct.traction_forces")
+        tractions[-6] = 10.0
+        prob.set_val("beamstruct.traction_forces", tractions)
+    elif args.run_flow:
+        prob.set_val("liftingline.gammas", np.zeros(40))
+    else:
+        tractions = prob.get_val("beamstruct.traction_forces")
+        tractions[-6] = 10.0
+        prob.set_val("beamstruct.traction_forces", tractions)
+        prob.set_val("liftingline.gammas", np.zeros(40))
 
-# ************************************************
-#     Do optimization
-# ************************************************
-# prob.run_driver()
-# print(f"f_xy = {prob.get_val('liftingline.f_xy')}")  # Should print `[-27.33333333]`
-# print(f"x = {prob.get_val('liftingline.x')}")  # Should print `[6.66666633]`
-# print(f"y = {prob.get_val('liftingline.y')}")  # Should print `[-7.33333367]`
+    # ************************************************
+    #     Evaluate model
+    # ************************************************
+    print("running model...\n" + "-" * 50)
+    starttime = time.time()
+    prob.final_setup()
+    midtime = time.time()
+    prob.run_model()
+    endtime = time.time()
+    print("model run complete\n" + "-" * 50)
+    print(f"Time taken to run model: {endtime-midtime:.2f} s")
+
+    print("running model again...\n" + "-" * 50)
+    starttime = time.time()
+    prob.run_model()
+    endtime = time.time()
+    print("model run complete\n" + "-" * 50)
+    print(f"Time taken to run model: {endtime-starttime:.2f} s")
+
+    if args.run_struct:
+        print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
+        print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+        print("all deflections", prob.get_val("beamstruct.deflections"))
+    elif args.run_flow:
+        print("nondimensional gammas", prob.get_val("gammas"))
+        print("CL", prob.get_val("CL"))
+        print("force distribution", prob.get_val("forces_dist"))
+    else:
+        print("nondimensional gammas", prob.get_val("liftingline.gammas"))
+        print("CL", prob.get_val("CL"))
+        # print("force distribution", prob.get_val("forces_dist"))
+        print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
+        print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+        # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
+        print("induced drag force", prob.get_val("F_x"))
+        print("lift force", prob.get_val("F_z"))
+        print(
+            "spray drag:",
+            prob.get_val("Ds"),
+            f"\tprofile drag: {prob.get_val('Dpr')}\t wavedrag: {prob.get_val('Dw')}\t junctiondrag: {prob.get_val('Dj')}",
+        )
+        print(
+            "spray drag coeff:",
+            prob.get_val("CDs"),
+            f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}",
+        )
+
+    # --- Check partials after you've solve the system!! ---
+    if args.test_partials:
+        fileName = "partials.out"
+        f = open(fileName, "w")
+        f.write("PARTIALS\n")
+        # prob.set_check_partial_options(wrt=[""],)
+        f.write("=" * 50)
+        f.write("\n liftingline partials\n")
+        f.write("=" * 50)
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["liftingline"],
+        #     method="fd",
+        #     compact_print=True,
+        # )
+        prob.check_partials(
+            out_stream=f,
+            includes=["liftingline_funcs"],
+            method="fd",
+            step=1e-4,  # now we're cooking :)
+            # compact_print=True,
+        )
+        f.write("=" * 50)
+        f.write("\n structural partials \n")
+        f.write("=" * 50)
+        prob.check_partials(
+            out_stream=f,
+            includes=["beamstruct"],
+            method="fd",
+            # compact_print=True,
+        )
+        prob.check_partials(
+            out_stream=f,
+            includes=["beamstruct_funcs"],
+            method="fd",
+            # compact_print=True,
+        )  # THESE ARE GOOD
+        # breakpoint()
+        f.close()
+
+    # --- Testing other values ---
+    # prob.set_val("liftingline.x", 5.0)
+    # prob.set_val("liftingline.y", -2.0)
+
+    # prob.run_model()
+    # print(prob.get_val("liftingline.f_xy"))  # Should print `[-5.]`
+
+    # ************************************************
+    #     Do optimization
+    # ************************************************
+    # prob.run_driver()
+    # print(f"f_xy = {prob.get_val('liftingline.f_xy')}")  # Should print `[-27.33333333]`
+    # print(f"x = {prob.get_val('liftingline.x')}")  # Should print `[6.66666633]`
+    # print(f"y = {prob.get_val('liftingline.y')}")  # Should print `[-7.33333367]`
