@@ -1,11 +1,11 @@
 # THIS IS THE JULIA CENTRIC RUN SCRIPT
-# TODO: now do this whole wrapping in julia to see if it is faster
 
 using OpenMDAO: om, make_component
 include("../src/hydro/LiftingLine.jl")
 include("../src/hydro/liftingline_om.jl")
-# const RealOrComplex = Union{Real, Complex}
-const RealOrComplex = AbstractFloat
+include("../src/struct/beam_om.jl")
+const RealOrComplex = Union{Real, Complex}
+# const RealOrComplex = AbstractFloat
 
 # ==============================================================================
 #                         Setup stuff
@@ -215,7 +215,7 @@ solverOptions = Dict(
     "run_modal" => true,
     "run_flutter" => true,
     # "nModes" => nModes,
-    # "uRange" => uRange,
+    "uRange" => [1.0,30],
     "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 500.0,
 )
@@ -224,13 +224,21 @@ solverOptions = Dict(
 #                         Derivatives
 # ==============================================================================
 using .LiftingLine
+using .FEMMethods
 gconv = vec([0.0322038 0.03231678 0.03253403 0.03284775 0.03324736 0.03371952 0.03425337 0.03484149 0.03547895 0.03616117 0.03688162 0.03762993 0.03839081 0.03914407 0.03986539 0.04052803 0.04110476 0.04156866 0.04189266 0.04205787 0.04205787 0.04189266 0.04156866 0.04110476 0.04052803 0.03986539 0.03914407 0.03839081 0.03762993 0.03688162 0.03616117 0.03547895 0.03484149 0.03425337 0.03371952 0.03324736 0.03284775 0.03253403 0.03231678 0.0322038])
 
 # LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
 # LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
 # ans1, ans2 = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="RAD")
-@time ans1fad, ans2fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+# @time ans1fad, ans2fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
+allStructStates = [0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 8.05204097e-09 2.07663899e-07 0.00000000e+00 0.00000000e+00 3.41657011e-06 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 3.81207259e-08 5.18382685e-07 0.00000000e+00 0.00000000e+00 4.29963911e-06 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 9.94491169e-08 9.64236765e-07 0.00000000e+00 0.00000000e+00 6.52539579e-06 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 2.06784693e-07 1.62203281e-06 0.00000000e+00 0.00000000e+00 8.36014003e-06 0.00000000e+00 0.00000000e+00]
+fu = zeros(length(allStructStates))
+fu[end-5] = 1.0
+LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+∂r∂Xpt, drdxParams = FEMMethods.compute_∂r∂x(allStructStates, fu, [appendageParams], LECoords, TECoords, nodeConn; mode="analytic", appendageOptions=appendageOptions, solverOptions=solverOptions)
+∂r∂Xpt, drdxParamsFD = FEMMethods.compute_∂r∂x(allStructStates, fu, [appendageParams], LECoords, TECoords, nodeConn; mode="FiDi", appendageOptions=appendageOptions, solverOptions=solverOptions)
 # ==============================================================================
 #                         OpenMDAO executables
 # ==============================================================================

@@ -241,9 +241,8 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
     "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
 }
 
-# Need to set struct damping once at the beginning
+# Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
 solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
-breakpoint()
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -420,6 +419,7 @@ print(f"Time taken to run model: {endtime-starttime:.2f} s")
 if args.run_struct:
     print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
     print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+    print("all deflections", prob.get_val("beamstruct.deflections"))
 elif args.run_flow:
     print("nondimensional gammas", prob.get_val("gammas"))
     print("CL", prob.get_val("CL"))
@@ -443,7 +443,7 @@ if args.test_partials:
     f.write("PARTIALS\n")
     # prob.set_check_partial_options(wrt=[""],)
     f.write("=" * 50)
-    f.write(" liftingline partials ")
+    f.write("\n liftingline partials\n")
     f.write("=" * 50)
     # prob.check_partials(
     #     out_stream=f,
@@ -459,13 +459,13 @@ if args.test_partials:
         # compact_print=True,
     )
     f.write("=" * 50)
-    f.write(" structural partials ")
+    f.write("\n structural partials \n")
     f.write("=" * 50)
     prob.check_partials(
         out_stream=f,
         includes=["beamstruct"],
         method="fd",
-        compact_print=True,
+        # compact_print=True,
     )
     prob.check_partials(
         out_stream=f,
