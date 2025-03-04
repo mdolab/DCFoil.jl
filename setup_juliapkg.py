@@ -22,7 +22,7 @@ import juliapkg
 
 fname = "Project.toml"
 targetFile = "./juliapkg.json"
-targetFile = None # Set to None to use default location...I can't seem to get the isolated install to work so this is a workaround
+targetFile = None  # Set to None to use default location...I can't seem to get the isolated install to work so this is a workaround
 # This will not work in the future if multiple julia environments are needed
 
 # ==============================================================================
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             uuid = line.split('"')[1]
 
             juliapkg.add(pkgName, uuid, target=targetFile)
-        
+
         juliapkg.resolve()
     else:
         print("WARNING: No dependencies found")

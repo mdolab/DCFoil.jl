@@ -369,7 +369,7 @@ if __name__ == "__main__":
     }
 
     prob.model.add_design_var("ptVec")
-    # prob.model.add_objective("liftingline.F_x")
+    prob.model.add_objective("CDi")
 
     # prob.model.nonlinear_solver = om.NewtonSolver(
     #     solve_subsystems=True,

@@ -104,11 +104,12 @@ It also doesn't fit with the data types.
 
 * `AbstractDifferentiation` is a wrapper level tool
 * `Zygote` is an RAD package
+* `ReverseDiff` is another RAD package that is more performant but restrictive on data types
 
 ### Performance
 
 * Don't add type annotations for function arguments unless for multiple dispatch
-* Don't do ```zeros(n)```, but rather ```zeros(typeof(x), n)```
+* Don't do ```zeros(n)```, but rather ```zeros(typeof(x), n)``` or better ```::Abstract<type> = zeros()``` so it works with dual numbers.
 
 ### DCFoil as a package
 
@@ -164,13 +165,6 @@ A juliapkg.json file is in your python environment (e.g., venv or conda).
 For the first time running, run the `update_juliapkg.py` script.
 For any other problems arising, look at the [juliapkg documentation](https://github.com/JuliaPy/PyJuliaPkg)
 
-<!-- On MacOS, I have only gotten the Conda.jl method to work which requires these runs
-```
-Conda.pip_interop(true, Conda.ROOTENV) # allow pip installation
-Conda.pip("install", ["<package-names>"], Conda.ROOTENV) # generic call to pip install a package
-```
-and for package names, you can install any python package that supports pip installation. -->
-
 The list of dependencies is:
 ```
 baseclasses
@@ -179,15 +173,7 @@ prefoil
 pygeo
 ```
 
-<!-- The MACH2DCFoil wrapper requires:
-```
-pip install julia
-```
-to install the pyjulia package and then in a python prompt
-```
-import julia
-julia.install("<your-version>") # if multiple versions of julia are installed
-``` -->
+You will need to set this up in a Linux environment because of the above dependencies. Sorry mac users.
 
 ### Tests
 

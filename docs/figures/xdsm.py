@@ -73,7 +73,7 @@ if __name__ == "__main__":
         x.add_process(["liftinglineoutput", "ldtransfer"], arrow=True)
         x.add_process(["ldtransfer", "liftingline"], arrow=True)
         x.add_process(["ldtransfer", "febeam"], arrow=True)
-        x.add_process(["febeam","ldtransfer"], arrow=True)
+        x.add_process(["febeam", "ldtransfer"], arrow=True)
         x.add_process(["febeam", "febeamoutput"], arrow=True)
         x.add_process(["liftingline", "solver"], arrow=True)
         x.add_process(["liftingline", "liftinglineoutput"], arrow=True)
