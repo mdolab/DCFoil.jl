@@ -504,7 +504,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["clmax"][1] = ksclmax
     outputs["forces_dist"][:] = DimForces
 
-    size(outputs["collocationPts"][:]) == size(LLMesh.collocationPts) || error("Size mismatch")
+    size(outputs["collocationPts"]) == size(LLMesh.collocationPts) || error("Size mismatch")
     outputs["collocationPts"][:] = LLMesh.collocationPts
 
     outputs["CDw"][1] = CDw
