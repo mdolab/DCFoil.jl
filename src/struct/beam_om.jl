@@ -222,8 +222,8 @@ function OpenMDAOCore.setup(self::OMFEBeamFuncs)
     outputs = [
         OpenMDAOCore.VarData("wtip", val=0.0),
         OpenMDAOCore.VarData("thetatip", val=0.0),
-        OpenMDAOCore.VarData("nodes", val=zeros(3, nNodeTot)),
-        OpenMDAOCore.VarData("elemConn", val=zeros(2, nElemTot)),
+        OpenMDAOCore.VarData("nodes", val=zeros(nNodeTot, 3)),
+        OpenMDAOCore.VarData("elemConn", val=zeros(nElemTot, 2)),
         OpenMDAOCore.VarData("Mmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
         OpenMDAOCore.VarData("Cmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
         OpenMDAOCore.VarData("Kmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
@@ -284,6 +284,8 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
     betaConst = solverOptions["betaConst"]
     Cmat = alphaConst * Mmat .+ betaConst * Kmat
 
+    size(FEMESH.mesh) == size(outputs["nodes"]) || error("Size mismatch")
+    size(FEMESH.elemConn) == size(outputs["elemConn"]) || error("Size mismatch")
     outputs["nodes"][:] = FEMESH.mesh
     outputs["elemConn"][:] = FEMESH.elemConn
 

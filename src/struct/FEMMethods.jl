@@ -57,7 +57,7 @@ struct StructMesh{TF,TC,TI}
     """
     Struct to hold the mesh, element connectivity, and node properties
     """
-    mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes)
+    mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes) => [nnodes, ndim]
     elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
     # sectionVectors::TM
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS

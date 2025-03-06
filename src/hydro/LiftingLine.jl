@@ -60,7 +60,7 @@ struct LiftingLineMesh{T<:Number,TF<:Number,TI,TA<:AbstractVector{TF},TM<:Abstra
     Only geometry and mesh information
     """
     nodePts::TM # LL node points
-    collocationPts::TM # Control points
+    collocationPts::TM # Control points [3 x npt]
     jointPts::AbstractMatrix # TV joint points
     npt_wing::TI # Number of wing points
     localChords::AbstractVector # Local chord lengths of the panel edges [m]
