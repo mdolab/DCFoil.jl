@@ -7,7 +7,6 @@
 @Desc          :   setup geometric design variables for dcfoil
 """
 
-from pygeo.mphys import OM_DVGEOCOMP
 import numpy as np
 
 
@@ -22,9 +21,6 @@ def setup(args, model, comm, files: dict):
             "options": None,
         }
     }
-    # model.add_subsystem("geometry", OM_DVGEOCOMP(file=files["FFDFile"], type="ffd"))
-    model.add_subsystem("geometry", OM_DVGEOCOMP(file=files["FFDFile"], type="ffd"), promotes=["*"])
-    model.geometry.setup()
 
     nRefAxPts = model.geometry.nom_addRefAxis("global", xFraction=0.5, alignIndex="j")
 
@@ -211,37 +207,5 @@ def setup(args, model, comm, files: dict):
     # #     # Set airfoil thickness values
     # #     for i in range(nSpanwise):
     # #         geo.scale_z["wing"].coef[i] = val[0]
-    dvDictInfo = {  # dictionary of design variable parameters
-        "twist": {
-            "lower": -15.0,
-            "upper": 15.0,
-            "scale": 1.0,
-            "value": np.zeros(nRefAxPts // 2),
-        },
-        "sweep": {
-            "lower": 0.0,
-            "upper": 30.0,
-            "scale": 1,
-            "value": 0.0,
-        },
-        "dihedral": {
-            "lower": -5.0,
-            "upper": 5.0,
-            "scale": 1,
-            "value": 0.0,
-        },
-        "taper": {
-            "lower": [-0.1, -0.1],
-            "upper": [0.1, 0.1],
-            "scale": 1.0,
-            "value": np.ones(2) * 1.0,
-        },
-        "span": {
-            "lower": -0.1,
-            "upper": 0.1,
-            "scale": 1 / 0.2,
-            "value": 0.0,
-        },
-    }
 
-    return model, dvDictInfo
+    return model

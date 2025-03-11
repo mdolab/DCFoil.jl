@@ -420,8 +420,9 @@ if __name__ == "__main__":
         print("all deflections", prob.get_val("beamstruct.deflections"))
     elif args.run_flow:
         print("nondimensional gammas", prob.get_val("gammas"))
-        print("CL", prob.get_val("CL"))
+        print("CL", prob.get_val("CL")) # should be around CL = 0.507 something
         print("force distribution", prob.get_val("forces_dist"))
+
     else:
         print("nondimensional gammas", prob.get_val("liftingline.gammas"))
         print("CL", prob.get_val("CL"))

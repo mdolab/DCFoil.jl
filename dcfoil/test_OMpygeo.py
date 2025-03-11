@@ -24,7 +24,9 @@ import numpy as np
 # ==============================================================================
 # import niceplots as nplt
 import setup_OMdvgeo
+from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
+from mphys.multipoint import Multipoint  # TODO: just copy this file in so there's no dependency on mphys
 
 outputDir = "embedding"
 files = {}
@@ -153,6 +155,79 @@ ptVec = np.array(
         0.0,
     ]
 )
+nnodes = len(ptVec) // 3 // 2
+XCoords = ptVec.reshape(-1, 3)
+LEcoords = XCoords[:nnodes]
+TEcoords = XCoords[nnodes:]
+
+dvDictInfo = {  # dictionary of design variable parameters
+    "twist": {
+        "lower": -15.0,
+        "upper": 15.0,
+        "scale": 1.0,
+        "value": np.zeros(8 // 2),
+    },
+    "sweep": {
+        "lower": 0.0,
+        "upper": 30.0,
+        "scale": 1,
+        "value": 0.0,
+    },
+    "dihedral": {
+        "lower": -5.0,
+        "upper": 5.0,
+        "scale": 1,
+        "value": 0.0,
+    },
+    "taper": {
+        "lower": [-0.1, -0.1],
+        "upper": [0.1, 0.1],
+        "scale": 1.0,
+        "value": np.ones(2) * 1.0,
+    },
+    "span": {
+        "lower": -0.1,
+        "upper": 0.1,
+        "scale": 1 / 0.2,
+        "value": 0.0,
+    },
+}
+
+
+class Top(Multipoint):
+    """
+    This class does geometry stuff
+    """
+
+    def setup(self):
+
+        self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
+        self.add_subsystem("mesh", om.IndepVarComp())
+
+        self.mesh.add_output("x_leptVec0", val=LEcoords.flatten(), distributed=True)
+        self.mesh.add_output("x_teptVec0", val=TEcoords.flatten(), distributed=True)
+
+        self.add_subsystem(
+            "geometry",
+            OM_DVGEOCOMP(file=files["FFDFile"], type="ffd"),
+            promotes=["twist", "sweep", "dihedral", "taper", "span"],
+        )
+
+        self.connect("mesh.x_leptVec0", "geometry.x_leptVec_in")
+        self.connect("mesh.x_teptVec0", "geometry.x_teptVec_in")
+
+    def configure(self):
+
+        self.geometry.nom_add_discipline_coords("leptVec", LEcoords.flatten())
+        self.geometry.nom_add_discipline_coords("teptVec", TEcoords.flatten())
+
+        self = setup_OMdvgeo.setup(args, self, None, files)
+
+        for dvName, value in dvDictInfo.items():
+            self.dvs.add_output(dvName, val=value["value"])
+            self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -166,6 +241,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--animate", default=False, action="store_true")
     args = parser.parse_args()
+
     # --- Echo the args ---
     print(30 * "-")
     print("Arguments are", flush=True)
@@ -173,10 +249,20 @@ if __name__ == "__main__":
         print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
     print(30 * "-", flush=True)
 
-    model = om.Group()
-    model.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
-    prob = om.Problem(model)
+    # ************************************************
+    #     DVGeo setup
+    # ************************************************
 
+    # model.geometry.nom_addPointSet(ptVec, ptSetName, add_output=False, DVGeoName="defaultDVGeo")
+    # model.geometry.add_input(f"{ptSetName}_in", distributed=True, val=ptVec)
+    # model.geometry.add_output(f"{ptSetName}_0", distributed=True, val=ptVec)
+
+    prob = om.Problem()
+    prob.model = Top()
+
+    # ---------------------------
+    #   Opt setup
+    # ---------------------------
     prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
     outputDir = "output"
     optOptions = {
@@ -194,47 +280,39 @@ if __name__ == "__main__":
         # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
     }
 
+    # model.add_subsystem("geometry", OM_DVGEOCOMP(file=files["FFDFile"], type="ffd"), promotes=["*"])
 
-
-    # ************************************************
-    #     DVGeo setup
-    # ************************************************
-    model, dvDictInfo = setup_OMdvgeo.setup(args, model, None, files)
-    DVGeo = model.geometry.nom_getDVGeo()
-    Path(outputDir).mkdir(exist_ok=True, parents=True)
-    DVGeo.writeTecplot(fileName=f"./{outputDir}/dvgeo.dat", solutionTime=1)
-
-    ptSetName = "ptVec"
-    model.geometry.nom_addPointSet(ptVec, ptSetName, add_output=False, DVGeoName="defaultDVGeo")
-    model.geometry.add_input(f"{ptSetName}_in", distributed=True, val=ptVec)
-    model.geometry.add_output(f"{ptSetName}_0", distributed=True, val=ptVec)
-
-    # ************************************************
-    #     Add design vars
-    # ************************************************
-    for key, value in dvDictInfo.items():
-        print(f"{key} design variable info:")
-        print(f"lower: {value['lower']}")
-        print(f"upper: {value['upper']}")
-        print(f"scale: {value['scale']}")
-        prob.model.add_design_var(key, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
-        
-        prob.model.dvs.add_output(key, val=value["value"])
-
-    # TODO: PICKUP HERE, WHY ARE THE pts NOT MOVING WHEN I CHANGE THE SWEEP?? Look at mphys examples more
-    # MAYBE IT IS BECAUSE OF THE DV SEPARATION
     prob.setup()
 
+    Path(outputDir).mkdir(exist_ok=True, parents=True)
+
+    om.n2(prob, outfile="n2.html", show_browser=False)
+
+    # --- Run this model with no sweep ---
+    prob.set_val("sweep", 0.0)
+    prob.run_model()
+    print("ptVec_in")
+    print("LE coords")
+    print(prob.get_val("geometry.x_leptVec0").reshape(-1, 3))
+    print("TE coords")
+    print(prob.get_val("geometry.x_teptVec0").reshape(-1, 3))
+    om.n2(prob, outfile=f"n2_before.html", show_browser=False)
+
+    # --- run model again with sweep ---
     prob.set_val("sweep", 10.0)
+    print("sweep angle:\t", prob.get_val("sweep"))
 
     prob.final_setup()
     prob.run_model()
 
-    print("ptVec_in")
-    print(prob.get_val("ptVec_in"))
-    print("ptVec_0")
-    print(prob.get_val("ptVec_0"))
-
+    print("ptVec_after")
+    print("LE coords")
+    print(prob.get_val("geometry.x_leptVec0").reshape(-1, 3))
+    print("TE coords")
+    print(prob.get_val("geometry.x_teptVec0").reshape(-1, 3))
+    om.n2(prob, outfile=f"n2_after.html", show_browser=False)
+    # print("ptVec_0")
+    # print(prob.get_val("ptVec_0"))
 
     if args.animate:
         # ---------------------------
@@ -254,14 +332,15 @@ if __name__ == "__main__":
             i_frame = 0
             for ii in range(nTwist):
 
+                print("index: ", ii)
                 # for ind, val in enumerate(twist_vals):
                 for val in wave:
-
-                    print("twist: ", val)
-
-                    dvDict = DVGeo.getValues()
-                    dvDict["twist"][ii] = val
-                    DVGeo.setDesignVars(dvDict)
+                    prob.set_val("twist", indices=ii, val=val)
+                    prob.run_model()
+                    DVGeo = prob.model.geometry.nom_getDVGeo()
+                    # dvDict = DVGeo.getValues()
+                    # dvDict["twist"][ii] = val
+                    # DVGeo.setDesignVars(dvDict)
 
                     # Write deformed FFD
                     DVGeo.writeTecplot(f"{dirName}/twist_{i_frame:03d}_ffd.dat")
@@ -291,7 +370,7 @@ if __name__ == "__main__":
                 print("index:", ind, val)
                 prob.set_val("sweep", val)
                 prob.run_model()
-                DVGeo = model.geometry.nom_getDVGeo()
+                DVGeo = prob.model.geometry.nom_getDVGeo()
 
                 # Write deformed FFD
                 DVGeo.writeTecplot(f"{dirName}/sweep_{i_frame:03d}_ffd.dat")

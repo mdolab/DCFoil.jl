@@ -128,7 +128,6 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     appendageParams["theta_f"] = theta_f
     appendageParams["toc"] = toc
 
-    # ************************************************
     LECoords, TECoords = FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     globalK, globalM, globalF, DOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 

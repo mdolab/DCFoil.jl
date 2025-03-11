@@ -8,6 +8,11 @@
              for a highly swept wing at the root AND the mathematical requirement that the LAC 
              be locally perpendicular to the trailing vortex (TV). Reid 2020 overcame this by
              using a blending function at the wing root and a jointed TV
+
+             Note: The origin is at the midchord of the root airfoil.
+             x is positive streamwise
+             y is positive to stbd
+             z is positive in the vertical direction
 """
 
 module LiftingLine
@@ -58,6 +63,7 @@ export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLres
 struct LiftingLineMesh{T<:Number,TF<:Number,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:AbstractArray{TF,3}}
     """
     Only geometry and mesh information
+    Coordinates use the midchord root airfoil as the origin
     """
     nodePts::TM # LL node points
     collocationPts::TM # Control points [3 x npt]
@@ -328,15 +334,6 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     SRef = rootChord * aeroWingSpan * (1 + taperRatio) * 0.5
     AR = aeroWingSpan^2 / SRef
 
-    translation = zeros(3)
-    if !isnothing(options) && haskey(options, "translation")
-        translation = options["translation"] # [m] 3d translation of the wing
-    end
-    # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
-    translatMatCtrl = repeat(reshape(translation, size(translation)..., 1), 1, npt_wing)
-    translatMat = repeat(reshape(translation, size(translation)..., 1), 1, npt_wing + 1)
-    #     wing_ctrl_xyz[:, ii] .+= translation #- 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
-
     # ************************************************
     #     Make wing coordinates
     # ************************************************
@@ -377,6 +374,17 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz_ycomp[1, :]) / aeroWingSpan
     local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz_ycomp[1, :]) / aeroWingSpan
 
+    # --- x shift setup ---
+    # Apply translation wrt using the root airfoil midchord as origin 
+    # This origin is different from Reid 2020 who used the root airfoil LE as the origin
+    rootsemichord = 0.5 * rootChord
+    translationVec = zeros(3) - vec([rootsemichord, 0.0, 0.0])
+    if !isnothing(options) && haskey(options, "translation")
+        translationVec = options["translation"] - vec([rootsemichord, 0.0, 0.0]) # [m] 3d translation of the wing
+    end
+    translatMatCtrl = repeat(reshape(translationVec, size(translationVec)..., 1), 1, npt_wing)
+    translatMat = repeat(reshape(translationVec, size(translationVec)..., 1), 1, npt_wing + 1)
+
     # --- Locus of aerodynamic centers (LAC) ---
     LAC = compute_LAC(AR, LLHydro, wing_xyz_ycomp[1, :], local_chords, rootChord, sweepAng, aeroWingSpan)
     wing_xyz = cat(reshape(LAC, 1, size(LAC)...), wing_xyz_ycomp, Zeros, dims=1) .+ translatMat
@@ -388,7 +396,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
     # This is a 3D array
     # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
-    wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...)
+    # Make sure to also add the translation vector to the effective locus of aerodynamic centers
+    wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...) .+ translationVec[XDIM]
     wing_xyz_eff_ycomp = reshape(repeat(transpose(wing_xyz[YDIM, :]), npt_wing, 1), 1, npt_wing, npt_wing + 1)
     wing_xyz_eff = cat(
         wing_xyz_eff_xcomp,
@@ -816,7 +825,7 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
     # uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
     # uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-    
+
     uicrossζi_z = Zygote.Buffer(zeros(Number, 3, LLMesh.npt_wing))
     for ii in 1:LLMesh.npt_wing
         uicrossζi_z[:, ii] = -myCrossProd(ui[:, ii], ζi[:, ii])
