@@ -26,7 +26,7 @@ import numpy as np
 import setup_OMdvgeo
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
-from mphys.multipoint import Multipoint  # TODO: just copy this file in so there's no dependency on mphys
+from multipoint import Multipoint  # TODO: just copy this file in so there's no dependency on mphys
 
 outputDir = "embedding"
 files = {}
