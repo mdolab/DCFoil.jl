@@ -227,6 +227,8 @@ class Top(Multipoint):
             self.dvs.add_output(dvName, val=value["value"])
             self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
 
+        # self.add_objective("x_leptVec0")
+
 
 # ==============================================================================
 #                         MAIN DRIVER
@@ -248,14 +250,6 @@ if __name__ == "__main__":
     for arg in vars(args):
         print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
     print(30 * "-", flush=True)
-
-    # ************************************************
-    #     DVGeo setup
-    # ************************************************
-
-    # model.geometry.nom_addPointSet(ptVec, ptSetName, add_output=False, DVGeoName="defaultDVGeo")
-    # model.geometry.add_input(f"{ptSetName}_in", distributed=True, val=ptVec)
-    # model.geometry.add_output(f"{ptSetName}_0", distributed=True, val=ptVec)
 
     prob = om.Problem()
     prob.model = Top()
@@ -280,8 +274,6 @@ if __name__ == "__main__":
         # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
     }
 
-    # model.add_subsystem("geometry", OM_DVGEOCOMP(file=files["FFDFile"], type="ffd"), promotes=["*"])
-
     prob.setup()
 
     Path(outputDir).mkdir(exist_ok=True, parents=True)
@@ -299,7 +291,7 @@ if __name__ == "__main__":
     om.n2(prob, outfile=f"n2_before.html", show_browser=False)
 
     # --- run model again with sweep ---
-    prob.set_val("sweep", 10.0)
+    prob.set_val("sweep", 0.0)
     print("sweep angle:\t", prob.get_val("sweep"))
 
     prob.final_setup()
@@ -315,6 +307,8 @@ if __name__ == "__main__":
     # print(prob.get_val("ptVec_0"))
 
     if args.animate:
+        outputDir = "embedding"
+
         # ---------------------------
         #   TWIST
         # ---------------------------
@@ -346,6 +340,13 @@ if __name__ == "__main__":
                     DVGeo.writeTecplot(f"{dirName}/twist_{i_frame:03d}_ffd.dat")
                     DVGeo.writeRefAxes(f"{dirName}/twist_{i_frame:03d}_axes")
 
+                    print("Writing ptSets to tecplot...")
+
+                    ptSetName = "x_leptVec0"
+                    DVGeo.writePointSet(ptSetName, f"{dirName}/twist_{i_frame:03d}", solutionTime=i_frame)
+                    ptSetName = "x_teptVec0"
+                    DVGeo.writePointSet(ptSetName, f"{dirName}/twist_{i_frame:03d}", solutionTime=i_frame)
+
                     i_frame += 1
 
         # ---------------------------
@@ -374,12 +375,22 @@ if __name__ == "__main__":
 
                 # Write deformed FFD
                 DVGeo.writeTecplot(f"{dirName}/sweep_{i_frame:03d}_ffd.dat")
-                # DVGeo.writeRefAxes(f"{dirName}/sweep_{i_frame:03d}_axes")
+                DVGeo.writeRefAxes(f"{dirName}/sweep_{i_frame:03d}_axes")
+
+                print("Writing ptSets to tecplot...")
+
+                ptSetName = "x_leptVec0"
+                DVGeo.writePointSet(ptSetName, f"{dirName}/sweep_{i_frame:03d}", solutionTime=i_frame)
+                ptSetName = "x_teptVec0"
+                DVGeo.writePointSet(ptSetName, f"{dirName}/sweep_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
-    # # ************************************************
-    # #     Check partials
-    # # ************************************************
-    # prob.check_partials(method="fd")
+    # ************************************************
+    #     Check partials
+    # ************************************************
+
+    fileName = "partials-geo.out"
+    f = open(fileName,"w")
+    prob.check_partials(out_stream=f, method="fd")
     # prob.check_totals()
