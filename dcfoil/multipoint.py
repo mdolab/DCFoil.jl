@@ -5,7 +5,7 @@
 @Desc          :   This file is a direct copy of the mphys multipoint.py file so DCFoil doesn't have a dependency.
                    This class is really only needed so that pygeo works properly
 """
-    
+
 import openmdao.api as om
 
 

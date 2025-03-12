@@ -1030,7 +1030,7 @@ The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady
 % \clearpage
 \section{Static solution}
 
-\emph{Old method:}\\
+\subsection{Old method}
 The static hydrostructural equation is
 \be
 \mbf{K}_{ss} \mbf{u}_s   = \mbf{f}_{\tn{hydro}} = \mbf{K}_f \mbf{u}_s
@@ -1049,7 +1049,7 @@ First, the \texttt{DCFoil.init\_model()} routine initializes the structural mesh
 If there are multiple lifting surfaces, there are multiple structural meshes.
 There is only one hydrodynamic mesh though because flow needs to be solved globally.
 
-\emph{New method:}\\
+\subsection{New method}
 DCFoil's static hydroelastic mode solves a structural and a flow problem.
 The nonlinear flow analysis solves the residual equations
 \beq
@@ -1072,9 +1072,18 @@ The combined solution requires solution of the multidisciplinary system
 =
 \mbf{0}
 \eeq
-which we do through the Gauss-Seidel iteration following the pseudocode of \citet{Kenway2014a}.
+which we do through the Gauss-Seidel iteration in OpenMDAO. % following the pseudocode of \citet{Kenway2014a}.
 
 \subsection{Load and displacement transfer}
+
+A load and displacement transfer scheme must be \emph{conservative} and \emph{consistent}~\cite{Martins2005c}.
+Consistency means the sum of the nodal forces and moments from the load transfer are equal to the forces and moments from a continuous pressure and shear force distribution on the element.
+An infinite number of choices of nodal forces and moments can satisfy consistency because it is an integration over a region.
+As such, we also require that the scheme be conservative.
+Conservation means the virtual work done by the forces (load vector $\mb{f}$) over the virtual displacements on the hydrodynamic and structural meshes are equal.
+
+Shugo wrote the load and displacement transfer to work for OAS and DCFoil.
+TODO: docs 
 
 The lifting line and beam discretization are different.
 Sometimes the lifting line needs cosine spacing for swept geometries.
@@ -1086,7 +1095,8 @@ The load transfer is the transpose operation
 \beq
 \mb{f} = \mb{T}^\top \mb{f}_{LL}
 \eeq
-TODO: read \citet{Kenway2014a} for these transfer matrices
+TODO: read \citet{Kenway2014a} for these transfer matrices.
+\citet{Martins2005c} also documents a load transfer scheme.
 
 \subsection{Derivative computation}
 % 
