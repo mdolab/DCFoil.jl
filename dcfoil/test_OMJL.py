@@ -34,6 +34,8 @@ jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
+from transfer import DisplacementTransfer, LoadTransfer
+
 ptVec = np.array(
     [
         -0.07,
@@ -152,13 +154,14 @@ ptVec = np.array(
         0.0,
     ]
 )
+
 nodeConn = np.array(
     [
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 12, 13, 14, 15, 16, 17, 18],
         [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
     ]
 )
-nNodes = 5
+nNodes = 21
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
@@ -324,6 +327,11 @@ if __name__ == "__main__":
     # ************************************************
     #     Setup components
     # ************************************************
+    # --- geometry component ---
+    # now ptVec is just an input, so use IVC as an placeholder. Later replace IVC with a geometry component
+    indep = model.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
+    indep.add_output("ptVec", val=ptVec)
+
     if args.run_struct:
         model.add_subsystem(
             "beamstruct",
@@ -360,25 +368,39 @@ if __name__ == "__main__":
         )
     else:
         # --- Combined hydroelastic ---
-        model.add_subsystem(
+        couple = model.add_subsystem("hydroelastic", om.Group(), promotes=["*"])
+        n_node = nNodes * 2 - 1
+
+        # structure
+        couple.add_subsystem(
             "beamstruct",
             impcomp_struct_solver,
-            promotes_inputs=["ptVec"],
+            promotes_inputs=["ptVec", "traction_forces"],
             promotes_outputs=["deflections"],
         )
-        model.add_subsystem(
+        couple.add_subsystem(
             "beamstruct_funcs",
             expcomp_struct_func,
             promotes_inputs=["ptVec", "deflections"],
             promotes_outputs=["*"],  # everything!
         )
-        model.add_subsystem(
+
+        # displacement transfer
+        couple.add_subsystem(
+            "disp_transfer",
+            DisplacementTransfer(n_node=n_node, n_secs=19),  # HARDCODED
+            promotes_inputs=["nodes", "deflections", "ptVec"],
+            promotes_outputs=["ptVec_def"],
+        )
+
+        # hydrodynamics
+        couple.add_subsystem(
             "liftingline",
             impcomp_LL_solver,
             promotes_inputs=["ptVec", "alfa0", "displacements_col"],
             promotes_outputs=["gammas", "gammas_d"],
         )
-        model.add_subsystem(
+        couple.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
             promotes_inputs=[
@@ -390,9 +412,21 @@ if __name__ == "__main__":
             ],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
-        # # --- Now add load transfer capabilities ---
-        # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-        # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
+
+        # load transfer
+        couple.add_subsystem(
+            "load_transfer",
+            LoadTransfer(n_node=n_node, n_strips=40, xMount=appendageOptions["xMount"]),  # HARDCODED
+            promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
+            promotes_outputs=[("loads_str", "traction_forces")],
+        )
+
+        # hydroelastic coupled solver
+        ### couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
+        ### couple.linear_solver = om.DirectSolver()   # for adjoint
+        couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, iprint=2, maxiter=30)
+        couple.linear_solver = om.DirectSolver()  # for adjoint
+        # NOTE: fails!!!
 
     # ************************************************
     #     Setup problem
@@ -469,6 +503,10 @@ if __name__ == "__main__":
     print("model run complete\n" + "-" * 50)
     print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
+    # manual NLBGS loop!!
+    # for i in range(10):
+    #     prob.run_model()
+
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
@@ -489,13 +527,14 @@ if __name__ == "__main__":
         # print("force distribution", prob.get_val("forces_dist"))
 
     else:
+        print("nondimensional gammas", prob.get_val("gammas"))
         print("nondimensional gammas", prob.get_val("liftingline.gammas"))
         print("nondimensional gammas_d", prob.get_val("liftingline.gammas_d"))
         print("CL", prob.get_val("CL"))
         print("CLa", prob.get_val("cla"))  #
         # print("force distribution", prob.get_val("forces_dist"))
-        print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
-        print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+        print("bending deflections", prob.get_val("deflections")[2::9])
+        print("twisting deflections", prob.get_val("deflections")[4::9])
         # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
         print("induced drag force", prob.get_val("F_x"))
         print("lift force", prob.get_val("F_z"))
@@ -510,7 +549,40 @@ if __name__ == "__main__":
             f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}",
         )
 
-    # plot_cla()
+    om.n2(prob)
+
+    # --- plot ---
+    nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
+    collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
+    pts_3D = ptVec.reshape(19, 2, 3).swapaxes(0, 2)   # shape (3, 2, 19)
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
+    ### ax.plot(nodes[0], nodes[1], nodes[2], 'o', label='nodes')
+    ### ax.plot(collocationPts[0], collocationPts[1], collocationPts[2], 'x', label='collocation points')
+    ### ax.plot(pts_3D[0], pts_3D[1], pts_3D[2], 'o', label='points')
+    mesh_orig = prob.get_val("ptVec").reshape(2, 19, 3)  # jig
+    mesh_def = prob.get_val("ptVec_def").reshape(2, 19, 3)
+    z_scaler = 100   # to make the deflection visible
+    # LE
+    ax.plot(mesh_orig[0, :, 0], mesh_orig[0, :, 1], mesh_orig[0, :, 2] * z_scaler, 'o', color='C0', ms=3)  # LE
+    ax.plot(mesh_orig[1, :, 0], mesh_orig[1, :, 1], mesh_orig[1, :, 2] * z_scaler, 'o', color='C0', ms=3)  # TE
+    # TE
+    ax.plot(mesh_def[0, :, 0], mesh_def[0, :, 1], mesh_def[0, :, 2] * z_scaler, 'o', color='C1', ms=3)  # LE
+    ax.plot(mesh_def[1, :, 0], mesh_def[1, :, 1], mesh_def[1, :, 2] * z_scaler, 'o', color='C1', ms=3)  # TE
+    # flow collocation points
+    ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :], color='k')
+    # set equal aspect ratio
+    ax.set_aspect('equal')
+
+    # 2D planform plot (top view)
+    fig, ax = plt.subplots()
+    ax.plot(nodes[0], nodes[1], 'o', label='nodes')
+    ax.plot(collocationPts[0], collocationPts[1], 'x', label='collocation points')
+    ax.plot(pts_3D[0], pts_3D[1], 'o', label='points')
+    plt.axis('equal')
+    plt.show()
 
     # --- Check partials after you've solve the system!! ---
     starttime = time.time()
