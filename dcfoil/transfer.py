@@ -12,6 +12,8 @@ class DisplacementTransfer(om.Group):
     """
     Displacement transfer
 
+    TODO: modify to use y-distance-inverse weight factors for the load transfer to be conservative (only minor difference, though)
+
     Parameters
     ----------
     ptVec : ndarray, (2 * n_secs * 3,)
@@ -162,7 +164,101 @@ class InterpolateDisplacement(om.JaxExplicitComponent):
 
 class LoadTransfer(om.JaxExplicitComponent):
     """
+    Load transfer from flow force distribution to FEM nodel loads
+
+    Parameters
+    ----------
+    collocationPts: ndarray, (3, n_strips)
+        Coordinates of force acting points
+        Sorted in spanwise direction from -b/2 to b/2
+    forces_hydro: ndarray, (3, n_strips)
+        Force distribution at each collocation point
+        Sorted in spanwise direction from -b/2 to b/2
+    nodes: ndarray, (n_node, 3)
+        Coordinates of FEM nodes
+        Does not need to be sorted
+
+    Returns
+    -------
+    loads_str: ndarray, (9 * n_node,)
+        Nodal force to be applied to FEM
+        First 6 entries (forces and moments) are computed, last 3 entries are zero
+    """
+
+    def initialize(self):
+        self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
+        self.options.declare('n_node', types=int, desc='Number of FEM nodes')
+        self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
+
+    def setup(self):
+        n_strips = self.options['n_strips']
+        n_node = self.options['n_node']
+
+        # NOTE: ordering of declared inputs and outputs must match the compute_primal's signature
+        self.add_input('collocationPts', shape=(3, n_strips))
+        self.add_input('forces_hydro', shape=(3, n_strips))
+        self.add_input('nodes', shape=(n_node, 3))
+
+        self.add_output('loads_str', shape=(9 * n_node,))
+
+        self.declare_partials('loads_str', '*')
+
+    def compute_primal(self, collocationPts, forces_hydro, nodes):
+        n_node = self.options['n_node']
+        n_strips = self.options['n_strips']
+
+        # shift collocation pts x axis to be consistent with FEM frame
+        colloc_pts = collocationPts * 1.
+        colloc_pts[0, :] -= self.options['xMount']  # shift x  # TODO: does this work in Jax?
+
+        # nodal load array
+        loads = jnp.zeros((9, n_node))  # [9, n_node]
+
+        # TODO: vectorize
+        for i in range(n_strips):
+            # find adjacent nodes (in spanwise coordinate)
+            y_dist = nodes[:, 1] - colloc_pts[1, i]
+
+            # left node: max y_dist for y_dist <= 0
+            left_y_ist = jnp.max(y_dist[y_dist <= 0])
+            left_node_index = int(jnp.where(y_dist == left_y_ist)[0][0])
+            # right node: min y_dist but y_dist > 0
+            right_y_dist = jnp.min(y_dist[y_dist >= 0])
+            right_node_index = int(jnp.where(y_dist == right_y_dist)[0][0])
+
+            if left_node_index == right_node_index:
+                # y-coord of the collocation point is exactly at one of the FEM nodes, so just transfer the loads to that node
+                loads = loads.at[:3, left_node_index].add(forces_hydro[:, i])
+                moment = jnp.cross(colloc_pts[:, i] - nodes[left_node_index, :], forces_hydro[:, i])
+                loads = loads.at[3:6, left_node_index].add(moment)
+            else:
+                # distribute load to left and right adjacent nodes
+                # compute weight factors (inverse of spanwise distance)
+                d1 = jnp.abs(colloc_pts[1, i] - nodes[left_node_index, 1])
+                d2 = jnp.abs(colloc_pts[1, i] - nodes[right_node_index, 1])
+                w1 = d2 / (d1 + d2)
+                w2 = d1 / (d1 + d2)
+                # check consistency
+                # if not jnp.allclose(w1 + w2, 1.0, 1e-8):
+                #     raise ValueError("Weight factors do not sum to 1.")
+
+                loads = loads.at[:3, left_node_index].add(forces_hydro[:, i] * w1)
+                loads = loads.at[:3, right_node_index].add(forces_hydro[:, i] * w2)
+                moment1 = jnp.cross(colloc_pts[:, i] - nodes[left_node_index, :], forces_hydro[:, i] * w1)
+                moment2 = jnp.cross(colloc_pts[:, i] - nodes[right_node_index, :], forces_hydro[:, i] * w2)
+
+                loads = loads.at[3:6, left_node_index].add(moment1)
+                loads = loads.at[3:6, right_node_index].add(moment2)
+
+        # flatten loads to 1D array
+        loads_str = loads.flatten(order='F')
+        return (loads_str,)
+
+
+class OLD_DONOTUSE_LoadTransferInterpolation(om.JaxExplicitComponent):
+    """
     Load transfer
+    TODO: This does not satisfy load concistency, so do not use!!
 
     Parameters
     ----------
@@ -179,8 +275,6 @@ class LoadTransfer(om.JaxExplicitComponent):
     -------
     loads_str: ndarray, (9 * n_node,)
         Nodal force to be applied to FEM
-
-    NOTE: physically linearly interpolatin the force seems bad idea... should do some distance-weighted average/summation?
     """
 
     def initialize(self):
@@ -302,24 +396,31 @@ def test_displacement_transfer():
 
 
 def test_load_transfer():
-    n_strips = 10
-    n_node = 7
+    n_strips = 20
+    n_node = 6   # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
     collocationPts[1, :] = np.linspace(-1, 1, n_strips)
-    collocationPts[0, :] = -0.5
+    collocationPts[0, :] = -0.5 + 3.355
 
-    nodes = np.zeros((n_node, 3))
-    nodes[:, 1] = np.linspace(-1, 1, n_node)
-    nodes[:, 0] = 0.5
-    # shuffle order
-    np.random.shuffle(nodes)
+    # FEM nodes and connectivity
+    nodes_pos = np.linspace(0, 1, n_node)
+    nodes_neg = np.linspace(0, -1, n_node)
+    nodes_y = np.concatenate((nodes_pos, nodes_neg[1:]))
+    nodes = np.zeros((n_node * 2 - 1, 3))
+    nodes[:, 1] = nodes_y
+    # print(nodes)
+
+    # elem_conn = [[i, i + 1] for i in range(len(nodes) - 1)]
+    # elem_conn = np.array(elem_conn) + 1  # index starts at 1 in Julia!!
+    # elem_conn[n_node - 1, 0] = 1
+    # print(elem_conn)
     
     forces_hydro = np.zeros((3, n_strips))
     forces_hydro[2, :] = np.sin(np.linspace(-np.pi, np.pi, n_strips)) + 0.3  # out of plane force
 
     prob = om.Problem()
-    prob.model.add_subsystem('load_transfer', LoadTransfer(n_strips=n_strips, n_node=n_node, xMount=3.355), promotes=['*'])
+    prob.model.add_subsystem('load_transfer', LoadTransfer(n_strips=n_strips, n_node=n_node * 2 - 1, xMount=3.355), promotes=['*'])
     prob.setup()
     prob.set_val('collocationPts', collocationPts)
     prob.set_val('nodes', nodes)
@@ -331,14 +432,14 @@ def test_load_transfer():
     # plot forces and moments
     col_pts = prob.get_val('collocationPts')
     f_hydro = prob.get_val('forces_hydro')
-    loads = prob.get_val('loads_str').reshape(9, n_node)
+    loads = prob.get_val('loads_str').reshape(9, n_node * 2 - 1, order='F')
     fig, ax = plt.subplots(3, 2, figsize=(10, 10))
     # plot original hydro forces
-    ax[0, 0].plot(col_pts[1, :], f_hydro[0, :], 'o-')
+    ax[0, 0].plot(col_pts[1, :], f_hydro[0, :], 'o-', label='hydro')
     ax[1, 0].plot(col_pts[1, :], f_hydro[1, :], 'o-')
     ax[2, 0].plot(col_pts[1, :], f_hydro[2, :], 'o-')
     # plot FEM loads
-    ax[0, 0].plot(nodes[:, 1], loads[0, :], 'o', color='C3')
+    ax[0, 0].plot(nodes[:, 1], loads[0, :], 'o', color='C3', label='FEM')
     ax[1, 0].plot(nodes[:, 1], loads[1, :], 'o', color='C3')
     ax[2, 0].plot(nodes[:, 1], loads[2, :], 'o', color='C3')
     ax[0, 1].plot(nodes[:, 1], loads[3, :], 'o', color='C3')
@@ -354,6 +455,18 @@ def test_load_transfer():
     ax[0, 1].set_ylabel('Mx')
     ax[1, 1].set_ylabel('My')
     ax[2, 1].set_ylabel('Mz')
+
+    ax[0, 0].legend()
+
+    # check force consistency
+    fx_sum_hydro = np.sum(f_hydro[2, :])
+    fx_sum_str = np.sum(loads[2, :])
+    print('Sum of hydro forces (Fx):', fx_sum_hydro)
+    print('Sum of FEM nodal forces (Fx):', fx_sum_str)
+    print('Diff:', fx_sum_hydro - fx_sum_str, ' (should be 0)')
+
+    mx_sum_str = np.sum(loads[3, :])
+    print('Sum of FEM moments (Mx):', mx_sum_str, ' (should be 0)')
 
     plt.show()
 

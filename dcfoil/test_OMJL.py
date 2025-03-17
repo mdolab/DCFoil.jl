@@ -161,7 +161,7 @@ nodeConn = np.array(
         [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
     ]
 )
-nNodes = 21
+nNodes = 5
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
@@ -422,11 +422,9 @@ if __name__ == "__main__":
         )
 
         # hydroelastic coupled solver
+        # NOTE: This fails!!!
         ### couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
         ### couple.linear_solver = om.DirectSolver()   # for adjoint
-        couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, iprint=2, maxiter=30)
-        couple.linear_solver = om.DirectSolver()  # for adjoint
-        # NOTE: fails!!!
 
     # ************************************************
     #     Setup problem
@@ -496,16 +494,19 @@ if __name__ == "__main__":
     print("model run complete\n" + "-" * 50)
     print(f"Time taken to run model: {endtime-midtime:.2f} s")
 
-    print("running model again...\n" + "-" * 50)
-    starttime = time.time()
-    prob.run_model()
-    endtime = time.time()
-    print("model run complete\n" + "-" * 50)
-    print(f"Time taken to run model: {endtime-starttime:.2f} s")
+    # print("running model again...\n" + "-" * 50)
+    # starttime = time.time()
+    # prob.run_model()
+    # endtime = time.time()
+    # print("model run complete\n" + "-" * 50)
+    # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
-    # manual NLBGS loop!!
-    # for i in range(10):
-    #     prob.run_model()
+    # # manual NLBGS loop!!
+    for i in range(5):
+        prob.run_model()
+    # model.hydroelastic.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
+    # model.hydroelastic.linear_solver = om.DirectSolver()   # for adjoint
+    # prob.run_model()
 
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
@@ -558,13 +559,12 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
 
+    # 3D plot
     fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
-    ### ax.plot(nodes[0], nodes[1], nodes[2], 'o', label='nodes')
-    ### ax.plot(collocationPts[0], collocationPts[1], collocationPts[2], 'x', label='collocation points')
-    ### ax.plot(pts_3D[0], pts_3D[1], pts_3D[2], 'o', label='points')
+
     mesh_orig = prob.get_val("ptVec").reshape(2, 19, 3)  # jig
     mesh_def = prob.get_val("ptVec_def").reshape(2, 19, 3)
-    z_scaler = 100   # to make the deflection visible
+    z_scaler = 10000   # to make the deflection visible
     # LE
     ax.plot(mesh_orig[0, :, 0], mesh_orig[0, :, 1], mesh_orig[0, :, 2] * z_scaler, 'o', color='C0', ms=3)  # LE
     ax.plot(mesh_orig[1, :, 0], mesh_orig[1, :, 1], mesh_orig[1, :, 2] * z_scaler, 'o', color='C0', ms=3)  # TE
@@ -572,15 +572,17 @@ if __name__ == "__main__":
     ax.plot(mesh_def[0, :, 0], mesh_def[0, :, 1], mesh_def[0, :, 2] * z_scaler, 'o', color='C1', ms=3)  # LE
     ax.plot(mesh_def[1, :, 0], mesh_def[1, :, 1], mesh_def[1, :, 2] * z_scaler, 'o', color='C1', ms=3)  # TE
     # flow collocation points
-    ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :], color='k')
-    # set equal aspect ratio
+    ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :], 'o-', color='k', ms=3)
+    # FEM nodes
+    ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], 'o-', color='darkgray', ms=3)
     ax.set_aspect('equal')
 
     # 2D planform plot (top view)
     fig, ax = plt.subplots()
-    ax.plot(nodes[0], nodes[1], 'o', label='nodes')
-    ax.plot(collocationPts[0], collocationPts[1], 'x', label='collocation points')
-    ax.plot(pts_3D[0], pts_3D[1], 'o', label='points')
+    ax.plot(nodes[0, :], nodes[1, :], 'o-', color='darkgray', ms=3, label='FEM nodes')
+    ax.plot(collocationPts[0] - appendageOptions['xMount'], collocationPts[1], 'o-', color='k', ms=3, label='Flow colloc points')
+    ax.plot(pts_3D[0], pts_3D[1], 'o', color='C0', ms=3)
+    ax.legend()
     plt.axis('equal')
     plt.show()
 
