@@ -159,7 +159,7 @@ nnodes = len(ptVec) // 3 // 2
 XCoords = ptVec.reshape(-1, 3)
 LEcoords = XCoords[:nnodes]
 TEcoords = XCoords[nnodes:]
-
+breakpoint()
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
