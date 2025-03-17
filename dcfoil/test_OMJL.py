@@ -219,6 +219,7 @@ solverOptions = {
     "rhoKS": 500.0,
 }
 
+# 2025-03-17 NOTE GN-SK: this dictionary is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
 appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
     "alfa0": 6.0,  # initial angle of attack [deg]
     # "sweep": np.deg2rad(0.0),  # sweep angle [rad]
@@ -418,6 +419,15 @@ if __name__ == "__main__":
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
         print("all deflections", prob.get_val("beamstruct.deflections"))
+
+        # Change fiber angle and rerun
+        prob.set_val("beamstruct.theta_f", np.deg2rad(-15.0))
+        prob.run_model()
+        print("print again with theta_f = -15.0")
+        print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
+        print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+        print("all deflections", prob.get_val("beamstruct.deflections"))
+
     elif args.run_flow:
         print("nondimensional gammas", prob.get_val("gammas"))
         print("CL", prob.get_val("CL"))  # should be around CL = 0.507 something

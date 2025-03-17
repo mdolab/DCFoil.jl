@@ -18,10 +18,9 @@ from pathlib import Path
 # ==============================================================================
 import numpy as np
 
-# from julia import Main, Pkg
 from juliacall import Main, Pkg
-import juliacall
 import openmdao.api as om
+from .multipoint import Multipoint
 
 
 class DCFOILWarning(object):
@@ -46,7 +45,7 @@ class DCFOILWarning(object):
 class DCFOIL:
     def __init__(self, appendageParamsList: list, evalFuncs, options=None, debug=False):
         """
-        Create the flutter solver class
+        Create the solver class
 
         Parameters
         ----------
