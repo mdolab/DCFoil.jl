@@ -225,7 +225,7 @@ solverOptions = {
 
 # 2025-03-17 NOTE GN-SK: this dictionary is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
 appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
-    "alfa0": 6.0,  # initial angle of attack [deg]
+    "alfa0": 2.0,  # initial angle of attack [deg]
     # "sweep": np.deg2rad(0.0),  # sweep angle [rad]
     "zeta": 0.04,  # modal damping ratio at first 2 modes
     # "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
@@ -369,7 +369,7 @@ if __name__ == "__main__":
     else:
         # --- Combined hydroelastic ---
         couple = model.add_subsystem("hydroelastic", om.Group(), promotes=["*"])
-        n_node = nNodes * 2 - 1
+        n_node_fullspan = nNodes * 2 - 1
 
         # structure
         couple.add_subsystem(
@@ -388,7 +388,7 @@ if __name__ == "__main__":
         # displacement transfer
         couple.add_subsystem(
             "disp_transfer",
-            DisplacementTransfer(n_node=n_node, n_secs=19),  # HARDCODED
+            DisplacementTransfer(n_node=n_node_fullspan, n_secs=19),  # HARDCODED
             promotes_inputs=["nodes", "deflections", "ptVec"],
             promotes_outputs=["ptVec_def"],
         )
@@ -416,15 +416,16 @@ if __name__ == "__main__":
         # load transfer
         couple.add_subsystem(
             "load_transfer",
-            LoadTransfer(n_node=n_node, n_strips=40, xMount=appendageOptions["xMount"]),  # HARDCODED
+            LoadTransfer(n_node=n_node_fullspan, n_strips=40, xMount=appendageOptions["xMount"]),  # HARDCODED
             promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
             promotes_outputs=[("loads_str", "traction_forces")],
         )
 
         # hydroelastic coupled solver
         # NOTE: This fails!!!
-        ### couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
-        ### couple.linear_solver = om.DirectSolver()   # for adjoint
+        # couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)  #, use_apply_nonlinear=True)
+        # couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, iprint=2)
+        # couple.linear_solver = om.DirectSolver()   # for adjoint
 
     # ************************************************
     #     Setup problem
@@ -462,7 +463,7 @@ if __name__ == "__main__":
     # prob.model.nonlinear_solver.linesearch.options["maxiter"] = 10
     # prob.model.nonlinear_solver.linesearch.options["iprint"] = 2
 
-    prob.setup()
+    prob.setup(check=True)
 
     prob.set_val("ptVec", ptVec)
 
@@ -481,6 +482,13 @@ if __name__ == "__main__":
         tractions[-6] = 10.0
         prob.set_val("beamstruct.traction_forces", tractions)
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
+
+    # setup fiber angle
+    fiber_angle = np.deg2rad(-15)
+    prob.set_val('beamstruct.theta_f', fiber_angle)
+    prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
+    prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
+    prob.set_val('beamstruct_funcs.toc', 0.075 * np.ones(nNodes))
 
     # ************************************************
     #     Evaluate model
@@ -502,7 +510,7 @@ if __name__ == "__main__":
     # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
     # # manual NLBGS loop!!
-    for i in range(5):
+    for i in range(10):
         prob.run_model()
     # model.hydroelastic.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
     # model.hydroelastic.linear_solver = om.DirectSolver()   # for adjoint
@@ -550,7 +558,7 @@ if __name__ == "__main__":
             f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}",
         )
 
-    om.n2(prob)
+    om.n2(prob, show_browser=False)
 
     # --- plot ---
     nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
@@ -564,7 +572,7 @@ if __name__ == "__main__":
 
     mesh_orig = prob.get_val("ptVec").reshape(2, 19, 3)  # jig
     mesh_def = prob.get_val("ptVec_def").reshape(2, 19, 3)
-    z_scaler = 10000   # to make the deflection visible
+    z_scaler = 10   # to make the deflection visible
     # LE
     ax.plot(mesh_orig[0, :, 0], mesh_orig[0, :, 1], mesh_orig[0, :, 2] * z_scaler, 'o', color='C0', ms=3)  # LE
     ax.plot(mesh_orig[1, :, 0], mesh_orig[1, :, 1], mesh_orig[1, :, 2] * z_scaler, 'o', color='C0', ms=3)  # TE
@@ -578,13 +586,42 @@ if __name__ == "__main__":
     ax.set_aspect('equal')
 
     # 2D planform plot (top view)
-    fig, ax = plt.subplots()
-    ax.plot(nodes[0, :], nodes[1, :], 'o-', color='darkgray', ms=3, label='FEM nodes')
-    ax.plot(collocationPts[0] - appendageOptions['xMount'], collocationPts[1], 'o-', color='k', ms=3, label='Flow colloc points')
-    ax.plot(pts_3D[0], pts_3D[1], 'o', color='C0', ms=3)
-    ax.legend()
-    plt.axis('equal')
+    fig, axs = plt.subplots(3, 1, figsize=(8, 8))
+    rotation = 0
+    labelpad = 20
+    axs[0].plot(nodes[1, :], nodes[0, :], 'o-', color='darkgray', ms=3, label='FEM nodes')
+    axs[0].plot(collocationPts[1], collocationPts[0] - appendageOptions['xMount'], 'o-', color='k', ms=3, label='Flow colloc points')
+    axs[0].plot(pts_3D[1], pts_3D[0], 'o', color='C0', ms=3)
+    # axs[0].legend()
+    axs[0].axis('equal')
+    axs[0].set_ylabel('chord [m]', rotation=rotation, labelpad=labelpad, ha='right')
+
+    # front view (bending)
+    dz_LE = mesh_def[0, :, 2] - mesh_orig[0, :, 2]
+    dz_TE = mesh_def[1, :, 2] - mesh_orig[1, :, 2]
+    dz_mid = (dz_LE + dz_TE) / 2   # 50% chord = beam
+    axs[1].plot(mesh_orig[0, :, 1], dz_mid, 'o', color='C0')
+    axs[1].set_ylabel('dz [m]', rotation=rotation, labelpad=labelpad, ha='right')
+
+    # twist
+    dz = dz_LE - dz_TE   # diff between LE and TE
+    chord = mesh_orig[1, :, 0] - mesh_orig[0, :, 0]
+    twist = np.arctan2(dz, chord) * 180 / np.pi
+    axs[2].plot(mesh_orig[0, :, 1], twist, 'o', color='C0')  # LE
+    axs[2].set_ylabel('twist [deg]', rotation=rotation, labelpad=labelpad, ha='right')
+
+    for ax in axs:
+        ax.set_xlim([-0.35, 0.35])
+
+    plt.savefig('deformations.pdf', bbox_inches='tight')
+
+    # total lift force
+    loads = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')
+    lift = np.sum(loads[2, :])  # sum of all lift forces
+    print("Total lift force:", float(lift))
+
     plt.show()
+    quit()
 
     # --- Check partials after you've solve the system!! ---
     starttime = time.time()
