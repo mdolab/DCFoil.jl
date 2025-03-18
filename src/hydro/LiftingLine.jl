@@ -1188,61 +1188,61 @@ function setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendagePa
     return solverParams, FlowCond
 end
 
-function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
+# function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
 
-    function compute_cdi(Gconv)
-        # ---------------------------
-        #   Calculate influence matrix
-        # ---------------------------
-        TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+#     function compute_cdi(Gconv)
+#         # ---------------------------
+#         #   Calculate influence matrix
+#         # ---------------------------
+#         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
 
-        ux, uy, uz = FlowCond.uvec
-        ζi = LLMesh.sectionVectors
-        dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-
-
-        Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-        Gjvji = TV_influence .* Gi
-        Gjvjix = TV_influence[XDIM, :, :] * Gconv
-        Gjvjiy = TV_influence[YDIM, :, :] * Gconv
-        Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
-        Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
-        Gjvji = permutedims(Gjvji, [2, 1])
-        u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
-
-        ui = Gjvji .+ u∞ # Local velocities (nondimensional)
-
-        # This is the Biot--Savart law but nondimensional
-        # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
-        uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-        uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-        coeff = 2.0 / LLMesh.SRef
-
-        # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-        IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+#         ux, uy, uz = FlowCond.uvec
+#         ζi = LLMesh.sectionVectors
+#         dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
 
 
-        # --- Final outputs ---
-        CDi = IntegratedForces[XDIM] * ux +
-              IntegratedForces[YDIM] * uy +
-              IntegratedForces[ZDIM] * uz
-        return CDi
-    end
+#         Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
+#         Gjvji = TV_influence .* Gi
+#         Gjvjix = TV_influence[XDIM, :, :] * Gconv
+#         Gjvjiy = TV_influence[YDIM, :, :] * Gconv
+#         Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
+#         Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
+#         Gjvji = permutedims(Gjvji, [2, 1])
+#         u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
 
-    backend = AD.ReverseDiffBackend()
-    ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-    ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
+#         ui = Gjvji .+ u∞ # Local velocities (nondimensional)
 
-    # Compares well with finite difference 2024-12-07
-    # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-    # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-    # println("∂cdi∂Γ: $(∂cdi∂Γ)")
-    # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+#         # This is the Biot--Savart law but nondimensional
+#         # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
+#         uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+#         uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+#         coeff = 2.0 / LLMesh.SRef
 
-    return ∂cdi∂Γ
-end
+#         # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
+#         IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
 
-function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions)
+
+#         # --- Final outputs ---
+#         CDi = IntegratedForces[XDIM] * ux +
+#               IntegratedForces[YDIM] * uy +
+#               IntegratedForces[ZDIM] * uz
+#         return CDi
+#     end
+
+#     backend = AD.ReverseDiffBackend()
+#     ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+#     ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
+
+#     # Compares well with finite difference 2024-12-07
+#     # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+#     # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+#     # println("∂cdi∂Γ: $(∂cdi∂Γ)")
+#     # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+
+#     return ∂cdi∂Γ
+# end
+
+function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
 
     NFORCES = 3
     NFORCECOEFFS = 3
@@ -1256,20 +1256,22 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions)
 
         ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
-        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(DimForces))
+        # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)))
 
         return outputvector
     end
 
-    # backend = AD.ReverseDiffBackend()
-    backend = AD.ForwardDiffBackend()
-    ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
-
-    # Compares well with finite difference 
-    # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-    # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-    # println("∂cdi∂Γ: $(∂cdi∂Γ)")
-    # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+    if uppercase(mode) == "FAD"
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ForwardDiffBackend()
+        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+    
+    elseif uppercase(mode) == "FIDI"
+        # Compares well with finite difference 
+        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+    end
 
     return ∂I∂G
 end
@@ -1368,8 +1370,9 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, appendagePar
 
         ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
-        # THIS ORDER MATTERS
-        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(DimForces))
+        # THIS ORDER MATTER
+        # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)))
 
         return outputVector
     end
@@ -1493,6 +1496,65 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     return ∂cdi∂Xpt
 end
 
+function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
+    ∂collocationPt∂Xpt = zeros(DTYPE, NPT_WING * 3, length(ptVec))
+
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
+
+    function compute_collocationFromXpt(xPt)
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+
+        # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+        outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
+
+        return outputVec
+    end
+
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-5
+
+        resVec_i = compute_collocationFromXpt(ptVec) # initialize the solver
+
+        # @inbounds begin # no speedup
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            resVec_f = compute_collocationFromXpt(ptVec)
+
+            ptVec[ii] -= dh
+
+            ∂collocationPt∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+        end
+        # end
+    elseif uppercase(mode) == "CS"
+        dh = 1e-100
+
+        ptVecCS = complex(copy(ptVec))
+
+        for ii in eachindex(ptVec)
+            ptVecCS[ii] += 1im * dh
+            resVec_f = compute_collocationFromXpt(ptVecCS)
+            ptVecCS[ii] -= 1im * dh
+            ∂collocationPt∂Xpt[:, ii] = imag(resVec_f) / dh
+        end
+    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to a few sec in pure Fidi julia
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteBackend()
+        ∂collocationPt∂Xpt, = AD.jacobian(backend, x -> compute_collocationFromXpt(x), ptVec)
+
+    elseif uppercase(mode) == "FAD" # use this, same speed as Fidi
+        backend = AD.ForwardDiffBackend()
+        ∂collocationPt∂Xpt, = AD.jacobian(backend, x -> compute_collocationFromXpt(x), ptVec)
+
+    end
+
+    return ∂collocationPt∂Xpt
+end
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     """
     Compute the influence of a straight semi-infinite vortex filament

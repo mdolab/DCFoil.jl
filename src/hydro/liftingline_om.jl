@@ -48,16 +48,16 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
     # --- Define inputs and outputs ---
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(npt * 3 * 2)),
-        # TODO: add angle of attack and other appendage params here
+        OpenMDAOCore.VarData("alfa0", val=0.0),
     ]
     outputs = [
         OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),]
 
     partials = [
-        # OpenMDAOCore.PartialsData("*", "*", method="fd"),
         # --- Residuals ---
         OpenMDAOCore.PartialsData("gammas", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("gammas", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("gammas", "alfa0", method="fd"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="exact")] # define the partials
 
@@ -70,12 +70,16 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     println("solving nonlinear lifting line")
 
     ptVec = inputs["ptVec"]
+    alfa0 = inputs["alfa0"][1]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    # --- Set hydro vars ---
+    appendageParams["alfa0"] = alfa0
 
     # ************************************************
     #     Core solver
@@ -147,12 +151,16 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
 
     ptVec = inputs["ptVec"]
     gammas = outputs["gammas"]
+    alfa0 = inputs["alfa0"][1]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    # --- Set hydro vars ---
+    appendageParams["alfa0"] = alfa0
 
     # --- Lifting line setup stuff ---    
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -215,12 +223,16 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     Provide initial guess for the states
     """
     ptVec = inputs["ptVec"]
+    alfa0 = inputs["alfa0"][1]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    # --- Set hydro vars ---
+    appendageParams["alfa0"] = alfa0
 
     # --- Lifting line setup stuff ---    
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -280,6 +292,7 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     """
 
     ptVec = inputs["ptVec"]
+    alfa0 = inputs["alfa0"][1]
     gammas = outputs["gammas"]
     residuals["gammas"] .= 0.0
 
@@ -288,6 +301,9 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    # --- Set hydro vars ---
+    appendageParams["alfa0"] = alfa0
 
     # --- Lifting line setup stuff ---    
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -358,6 +374,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
 
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
+        OpenMDAOCore.VarData("alfa0", val=0.0),
         OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
     ]
 
@@ -413,7 +430,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         # --- lift slopes for dynamic solution ---
         OpenMDAOCore.PartialsData("cla", "ptVec", method="exact"),
         # --- Hydro mesh ---
-        OpenMDAOCore.PartialsData("collocationPts", "ptVec", method="exact"), # TODO: implement this in julia
+        OpenMDAOCore.PartialsData("collocationPts", "ptVec", method="exact"),
         # --- WRT gammas ---
         OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
@@ -431,8 +448,9 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("Dw", "gammas", method="exact"),
         # --- lift slopes for dynamic solution ---
         OpenMDAOCore.PartialsData("cla", "gammas", method="exact"),
+        # --- AOA DVs ---
+        OpenMDAOCore.PartialsData("*", "alfa0", method="fd")
     ]
-    # partials = [OpenMDAOCore.PartialsData("*", "*", method="fd")] # define the partials
 
     return inputs, outputs, partials
 end
@@ -441,12 +459,16 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
 
     Gconv = inputs["gammas"]
     ptVec = inputs["ptVec"]
+    alfa0 = inputs["alfa0"][1]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    # --- Set hydro vars ---
+    appendageParams["alfa0"] = alfa0
 
     # ************************************************
     #     Core solver
@@ -502,10 +524,15 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["CDi"][1] = CDi
     outputs["CS"][1] = CS
     outputs["clmax"][1] = ksclmax
-    outputs["forces_dist"][:] = DimForces
 
-    size(outputs["collocationPts"]) == size(LLMesh.collocationPts) || error("Size mismatch")
-    outputs["collocationPts"][:] = LLMesh.collocationPts
+    for (ii, fi) in enumerate(eachrow(DimForces))
+        outputs["forces_dist"][ii, :] = fi
+    end
+
+    size(outputs["collocationPts"]) == size(LLMesh.collocationPts) || error("Size mismatch for collocationPts")
+    for (ii, collocationi) in enumerate(eachrow(LLMesh.collocationPts))
+        outputs["collocationPts"][ii, :] = collocationi
+    end
 
     outputs["CDw"][1] = CDw
     outputs["CDpr"][1] = CDpr
@@ -530,6 +557,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
 
     Gconv = inputs["gammas"]
     ptVec = inputs["ptVec"]
+    alfa0 = inputs["alfa0"][1]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -537,10 +565,13 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
 
+    # --- Set hydro vars ---
+    appendageParams["alfa0"] = alfa0
+
     # ************************************************
     #     Derivatives wrt ptVec (2025-03-02 agree)
     # ************************************************
-    # mode = "FiDi"
+    # mode = "FiDi" # slow
     # mode = "CS" # broken
     # mode = "RAD" # broken
     mode = "FAD"
@@ -574,12 +605,15 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # ---------------------------
     #   Hydro mesh points
     # ---------------------------
-    println("CollocationPts and cla deriv don't work") #TODO: PICKUP HERE
-    partials["collocationPts", "ptVec"][:, :] = zeros(LiftingLine.NPT_WING * 3, length(ptVec))
+    ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt))
+        partials["collocationPts", "ptVec"][ii, :] = ∂cPti∂xPt
+    end
 
     # ---------------------------
     #   Lift slopes
     # ---------------------------
+    println("cla deriv don't work") #TODO: PICKUP HERE
     # partials["cla", "gammas"] = 
 
     # ************************************************
@@ -616,8 +650,9 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 
     ∂f∂g = LiftingLine.compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions) # Forward Diff by default
+
     for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g[1:7, :]))
-        partials[costFuncsInOrder[ii], "gammas"][1, :] = ∂fi∂g
+        partials[costFuncsInOrder[ii], "gammas"][:] = ∂fi∂g
     end
 
     for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8:end])

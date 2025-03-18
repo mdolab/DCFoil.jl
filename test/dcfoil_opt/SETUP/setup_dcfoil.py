@@ -138,6 +138,7 @@ def setup_old(args, comm, files, evalFuncs, outputDir: str, ap):
 
     return STICKSolver, solverOptions, valDict, lowerDict, upperDict, scaleDict
 
+
 def setup(args, comm, files, evalFuncs, outputDir: str):
     nNodes = 5
     nNodesStrut = 3
@@ -235,7 +236,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str):
 
     # --- Variables for DCFoil ---
     valDict = {
-        "alfa0": 2.0,
+        "alfa0": 6.0,
         "theta_f": appendageParams["theta_f"],
         "toc": appendageParams["toc"],
     }
@@ -245,7 +246,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str):
         "toc": 0.9 * appendageParams["toc"],
     }
     upperDict = {
-        "alfa0": 5.0,
+        "alfa0": 10.0,
         "theta_f": np.deg2rad(30),  # rad
         "toc": 1.1 * appendageParams["toc"],
     }

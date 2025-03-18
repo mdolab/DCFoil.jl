@@ -4,7 +4,7 @@ using OpenMDAO: om, make_component
 include("../src/hydro/LiftingLine.jl")
 include("../src/hydro/liftingline_om.jl")
 include("../src/struct/beam_om.jl")
-const RealOrComplex = Union{Real, Complex}
+const RealOrComplex = Union{Real,Complex}
 # const RealOrComplex = AbstractFloat
 
 # ==============================================================================
@@ -215,7 +215,7 @@ solverOptions = Dict(
     "run_modal" => true,
     "run_flutter" => true,
     # "nModes" => nModes,
-    "uRange" => [1.0,30],
+    "uRange" => [1.0, 30],
     "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 500.0,
 )
@@ -229,6 +229,35 @@ gconv = vec([0.0322038 0.03231678 0.03253403 0.03284775 0.03324736 0.03371952 0.
 
 # LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
 # LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+idxTip = LiftingLine.get_tipnode(LECoords)
+midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+# ---------------------------
+#   Hydrodynamics
+# ---------------------------
+α0 = appendageParams["alfa0"]
+β0 = appendageParams["beta"]
+rake = appendageParams["rake"]
+depth0 = appendageParams["depth0"]
+airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    npt_wing=npt_wing,
+    npt_airfoil=npt_airfoil,
+    rhof=solverOptions["rhof"],
+    # airfoilCoordFile=airfoilCoordFile,
+    airfoil_ctrl_xy=airfoilCtrlXY,
+    airfoil_xy=airfoilXY,
+    options=options,
+)
+TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+
+LLNLParams = LiftingLine.LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions)
+dfdg_FD = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FiDi")
+# These derivatives are good
+# @time dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+# dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="RAD")
+# @time dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
 # ans1, ans2 = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="RAD")
 # @time ans1fad, ans2fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")

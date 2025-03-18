@@ -23,6 +23,7 @@ import argparse
 # Extension modules
 # ==============================================================================
 import openmdao.api as om
+import openmdao.visualization as omv
 import juliacall
 
 jl = juliacall.newmodule("DCFoil")
@@ -305,13 +306,13 @@ if __name__ == "__main__":
         model.add_subsystem(
             "liftingline",
             impcomp_LL_solver,
-            promotes_inputs=["ptVec"],
+            promotes_inputs=["ptVec", "alfa0"],
             promotes_outputs=["gammas"],
         )
         model.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+            promotes_inputs=["gammas", "ptVec", "alfa0"],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
     else:
@@ -331,13 +332,13 @@ if __name__ == "__main__":
         model.add_subsystem(
             "liftingline",
             impcomp_LL_solver,
-            promotes_inputs=["ptVec"],
+            promotes_inputs=["ptVec", "alfa0"],
             promotes_outputs=["gammas"],
         )
         model.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+            promotes_inputs=["gammas", "ptVec", "alfa0"],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
         # # --- Now add load transfer capabilities ---
@@ -390,6 +391,7 @@ if __name__ == "__main__":
         prob.set_val("beamstruct.traction_forces", tractions)
     elif args.run_flow:
         prob.set_val("liftingline.gammas", np.zeros(40))
+        prob.set_val("alfa0", appendageParams["alfa0"])
     else:
         tractions = prob.get_val("beamstruct.traction_forces")
         tractions[-6] = 10.0
@@ -431,7 +433,7 @@ if __name__ == "__main__":
     elif args.run_flow:
         print("nondimensional gammas", prob.get_val("gammas"))
         print("CL", prob.get_val("CL"))  # should be around CL = 0.507 something
-        print("force distribution", prob.get_val("forces_dist"))
+        # print("force distribution", prob.get_val("forces_dist"))
 
     else:
         print("nondimensional gammas", prob.get_val("liftingline.gammas"))
@@ -455,6 +457,9 @@ if __name__ == "__main__":
 
     # --- Check partials after you've solve the system!! ---
     if args.test_partials:
+    
+        np.set_printoptions(linewidth=1000, precision=4)
+
         fileName = "partials.out"
         f = open(fileName, "w")
         f.write("PARTIALS\n")
@@ -462,18 +467,19 @@ if __name__ == "__main__":
         f.write("=" * 50)
         f.write("\n liftingline partials\n")
         f.write("=" * 50)
-        # prob.check_partials(
-        #     out_stream=f,
-        #     includes=["liftingline"],
-        #     method="fd",
-        #     compact_print=True,
-        # )
+        prob.check_partials(
+            out_stream=f,
+            includes=["liftingline_funcs"],
+            method="fd",
+            step=1e-4, 
+            compact_print=True,
+        )
         prob.check_partials(
             out_stream=f,
             includes=["liftingline_funcs"],
             method="fd",
             step=1e-4,  # now we're cooking :)
-            # compact_print=True,
+            compact_print=False,
         )
         f.write("=" * 50)
         f.write("\n structural partials \n")

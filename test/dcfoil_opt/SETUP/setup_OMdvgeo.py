@@ -208,7 +208,6 @@ def setup(args, model, comm, files: dict):
     # #     for i in range(nSpanwise):
     # #         geo.scale_z["wing"].coef[i] = val[0]
 
-
     dvDictInfo = {  # dictionary of design variable parameters
         "twist": {
             "lower": -15.0,

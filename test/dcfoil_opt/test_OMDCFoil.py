@@ -40,6 +40,7 @@ jl.include("../../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 jl.include("../../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
+
 # ==============================================================================
 #                         Top level variables
 # ==============================================================================
@@ -58,9 +59,7 @@ class Top(Multipoint):
         self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
         self.add_subsystem("mesh", om.IndepVarComp())
 
-
-        self.mesh.add_output("x_leptVec0", val=LECoords.flatten(), distributed=True)
-        self.mesh.add_output("x_teptVec0", val=TECoords.flatten(), distributed=True)
+        self.mesh.add_output("x_ptVec0", val=np.array(ptVec), distributed=True)
 
         self.add_subsystem(
             "geometry",
@@ -68,9 +67,7 @@ class Top(Multipoint):
             promotes=["twist", "sweep", "dihedral", "taper", "span"],
         )
 
-        self.connect("mesh.x_leptVec0", "geometry.x_leptVec_in")
-        self.connect("mesh.x_teptVec0", "geometry.x_teptVec_in")
-
+        self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")
 
         # ---------------------------
         #   Julia specific components
@@ -91,41 +88,52 @@ class Top(Multipoint):
         self.add_subsystem(
             "beamstruct",
             impcomp_struct_solver,
-            promotes_inputs=["ptVec"],
+            promotes_inputs=["ptVec", "theta_f", "toc"],
             promotes_outputs=["deflections"],
         )
         self.add_subsystem(
             "beamstruct_funcs",
             expcomp_struct_func,
-            promotes_inputs=["ptVec", "deflections"],
+            promotes_inputs=["ptVec", "deflections", "theta_f", "toc"],
             promotes_outputs=["*"],  # everything!
         )
         self.add_subsystem(
             "liftingline",
             impcomp_LL_solver,
-            promotes_inputs=["ptVec"],
+            promotes_inputs=["ptVec", "alfa0"],
             promotes_outputs=["gammas"],
         )
         self.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "ptVec"],  # promotion auto connects these variables
+            promotes_inputs=["gammas", "ptVec", "alfa0"],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
 
+        self.connect("geometry.x_ptVec0", "ptVec") # connect the geometry to the beam and lifting line solver
 
     def configure(self):
 
-        self.geometry.nom_add_discipline_coords("leptVec", LECoords.flatten())
-        self.geometry.nom_add_discipline_coords("teptVec", TECoords.flatten())
+        # ************************************************
+        #     Geometry
+        # ************************************************
+        self.geometry.nom_add_discipline_coords("ptVec", np.array(ptVec))
 
-        self, dvDictInfo = setup_OMdvgeo.setup(args, self, None, files)
+        self, geoDVDictInfo = setup_OMdvgeo.setup(args, self, None, files)
 
-        for dvName, value in dvDictInfo.items():
+        for dvName, value in geoDVDictInfo.items():
             self.dvs.add_output(dvName, val=value["value"])
             self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
 
-        # self.add_objective("")
+        # ************************************************
+        #     DCFoil DVs
+        # ************************************************
+        for key, value in valDict.items():
+            self.dvs.add_output(key, val=value)
+            self.add_design_var(key, lower=lowerDict[key], upper=upperDict[key], scaler=scaleDict[key])
+
+        self.add_objective("CDi")
+
 
 # ==============================================================================
 #                         MAIN DRIVER
@@ -162,7 +170,7 @@ if __name__ == "__main__":
     ]
     files["FFDFile"] = f"{args.input}/{args.foil}_ffd.xyz"
 
-    Grid = jl.DCFoil.MeshIO.add_meshfiles(files["gridFile"], {"junction-first":True})
+    Grid = jl.DCFoil.MeshIO.add_meshfiles(files["gridFile"], {"junction-first": True})
     # Unpack for this code. Remember Julia is transposed from Python
     LECoords = np.array(Grid.LEMesh).T
     TECoords = np.array(Grid.TEMesh).T
@@ -171,7 +179,9 @@ if __name__ == "__main__":
     # ************************************************
     #     DCFoil options setup
     # ************************************************
-    solverOptions, appendageParams, appendageList, valDict, lowerDict, upperDict, scaleDict = setup_dcfoil.setup(args, None, files, None, outputDir)
+    solverOptions, appendageParams, appendageList, valDict, lowerDict, upperDict, scaleDict = setup_dcfoil.setup(
+        args, None, files, None, outputDir
+    )
     # Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
     solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
 
@@ -193,12 +203,29 @@ if __name__ == "__main__":
         "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
     }
 
+    print("Running setup...")
+    prob.setup()
 
     # ************************************************
     #     Execution
     # ************************************************
-    print("Running setup...")
-    prob.setup()
-
     print("Running model...")
     prob.run_model()
+
+    # print("ptVec", prob.get_val("geometry.x_ptVec0").reshape(-1, 3))
+    print("deflections", prob.get_val("deflections"))
+    print("CL", prob.get_val("CL"))
+    print("CDi", prob.get_val("CDi"))
+
+    print(20 * "=")
+    print("setting sweep to 45 deg")
+    print(20 * "=")
+    prob.set_val("sweep", 45.0)
+
+    prob.run_model()
+    # print("ptVec", prob.get_val("geometry.x_ptVec0").reshape(-1, 3))
+    print("deflections", prob.get_val("deflections"))
+    print("CL", prob.get_val("CL"))
+    print("CDi", prob.get_val("CDi"))
+
+    breakpoint()

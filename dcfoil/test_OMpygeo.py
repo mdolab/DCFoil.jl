@@ -159,7 +159,7 @@ nnodes = len(ptVec) // 3 // 2
 XCoords = ptVec.reshape(-1, 3)
 LEcoords = XCoords[:nnodes]
 TEcoords = XCoords[nnodes:]
-breakpoint()
+
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
@@ -204,8 +204,9 @@ class Top(Multipoint):
         self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
         self.add_subsystem("mesh", om.IndepVarComp())
 
-        self.mesh.add_output("x_leptVec0", val=LEcoords.flatten(), distributed=True)
-        self.mesh.add_output("x_teptVec0", val=TEcoords.flatten(), distributed=True)
+        # self.mesh.add_output("x_leptVec0", val=LEcoords.flatten(), distributed=True)
+        # self.mesh.add_output("x_teptVec0", val=TEcoords.flatten(), distributed=True)
+        self.mesh.add_output("x_ptVec0", val=ptVec, distributed=True)
 
         self.add_subsystem(
             "geometry",
@@ -213,13 +214,15 @@ class Top(Multipoint):
             promotes=["twist", "sweep", "dihedral", "taper", "span"],
         )
 
-        self.connect("mesh.x_leptVec0", "geometry.x_leptVec_in")
-        self.connect("mesh.x_teptVec0", "geometry.x_teptVec_in")
+        # self.connect("mesh.x_leptVec0", "geometry.x_leptVec_in")
+        # self.connect("mesh.x_teptVec0", "geometry.x_teptVec_in")
+        self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")
 
     def configure(self):
 
-        self.geometry.nom_add_discipline_coords("leptVec", LEcoords.flatten())
-        self.geometry.nom_add_discipline_coords("teptVec", TEcoords.flatten())
+        # self.geometry.nom_add_discipline_coords("leptVec", LEcoords.flatten())
+        # self.geometry.nom_add_discipline_coords("teptVec", TEcoords.flatten())
+        self.geometry.nom_add_discipline_coords("ptVec", ptVec)
 
         self = setup_OMdvgeo.setup(args, self, None, files)
 
@@ -342,10 +345,12 @@ if __name__ == "__main__":
 
                     print("Writing ptSets to tecplot...")
 
-                    ptSetName = "x_leptVec0"
+                    ptSetName = "x_ptVec0"
                     DVGeo.writePointSet(ptSetName, f"{dirName}/twist_{i_frame:03d}", solutionTime=i_frame)
-                    ptSetName = "x_teptVec0"
-                    DVGeo.writePointSet(ptSetName, f"{dirName}/twist_{i_frame:03d}", solutionTime=i_frame)
+                    # ptSetName = "x_leptVec0"
+                    # DVGeo.writePointSet(ptSetName, f"{dirName}/twist_{i_frame:03d}", solutionTime=i_frame)
+                    # ptSetName = "x_teptVec0"
+                    # DVGeo.writePointSet(ptSetName, f"{dirName}/twist_{i_frame:03d}", solutionTime=i_frame)
 
                     i_frame += 1
 
@@ -377,10 +382,12 @@ if __name__ == "__main__":
 
                 print("Writing ptSets to tecplot...")
 
-                ptSetName = "x_leptVec0"
+                ptSetName = "x_ptVec0"
                 DVGeo.writePointSet(ptSetName, f"{dirName}/span_{i_frame:03d}", solutionTime=i_frame)
-                ptSetName = "x_teptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/span_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/span_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/span_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
@@ -414,10 +421,12 @@ if __name__ == "__main__":
 
                 print("Writing ptSets to tecplot...")
 
-                ptSetName = "x_leptVec0"
+                ptSetName = "x_ptVec0"
                 DVGeo.writePointSet(ptSetName, f"{dirName}/sweep_{i_frame:03d}", solutionTime=i_frame)
-                ptSetName = "x_teptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/sweep_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/sweep_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/sweep_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
@@ -447,10 +456,12 @@ if __name__ == "__main__":
 
                 print("Writing ptSets to tecplot...")
 
-                ptSetName = "x_leptVec0"
+                ptSetName = "x_ptVec0"
                 DVGeo.writePointSet(ptSetName, f"{dirName}/taper_{i_frame:03d}", solutionTime=i_frame)
-                ptSetName = "x_teptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/taper_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/taper_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/taper_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
@@ -489,10 +500,12 @@ if __name__ == "__main__":
 
                 print("Writing ptSets to tecplot...")
 
-                ptSetName = "x_leptVec0"
+                ptSetName = "x_ptVec0"
                 DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-                ptSetName = "x_teptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
@@ -510,10 +523,12 @@ if __name__ == "__main__":
                     DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
                     print("Writing ptSets to tecplot...")
 
-                    ptSetName = "x_leptVec0"
+                    ptSetName = "x_ptVec0"
                     DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-                    ptSetName = "x_teptVec0"
-                    DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                    # ptSetName = "x_leptVec0"
+                    # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                    # ptSetName = "x_teptVec0"
+                    # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
 
                     i_frame += 1
 
@@ -531,10 +546,12 @@ if __name__ == "__main__":
 
                 print("Writing ptSets to tecplot...")
 
-                ptSetName = "x_leptVec0"
+                ptSetName = "x_ptVec0"
                 DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-                ptSetName = "x_teptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
@@ -553,10 +570,12 @@ if __name__ == "__main__":
 
                 print("Writing ptSets to tecplot...")
 
-                ptSetName = "x_leptVec0"
+                ptSetName = "x_ptVec0"
                 DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-                ptSetName = "x_teptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
 
