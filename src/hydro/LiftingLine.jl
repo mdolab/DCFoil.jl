@@ -801,6 +801,150 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
 
 end
 
+function compute_liftslopes(Gconv, ∂Gconv, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
+    """
+    Compute the lift curve slope of the wing at the converged solution
+    """
+
+    
+    # --- Compute the lift curve slope ---
+    ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
+    ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
+
+    # TODO: perturb beta as well to get the lift curve slope wrt to sideslip angle for the strut sections
+    
+    # ************************************************
+    #     Method 2
+    # ************************************************
+    ∂α = FlowCond.alpha + Δα # FD
+
+    ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+    ∂Uinf = norm_cs_safe(∂Uinfvec)
+    ∂uvec = ∂Uinfvec / FlowCond.Uinf
+    ∂FlowCond = FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
+
+    # ---------------------------
+    #   Calculate influence matrix
+    # ---------------------------
+    ∂TV_influence = compute_TVinfluences(∂FlowCond, LLMesh)
+
+    # ---------------------------
+    #   Solve for circulation
+    # ---------------------------
+    # --- Pack up parameters for the NL solve ---
+    ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
+
+    # --- Nonlinear solve for circulation distribution ---
+    ∂Gconv, ∂residuals = do_newton_raphson(compute_LLresiduals, compute_LLresJacobian, Gconv, nothing;
+        solverParams=∂LLNLParams, is_verbose=false,
+        appendageOptions=appendageOptions, solverOptions=solverOptions,
+        mode="FiDi"  # this is the fastest
+    )
+    # --- Compute the lift curve slope ---
+    ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
+    ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
+
+    return ∂cl∂α
+end
+
+function compute_dcladXpt(Gconv_i, Gconv_f, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FiDi")
+    """
+    Derivative of the lift slope wrt the design variables
+    """
+
+    dcldX_f = zeros(npt_wing, length(ptVec))
+    dcldX_i = zeros(npt_wing, length(ptVec))
+    appendageParams_da = copy(appendageParams)
+    appendageParams_da["alfa0"] = appendageParams["alfa0"] + Δα
+
+    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+
+        dh = 1e-7
+        idh = 1 / dh
+
+        # ************************************************
+        #     First time with current angle of attack
+        # ************************************************
+        LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+        f_i = LLOutputs_i.cl
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+            f_f = LLOutputs_f.cl
+
+            dcldX_i[:, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+
+        # writedlm("dcldX_i-$(mode).csv", dcldX_i, ',')
+
+        # ************************************************
+        #     Second time with perturbed angle of attack
+        # ************************************************
+
+        LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+        f_i = LLOutputs_i.cl
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+            f_f = LLOutputs_f.cl
+            dcldX_f[:, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+        # writedlm("dcldX_f-$(mode).csv", dcldX_f, ',')
+
+
+    elseif uppercase(mode) == "IMPLICIT"
+        function compute_directMatrix(∂r∂u, ∂r∂xPt)
+
+            Φ = ∂r∂u \ ∂r∂xPt
+            return Φ
+        end
+        # ************************************************
+        #     First time with current converged solution
+        # ************************************************
+
+        # println("∂r∂Γ") # 2 sec, so it's fast
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv_i, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        # println("∂r∂Xpt") # ACCELERATE THIS!!?
+        # Takes about 4 sec in pure julia and about 20sec from python
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv_i, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions;
+            # mode="FAD",
+            mode="FiDi", # fastest
+        )
+
+        ∂cl∂Γ = diagm(2 * LLOutputs_i.cl ./ LLOutputs_i.Γdist)
+        ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
+
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        dcldX_i = ∂cl∂X - ∂cl∂Γ * Φ
+
+
+        # ************************************************
+        #     Second time with perturbed angle of attack
+        # ************************************************
+
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv_f, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
+
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv_f, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
+        ∂cl∂Γ = diagm(2 * LLOutputs_f.cl ./ LLOutputs_f.Γdist)
+
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        dcldX_f = ∂cl∂X - ∂cl∂Γ * Φ
+
+    end
+
+    dcladXpt = (dcldX_f - dcldX_i) ./ Δα
+
+    return dcladXpt
+end
+
 function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     """
     """
@@ -1247,7 +1391,7 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
     NFORCES = 3
     NFORCECOEFFS = 3
     NQUANTS = 1
-    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS)
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS + NPT_WING)
     ∂I∂G = zeros(DTYPE, length(outputVector), length(Gconv))
 
     function compute_outputsFromGConv(Gconv)
@@ -1257,7 +1401,7 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
         ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)))
+        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
 
         return outputvector
     end
@@ -1266,7 +1410,7 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
         # backend = AD.ReverseDiffBackend()
         backend = AD.ForwardDiffBackend()
         ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
-    
+
     elseif uppercase(mode) == "FIDI"
         # Compares well with finite difference 
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
@@ -1354,7 +1498,7 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, appendagePar
     NFORCES = 3
     NFORCECOEFFS = 3
     NQUANTS = 1
-    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS)
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS + NPT_WING)
     ∂I∂Xpt = zeros(DTYPE, length(outputVector), length(ptVec))
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
@@ -1370,9 +1514,9 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, appendagePar
 
         ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
-        # THIS ORDER MATTER
+        # THIS ORDER MATTER. Check CostFuncsInOrder variable
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)))
+        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
 
         return outputVector
     end
@@ -1555,6 +1699,7 @@ function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, append
 
     return ∂collocationPt∂Xpt
 end
+
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     """
     Compute the influence of a straight semi-infinite vortex filament
