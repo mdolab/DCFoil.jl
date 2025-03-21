@@ -161,7 +161,7 @@ nodeConn = np.array(
         [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
     ]
 )
-nNodes = 5
+nNodes = 21
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
@@ -422,10 +422,8 @@ if __name__ == "__main__":
         )
 
         # hydroelastic coupled solver
-        # NOTE: This fails!!!
-        # couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)  #, use_apply_nonlinear=True)
-        # couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, iprint=2)
-        # couple.linear_solver = om.DirectSolver()   # for adjoint
+        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
+        couple.linear_solver = om.DirectSolver()   # for adjoint
 
     # ************************************************
     #     Setup problem
@@ -463,9 +461,10 @@ if __name__ == "__main__":
     # prob.model.nonlinear_solver.linesearch.options["maxiter"] = 10
     # prob.model.nonlinear_solver.linesearch.options["iprint"] = 2
 
-    prob.setup(check=True)
+    prob.setup(check=False)
 
     prob.set_val("ptVec", ptVec)
+    prob.set_val("ptVec_def", ptVec)  # also need this, otherwise DC foil initialization fails
 
     if args.run_struct:
         tractions = prob.get_val("beamstruct.traction_forces")
@@ -484,7 +483,7 @@ if __name__ == "__main__":
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
 
     # setup fiber angle
-    fiber_angle = np.deg2rad(-15)
+    fiber_angle = np.deg2rad(0)
     prob.set_val('beamstruct.theta_f', fiber_angle)
     prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
     prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
@@ -510,11 +509,13 @@ if __name__ == "__main__":
     # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
     # # manual NLBGS loop!!
-    for i in range(10):
-        prob.run_model()
     # model.hydroelastic.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
     # model.hydroelastic.linear_solver = om.DirectSolver()   # for adjoint
     # prob.run_model()
+
+    # manual NLBGS loop!!
+    # for i in range(10):
+    #     prob.run_model()
 
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
