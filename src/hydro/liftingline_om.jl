@@ -51,13 +51,18 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
         OpenMDAOCore.VarData("alfa0", val=0.0),
     ]
     outputs = [
-        OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),]
+        OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("gammas_d", val=zeros(LiftingLine.NPT_WING)), # perturbed gammas
+    ]
 
     partials = [
         # --- Residuals ---
         OpenMDAOCore.PartialsData("gammas", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("gammas", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("gammas", "alfa0", method="fd"),
+        OpenMDAOCore.PartialsData("gammas_d", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("gammas_d", "gammas_d", method="exact"),
+        OpenMDAOCore.PartialsData("gammas_d", "alfa0", method="fd"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="exact")] # define the partials
 
@@ -97,7 +102,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacements;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -107,9 +112,16 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
         options=options,
     )
 
+    ∂α = FlowCond.alpha + LiftingLine.Δα # FD
+    ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+    ∂Uinf = norm_cs_safe(∂Uinfvec)
+    ∂uvec = ∂Uinfvec / FlowCond.Uinf
+    ∂FlowCond = LiftingLine.FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
+
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
+    ∂TV_influence = LiftingLine.compute_TVinfluences(∂FlowCond, LLMesh)
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
 
     # ---------------------------
@@ -128,15 +140,24 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     # --- Nonlinear solve for circulation distribution ---
-    Gconv, _, _ = LiftingLine.do_newton_raphson(
+    Gconv0, _, _ = LiftingLine.do_newton_raphson(
         LiftingLine.compute_LLresiduals, LiftingLine.compute_LLresJacobian, g0, nothing;
         maxIters=50, tol=1e-6, mode="FiDi", solverParams=LLNLParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
 
+    Gconv_d, _, _ = LiftingLine.do_newton_raphson(
+        LiftingLine.compute_LLresiduals, LiftingLine.compute_LLresJacobian, Gconv0, nothing;
+        maxIters=50, tol=1e-6, mode="FiDi", solverParams=∂LLNLParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
+
     # --- Set all values ---
-    for (ii, gamma) in enumerate(Gconv)
+    for (ii, gamma) in enumerate(Gconv0)
         outputs["gammas"][ii] = gamma
+    end
+
+    for (ii, gamma) in enumerate(Gconv_d)
+        outputs["gammas_d"][ii] = gamma
     end
 
     return nothing
@@ -150,8 +171,9 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     # println("running linearize...")
 
     ptVec = inputs["ptVec"]
-    gammas = outputs["gammas"]
     alfa0 = inputs["alfa0"][1]
+    gammas = outputs["gammas"]
+    gammas_d = outputs["gammas_d"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -185,8 +207,8 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
         airfoil_xy=airfoilXY,
         options=options,
     )
-    ∂α = FlowCond.alpha + LiftingLine.Δα # FD
 
+    ∂α = FlowCond.alpha + LiftingLine.Δα # FD
     ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
     ∂Uinf = norm_cs_safe(∂Uinfvec)
     ∂uvec = ∂Uinfvec / FlowCond.Uinf
@@ -196,8 +218,10 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     #   Calculate influence matrix
     # ---------------------------
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+    ∂TV_influence = LiftingLine.compute_TVinfluences(∂FlowCond, LLMesh)
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     # ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="FiDi")
     ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="CS") # use very accurate derivatives only when necessary
@@ -214,6 +238,15 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
         partials["gammas", "ptVec"][ii, :] = ∂ri∂Xpt
     end
 
+    ∂r∂g_d = LiftingLine.compute_LLresJacobian(gammas_d; solverParams=∂LLNLParams, mode="CS") # use very accurate derivatives only when necessary
+    for (ii, ∂ri∂g) in enumerate(eachrow(∂r∂g_d))
+        partials["gammas_d", "gammas_d"][ii, :] = ∂ri∂g
+    end
+
+    ∂r∂xPt_d = LiftingLine.compute_∂r∂Xpt(gammas_d, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    for (ii, ∂ri∂Xpt) in enumerate(eachrow(∂r∂xPt_d))
+        partials["gammas_d", "ptVec"][ii, :] = ∂ri∂Xpt
+    end
 
     return nothing
 end
@@ -294,6 +327,7 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
     gammas = outputs["gammas"]
+    gammas_d = outputs["gammas_d"]
     residuals["gammas"] .= 0.0
 
     # --- Deal with options here ---
@@ -329,9 +363,16 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
         options=options,
     )
 
+    ∂α = FlowCond.alpha + LiftingLine.Δα # FD
+    ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+    ∂Uinf = norm_cs_safe(∂Uinfvec)
+    ∂uvec = ∂Uinfvec / FlowCond.Uinf
+    ∂FlowCond = LiftingLine.FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
+
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
+    ∂TV_influence = LiftingLine.compute_TVinfluences(∂FlowCond, LLMesh)
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
 
     # ---------------------------
@@ -340,13 +381,19 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     sweepAng = LLMesh.sweepAng
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     resVec = LiftingLine.compute_LLresiduals(gammas; solverParams=LLNLParams)
+    resVec_d = LiftingLine.compute_LLresiduals(gammas_d; solverParams=∂LLNLParams)
 
 
     # Residuals are of the output state variable
     for (ii, res) in enumerate(resVec)
         residuals["gammas"][ii] = res
+    end
+
+    for (ii, res) in enumerate(resVec_d)
+        residuals["gammas_d"][ii] = res
     end
 
     return nothing
@@ -376,6 +423,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
         OpenMDAOCore.VarData("alfa0", val=0.0),
         OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("gammas_d", val=zeros(LiftingLine.NPT_WING)),
     ]
 
     outputs = [
@@ -392,6 +440,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)),
         OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
         OpenMDAOCore.VarData("clmax", val=0.0), # KS aggregated clmax
+        OpenMDAOCore.VarData("cl", val=zeros(LiftingLine.NPT_WING)), # all cl along the wing
         # Empirical drag build up
         OpenMDAOCore.VarData("CDw", val=0.0),
         OpenMDAOCore.VarData("CDpr", val=0.0),
@@ -411,6 +460,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CDi", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("CS", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("clmax", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("cl", "ptVec", method="exact"), # good
         OpenMDAOCore.PartialsData("F_x", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("F_y", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("F_z", "ptVec", method="exact"),
@@ -428,7 +478,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("Dj", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("Ds", "ptVec", method="exact"),
         # --- lift slopes for dynamic solution ---
-        OpenMDAOCore.PartialsData("cla", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("cla", "ptVec", method="exact"), # good, but the FD check will be wrong because of how the cla is calculated. See test script
         # --- Hydro mesh ---
         OpenMDAOCore.PartialsData("collocationPts", "ptVec", method="exact"),
         # --- WRT gammas ---
@@ -436,6 +486,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CS", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("clmax", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("cl", "gammas", method="exact"), # good
         OpenMDAOCore.PartialsData("F_x", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("F_y", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("F_z", "gammas", method="exact"),
@@ -458,6 +509,7 @@ end
 function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
 
     Gconv = inputs["gammas"]
+    Gconv_d = inputs["gammas_d"]
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
 
@@ -524,6 +576,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["CDi"][1] = CDi
     outputs["CS"][1] = CS
     outputs["clmax"][1] = ksclmax
+    outputs["cl"][:] = clvec
 
     for (ii, fi) in enumerate(eachrow(DimForces))
         outputs["forces_dist"][ii, :] = fi
@@ -546,7 +599,10 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     # ---------------------------
     #   Lift slope solution
     # ---------------------------
-    # TODO: PICKUP HERE
+    Gconv = convert(Vector{Float64}, Gconv) # convert to vector because julia was complaining
+    Gconv_d = convert(Vector{Float64}, Gconv_d) # convert to vector because julia was complaining
+    cla = LiftingLine.compute_liftslopes(Gconv, Gconv_d, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
+    outputs["cla"][:] = cla
 
     return nothing
 end
@@ -556,6 +612,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     """
 
     Gconv = inputs["gammas"]
+    Gconv_d = inputs["gammas_d"]
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
 
@@ -576,17 +633,23 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # mode = "RAD" # broken
     mode = "FAD"
 
-    costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist"]
+    costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist", "cl"]
+    FXIND = 1
+    CLMAXIND = 7
 
     ∂f∂x = LiftingLine.compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=mode)
 
-    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x[1:7, :]))
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x[FXIND:CLMAXIND, :]))
         # println("shape: ", size(∂fi∂x))
         partials[costFuncsInOrder[ii], "ptVec"][1, :] = ∂fi∂x
     end
 
-    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8:end])
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8:end-LiftingLine.NPT_WING])
         partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
+    end
+
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[end-LiftingLine.NPT_WING+1:end])
+        partials["cl", "ptVec"][ii, :] = ∂fi∂x
     end
 
     # ---------------------------
@@ -613,8 +676,23 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # ---------------------------
     #   Lift slopes
     # ---------------------------
-    println("cla deriv don't work") #TODO: PICKUP HERE
-    # partials["cla", "gammas"] = 
+    dcldXpt_i = partials["cl", "ptVec"]
+    appendageParams_d = copy(appendageParams)
+    appendageParams_d["alfa0"] = alfa0 + LiftingLine.Δα
+    ∂f∂x_d = LiftingLine.compute_∂I∂Xpt(Gconv_d, ptVec, nodeConn, appendageParams_d, appendageOptions, solverOptions; mode=mode)
+    dcldXpt_f = ∂f∂x_d[end-LiftingLine.NPT_WING+1:end, :]
+
+    dcladXpt = (dcldXpt_f - dcldXpt_i) / LiftingLine.Δα
+    # println("dcladXpt")
+    # show(stdout, "text/plain", dcladXpt[1:20, 1:20])
+    # println()
+    # println("dcldXpt_i")
+    # show(stdout, "text/plain", dcladXpt[1:20, 1:20])
+
+    for (ii, ∂claidXpt) in enumerate(eachrow(dcladXpt))
+        partials["cla", "ptVec"][ii, :] = ∂claidXpt
+    end
+    # println("cla deriv don't work") # 
 
     # ************************************************
     #     Derivatives wrt gammas (2025-03-02 these are all good)
@@ -642,12 +720,21 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         options=options,
     )
 
+
+    ∂α = FlowCond.alpha + LiftingLine.Δα # FD
+    ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+    ∂Uinf = norm_cs_safe(∂Uinfvec)
+    ∂uvec = ∂Uinfvec / FlowCond.Uinf
+    ∂FlowCond = LiftingLine.FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
+
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
     TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+    ∂TV_influence = LiftingLine.compute_TVinfluences(∂FlowCond, LLMesh)
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+    ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     ∂f∂g = LiftingLine.compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions) # Forward Diff by default
 
@@ -655,12 +742,27 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         partials[costFuncsInOrder[ii], "gammas"][:] = ∂fi∂g
     end
 
-    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8:end])
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8:end-LiftingLine.NPT_WING])
         partials["forces_dist", "gammas"][ii, :] = ∂fi∂g
+    end
+
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[end-LiftingLine.NPT_WING+1:end])
+        partials["cl", "gammas"][ii, :] = ∂fi∂g
     end
 
     partials["CDw", "gammas"][1, :] = ∂Drag∂G[1, :]
     partials["Dw", "gammas"][1, :] = ∂Drag∂G[5, :]
+
+    # ---------------------------
+    #   Lift slopes
+    # ---------------------------
+    dcldg_i = partials["cl", "gammas"]
+    ∂f∂g_d = LiftingLine.compute_∂I∂G(Gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions) # Forward Diff by default
+    dcldg_f = ∂f∂g_d[end-LiftingLine.NPT_WING+1:end, :]
+    dcladg = (dcldg_f - dcldg_i) / LiftingLine.Δα
+    for (ii, dclaidg) in enumerate(eachcol(dcladg))
+        partials["cla", "gammas"][ii, :] = dclaidg
+    end
 
     return nothing
 end
