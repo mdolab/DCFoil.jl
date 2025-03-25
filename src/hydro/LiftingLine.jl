@@ -455,12 +455,14 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     wing_joint_xyz_xcomp = reshape(wing_xyz[XDIM, :] + δ * local_chords .* cos.(localSweeps), 1, npt_wing + 1)
     wing_joint_xyz_eff_xcomp = reshape(wing_xyz_eff[XDIM, :, :] + δ * local_chords_colmat .* cos.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
-
     wing_joint_xyz_ycomp = reshape(wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps), 1, npt_wing + 1)
     wing_joint_xyz_eff_ycomp = reshape(transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
-    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, Zeros, dims=1)
-    wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, zeros(1, npt_wing, npt_wing + 1), dims=1)
+    wing_joint_xyz_zcomp = reshape(wing_xyz[ZDIM, :], 1, npt_wing + 1)
+    wing_joint_xyz_eff_zcomp = reshape(transpose(wing_xyz_eff[ZDIM, :, :]), 1, npt_wing, npt_wing + 1)
+
+    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, wing_joint_xyz_zcomp, dims=1)
+    wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, wing_joint_xyz_eff_zcomp, dims=1)
 
     # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
@@ -1432,27 +1434,29 @@ function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOpt
     return ∂r∂Γ
 end
 
-function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
-    ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
-
+    
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
-
-    function compute_resFromXpt(xPt)
-        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
-
+    
+    function compute_resFromXpt(xPt, xDisplCol)
+        displCol_in = reshape(xDisplCol, size(displCol)...)
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
+        
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
         return resVec
     end
-
+    
     # ************************************************
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
+        ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
+        ∂r∂Xdispl = zeros(DTYPE, length(Gconv), length(displCol))
         dh = 1e-5
 
-        resVec_i = compute_resFromXpt(ptVec) # initialize the solver
+        resVec_i = compute_resFromXpt(ptVec, vec(displCol)) # initialize the solver
 
         # @inbounds begin # no speedup
         for ii in eachindex(ptVec)
@@ -1463,6 +1467,17 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
             ptVec[ii] -= dh
 
             ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+        end
+
+        for ii in eachindex(displCol)
+            displCol[ii] += dh
+
+            resVec_f = compute_resFromXpt(ptVec, vec(displCol))
+
+            displCol[ii] -= dh
+
+            ∂r∂Xdispl[:, ii] = (resVec_f - resVec_i) / dh
+            
         end
         # end
     elseif uppercase(mode) == "CS" # does not work
@@ -1476,18 +1491,21 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOp
             ptVecCS[ii] -= 1im * dh
             ∂r∂Xpt[:, ii] = imag(resVec_f) / dh
         end
-    elseif uppercase(mode) == "RAD" # It's broken # This takes nearly 15 seconds compared to 4 sec in pure julia
-        # backend = AD.ReverseDiffBackend()
-        backend = AD.ZygoteBackend()
+    elseif uppercase(mode) == "RAD" # It's broken
+
+        backend = AD.ReverseDiffBackend() # stack overflow errors?
+        # backend = AD.ZygoteBackend() # Broken and does not work without buffering over VPM solve
         ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
 
     elseif uppercase(mode) == "FAD"
         backend = AD.ForwardDiffBackend()
-        ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
+        # ∂r∂Xpt, = AD.jacobian(backend, (xPt, xDisplCol) -> compute_resFromXpt(xPt, xDisplCol), ptVec, vec(displCol))
+        ∂r∂Xpt = ForwardDiff.jacobian((xPt) -> compute_resFromXpt(xPt, vec(displCol)), ptVec)
+        ∂r∂Xdispl = ForwardDiff.jacobian((xDisplCol) -> compute_resFromXpt(ptVec, xDisplCol), vec(displCol))
 
     end
 
-    return ∂r∂Xpt
+    return ∂r∂Xpt, ∂r∂Xdispl
 end
 
 function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
