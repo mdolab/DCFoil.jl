@@ -101,12 +101,12 @@ class Top(Multipoint):
             "liftingline",
             impcomp_LL_solver,
             promotes_inputs=["ptVec", "alfa0"],
-            promotes_outputs=["gammas"],
+            promotes_outputs=["gammas", "gammas_d"],
         )
         self.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "ptVec", "alfa0"],  # promotion auto connects these variables
+            promotes_inputs=["gammas","gammas_d", "ptVec", "alfa0"],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
 

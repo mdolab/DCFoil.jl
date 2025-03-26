@@ -245,6 +245,43 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
 
 # Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
 solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
+
+# ==============================================================================
+#                         Helper func
+# ==============================================================================
+def plot_cla():
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import niceplots as nplt
+
+    fname = "output/CLa.pdf"
+    dosave = not not fname
+
+    # plt.rcParams.update(myOptions)
+    niceColors = sns.color_palette("tab10")
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
+    cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    # Create figure object
+    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10))
+
+    ax = axes
+    ax.plot(prob.get_val("collocationPts")[1, :], prob.get_val("cla"))
+
+    ax.set_xlabel("spanwise location [m]")
+    ax.set_ylabel("$c_{\ell_\\alpha}$", rotation="horizontal", ha="right", va="center")
+
+    plt.show(block=(not dosave))
+    # nplt.all()
+    # for ax in axes.flatten():
+    nplt.adjust_spines(ax, outward=True)
+    if dosave:
+        plt.savefig(fname, format="pdf")
+        print("Saved to:", fname)
+    plt.close()
+
+
+npt_wing = jl.LiftingLine.NPT_WING
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -306,13 +343,19 @@ if __name__ == "__main__":
         model.add_subsystem(
             "liftingline",
             impcomp_LL_solver,
-            promotes_inputs=["ptVec", "alfa0"],
-            promotes_outputs=["gammas"],
+            promotes_inputs=["ptVec", "alfa0", "displacements_col"],
+            promotes_outputs=["gammas", "gammas_d"],
         )
         model.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "ptVec", "alfa0"],  # promotion auto connects these variables
+            promotes_inputs=[
+                "gammas",
+                "gammas_d",
+                "ptVec",
+                "alfa0",
+                "displacements_col",
+            ],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
     else:
@@ -332,13 +375,19 @@ if __name__ == "__main__":
         model.add_subsystem(
             "liftingline",
             impcomp_LL_solver,
-            promotes_inputs=["ptVec", "alfa0"],
-            promotes_outputs=["gammas"],
+            promotes_inputs=["ptVec", "alfa0", "displacements_col"],
+            promotes_outputs=["gammas", "gammas_d"],
         )
         model.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "ptVec", "alfa0"],  # promotion auto connects these variables
+            promotes_inputs=[
+                "gammas",
+                "gammas_d",
+                "ptVec",
+                "alfa0",
+                "displacements_col",
+            ],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
         # # --- Now add load transfer capabilities ---
@@ -390,13 +439,16 @@ if __name__ == "__main__":
         tractions[-6] = 10.0
         prob.set_val("beamstruct.traction_forces", tractions)
     elif args.run_flow:
-        prob.set_val("liftingline.gammas", np.zeros(40))
+        prob.set_val("liftingline.gammas", np.zeros(npt_wing))
+        prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
     else:
+        prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
+        prob.set_val("alfa0", appendageParams["alfa0"])
         tractions = prob.get_val("beamstruct.traction_forces")
         tractions[-6] = 10.0
         prob.set_val("beamstruct.traction_forces", tractions)
-        prob.set_val("liftingline.gammas", np.zeros(40))
+        prob.set_val("liftingline.gammas", np.zeros(npt_wing))
 
     # ************************************************
     #     Evaluate model
@@ -433,11 +485,14 @@ if __name__ == "__main__":
     elif args.run_flow:
         print("nondimensional gammas", prob.get_val("gammas"))
         print("CL", prob.get_val("CL"))  # should be around CL = 0.507 something
+        print("CLa", prob.get_val("cla"))  #
         # print("force distribution", prob.get_val("forces_dist"))
 
     else:
         print("nondimensional gammas", prob.get_val("liftingline.gammas"))
+        print("nondimensional gammas_d", prob.get_val("liftingline.gammas_d"))
         print("CL", prob.get_val("CL"))
+        print("CLa", prob.get_val("cla"))  #
         # print("force distribution", prob.get_val("forces_dist"))
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
@@ -455,9 +510,12 @@ if __name__ == "__main__":
             f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}",
         )
 
+    # plot_cla()
+
     # --- Check partials after you've solve the system!! ---
+    starttime = time.time()
     if args.test_partials:
-    
+
         np.set_printoptions(linewidth=1000, precision=4)
 
         fileName = "partials.out"
@@ -471,12 +529,13 @@ if __name__ == "__main__":
             out_stream=f,
             includes=["liftingline_funcs"],
             method="fd",
-            step=1e-4, 
+            step=1e-4,
             compact_print=True,
         )
         prob.check_partials(
             out_stream=f,
             includes=["liftingline_funcs"],
+            # includes=["liftingline"],
             method="fd",
             step=1e-4,  # now we're cooking :)
             compact_print=False,
@@ -498,6 +557,9 @@ if __name__ == "__main__":
         )  # THESE ARE GOOD
         # breakpoint()
         f.close()
+
+        endtime = time.time()
+        print(f"partials testing time: {endtime-starttime}")
 
     # --- Testing other values ---
     # prob.set_val("liftingline.x", 5.0)
