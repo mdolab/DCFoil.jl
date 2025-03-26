@@ -9,6 +9,7 @@
 OUTPUT/
 POSTPROCESSING/MOVIES/
 POSTPROCESSING/PLOTS/
+embedding/
 *.jld*
 *.hst
 

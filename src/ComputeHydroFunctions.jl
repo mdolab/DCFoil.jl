@@ -178,7 +178,8 @@ function compute_besselInt(Uinf, span, Fnh)
     return I
 end
 
-function compute_dragsFromX(ptVec, gammas, nodeConn, appendageParams, appendageOptions, solverOptions)
+function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
@@ -193,7 +194,8 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, appendageParams, appendageO
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords;
+    displCol = reshape(displVec, 6, length(displVec) ÷ 6)
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -221,22 +223,62 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, appendageParams, appendageO
     return vec([CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds])
 end
 
-function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
     # backend = AD.ReverseDiffBackend()
 
     # backend = AD.ZygoteBackend()
 
-    if uppercase(mode) == "RAD" # don't use this because it gives NaNs at the root and tip of the mesh
-        ∂I∂xDV = Zygote.jacobian((xPt, xGamma) -> compute_dragsFromX(xPt, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), ptVec, gammas)
-        # ∂I∂xDV = ReverseDiff.jacobian((xPt, xGamma) -> compute_dragsFromX(xPt, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), ptVec, gammas) # Reverse Diff is bugging out...
-        ∂Drag∂Xpt = ∂I∂xDV[1]
-        ∂Drag∂G = ∂I∂xDV[2]
-    elseif uppercase(mode) == "FAD"
+    # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+    displVec = vec((displCol))
+
+    if uppercase(mode) == "RAD" # RAD everything except the ptVec ones because this gave NaNs
+        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displCol)
+
         backend = AD.ForwardDiffBackend()
-        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), ptVec)
+
+    elseif uppercase(mode) == "FIDI"
+        outputVector = ["cdw", "cdpr", "cdj", "cds", "dw", "dpr", "dj", "ds"]
+        ∂Drag∂Xpt = zeros(DTYPE, length(outputVector), length(ptVec))
+        ∂Drag∂xdispl = zeros(DTYPE, length(outputVector), length(displCol))
+        dh = 1e-4
+
+        f_i = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+        for ii in eachindex(ptVec)
+
+            ptVec[ii] += dh
+
+            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+
+            ptVec[ii] -= dh
+
+            ∂Drag∂Xpt[:, ii] = (f_f - f_i) / dh
+        end
+        for ii in eachindex(displVec)
+
+            displVec[ii] += dh
+
+            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+
+            displVec[ii] -= dh
+
+            ∂Drag∂xdispl[:, ii] = (f_f - f_i) / dh
+
+        end
+
+        backend = AD.ZygoteBackend()
+        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), gammas)
+
+    elseif uppercase(mode) == "FAD"
+        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
+
+
+        backend = AD.ForwardDiffBackend()
         # @time ∂Drag∂G, = ReverseDiff.jacobian((xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
-        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), ptVec)
+    else
+        error("Mode not recognized")
     end
 
     # println("size of ∂I∂xDV: ", (∂I∂xDV))
@@ -244,7 +286,7 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, appendageParams, appe
     # writedlm("ddragdX-$(mode).csv", ∂Drag∂Xpt, ',')
     # writedlm("ddragdG-$(mode).csv", ∂Drag∂G, ',')
 
-    return ∂Drag∂Xpt, ∂Drag∂G
+    return ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G
 end
 
 # ************************************************

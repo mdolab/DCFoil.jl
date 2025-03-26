@@ -4,6 +4,9 @@
 @Time    :   2023/12/25
 @Author  :   Galen Ng
 @Desc    :   This is the openmdao wrapper for the lifting line
+            NOTE: When checking partials, the cla derivatives will be wrong from OpenMDAO FD because the
+            gammas_d are not perturbed as well
+            * Another tricky thing is python and julia store arrays differently so the order of the jacobians for non-vector inputs or outputs will be different. You'll see some transpose flattening code here. 
 """
 
 # --- Used in this script ---
@@ -48,6 +51,7 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
     # --- Define inputs and outputs ---
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(npt * 3 * 2)),
+        OpenMDAOCore.VarData("displacements_col", val=zeros(6, LiftingLine.NPT_WING)), # displacements of collocation pts
         OpenMDAOCore.VarData("alfa0", val=0.0),
     ]
     outputs = [
@@ -60,9 +64,11 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
         OpenMDAOCore.PartialsData("gammas", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("gammas", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("gammas", "alfa0", method="fd"),
+        OpenMDAOCore.PartialsData("gammas", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("gammas_d", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("gammas_d", "gammas_d", method="exact"),
         OpenMDAOCore.PartialsData("gammas_d", "alfa0", method="fd"),
+        OpenMDAOCore.PartialsData("gammas_d", "displacements_col", method="exact"),
     ]
     # partials = [OpenMDAOCore.PartialsData("*", "*", method="exact")] # define the partials
 
@@ -76,6 +82,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
 
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
+    displCol = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -102,7 +109,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacements;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -168,12 +175,11 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     This defines the derivatives of outputs
     """
 
-    # println("running linearize...")
-
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
     gammas = outputs["gammas"]
     gammas_d = outputs["gammas_d"]
+    displCol = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -198,7 +204,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -226,8 +232,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     # ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="FiDi")
     ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="CS") # use very accurate derivatives only when necessary
 
-    ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-
+    ∂r∂xPt, ∂r∂xdispl = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
     # This definition really breaks my head but it's basically ∂r / ∂ <second-var>
     for (ii, ∂ri∂g) in enumerate(eachrow(∂r∂g))
@@ -238,14 +243,24 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
         partials["gammas", "ptVec"][ii, :] = ∂ri∂Xpt
     end
 
+    for (ii, ∂ri∂xdispl) in enumerate(eachrow(∂r∂xdispl))
+        partials["gammas", "displacements_col"][ii, :] = ∂ri∂xdispl
+    end
+
     ∂r∂g_d = LiftingLine.compute_LLresJacobian(gammas_d; solverParams=∂LLNLParams, mode="CS") # use very accurate derivatives only when necessary
+
     for (ii, ∂ri∂g) in enumerate(eachrow(∂r∂g_d))
         partials["gammas_d", "gammas_d"][ii, :] = ∂ri∂g
     end
 
-    ∂r∂xPt_d = LiftingLine.compute_∂r∂Xpt(gammas_d, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    ∂r∂xPt_d, ∂r∂xdispl_d = LiftingLine.compute_∂r∂Xpt(gammas_d, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
     for (ii, ∂ri∂Xpt) in enumerate(eachrow(∂r∂xPt_d))
         partials["gammas_d", "ptVec"][ii, :] = ∂ri∂Xpt
+    end
+
+    for (ii, ∂ri∂xdispl) in enumerate(eachrow(∂r∂xdispl_d))
+        partials["gammas_d", "displacements_col"][ii, :] = ∂ri∂xdispl
     end
 
     return nothing
@@ -257,6 +272,7 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     """
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
+    displCol = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -281,7 +297,7 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -329,6 +345,7 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     gammas = outputs["gammas"]
     gammas_d = outputs["gammas_d"]
     residuals["gammas"] .= 0.0
+    displCol = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -353,7 +370,7 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -424,6 +441,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("alfa0", val=0.0),
         OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
         OpenMDAOCore.VarData("gammas_d", val=zeros(LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("displacements_col", val=zeros(6, LiftingLine.NPT_WING)),
     ]
 
     outputs = [
@@ -437,7 +455,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("M_x", val=0.0),
         OpenMDAOCore.VarData("M_y", val=0.0),
         OpenMDAOCore.VarData("M_z", val=0.0),
-        OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)), # not really going to use this since we have forces at collocation pts
         OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
         OpenMDAOCore.VarData("clmax", val=0.0), # KS aggregated clmax
         OpenMDAOCore.VarData("cl", val=zeros(LiftingLine.NPT_WING)), # all cl along the wing
@@ -465,6 +483,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("F_y", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("F_z", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("forces_dist", "ptVec", method="exact"),
+        # OpenMDAOCore.PartialsData("moments_dist", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("M_x", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("M_y", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("M_z", "ptVec", method="exact"),
@@ -491,6 +510,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("F_y", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("F_z", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("forces_dist", "gammas", method="exact"),
+        # OpenMDAOCore.PartialsData("moments_dist", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("M_x", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("M_y", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("M_z", "gammas", method="exact"),
@@ -499,8 +519,29 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("Dw", "gammas", method="exact"),
         # --- lift slopes for dynamic solution ---
         OpenMDAOCore.PartialsData("cla", "gammas", method="exact"),
+        # --- WRT displacements col ---
+        OpenMDAOCore.PartialsData("CL", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("CDi", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("CS", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("clmax", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("cl", "displacements_col", method="exact"), # good
+        OpenMDAOCore.PartialsData("F_x", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("F_y", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("F_z", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("forces_dist", "displacements_col", method="exact"),
+        # OpenMDAOCore.PartialsData("moments_dist", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("M_x", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("M_y", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("M_z", "displacements_col", method="exact"),
+        # Empirical drag build up
+        OpenMDAOCore.PartialsData("CDw", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("Dw", "displacements_col", method="exact"),
+        # --- lift slopes for dynamic solution ---
+        OpenMDAOCore.PartialsData("cla", "displacements_col", method="exact"), # good, but the FD check will be wrong because of how the cla is calculated. See test script
+        # --- Hydro mesh ---
+        OpenMDAOCore.PartialsData("collocationPts", "displacements_col", method="exact"),
         # --- AOA DVs ---
-        OpenMDAOCore.PartialsData("*", "alfa0", method="fd")
+        OpenMDAOCore.PartialsData("*", "alfa0", method="fd"),
     ]
 
     return inputs, outputs, partials
@@ -512,6 +553,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     Gconv_d = inputs["gammas_d"]
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
+    displCol = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -538,7 +580,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -557,16 +599,12 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
 
     DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
 
-    for (ii, DimForce) in enumerate(eachcol(DimForces))
-        outputs["forces_dist"][:, ii] = DimForce
-    end
-
     ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
     # ---------------------------
     #   Drag build up
     # ---------------------------
-    dragOutputs = LiftingLine.compute_dragsFromX(ptVec, Gconv, nodeConn, appendageParams, appendageOptions, solverOptions)
+    dragOutputs = LiftingLine.compute_dragsFromX(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions)
     CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds = dragOutputs
 
     outputs["F_x"][1] = IntegratedForces[XDIM]
@@ -615,6 +653,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     Gconv_d = inputs["gammas_d"]
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
+    displCol = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn
@@ -637,25 +676,40 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     FXIND = 1
     CLMAXIND = 7
 
-    ∂f∂x = LiftingLine.compute_∂I∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=mode)
+    ∂f∂x, ∂f∂xdispl = LiftingLine.compute_∂I∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode=mode)
+
 
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x[FXIND:CLMAXIND, :]))
-        # println("shape: ", size(∂fi∂x))
         partials[costFuncsInOrder[ii], "ptVec"][1, :] = ∂fi∂x
+    end
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl[FXIND:CLMAXIND, :]))
+        # transpose reshape flatten stuff bc julia and python store arrays differently
+        partials[costFuncsInOrder[ii], "displacements_col"][1, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
     end
 
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8:end-LiftingLine.NPT_WING])
         partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
     end
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[8:end-LiftingLine.NPT_WING])
+        # transpose reshape flatten stuff bc julia and python store arrays differently
+        partials["forces_dist", "displacements_col"][ii, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+    end
 
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[end-LiftingLine.NPT_WING+1:end])
         partials["cl", "ptVec"][ii, :] = ∂fi∂x
     end
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[end-LiftingLine.NPT_WING+1:end])
+        # transpose reshape flatten stuff bc julia and python store arrays differently
+        partials["cl", "displacements_col"][ii, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+    end
+
+    # println("size ∂f∂xdispl: ", size(∂f∂xdispl))
+    # println("size ∂f∂x: ", size(partials[costFuncsInOrder[1], "displacments_col"][:, :]))
 
     # ---------------------------
     #   Drag build up derivatives
     # --------------------------- 
-    ∂Drag∂Xpt, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
     partials["CDw", "ptVec"][1, :] = ∂Drag∂Xpt[1, :]
     partials["CDpr", "ptVec"][1, :] = ∂Drag∂Xpt[2, :]
     partials["CDj", "ptVec"][1, :] = ∂Drag∂Xpt[3, :]
@@ -664,6 +718,10 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     partials["Dpr", "ptVec"][1, :] = ∂Drag∂Xpt[6, :]
     partials["Dj", "ptVec"][1, :] = ∂Drag∂Xpt[7, :]
     partials["Ds", "ptVec"][1, :] = ∂Drag∂Xpt[8, :]
+    dCdwdxdisp = vec(transpose(reshape(∂Drag∂xdispl[1, :], 6, LiftingLine.NPT_WING))) # transpose reshape flatten stuff bc julia and python store arrays differently
+    partials["CDw", "displacements_col"][1, :] = dCdwdxdisp
+    dDwdxdisp = vec(transpose(reshape(∂Drag∂xdispl[5, :], 6, LiftingLine.NPT_WING))) # transpose reshape flatten stuff bc julia and python store arrays differently
+    partials["Dw", "displacements_col"][1, :] = dDwdxdisp
 
     # ---------------------------
     #   Hydro mesh points
@@ -672,6 +730,13 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt))
         partials["collocationPts", "ptVec"][ii, :] = ∂cPti∂xPt
     end
+    partials["collocationPts", "displacements_col"] .= 0.0
+    # The first 3 of every 6 columns have a one-to-one mapping
+    for ii in 1:length(displCol)
+        if mod(ii, 6) in [1, 2, 3]
+            partials["collocationPts", "displacements_col"][ii÷6+mod(ii, 6), ii] = 1.0
+        end
+    end
 
     # ---------------------------
     #   Lift slopes
@@ -679,20 +744,25 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     dcldXpt_i = partials["cl", "ptVec"]
     appendageParams_d = copy(appendageParams)
     appendageParams_d["alfa0"] = alfa0 + LiftingLine.Δα
-    ∂f∂x_d = LiftingLine.compute_∂I∂Xpt(Gconv_d, ptVec, nodeConn, appendageParams_d, appendageOptions, solverOptions; mode=mode)
+    ∂f∂x_d, ∂f∂xdispl_d = LiftingLine.compute_∂I∂Xpt(Gconv_d, ptVec, nodeConn, displCol, appendageParams_d, appendageOptions, solverOptions; mode=mode)
     dcldXpt_f = ∂f∂x_d[end-LiftingLine.NPT_WING+1:end, :]
 
+    dcldxdispl_i = partials["cl", "displacements_col"]
+    dcldxdispl_f = zeros(size(dcldxdispl_i))
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl_d)[end-LiftingLine.NPT_WING+1:end])
+        # transpose reshape flatten stuff bc julia and python store arrays differently
+        dcldxdispl_f[ii, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+    end
+
     dcladXpt = (dcldXpt_f - dcldXpt_i) / LiftingLine.Δα
-    # println("dcladXpt")
-    # show(stdout, "text/plain", dcladXpt[1:20, 1:20])
-    # println()
-    # println("dcldXpt_i")
-    # show(stdout, "text/plain", dcladXpt[1:20, 1:20])
+    dcladxdispl = (dcldxdispl_f - dcldxdispl_i) / LiftingLine.Δα
 
     for (ii, ∂claidXpt) in enumerate(eachrow(dcladXpt))
         partials["cla", "ptVec"][ii, :] = ∂claidXpt
     end
-    # println("cla deriv don't work") # 
+    for (ii, ∂claidxdispl) in enumerate(eachrow(dcladxdispl))
+        partials["cla", "displacements_col"][ii, :] = ∂claidxdispl
+    end
 
     # ************************************************
     #     Derivatives wrt gammas (2025-03-02 these are all good)
@@ -710,7 +780,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -738,7 +808,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
 
     ∂f∂g = LiftingLine.compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions) # Forward Diff by default
 
-    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g[1:7, :]))
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g[FXIND:CLMAXIND, :]))
         partials[costFuncsInOrder[ii], "gammas"][:] = ∂fi∂g
     end
 
