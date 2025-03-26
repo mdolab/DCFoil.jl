@@ -307,6 +307,93 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
+function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
+    """
+    """
+
+    println("====================================================================================")
+    println("        BEGINNING FLUTTER SOLUTION")
+    println("====================================================================================")
+    println("Speed range [m/s]: ", uRange)
+    if debug
+        rm("DebugOutput/", recursive=true)
+        mkpath("DebugOutput/")
+        println("+---------------------------+")
+        println("|    Running debug mode!    |")
+        println("+---------------------------+")
+    end
+
+    # ************************************************
+    #     Initializations
+    # ************************************************
+    uRange = solverOptions["uRange"]
+    nModes = solverOptions["nModes"]
+    debug = solverOptions["debug"]
+
+    # TODO PICKUP HERE: 2025-03-26 GGGGGGGGGGGGGGGGGGGGGG
+    # --- Init model structure ---
+    if length(solverOptions["appendageList"]) == 1
+        appendageOptions = solverOptions["appendageList"][1]
+        tipMass = appendageOptions["use_tipMass"]
+        # FOIL, STRUT, LLOutputs, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+
+        idxTip = LiftingLine.get_tipnode(LECoords)
+        midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        # ---------------------------
+        #   Hydrodynamics
+        # ---------------------------
+        α0 = appendageParams["alfa0"]
+        β0 = appendageParams["beta"]
+        rake = appendageParams["rake"]
+        depth0 = appendageParams["depth0"]
+        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
+            npt_wing=npt_wing,
+            npt_airfoil=npt_airfoil,
+            rhof=solverOptions["rhof"],
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
+            options=options,
+        )
+
+    else
+        error("Only one appendage is supported at the moment")
+    end
+
+
+    # ************************************************
+    #     FLUTTER SOLUTION
+    # ************************************************
+    N_MAX_Q_ITER = solverOptions["maxQIter"]    # TEST VALUE
+    N_R = 8                                     # reduced problem size (Nr x Nr)
+    abVec = FOIL.ab
+    x_αbVec = appendageParams["x_ab"]
+    chordVec = FOIL.chord
+    ebVec = 0.25 * chordVec .+ abVec
+    b_ref = sum(chordVec) / FOIL.nNodes         # mean semichord
+
+    # ---------------------------
+    #   Add any discrete masses
+    # ---------------------------
+    if tipMass
+        bulbMass = 2200 #[kg]
+        bulbInertia = 900 #[kg-m²]
+        x_αbBulb = -0.1 # [m]
+        dR = (structMesh[end, :] - structMesh[end-1, :])
+        elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
+        # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
+        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
+    end
+
+    alphaCorrection = 0.0
+    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
+
+    return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
+end
+
 function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict)
     """
     System natural frequencies
