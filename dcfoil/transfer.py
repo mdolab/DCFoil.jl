@@ -74,7 +74,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
             if left_node_index == right_node_index:
                 # y-coord of the collocation point is exactly at one of the FEM nodes
                 r = colloc_pts[:, i] - nodes[left_node_index, :]
-                disp_translation = disp_trans[left_node_index, :] + jnp.cross(r, disp_rot[left_node_index, :])
+                disp_translation = disp_trans[left_node_index, :] + jnp.cross(disp_rot[left_node_index, :], r)
                 disp_rotation = disp_rot[left_node_index, :]
                 disp_colloc = disp_colloc.at[:3, i].set(disp_translation)
                 disp_colloc = disp_colloc.at[3:6, i].set(disp_rotation)
@@ -92,11 +92,11 @@ class DisplacementTransfer(om.JaxExplicitComponent):
 
                 # translational and rotational displacements from left and right nodes
                 r1 = colloc_pts[:, i] - nodes[left_node_index, :]
-                disp_trans_1 = disp_trans[left_node_index, :] + jnp.cross(r1, disp_rot[left_node_index, :])
+                disp_trans_1 = disp_trans[left_node_index, :] + jnp.cross(disp_rot[left_node_index, :], r1)
                 disp_rot_1 = disp_rot[left_node_index, :]
 
                 r2 = colloc_pts[:, i] - nodes[right_node_index, :]
-                disp_trans_2 = disp_trans[right_node_index, :] + jnp.cross(r2, disp_rot[right_node_index, :])
+                disp_trans_2 = disp_trans[right_node_index, :] + jnp.cross(disp_rot[right_node_index, :], r2)
                 disp_rot_2 = disp_rot[right_node_index, :]
 
                 # weighted sum of displacements
@@ -341,7 +341,8 @@ def test_load_transfer():
     # print(elem_conn)
     
     forces_hydro = np.zeros((3, n_strips))
-    forces_hydro[2, :] = np.sin(np.linspace(-np.pi, np.pi, n_strips)) + 0.3  # out of plane force
+    # forces_hydro[2, :] = np.sin(np.linspace(-np.pi, np.pi, n_strips)) + 0.3  # out of plane force
+    forces_hydro[0, :] = np.linspace(-0.1, -0.1, n_strips)  # in plane force
 
     prob = om.Problem()
     prob.model.add_subsystem('load_transfer', LoadTransfer(n_strips=n_strips, n_node=n_node * 2 - 1, xMount=3.355), promotes=['*'])
@@ -436,6 +437,6 @@ def test_CLalpha_transfer():
 
 
 if __name__ == '__main__':
-    test_displacement_transfer()
-    # test_load_transfer()
+    # test_displacement_transfer()
+    test_load_transfer()
     # test_CLalpha_transfer()
