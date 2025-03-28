@@ -34,7 +34,7 @@ jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
-from transfer import DisplacementTransfer, LoadTransfer
+from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 ptVec = np.array(
     [
@@ -161,7 +161,7 @@ nodeConn = np.array(
         [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
     ]
 )
-nNodes = 21
+nNodes = 5
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
@@ -388,9 +388,9 @@ if __name__ == "__main__":
         # displacement transfer
         couple.add_subsystem(
             "disp_transfer",
-            DisplacementTransfer(n_node=n_node_fullspan, n_secs=19),  # HARDCODED
-            promotes_inputs=["nodes", "deflections", "ptVec"],
-            promotes_outputs=["ptVec_def"],
+            DisplacementTransfer(n_node=n_node_fullspan, n_strips=40, xMount=appendageOptions["xMount"]),  # HARDCODED n_strips
+            promotes_inputs=["nodes", "deflections", "collocationPts"],
+            promotes_outputs=[("disp_colloc", "displacements_col")],
         )
 
         # hydrodynamics
@@ -416,14 +416,22 @@ if __name__ == "__main__":
         # load transfer
         couple.add_subsystem(
             "load_transfer",
-            LoadTransfer(n_node=n_node_fullspan, n_strips=40, xMount=appendageOptions["xMount"]),  # HARDCODED
+            LoadTransfer(n_node=n_node_fullspan, n_strips=40, xMount=appendageOptions["xMount"]),  # HARDCODED n_strips
             promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
             promotes_outputs=[("loads_str", "traction_forces")],
         )
 
         # hydroelastic coupled solver
-        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
+        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=0)
         couple.linear_solver = om.DirectSolver()   # for adjoint
+
+        # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
+        model.add_subsystem(
+            "CLa_interp",
+            CLaInterpolation(n_node=n_node_fullspan, n_strips=40),
+            promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla")],
+            promotes_outputs=[("CL_alpha_node", "cla_node")],
+        )
 
     # ************************************************
     #     Setup problem
@@ -463,8 +471,9 @@ if __name__ == "__main__":
 
     prob.setup(check=False)
 
+    # om.n2(prob)
+
     prob.set_val("ptVec", ptVec)
-    prob.set_val("ptVec_def", ptVec)  # also need this, otherwise DC foil initialization fails
 
     if args.run_struct:
         tractions = prob.get_val("beamstruct.traction_forces")
@@ -472,17 +481,20 @@ if __name__ == "__main__":
         prob.set_val("beamstruct.traction_forces", tractions)
     elif args.run_flow:
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
-        prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
+        prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
     else:
-        prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
+        prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
-        tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-6] = 10.0
-        prob.set_val("beamstruct.traction_forces", tractions)
-        prob.set_val("liftingline.gammas", np.zeros(npt_wing))
+        prob.set_val("gammas", np.zeros(npt_wing))
 
-    # setup fiber angle
+        # tip load test
+        loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
+        loads[4 * 9 + 1] = 1000
+        loads[4 * 9 + 2] = 1000   # tip vertical force (z direction)
+        tractions = prob.set_val("traction_forces", loads)
+
+    # set fiber angle
     fiber_angle = np.deg2rad(0)
     prob.set_val('beamstruct.theta_f', fiber_angle)
     prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
@@ -508,15 +520,6 @@ if __name__ == "__main__":
     # print("model run complete\n" + "-" * 50)
     # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
-    # # manual NLBGS loop!!
-    # model.hydroelastic.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=1e-7)
-    # model.hydroelastic.linear_solver = om.DirectSolver()   # for adjoint
-    # prob.run_model()
-
-    # manual NLBGS loop!!
-    # for i in range(10):
-    #     prob.run_model()
-
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
@@ -538,13 +541,13 @@ if __name__ == "__main__":
 
     else:
         print("nondimensional gammas", prob.get_val("gammas"))
-        print("nondimensional gammas", prob.get_val("liftingline.gammas"))
-        print("nondimensional gammas_d", prob.get_val("liftingline.gammas_d"))
+        print("nondimensional gammas_d", prob.get_val("gammas_d"))
         print("CL", prob.get_val("CL"))
         print("CLa", prob.get_val("cla"))  #
         # print("force distribution", prob.get_val("forces_dist"))
         print("bending deflections", prob.get_val("deflections")[2::9])
         print("twisting deflections", prob.get_val("deflections")[4::9])
+        print("Rx deflections", prob.get_val("deflections")[3::9])
         # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
         print("induced drag force", prob.get_val("F_x"))
         print("lift force", prob.get_val("F_z"))
@@ -562,59 +565,115 @@ if __name__ == "__main__":
     om.n2(prob, show_browser=False)
 
     # --- plot ---
+    ptVec = prob.get_val('ptVec').reshape(2, 19, 3)
     nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
     collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
-    pts_3D = ptVec.reshape(19, 2, 3).swapaxes(0, 2)   # shape (3, 2, 19)
+    force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
+    force_FEM = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')   # shape (9, n_nodes)
 
     import matplotlib.pyplot as plt
 
-    # 3D plot
+    # --- 3D plot ---
+    z_scaler = 10   # exaggerate vertical deflections
     fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
-
-    mesh_orig = prob.get_val("ptVec").reshape(2, 19, 3)  # jig
-    mesh_def = prob.get_val("ptVec_def").reshape(2, 19, 3)
-    z_scaler = 10   # to make the deflection visible
-    # LE
-    ax.plot(mesh_orig[0, :, 0], mesh_orig[0, :, 1], mesh_orig[0, :, 2] * z_scaler, 'o', color='C0', ms=3)  # LE
-    ax.plot(mesh_orig[1, :, 0], mesh_orig[1, :, 1], mesh_orig[1, :, 2] * z_scaler, 'o', color='C0', ms=3)  # TE
-    # TE
-    ax.plot(mesh_def[0, :, 0], mesh_def[0, :, 1], mesh_def[0, :, 2] * z_scaler, 'o', color='C1', ms=3)  # LE
-    ax.plot(mesh_def[1, :, 0], mesh_def[1, :, 1], mesh_def[1, :, 2] * z_scaler, 'o', color='C1', ms=3)  # TE
-    # flow collocation points
-    ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :], 'o-', color='k', ms=3)
-    # FEM nodes
-    ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], 'o-', color='darkgray', ms=3)
+    ax.plot(ptVec[:, :, 0], ptVec[:, :, 1], ptVec[:, :, 2], 'o', color='k', ms=3)
+    ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], 'o', color='darkgray', ms=5)
+    ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :] * z_scaler, 'o-', color='C0', ms=3)
     ax.set_aspect('equal')
 
-    # 2D planform plot (top view)
-    fig, axs = plt.subplots(3, 1, figsize=(8, 8))
-    rotation = 0
-    labelpad = 20
-    axs[0].plot(nodes[1, :], nodes[0, :], 'o-', color='darkgray', ms=3, label='FEM nodes')
-    axs[0].plot(collocationPts[1], collocationPts[0] - appendageOptions['xMount'], 'o-', color='k', ms=3, label='Flow colloc points')
-    axs[0].plot(pts_3D[1], pts_3D[0], 'o', color='C0', ms=3)
-    # axs[0].legend()
-    axs[0].axis('equal')
-    axs[0].set_ylabel('chord [m]', rotation=rotation, labelpad=labelpad, ha='right')
+    # --- top view of planform ---
+    fig, ax = plt.subplots()
+    ax.plot(ptVec[:, :, 1], ptVec[:, :, 0], 'o', color='k', ms=3)
+    ax.plot(nodes[1, :], nodes[0, :], 'o', color='darkgray', ms=5)
+    ax.plot(collocationPts[1, :], collocationPts[0, :] - appendageOptions['xMount'], 'o-', color='C0', ms=3)
+    ax.set_aspect('equal')
 
-    # front view (bending)
-    dz_LE = mesh_def[0, :, 2] - mesh_orig[0, :, 2]
-    dz_TE = mesh_def[1, :, 2] - mesh_orig[1, :, 2]
-    dz_mid = (dz_LE + dz_TE) / 2   # 50% chord = beam
-    axs[1].plot(mesh_orig[0, :, 1], dz_mid, 'o', color='C0')
-    axs[1].set_ylabel('dz [m]', rotation=rotation, labelpad=labelpad, ha='right')
+    # --- plot displacements ---
+    disp_nodes = prob.get_val('deflections').reshape(nNodes * 2 - 1, 9)
+    disp_colloc = prob.get_val('displacements_col')
+    node_y = nodes[1, :]
+    colloc_y = collocationPts[1, :]
 
-    # twist
-    dz = dz_LE - dz_TE   # diff between LE and TE
-    chord = mesh_orig[1, :, 0] - mesh_orig[0, :, 0]
-    twist = np.arctan2(dz, chord) * 180 / np.pi
-    axs[2].plot(mesh_orig[0, :, 1], twist, 'o', color='C0')  # LE
-    axs[2].set_ylabel('twist [deg]', rotation=rotation, labelpad=labelpad, ha='right')
+    fig, axs = plt.subplots(3, 2, figsize=(8, 8))
+    fig.suptitle('Displacements')
+    axs[0, 0].plot(node_y, disp_nodes[:, 0], 'o', color='darkgray', ms=5, label='FEM nodes')
+    axs[0, 0].plot(colloc_y, disp_colloc[0, :], 'o-', color='C0', ms=3, label='Collocation points')
+    axs[0, 0].set_ylabel('disp X')
+    axs[0, 0].set_xticklabels([])
+    axs[0, 0].legend()
 
-    for ax in axs:
-        ax.set_xlim([-0.35, 0.35])
+    axs[1, 0].plot(node_y, disp_nodes[:, 1], 'o', color='darkgray', ms=5)
+    axs[1, 0].plot(colloc_y, disp_colloc[1, :], 'o-', color='C0', ms=3)
+    axs[1, 0].set_ylabel('disp Y')
+    axs[1, 0].set_xticklabels([])
 
-    plt.savefig('deformations.pdf', bbox_inches='tight')
+    axs[2, 0].plot(node_y, disp_nodes[:, 2], 'o', color='darkgray', ms=5)
+    axs[2, 0].plot(colloc_y, disp_colloc[2, :], 'o-', color='C0', ms=3)
+    axs[2, 0].set_ylabel('disp Z')
+    axs[2, 0].set_xlabel('spanwise location')
+    
+    axs[0, 1].plot(node_y, disp_nodes[:, 3], 'o', color='darkgray', ms=5)
+    axs[0, 1].plot(colloc_y, disp_colloc[3, :], 'o-', color='C0', ms=3)
+    axs[0, 1].set_ylabel('disp Rx')
+    axs[0, 1].set_xticklabels([])
+
+    axs[1, 1].plot(node_y, disp_nodes[:, 4], 'o', color='darkgray', ms=5)
+    axs[1, 1].plot(colloc_y, disp_colloc[4, :], 'o-', color='C0', ms=3)
+    axs[1, 1].set_ylabel('disp Ry')
+    axs[1, 1].set_xticklabels([])
+
+    axs[2, 1].plot(node_y, disp_nodes[:, 5], 'o', color='darkgray', ms=5)
+    axs[2, 1].plot(colloc_y, disp_colloc[5, :], 'o-', color='C0', ms=3)
+    axs[2, 1].set_ylabel('disp Rz')
+    axs[2, 1].set_xlabel('spanwise location')
+
+    fig.tight_layout()
+    fig.savefig('displacements.pdf', bbox_inches='tight')
+
+    # --- plot forces ---
+    fig, axs = plt.subplots(3, 2, figsize=(8, 8))
+    fig.suptitle('Forces')
+
+    axs[0, 0].plot(node_y, force_FEM[0, :], 'o', color='darkgray', ms=5)
+    axs[0, 0].plot(colloc_y, force_colloc[0, :], 'o-', color='C0', ms=3)
+    axs[0, 0].set_ylabel('force X')
+    axs[0, 0].set_xticklabels([])
+
+    axs[1, 0].plot(node_y, force_FEM[1, :], 'o', color='darkgray', ms=5)
+    axs[1, 0].plot(colloc_y, force_colloc[1, :], 'o-', color='C0', ms=3)
+    axs[1, 0].set_ylabel('force Y')
+    axs[1, 0].set_xticklabels([])
+
+    axs[2, 0].plot(node_y, force_FEM[2, :], 'o', color='darkgray', ms=5)
+    axs[2, 0].plot(colloc_y, force_colloc[2, :], 'o-', color='C0', ms=3)
+    axs[2, 0].set_ylabel('force Z')
+    axs[2, 0].set_xlabel('spanwise location')
+
+    axs[0, 1].plot(node_y, force_FEM[3, :], 'o', color='darkgray', ms=5)
+    axs[0, 1].set_ylabel('moment X')
+    axs[0, 1].set_xticklabels([])
+
+    axs[1, 1].plot(node_y, force_FEM[4, :], 'o', color='darkgray', ms=5)
+    axs[1, 1].set_ylabel('moment Y')
+    axs[1, 1].set_xticklabels([])
+
+    axs[2, 1].plot(node_y, force_FEM[5, :], 'o', color='darkgray', ms=5)
+    axs[2, 1].set_ylabel('moment Z')
+    axs[2, 1].set_xlabel('spanwise location')
+    
+    fig.tight_layout()
+    fig.savefig('forces.pdf', bbox_inches='tight')
+
+    # --- plot CL_alpha ---
+    cla_flow = prob.get_val("cla")
+    cla_node = prob.get_val("cla_node")
+    fig, ax = plt.subplots()
+    ax.plot(colloc_y, cla_flow, 'o-', color='C0', ms=3, label='flow collocation points')
+    ax.plot(node_y, cla_node, 'o', color='darkgray', ms=5, label='FEM nodes')
+    ax.set_xlabel('spanwise location [m]')
+    ax.set_ylabel("CL_alpha")
+    ax.legend()
+    fig.savefig('CLa.pdf', bbox_inches='tight')
 
     # total lift force
     loads = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')

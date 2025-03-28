@@ -199,7 +199,7 @@ class LoadTransfer(om.JaxExplicitComponent):
         return (loads_str,)
 
 
-class CLAlphaInterpolation(om.JaxExplicitComponent):
+class CLaInterpolation(om.JaxExplicitComponent):
     """
     Interpolate CL_alpha from flow collocation points to FEM nodes
 
@@ -416,7 +416,7 @@ def test_CLalpha_transfer():
     CL_alpha = np.random.random(n_strips)
 
     prob = om.Problem()
-    prob.model.add_subsystem('CL_alpha_transfer', CLAlphaInterpolation(n_strips=n_strips, n_node=n_node * 2 - 1), promotes=['*'])
+    prob.model.add_subsystem('CL_alpha_transfer', CLaInterpolation(n_strips=n_strips, n_node=n_node * 2 - 1), promotes=['*'])
     prob.setup()
     prob.set_val('CL_alpha', CL_alpha)
     prob.set_val('collocationPts', collocationPts)
