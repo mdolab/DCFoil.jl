@@ -1117,7 +1117,7 @@ function setup_FEBeamFromCoords(
     # Initial guess on unknown deflections (excluding BC nodes)
     DOFBlankingList = get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
 
-    return globalK, globalM, globalF, DOFBlankingList, FEMESH
+    return globalK, globalM, globalF, DOFBlankingList, FEMESH, WingStructModel, StrutStructModel
 end
 
 # ************************************************
@@ -1224,10 +1224,6 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
     return ∂KssU∂x
 end
 
-
-
-function compute_∂outputs∂Xpt(str)
-end
 
 function compute_∂r∂x(
     allStructStates, fu, appendageParamsList, LECoords, TECoords, nodeConn;
@@ -1345,7 +1341,7 @@ function compute_∂r∂x(
             appendageParamsListCS[iComp]["toc"][ii] -= 1im * dh
             # ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
             ∂r∂xParams["toc"][:, ii] = imag(f_f) / dh
-            # TODO: PICKUP HERE SOMETHING WRONG
+            # TODO: PICKUP HERE SOMETHING WRONG?
         end
 
         appendageParamsList[iComp]["alfa0"] += dh

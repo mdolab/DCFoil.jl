@@ -1,8 +1,9 @@
 # THIS IS THE JULIA CENTRIC RUN SCRIPT
-
+using Plots
 using OpenMDAO: om, make_component
 include("../src/hydro/LiftingLine.jl")
 include("../src/hydro/liftingline_om.jl")
+include("../src/solvers/solveflutter_om.jl")
 include("../src/struct/beam_om.jl")
 const RealOrComplex = Union{Real,Complex}
 # const RealOrComplex = AbstractFloat
@@ -214,21 +215,140 @@ solverOptions = Dict(
     # --- p-k (Eigen) solve ---
     "run_modal" => true,
     "run_flutter" => true,
-    # "nModes" => nModes,
+    "nModes" => 4,
     "uRange" => [1.0, 30],
     "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 500.0,
 )
-
 # ==============================================================================
 #                         Derivatives
 # ==============================================================================
 using .LiftingLine
 using .FEMMethods
-gconv = vec([0.0322038 0.03231678 0.03253403 0.03284775 0.03324736 0.03371952 0.03425337 0.03484149 0.03547895 0.03616117 0.03688162 0.03762993 0.03839081 0.03914407 0.03986539 0.04052803 0.04110476 0.04156866 0.04189266 0.04205787 0.04205787 0.04189266 0.04156866 0.04110476 0.04052803 0.03986539 0.03914407 0.03839081 0.03762993 0.03688162 0.03616117 0.03547895 0.03484149 0.03425337 0.03371952 0.03324736 0.03284775 0.03253403 0.03231678 0.0322038])
 
-# LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
-# LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+solverOptions = FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[1])
+
+# ************************************************
+#     Testing cla d xpt
+# ************************************************
+
+# gconv = vec([0.0322038 0.03231678 0.03253403 0.03284775 0.03324736 0.03371952 0.03425337 0.03484149 0.03547895 0.03616117 0.03688162 0.03762993 0.03839081 0.03914407 0.03986539 0.04052803 0.04110476 0.04156866 0.04189266 0.04205787 0.04205787 0.04189266 0.04156866 0.04110476 0.04052803 0.03986539 0.03914407 0.03839081 0.03762993 0.03688162 0.03616117 0.03547895 0.03484149 0.03425337 0.03371952 0.03324736 0.03284775 0.03253403 0.03231678 0.0322038])
+dalfa = LiftingLine.Δα
+gconv = vec([0.00310651 0.00886824 0.01383426 0.01797466 0.02138239 0.02419296 0.02653531 0.02851189 0.03019559 0.03163361 0.03285384 0.03387137 0.03469469 0.03533145 0.03579343 0.03610042 0.0362815 0.03637183 0.03640545 0.03641115 0.03641115 0.03640545 0.03637183 0.0362815 0.03610042 0.03579343 0.03533145 0.03469469 0.03387137 0.03285384 0.03163361 0.03019559 0.02851189 0.02653531 0.02419296 0.02138239 0.01797466 0.01383426 0.00886824 0.00310651])
+gconv_d = vec([0.00313608 0.00895266 0.013966 0.01814589 0.02158614 0.02442354 0.02678823 0.02878367 0.03048342 0.03193516 0.03316702 0.03419425 0.03502543 0.03566826 0.03613464 0.03644456 0.03662737 0.03671856 0.0367525 0.03675826 0.03675826 0.0367525 0.03671856 0.03662737 0.03644456 0.03613464 0.03566826 0.03502543 0.03419425 0.03316702 0.03193516 0.03048342 0.02878367 0.02678823 0.02442354 0.02158614 0.01814589 0.013966 0.00895266 0.00313608])
+dfdxpt = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+appendageParams_d = copy(appendageParams)
+appendageParams_d["alfa0"] += dalfa
+dfdxpt_f = LiftingLine.compute_∂I∂Xpt(gconv_d, ptVec, nodeConn, appendageParams_d, appendageOptions, solverOptions; mode="FAD")
+# dfdxpt = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+
+# Check the dcldx derivatives
+dcldx = dfdxpt[end-LiftingLine.NPT_WING+1:end, :]
+dcldx_f = dfdxpt_f[end-LiftingLine.NPT_WING+1:end, :]
+dcladx = (dcldx_f - dcldx) / dalfa
+
+function compute_dcladx(dh)
+
+    function compute_clafromX(ptVec)
+
+        LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+        idxTip = LiftingLine.get_tipnode(LECoords)
+        midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        α0 = appendageParams["alfa0"]
+        β0 = appendageParams["beta"]
+        rake = appendageParams["rake"]
+        depth0 = appendageParams["depth0"]
+        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, LiftingLine.NPT_WING);
+            npt_wing=npt_wing,
+            npt_airfoil=npt_airfoil,
+            rhof=solverOptions["rhof"],
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
+            options=options,
+        )
+
+        cla = LiftingLine.compute_liftslopes(gconv, gconv_d, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
+        return cla
+    end
+
+    # FD
+    dcladx = zeros(LiftingLine.NPT_WING, length(ptVec))
+    cla_p = compute_clafromX(ptVec)
+    for ii in 1:length(ptVec)
+        ptVec[ii] += dh
+        cla_m = compute_clafromX(ptVec)
+        ptVec[ii] -= dh
+        dcladx[:, ii] = (cla_m - cla_p) / (dh)
+    end
+
+    # ForwardDiff.jacobian(compute_clafromX, ptVec)
+
+    return dcladx
+end
+
+dcladx_fidi = compute_dcladx(dh)
+
+dh = 1e-5
+
+∂α = FlowCond.alpha + LiftingLine.Δα # FD
+∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+∂Uinf = norm_cs_safe(∂Uinfvec)
+∂uvec = ∂Uinfvec / FlowCond.Uinf
+∂FlowCond = LiftingLine.FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
+∂TV_influence = LiftingLine.compute_TVinfluences(∂FlowCond, LLMesh)
+∂LLNLParams = LiftingLine.LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
+
+dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
+dfdg_f = LiftingLine.compute_∂I∂G(gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions; mode="FAD")
+dcldg = dfdg[end-LiftingLine.NPT_WING+1:end, :]
+dcldg_f = dfdg_f[end-LiftingLine.NPT_WING+1:end, :]
+
+dcladg = (dcldg_f - dcldg) / dalfa # this makes sense 
+
+# ************************************************
+#     Test twist into lifting line
+# ************************************************
+LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+idxTip = LiftingLine.get_tipnode(LECoords)
+midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+displacementsCol = zeros(6, LiftingLine.NPT_WING)
+
+# Here's a twist distribution
+displacementsCol[5, :] .= vcat(LinRange(deg2rad(10.0), deg2rad(0.0), LiftingLine.NPT_WING ÷ 2), LinRange(deg2rad(0.0), deg2rad(10.0), LiftingLine.NPT_WING ÷ 2))
+
+# Vertically displace them
+dist = 0.1
+displacementsCol[3, :] .= vcat(LinRange(dist, 0.0, LiftingLine.NPT_WING ÷ 2), LinRange(0.0, dist, LiftingLine.NPT_WING ÷ 2))
+
+α0 = appendageParams["alfa0"]
+β0 = appendageParams["beta"]
+rake = appendageParams["rake"]
+depth0 = appendageParams["depth0"]
+airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol;
+    npt_wing=npt_wing,
+    npt_airfoil=npt_airfoil,
+    rhof=solverOptions["rhof"],
+    # airfoilCoordFile=airfoilCoordFile,
+    airfoil_ctrl_xy=airfoilCtrlXY,
+    airfoil_xy=airfoilXY,
+    options=options,
+)
+TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
+
+LLNLParams = LiftingLine.LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+Forces, gammaDist, cla, cl, Forces, CL, CDi, CS = LiftingLine.compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
+plot(LLMesh.collocationPts[2, :], cl)
+p2 = plot(LLMesh.collocationPts[2, :], gammaDist)
+p3 = plot(LLMesh.collocationPts[2, :], LLMesh.collocationPts[3, :])
+p3 = plot(LLMesh.collocationPts[2, :], displacementsCol[5, :])
+plot(p2, p3, layout=(2, 1))
+
+println("CDi:\t", CDi)
+
 LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 idxTip = LiftingLine.get_tipnode(LECoords)
 midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
@@ -240,7 +360,7 @@ midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compu
 rake = appendageParams["rake"]
 depth0 = appendageParams["depth0"]
 airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, LiftingLine.NPT_WING);
     npt_wing=npt_wing,
     npt_airfoil=npt_airfoil,
     rhof=solverOptions["rhof"],
@@ -254,10 +374,28 @@ TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
 LLNLParams = LiftingLine.LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions)
 dfdg_FD = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FiDi")
+
+
+# smaller gconv
+gconv = vec([0.0061781 0.01608609 0.02289767 0.02758199 0.03094478 0.03337678 0.03501358 0.03592766 0.03627758 0.03633065 0.03633065 0.03627758 0.03592766 0.03501358 0.03337678 0.03094478 0.02758199 0.02289767 0.01608609 0.0061781])
+# GOOD
+drdx, drdxdisp = LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+drdx_FD, drdxdisp_FD = LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+# @time LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
+
+# GOOD
+dfdxpt, dfdxdispl = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+dfdxpt_fd, dfdxdispl_fd = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+
+# GOOD
+∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+∂Drag∂Xpt_fd, ∂Drag∂xdispl_fd, ∂Drag∂G_fd = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+
 # These derivatives are good
 # @time dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 # dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="RAD")
 # @time dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+cla = LiftingLine.compute_liftslopes(gconv, FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences)
 
 # ans1, ans2 = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="RAD")
 # @time ans1fad, ans2fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
@@ -295,3 +433,30 @@ prob.set_val("liftingline.gammas", zeros(AbstractFloat, 100))
 @time prob.run_model()
 
 println(prob.get_val("liftingline.gammas"))
+
+
+# ==============================================================================
+#                         Testing flutter
+# ==============================================================================
+
+using .SolveFlutter
+claVec = vec([0.62203061 1.76578511 2.72440491 3.48331132 4.05915881 4.48205682 4.78369524 4.99179699 5.12856967 5.21100599 5.25185966 5.26075176 5.24519846 5.21150891 5.16553872 5.11324235 5.06088288 5.01468345 4.98003015 4.96115104 4.96115104 4.98003015 5.01468345 5.06088288 5.11324235 5.16553872 5.21150891 5.24519846 5.26075176 5.25185966 5.21100599 5.12856967 4.99179699 4.78369524 4.48205682 4.05915881 3.48331132 2.72440491 1.76578511 0.62203061])
+mesh = [[0.0 0.0 0.0]
+    [0.0 0.08325 0.0]
+    [0.0 0.1665 0.0]
+    [0.0 0.24975 0.0]
+    [0.0 0.333 0.0]
+    [0.0 -0.08325 0.0]
+    [0.0 -0.1665 0.0]
+    [0.0 -0.24975 0.0]
+    [0.0 -0.333 0.0]]
+elemConn = [[1.0 2.0]
+    [2.0 3.0]
+    [3.0 4.0]
+    [4.0 5.0]
+    [1.0 6.0]
+    [6.0 7.0]
+    [7.0 8.0]
+    [8.0 9.0]]
+# TODO: GPICKUP HERE
+SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, mesh, elemConn, claVec, appendageParams, solverOptions)

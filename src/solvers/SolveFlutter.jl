@@ -25,14 +25,17 @@ using FiniteDifferences
 using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
-# # --- DCFoil modules ---
+# --- DCFoil modules ---
 for headerName in [
     "../struct/FEMMethods",
+    "../hydro/LiftingLine",
+    "../constants/SolutionConstants",
 ]
     include("$(headerName).jl")
 end
-using .FEMMethods
 
+using .FEMMethods
+using .LiftingLine
 # using ..DCFoil: DTYPE
 # using ..InitModel
 # using ..HydroStrip
@@ -56,7 +59,7 @@ const derivMode = "RAD"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, idxTip, LLSystem, LLOutputs, FlowCond, debug)
+function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, idxTip, LLSystem, claVec, FlowCond, debug)
     """
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
@@ -87,7 +90,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
         CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
         CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
         CONSTANTS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
-        LLSystem, LLOutputs, FlowCond
+        LLSystem, claVec, FlowCond
         ;
         # --- Optional args ---
         # ΔdynP=0.5 * FlowCond.rhof * 1^2,
@@ -307,10 +310,17 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
+function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
     """
     """
 
+
+    # ************************************************
+    #     Initializations
+    # ************************************************
+    uRange = solverOptions["uRange"]
+    nModes = solverOptions["nModes"]
+    debug = solverOptions["debug"]
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
     println("====================================================================================")
@@ -323,19 +333,10 @@ function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoor
         println("+---------------------------+")
     end
 
-    # ************************************************
-    #     Initializations
-    # ************************************************
-    uRange = solverOptions["uRange"]
-    nModes = solverOptions["nModes"]
-    debug = solverOptions["debug"]
-
-    # TODO PICKUP HERE: 2025-03-26 GGGGGGGGGGGGGGGGGGGGGG
     # --- Init model structure ---
     if length(solverOptions["appendageList"]) == 1
         appendageOptions = solverOptions["appendageList"][1]
         tipMass = appendageOptions["use_tipMass"]
-        # FOIL, STRUT, LLOutputs, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 
         idxTip = LiftingLine.get_tipnode(LECoords)
         midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
@@ -368,11 +369,29 @@ function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoor
     # ************************************************
     N_MAX_Q_ITER = solverOptions["maxQIter"]    # TEST VALUE
     N_R = 8                                     # reduced problem size (Nr x Nr)
-    abVec = FOIL.ab
+
+
     x_αbVec = appendageParams["x_ab"]
-    chordVec = FOIL.chord
+
+    # ************************************************
+    #     FEM assembly
+    # ************************************************
+    # globalKs, globalMs, _ = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive;
+    # config=appendageOptions["config"])
+
+    globalKs, globalMs, _, _, FEMESH, WingStructModel, StrutStructModel = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+
+    abVec = WingStructModel.ab
+    chordVec = WingStructModel.chord
     ebVec = 0.25 * chordVec .+ abVec
-    b_ref = sum(chordVec) / FOIL.nNodes         # mean semichord
+    b_ref = sum(chordVec) / WingStructModel.nNodes         # mean semichord
+
+    # ---------------------------
+    #   Get structural damping
+    # ---------------------------
+    alphaConst = solverOptions["alphaConst"]
+    betaConst = solverOptions["betaConst"]
+    globalCs = alphaConst * globalMs .+ betaConst * globalKs
 
     # ---------------------------
     #   Add any discrete masses
@@ -389,9 +408,11 @@ function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoor
     end
 
     alphaCorrection = 0.0
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
+    SOLVERPARAMS = DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
 
-    return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
+    dim = size(globalKs)[1]
+
+    return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, WingStructModel, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
 function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict)
@@ -822,7 +843,7 @@ end
 
 function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVec, abVec, ebVec,
     FOIL, dim::Int64, Nr::Int64, DOFBlankingList, idxTip,
-    N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat, LLSystem, LLOutputs, FlowCond;
+    N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat, LLSystem, claVec, FlowCond;
     ΔdynP=nothing, Δu=nothing, debug=false, solverOptions=Dict(), appendageOptions=Dict()
 )
     """
@@ -983,7 +1004,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         # div_tmp = 1 / tmpFactor
         # kSweep = ωSweep * div_tmp
         # --- Compute generalized hydrodynamic loads ---
-        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, LLOutputs, FlowCond.rhof, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, FlowCond.rhof, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
         # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Cr, Qr, structMesh, DOFBlankingList; debug=solverOptions["debug"], qiter=nFlow)
         # ---------------------------
@@ -2188,6 +2209,23 @@ function cost_funcsFromCoordsDVs(
 
     # Solve
     obj, _, SOL = solve(FEMESH.mesh, FEMESH.elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, LLOutputs, FlowCond, debug)
+    if return_all
+        return obj, SOL
+    else
+        return obj
+    end
+end
+
+function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, mesh, elemConn, claVec, appendageParams, solverOptions; return_all=false)
+    """
+    """
+
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug = setup_solverOM(displacements_col, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+
+    obj, _, SOL = solve(mesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, claVec, FlowCond, debug)
+
     if return_all
         return obj, SOL
     else

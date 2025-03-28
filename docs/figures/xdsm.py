@@ -48,15 +48,15 @@ if __name__ == "__main__":
         x.connect("febeam", "solver", r"\mathbf{r}_s(\mathbf{u})")
         x.connect("febeam", "febeamoutput", r"\text{Displacements } \mathbf{u}")
         x.connect("liftingline", "solver", r"\mathbf{r}_f(\boldsymbol{\gamma})")
-        x.connect(
-            "febeamoutput",
-            "dynamicsolver",
-            (
-                r"\text{Linearized quantities }",
-                r"\text{about static equilibrium for dynamics analysis:}",
-                r"\mathbf{M}_{ss}, \mathbf{C}_{ss}, \mathbf{K}_{ss}",
-            ),
-        )
+        # x.connect(
+        #     "febeamoutput",
+        #     "dynamicsolver",
+        #     (
+        #         r"\text{Linearized quantities }",
+        #         r"\text{about static equilibrium for dynamics analysis:}",
+        #         r"\mathbf{M}_{ss}, \mathbf{C}_{ss}, \mathbf{K}_{ss}",
+        #     ),
+        # )
         x.connect(
             "liftinglineoutput",
             "dynamicsolver",
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         x.add_process(["febeam", "febeamoutput"], arrow=True)
         x.add_process(["liftingline", "solver"], arrow=True)
         x.add_process(["liftingline", "liftinglineoutput"], arrow=True)
-        x.add_process(["febeamoutput", "dynamicsolver"], arrow=True)
+        # x.add_process(["febeamoutput", "dynamicsolver"], arrow=True)
         x.add_process(["liftinglineoutput", "dynamicsolver"], arrow=True)
 
         x.write("statichydroelastic")
