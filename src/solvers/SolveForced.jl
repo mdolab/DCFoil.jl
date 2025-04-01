@@ -11,9 +11,6 @@ module SolveForced
 Frequency domain hydroelastic solver
 """
 
-# --- Public functions ---
-export solve
-
 # --- PACKAGES ---
 using LinearAlgebra, Statistics
 using JSON
@@ -22,18 +19,26 @@ using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using FileIO
 
 # --- DCFoil modules ---
-using ..InitModel, ..HydroStrip, ..BeamProperties
-using ..FEMMethods
-using ..SolveStatic
-using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
-using ..SolverRoutines
-using ..Interpolation
-using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
-using ..DCFoilSolution
+for headerName in [
+    "../struct/FEMMethods",
+    "../hydro/OceanWaves"
+]
+    include("$(headerName).jl")
+end
 
-using ..OceanWaves
+using .FEMMethods
 
-using Debugger
+# using ..InitModel, ..HydroStrip, ..BeamProperties
+# using ..SolveStatic
+# using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
+# using ..SolverRoutines
+# using ..Interpolation
+# using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
+# using ..DCFoilSolution
+
+# using ..OceanWaves
+
+# using Debugger
 
 # ==============================================================================
 #                         COMMON VARIABLES
@@ -320,72 +325,6 @@ end
 
 function evalFuncsSens(VIBSOL)
     
-end
-
-function compute_residuals(unfoldedStructuralStates)
-    """
-    Compute residual for every node that is not the clamped root node
-
-    r(u) = [D(ω)]{ũ} - {f(ω)}
-
-    where f is the force vector from the current solution
-
-    Inputs
-    ------
-    structuralStates : array
-        Unfolded residual state vector with nodal DOFs and deformations EXCLUDING BCs (concatenation of real and imag)
-
-    Outputs
-    -------
-    resVec : array
-        Unfolded residual vector of real data type (concatenation of real and imag parts)
-    """
-
-    # --- Fold them ---
-    structuralStates = unfoldedStructuralStates[1:end÷2] + 1im * unfoldedStructuralStates[end÷2+1:end]
-
-    if ELEMTYPE == "BT2"
-        foilDynamicStates, _ = FEMMethods.put_BC_back(structuralStates, ELEMTYPE)
-    else
-        println("Invalid element type")
-    end
-
-    # --- Stack them ---
-    cmplxResVec = CONSTANTS.Dmat * structuralStates - CONSTANTS.extForceVec
-
-    # --- Unfold them ---
-    resVec = [real(cmplxResVec); imag(cmplxResVec)]
-
-
-    return resVec
-end
-
-function compute_∂r∂u(structuralStates, mode="FiDi")
-    """
-    Jacobian of residuals with respect to dynamic structural states
-    EXCLUDING BC NODES
-    """
-
-    # --- Convert to real data-type ---
-    unfolded = vcat(real(structuralStates), imag(structuralStates))
-
-    if mode == "FiDi" # Finite difference
-        # First derivative using 3 stencil points
-        ∂r∂u = FiniteDifferences.jacobian(central_fdm(3, 1), compute_residuals, structuralStates)
-
-    elseif mode == "RAD" # Forward automatic differentiation
-        ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
-
-        # elseif mode == "RAD" # Reverse automatic differentiation
-        #     @time ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
-    elseif mode == "Analytical"
-        ∂r∂u = CONSTANTS.Dmat
-    else
-        error("Invalid mode")
-    end
-
-    return ∂r∂u
-
 end
 
 end # end module

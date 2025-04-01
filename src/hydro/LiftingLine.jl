@@ -42,8 +42,8 @@ for headerName in [
     "../utils/Interpolation",
     "../utils/Rotations",
     "../struct/EBBeam",
-    "../hydro/Unsteady",
     "../utils/Preprocessing",
+    "../hydro/Unsteady",
     "../hydro/VPM",
     "../solvers/NewtonRaphson",
     "../ComputeHydroFunctions",
@@ -818,7 +818,7 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
 
 end
 
-function compute_liftslopes(Gconv, ∂Gconv, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
+function compute_liftslopes(Gconv::AbstractVector, ∂Gconv::AbstractVector, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
     """
     Compute the lift curve slope of the wing at the converged solution
     """

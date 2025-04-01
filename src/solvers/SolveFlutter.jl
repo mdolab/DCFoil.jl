@@ -25,14 +25,19 @@ using FiniteDifferences
 using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
-# # --- DCFoil modules ---
+# --- DCFoil modules ---
 for headerName in [
     "../struct/FEMMethods",
+    "../hydro/LiftingLine",
+    "../constants/SolutionConstants",
+    "../hydro/HydroStrip",
 ]
     include("$(headerName).jl")
 end
-using .FEMMethods
 
+using .FEMMethods
+using .LiftingLine
+using .HydroStrip
 # using ..DCFoil: DTYPE
 # using ..InitModel
 # using ..HydroStrip
@@ -56,7 +61,7 @@ const derivMode = "RAD"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, idxTip, LLSystem, LLOutputs, FlowCond, debug)
+function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, idxTip, LLSystem, claVec, FlowCond, debug)
     """
     Use p-k method to find roots (p) to the equation
         (-p²[M]-p[C]+[K]){ũ} = {0}
@@ -87,7 +92,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
         CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
         CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
         CONSTANTS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
-        LLSystem, LLOutputs, FlowCond
+        LLSystem, claVec, FlowCond
         ;
         # --- Optional args ---
         # ΔdynP=0.5 * FlowCond.rhof * 1^2,
@@ -307,10 +312,17 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
+function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
     """
     """
 
+
+    # ************************************************
+    #     Initializations
+    # ************************************************
+    uRange = solverOptions["uRange"]
+    nModes = solverOptions["nModes"]
+    debug = solverOptions["debug"]
     println("====================================================================================")
     println("        BEGINNING FLUTTER SOLUTION")
     println("====================================================================================")
@@ -323,19 +335,10 @@ function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoor
         println("+---------------------------+")
     end
 
-    # ************************************************
-    #     Initializations
-    # ************************************************
-    uRange = solverOptions["uRange"]
-    nModes = solverOptions["nModes"]
-    debug = solverOptions["debug"]
-
-    # TODO PICKUP HERE: 2025-03-26 GGGGGGGGGGGGGGGGGGGGGG
     # --- Init model structure ---
     if length(solverOptions["appendageList"]) == 1
         appendageOptions = solverOptions["appendageList"][1]
         tipMass = appendageOptions["use_tipMass"]
-        # FOIL, STRUT, LLOutputs, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 
         idxTip = LiftingLine.get_tipnode(LECoords)
         midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
@@ -368,11 +371,29 @@ function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoor
     # ************************************************
     N_MAX_Q_ITER = solverOptions["maxQIter"]    # TEST VALUE
     N_R = 8                                     # reduced problem size (Nr x Nr)
-    abVec = FOIL.ab
+
+
     x_αbVec = appendageParams["x_ab"]
-    chordVec = FOIL.chord
+
+    # ************************************************
+    #     FEM assembly
+    # ************************************************
+    # globalKs, globalMs, _ = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive;
+    # config=appendageOptions["config"])
+
+    globalKs, globalMs, _, _, FEMESH, WingStructModel, StrutStructModel = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+
+    abVec = WingStructModel.ab
+    chordVec = WingStructModel.chord
     ebVec = 0.25 * chordVec .+ abVec
-    b_ref = sum(chordVec) / FOIL.nNodes         # mean semichord
+    b_ref = sum(chordVec) / WingStructModel.nNodes         # mean semichord
+
+    # ---------------------------
+    #   Get structural damping
+    # ---------------------------
+    alphaConst = solverOptions["alphaConst"]
+    betaConst = solverOptions["betaConst"]
+    globalCs = alphaConst * globalMs .+ betaConst * globalKs
 
     # ---------------------------
     #   Add any discrete masses
@@ -389,9 +410,11 @@ function setup_solverOM(displCol, globalKs, globalCs, globalMs, LECoords, TECoor
     end
 
     alphaCorrection = 0.0
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
+    SOLVERPARAMS = DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
 
-    return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
+    dim = size(globalKs)[1]
+
+    return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, WingStructModel, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
 function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict)
@@ -470,7 +493,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     #   Test eigensolver
     # ---------------------------
     # --- Dry solve ---
-    omegaSquared, structModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms, nModes)
+    omegaSquared, structModeShapes = FEMMethods.compute_eigsolve(Ks, Ms, nModes)
     structNatFreqs = .√(omegaSquared) / (2π)
     println("+-------------------------------------+")
     println("| Structural natural frequencies [Hz]:")
@@ -486,7 +509,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
     globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
-    wetOmegaSquared, wetModeShapes = SolverRoutines.compute_eigsolve(Ks, Ms .+ Mf, nModes)
+    wetOmegaSquared, wetModeShapes = FEMMethods.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = .√(wetOmegaSquared) / (2π)
     println("| Wetted natural frequencies [Hz]:    |")
     println("+-------------------------------------+")
@@ -822,7 +845,7 @@ end
 
 function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVec, abVec, ebVec,
     FOIL, dim::Int64, Nr::Int64, DOFBlankingList, idxTip,
-    N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat, LLSystem, LLOutputs, FlowCond;
+    N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat, LLSystem, claVec, FlowCond;
     ΔdynP=nothing, Δu=nothing, debug=false, solverOptions=Dict(), appendageOptions=Dict()
 )
     """
@@ -894,14 +917,14 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, idxTip, zeros(2, 2))
 
     # --- Outputs ---
-    p_r = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
-    p_i = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
-    true_eigs_r = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
-    true_eigs_i = zeros(DTYPE, 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_r = zeros(DTYPE, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i = zeros(DTYPE, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    p_r::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
+    p_i::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
+    true_eigs_r::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
+    true_eigs_i::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r::AbstractArray{Number} = zeros(2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i::AbstractArray{Number} = zeros(2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
-    flowHistory = zeros(DTYPE, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
+    flowHistory::AbstractMatrix{Number} = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
 
 
     # ---------------------------
@@ -914,8 +937,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     m = zeros(Int64, nModes * 3, 2)
 
     # --- Retained eigenvector matrices in the speed sweep ---
-    R_eigs_r_tmp = zeros(DTYPE, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i_tmp = zeros(DTYPE, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r_tmp::AbstractArray{Number} = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i_tmp::AbstractArray{Number} = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
 
     # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
@@ -983,7 +1006,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         # div_tmp = 1 / tmpFactor
         # kSweep = ωSweep * div_tmp
         # --- Compute generalized hydrodynamic loads ---
-        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, LLOutputs, FlowCond.rhof, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, FlowCond.rhof, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
         # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Cr, Qr, structMesh, DOFBlankingList; debug=solverOptions["debug"], qiter=nFlow)
         # ---------------------------
@@ -1497,7 +1520,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     # --- Determine Δk ---
     Δk = 0.0
     ChainRulesCore.ignore_derivatives() do
-        omegaSquared, _ = SolverRoutines.compute_eigsolve(KK, MM .+ Mf, Nr)
+        omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM .+ Mf, Nr)
         Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
     end
     # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
@@ -2011,7 +2034,7 @@ function compute_modalSpace(Ms, Ks, Cs; reducedSize=20)
     """
 
     # --- Compute the modal space matrix ---
-    _, ubar = SolverRoutines.compute_eigsolve(Ks, Ms, reducedSize)
+    _, ubar = FEMMethods.compute_eigsolve(Ks, Ms, reducedSize)
     Qr = ubar
     QrT = transpose(Qr)
 
@@ -2019,10 +2042,6 @@ function compute_modalSpace(Ms, Ks, Cs; reducedSize=20)
     Ms_r = QrT * real(Ms * Qr) # need this for type stability in AD
     Ks_r = QrT * real(Ks * Qr) # need this for type stability in AD
     Cs_r = QrT * Cs * Qr
-
-    # println("type of QrT", typeof(QrT))
-    # println("type of Ks", typeof(Ks))
-    # println("type of Ks_r", typeof(Ks_r))
 
     return Ms_r, Ks_r, Cs_r, Qr
 end
@@ -2188,6 +2207,23 @@ function cost_funcsFromCoordsDVs(
 
     # Solve
     obj, _, SOL = solve(FEMESH.mesh, FEMESH.elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, LLOutputs, FlowCond, debug)
+    if return_all
+        return obj, SOL
+    else
+        return obj
+    end
+end
+
+function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, mesh, elemConn, claVec, appendageParams, solverOptions; return_all=false)
+    """
+    """
+
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solverOM(displacements_col, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+
+    obj, _, SOL = solve(mesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, claVec, FlowCond, debug)
+
     if return_all
         return obj, SOL
     else

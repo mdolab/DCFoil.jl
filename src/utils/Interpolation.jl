@@ -6,13 +6,7 @@
 @Desc    :   Interpolation schemes
 """
 
-module Interpolation
-
-using Zygote
 using ChainRulesCore
-# using ..DCFoil: DTYPE
-
-const RealOrComplex = Union{Real,Complex}
 
 function lagrangeArrInterp(xj, yj, m::Int64, n::Int64, d::Int64, x)
     """
@@ -522,4 +516,3 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
     end
 end
 
-end # module

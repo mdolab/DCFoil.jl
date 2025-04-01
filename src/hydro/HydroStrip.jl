@@ -9,6 +9,7 @@
 
 module HydroStrip
 
+
 # --- Public functions ---
 export compute_theodorsen, compute_glauert_circ
 export compute_node_mass, compute_node_damp, compute_node_stiff
@@ -28,19 +29,34 @@ using FLOWMath: norm_cs_safe, abs_cs_safe
 # using Cthulhu
 
 # --- DCFoil modules ---
-using ..SolverRoutines
-using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
-using ..GlauertLL: GlauertLL
-using ..LiftingLine: LiftingLine, Δα
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
-using ..EBBeam: EBBeam as BeamElement, NDOF
-using ..DCFoil: RealOrComplex, DTYPE
-using ..DesignConstants: CONFIGS
-using ..Preprocessing
-using ..Utilities
-using ..FEMMethods
-using ..Interpolation
-using ..Rotations
+for headerName in [
+    "../constants/DataTypes",
+    "../constants/SolutionConstants",
+    "../adrules/CustomRules",
+    "../constants/DesignConstants",
+    "../utils/Utilities",
+    "../utils/Rotations",
+    "../struct/EBBeam",
+    "../utils/Preprocessing",
+    "../hydro/Unsteady",
+    "../utils/Interpolation",
+]
+
+    include(headerName * ".jl")
+end
+# using ..SolverRoutines
+# using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
+# using ..GlauertLL: GlauertLL
+# using ..LiftingLine: LiftingLine, Δα
+# using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
+# using ..EBBeam: EBBeam as BeamElement, NDOF
+# using ..DCFoil: RealOrComplex, DTYPE
+# using ..DesignConstants: CONFIGS
+# using ..Preprocessing
+# using ..Utilities
+# using ..FEMMethods
+# using ..Interpolation
+# using ..Rotations
 
 # ==============================================================================
 #                         Free surface effects
@@ -510,7 +526,7 @@ end
 
 
 function correct_downwash(
-    iComp::Int64, CLMain::DTYPE, DVDictList, solverOptions
+    iComp::Int64, CLMain::Number, DVDictList, solverOptions
 )
     """
     """
@@ -624,7 +640,7 @@ end
 #                         Static drag
 # ==============================================================================
 function compute_AICs(
-    AEROMESH, FOIL, LLSystem, LLOutputs, ϱ, dim, Λ, U∞, ω, elemType="BT2";
+    AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
     solverOptions=Dict(),
 )
@@ -653,9 +669,6 @@ function compute_AICs(
     NOTE: Do not actually call these AIC when talking to other people because this is technically incorrect.
     AIC is the A matrix in potential flow
     """
-
-    # Spline to get lift slope in the right spots if using nonlinear LL
-    clαVec = LLOutputs.cla
 
     globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
@@ -734,94 +747,9 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
 
         # --- Linearly interpolate values based on y loc ---
+        # TODO: GWN DEBUG THIS AND GENERALIZE IT
         clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
-        # # THis chunk of code is super hacky based on assuming wing and t-foil strut order
-        # if use_nlll # TODO: FIX LATER TO BE GENERAL
-        #     xeval = LLSystem.collocationPts[YDIM, :]
-        #     clα = Interpolation.do_linear_interp(xeval, clαVec, yⁿ)
-        #     sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
-        #     if inode <= FOIL.nNodes # STBD WING
-        #         c = Interpolation.do_linear_interp(sDomFoil, chordVec, yⁿ)
-        #         ab = Interpolation.do_linear_interp(sDomFoil, abVec, yⁿ)
-        #         eb = Interpolation.do_linear_interp(sDomFoil, ebVec, yⁿ)
-        #         # c = chordVec[inode]
-        #         # ab = abVec[inode]
-        #         # eb = ebVec[inode]
 
-        #     else
-        #         if appendageOptions["config"] in ["t-foil", "full-wing"]
-        #             if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
-        #                 # Put negative sign on the linear interp routine bc there is a bug!
-        #                 sDomFoil = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-
-        #                 c = Interpolation.do_linear_interp(sDomFoil, chordVec, -yⁿ)
-        #                 ab = Interpolation.do_linear_interp(sDomFoil, abVec, -yⁿ)
-        #                 eb = Interpolation.do_linear_interp(sDomFoil, ebVec, -yⁿ)
-        #                 # c = chordVec[inode-FOIL.nNodes+1]
-        #                 # ab = abVec[inode-FOIL.nNodes+1]
-        #                 # eb = ebVec[inode-FOIL.nNodes+1]
-        #                 # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-        #                 dR1 = -dR1
-        #                 dR2 = -dR2
-        #                 dR3 = -dR3
-        #             else # strut section
-        #                 sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-        #                 c = Interpolation.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
-        #                 ab = Interpolation.do_linear_interp(sDomFoil, strutabVec, zⁿ)
-        #                 eb = Interpolation.do_linear_interp(sDomFoil, strutebVec, zⁿ)
-        #             end
-        #         end
-        #     end
-        #     # println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f",eb), "\tyn: $(yⁿ)")
-        # else
-        #     # if inode <= FOIL.nNodes # STBD WING
-        #     #     sDom = aeroMesh[1:FOIL.nNodes, YDIM]
-        #     #     clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-        #     #     c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-        #     #     ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-        #     #     eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
-        #     # else
-        #     #     if appendageOptions["config"] == "t-foil"
-        #     #         if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
-        #     #             # Put negative sign on the linear interp routine bc there is a bug!
-        #     #             sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-        #     #             yⁿ = -1 * yⁿ
-
-        #     #             clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-        #     #             c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-        #     #             ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-        #     #             eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
-        #     #             # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-        #     #             dR1 = -dR1
-        #     #             dR2 = -dR2
-        #     #             dR3 = -dR3
-        #     #             # println("I'm a port wing strip")
-        #     #         else
-        #     #             sDom = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-        #     #             clα = Interpolation.do_linear_interp(sDom, strutclαVec, zⁿ)
-        #     #             c = Interpolation.do_linear_interp(sDom, strutChordVec, zⁿ)
-        #     #             ab = Interpolation.do_linear_interp(sDom, strutabVec, zⁿ)
-        #     #             eb = Interpolation.do_linear_interp(sDom, strutebVec, zⁿ)
-        #     #             # println("I'm a strut strip")
-        #     #         end
-        #     #     elseif appendageOptions["config"] == "full-wing"
-        #     #         if inode <= nElemWing * 2 + 1
-        #     #             # Put negative sign on the linear interp routine bc there is a bug!
-        #     #             sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-        #     #             yⁿ = -1 * yⁿ
-
-        #     #             clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-        #     #             c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-        #     #             ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-        #     #             eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
-        #     #             # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-        #     #             dR1 = -dR1
-        #     #             dR2 = -dR2
-        #     #             dR3 = -dR3
-        #     #         end
-        #     #     end
-        #     # end
-        # end
         b = 0.5 * localchord # semichord for more readable code
 
         # --- Precomputes ---
@@ -883,9 +811,12 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
     nElemWing = length(chordVec) - 1
 
     if use_nlll
-        xeval = LLSystem.collocationPts[YDIM, :]
-        clα = Interpolation.do_linear_interp(xeval, clαVec, yⁿ)
+        # xeval = LLSystem.collocationPts[YDIM, :]
         sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
+        # println("sDomFoil: ", sDomFoil)
+        # println("yⁿ: ", yⁿ)
+        # println("clαVec length: ", length(clαVec))
+        clα = do_linear_interp(sDomFoil, clαVec, yⁿ)
         if inode <= FOIL.nNodes # STBD WING
             c = chordVec[inode]
             ab = abVec[inode]
@@ -909,6 +840,7 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
                 end
             end
         end
+        println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f", eb), "\tyn: $(yⁿ)")
     else
         if inode <= FOIL.nNodes # STBD WING
             sDom = aeroMesh[1:FOIL.nNodes, YDIM]
@@ -1344,7 +1276,7 @@ function get_strip_vecs(
     return copy(stripVecs_z)
 end
 
-function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, LLOutputs, rhof, elemType; appendageOptions, solverOptions)
+function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, rhof, elemType; appendageOptions, solverOptions)
     """
     Computes the hydrodynamic coefficients for a sweep of reduced frequencies
 
@@ -1370,7 +1302,7 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
         ω = k * U∞ * (cos(Λ)) / b_ref
 
         # Compute AIC
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = compute_AICs(AEROMESH, FOIL, LLSystem, claVec, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
 
         # Accumulate in frequency sweep matrix
         # @inbounds begin
@@ -1410,11 +1342,11 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
     # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+        x0L::Vector{Number} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
 
         # This unravels to keep computations in the stack, not the heap
 
-        y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+        y0L::Array{Number} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
         Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
@@ -1460,7 +1392,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
 end
 
 function integrate_hydroLoads(
-    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::DTYPE, elemType="BT2";
+    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::Number, elemType="BT2";
     appendageOptions=Dict(), solverOptions=Dict()
 )
     """

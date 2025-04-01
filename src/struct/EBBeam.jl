@@ -4,9 +4,7 @@
 @Time    :   2024/01/30
 @Author  :   Galen Ng
 @Desc    :   Module with the linear beam elements
-"""
 
-"""
     ELEMENTS THAT WORK IN 3D SPACE
      - BEAM3D
 
@@ -34,6 +32,10 @@
     This has already been derived so no need to redo getting [N] in the code
 
     The coordinate system is origin at the midchord
+
+    KNOWN BUGS:
+    The rotation about beam local y-axis is negated when solving 
+    so there's either a bug in the stiffness matrix or in the transformation matrix
 
 """
 

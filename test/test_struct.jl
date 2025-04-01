@@ -8,8 +8,10 @@
 using LinearAlgebra
 using Plots, DelimitedFiles
 
-include("../src/DCFoil.jl")
-using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, Rotations
+# include("../src/DCFoil.jl")
+# using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, Rotations
+include("../src/struct/FEMMethods.jl")
+using .FEMMethods
 
 # ==============================================================================
 #                         BEAM PROPERTIES
@@ -279,7 +281,7 @@ function test_FiniteElementIso(DVDict, solverOptions)
 
     K, M, F = FEMMethods.apply_BCs(globalK, globalM, globalF, globalDOFBlankingList)
 
-    q1 = FEMMethods.solve_structure(K,F)
+    q1 = FEMMethods.solve_structure(K, F)
 
     # ************************************************
     #     bend-twist
@@ -810,6 +812,7 @@ function test_FECOMP2()
         "material" => "test-comp", # preselect from material library
         "config" => "wing",
         "nNodes" => nNodes,
+        "nNodeStrut" => nNodesStrut,
         "xMount" => 0.0,
     )
     solverOptions = Dict(
@@ -820,6 +823,29 @@ function test_FECOMP2()
         "run_body" => false,
         "debug" => false,
         "use_nlll" => false,
+        "fRange" => [0.0, 10.0],
+        "uRange" => [1.0, 2.0],
+    )
+    appendageParams = Dict(
+        "alfa0" => 6.0, # initial angle of attack [deg]
+        "sweep" => 0.0 * π / 180, # sweep angle [rad]
+        "zeta" => 0.04, # modal damping ratio at first 2 modes
+        "c" => 1 * ones(nNodes), # chord length [m]
+        "s" => 1.0, # semispan [m]
+        "ab" => zeros(nNodes), # dist from midchord to EA [m]
+        "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
+        "x_ab" => zeros(nNodes), # static imbalance [m]
+        "theta_f" => deg2rad(15), # fiber angle global [rad]
+        # --- Strut vars ---
+        "rake" => 0.0,
+        "depth0" => 0.1,
+        "beta" => 0.0, # yaw angle wrt flow [deg]
+        "s_strut" => 0.4, # from Yingqian
+        "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+        "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+        "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
     )
 
 
@@ -828,24 +854,32 @@ function test_FECOMP2()
 
     axisDefault = "z"
 
-    FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, wingOptions)
+    # FOIL, STRUT, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, wingOptions)
+    LECoords::Matrix = transpose(hcat(-ones(10) * 0.5, LinRange(0, DVDict["s"], 10), zeros(10)))
+    TECoords::Matrix = transpose(hcat(ones(10) * 0.5, LinRange(0, DVDict["s"], 10), zeros(10)))
+    nodeConn = zeros(Int64, 2, 9)
+    for ii in 1:9
+        nodeConn[1, ii] = ii
+        nodeConn[2, ii] = ii + 1
+    end
+
+    globalK, globalM, globalF, globalDOFBlankingList, FEMESH, FOIL, STRUT = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], wingOptions, solverOptions)
 
     nElem = nNodes - 1
     constitutive = FOIL.constitutive
-    structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"], rake=testAngle)
+    # structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"], rake=testAngle)
 
     # ---------------------------
     #   Tip force only
     # ---------------------------
     elemType = "COMP2"
-    globalDOFBlankingList = FEMMethods.get_fixed_dofs(elemType; appendageOptions=wingOptions)
-    abVec = DVDict["ab"]
+    # abVec = DVDict["ab"]
     x_αbVec = DVDict["x_ab"]
-    chordVec = DVDict["c"]
-    ebVec = 0.25 * chordVec .+ abVec
-    FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], length(chordVec), zeros(2, 2))
-    globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
-    T1 = Rotations.get_rotate3dMat(angleDefault, axisDefault)
+    # chordVec = DVDict["c"]
+    # ebVec = 0.25 * chordVec .+ abVec
+    # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, DVDict["toc"], abVec, x_αbVec, DVDict["theta_f"], length(chordVec), zeros(2, 2))
+    # globalK, globalM, globalF = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, elemType, FOIL.constitutive)
+    T1 = FEMMethods.get_rotate3dMat(angleDefault, axisDefault)
     T = I(3)
     transMatL2G = [
         T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
@@ -916,14 +950,16 @@ function test_FECOMP2()
     # the tip deformations should be 4m for pure bending with tip force and 3 radians for tip torque
     # Of course, the tip torque for BT2 will be smaller since we prescribe the zero twist derivative BC at the root
     ref_sol = [0.0499, deg2rad(-4.47), -0.078, deg2rad(9.24)]
+    println("ref_sol = ", ref_sol)
 
     # --- Relative error ---
     answers = [BT2_Ftip_wtip, BT2_Ftip_psitip, BT2_Ttip_wtip, BT2_Ttip_psitip] # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
-    omegaSquared, modeShapes = SolverRoutines.compute_eigsolve(K, M, 6)
+    omegaSquared, modeShapes = FEMMethods.compute_eigsolve(K, M, 6)
 
-    println("f_n = ", .√(omegaSquared) / (2 * pi))
+    println("omegaSquared = ", omegaSquared)
+    println("f_n = ", .√(abs.(omegaSquared)) / (2 * pi))
 
     return rel_err
 end

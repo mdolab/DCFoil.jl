@@ -5,6 +5,7 @@
 @Last modified :   2025/02/04
 @Author        :   Galen Ng
 @Desc          :   OpenMDAO component for the Julia lifting line code
+                   This is a test script for assembling parts of DCFoil's static and dynamic solvers
 """
 
 # ==============================================================================
@@ -31,6 +32,8 @@ jl = juliacall.newmodule("DCFoil")
 jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
+jl.include("../src/solvers/solveflutter_om.jl")  # discipline 4 flutter solver
+jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
@@ -321,6 +324,12 @@ if __name__ == "__main__":
     expcomp_displacement = JuliaExplicitComp(
         jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
+    expcomp_flutter = JuliaExplicitComp(
+        jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions)
+    )
+    expcomp_forced = JuliaExplicitComp(
+        jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions)
+    )
 
     model = om.Group()
 
@@ -537,14 +546,21 @@ if __name__ == "__main__":
     elif args.run_flow:
         print("nondimensional gammas", prob.get_val("gammas"))
         print("CL", prob.get_val("CL"))  # should be around CL = 0.507 something
-        print("CLa", prob.get_val("cla"))  #
+        print("CLa", prob.get_val("cla_col"))  #
         # print("force distribution", prob.get_val("forces_dist"))
 
     else:
         print("nondimensional gammas", prob.get_val("gammas"))
         print("nondimensional gammas_d", prob.get_val("gammas_d"))
         print("CL", prob.get_val("CL"))
-        print("CLa", prob.get_val("cla"))  #
+        print("CLa", prob.get_val("cla_col")) 
+        print("mesh", prob.get_val("nodes"))
+        print("elemConn", prob.get_val("elemConn"))
+        # Write matrices to a file so we can test them
+
+        # print("Kmatrix", prob.get_val("Kmat"))
+        # print("Cmatrix", prob.get_val("Cmat"))
+        # print("Mmatrix", prob.get_val("Mmat"))
         # print("force distribution", prob.get_val("forces_dist"))
         print("bending deflections", prob.get_val("deflections")[2::9])
         print("twisting deflections", prob.get_val("deflections")[4::9])

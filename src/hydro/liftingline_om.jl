@@ -469,7 +469,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("Dj", val=0.0),
         OpenMDAOCore.VarData("Ds", val=0.0),
         # --- lift slopes for dynamic solution ---
-        OpenMDAOCore.VarData("cla", val=zeros(LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("cla_col", val=zeros(LiftingLine.NPT_WING)),
     ]
 
     partials = [
@@ -497,7 +497,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("Dj", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("Ds", "ptVec", method="exact"),
         # --- lift slopes for dynamic solution ---
-        OpenMDAOCore.PartialsData("cla", "ptVec", method="exact"), # good, but the FD check will be wrong because of how the cla is calculated. See test script
+        OpenMDAOCore.PartialsData("cla_col", "ptVec", method="exact"), # good, but the FD check will be wrong because of how the cla is calculated. See test script
         # --- Hydro mesh ---
         OpenMDAOCore.PartialsData("collocationPts", "ptVec", method="exact"),
         # --- WRT gammas ---
@@ -518,7 +518,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CDw", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("Dw", "gammas", method="exact"),
         # --- lift slopes for dynamic solution ---
-        OpenMDAOCore.PartialsData("cla", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("cla_col", "gammas", method="exact"),
         # --- WRT displacements col ---
         OpenMDAOCore.PartialsData("CL", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "displacements_col", method="exact"),
@@ -537,7 +537,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CDw", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("Dw", "displacements_col", method="exact"),
         # --- lift slopes for dynamic solution ---
-        OpenMDAOCore.PartialsData("cla", "displacements_col", method="exact"), # good, but the FD check will be wrong because of how the cla is calculated. See test script
+        OpenMDAOCore.PartialsData("cla_col", "displacements_col", method="exact"), # good, but the FD check will be wrong because of how the cla is calculated. See test script
         # --- Hydro mesh ---
         OpenMDAOCore.PartialsData("collocationPts", "displacements_col", method="exact"),
         # --- AOA DVs ---
@@ -637,10 +637,8 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     # ---------------------------
     #   Lift slope solution
     # ---------------------------
-    Gconv = convert(Vector{Float64}, Gconv) # convert to vector because julia was complaining
-    Gconv_d = convert(Vector{Float64}, Gconv_d) # convert to vector because julia was complaining
     cla = LiftingLine.compute_liftslopes(Gconv, Gconv_d, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
-    outputs["cla"][:] = cla
+    outputs["cla_col"][:] = cla
 
     return nothing
 end
@@ -758,10 +756,10 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     dcladxdispl = (dcldxdispl_f - dcldxdispl_i) / LiftingLine.Δα
 
     for (ii, ∂claidXpt) in enumerate(eachrow(dcladXpt))
-        partials["cla", "ptVec"][ii, :] = ∂claidXpt
+        partials["cla_col", "ptVec"][ii, :] = ∂claidXpt
     end
     for (ii, ∂claidxdispl) in enumerate(eachrow(dcladxdispl))
-        partials["cla", "displacements_col"][ii, :] = ∂claidxdispl
+        partials["cla_col", "displacements_col"][ii, :] = ∂claidxdispl
     end
 
     # ************************************************
@@ -831,7 +829,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     dcldg_f = ∂f∂g_d[end-LiftingLine.NPT_WING+1:end, :]
     dcladg = (dcldg_f - dcldg_i) / LiftingLine.Δα
     for (ii, dclaidg) in enumerate(eachcol(dcladg))
-        partials["cla", "gammas"][ii, :] = dclaidg
+        partials["cla_col", "gammas"][ii, :] = dclaidg
     end
 
     return nothing
