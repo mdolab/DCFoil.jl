@@ -9,6 +9,7 @@
 
 module HydroStrip
 
+
 # --- Public functions ---
 export compute_theodorsen, compute_glauert_circ
 export compute_node_mass, compute_node_damp, compute_node_stiff
@@ -28,19 +29,34 @@ using FLOWMath: norm_cs_safe, abs_cs_safe
 # using Cthulhu
 
 # --- DCFoil modules ---
-using ..SolverRoutines
-using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
-using ..GlauertLL: GlauertLL
-using ..LiftingLine: LiftingLine, Δα
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
-using ..EBBeam: EBBeam as BeamElement, NDOF
-using ..DCFoil: RealOrComplex, DTYPE
-using ..DesignConstants: CONFIGS
-using ..Preprocessing
-using ..Utilities
-using ..FEMMethods
-using ..Interpolation
-using ..Rotations
+for headerName in [
+    "../constants/DataTypes",
+    "../constants/SolutionConstants",
+    "../adrules/CustomRules",
+    "../constants/DesignConstants",
+    "../utils/Utilities",
+    "../utils/Rotations",
+    "../struct/EBBeam",
+    "../utils/Preprocessing",
+    "../hydro/Unsteady",
+    "../utils/Interpolation",
+]
+
+    include(headerName * ".jl")
+end
+# using ..SolverRoutines
+# using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
+# using ..GlauertLL: GlauertLL
+# using ..LiftingLine: LiftingLine, Δα
+# using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
+# using ..EBBeam: EBBeam as BeamElement, NDOF
+# using ..DCFoil: RealOrComplex, DTYPE
+# using ..DesignConstants: CONFIGS
+# using ..Preprocessing
+# using ..Utilities
+# using ..FEMMethods
+# using ..Interpolation
+# using ..Rotations
 
 # ==============================================================================
 #                         Free surface effects
@@ -510,7 +526,7 @@ end
 
 
 function correct_downwash(
-    iComp::Int64, CLMain::DTYPE, DVDictList, solverOptions
+    iComp::Int64, CLMain::Number, DVDictList, solverOptions
 )
     """
     """
@@ -733,7 +749,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # --- Linearly interpolate values based on y loc ---
         # TODO: GWN DEBUG THIS AND GENERALIZE IT
         clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
-        
+
         b = 0.5 * localchord # semichord for more readable code
 
         # --- Precomputes ---
@@ -797,8 +813,10 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
     if use_nlll
         # xeval = LLSystem.collocationPts[YDIM, :]
         sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
-        clα = Interpolation.do_linear_interp(sDomFoil, clαVec, yⁿ)
-        println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f", eb), "\tyn: $(yⁿ)")
+        # println("sDomFoil: ", sDomFoil)
+        # println("yⁿ: ", yⁿ)
+        # println("clαVec length: ", length(clαVec))
+        clα = do_linear_interp(sDomFoil, clαVec, yⁿ)
         if inode <= FOIL.nNodes # STBD WING
             c = chordVec[inode]
             ab = abVec[inode]
@@ -822,6 +840,7 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
                 end
             end
         end
+        println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f", eb), "\tyn: $(yⁿ)")
     else
         if inode <= FOIL.nNodes # STBD WING
             sDom = aeroMesh[1:FOIL.nNodes, YDIM]
@@ -1283,7 +1302,7 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
         ω = k * U∞ * (cos(Λ)) / b_ref
 
         # Compute AIC
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, LLSystem, claVec, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = compute_AICs(AEROMESH, FOIL, LLSystem, claVec, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
 
         # Accumulate in frequency sweep matrix
         # @inbounds begin
@@ -1323,11 +1342,11 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
     # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+        x0L::Vector{Number} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
 
         # This unravels to keep computations in the stack, not the heap
 
-        y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+        y0L::Array{Number} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
         Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
@@ -1373,7 +1392,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
 end
 
 function integrate_hydroLoads(
-    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::DTYPE, elemType="BT2";
+    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::Number, elemType="BT2";
     appendageOptions=Dict(), solverOptions=Dict()
 )
     """

@@ -289,9 +289,9 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
     outputs["nodes"][:] = FEMESH.mesh
     outputs["elemConn"][:] = FEMESH.elemConn
 
-    outputs["Kmat"][:] = Kmat
-    outputs["Cmat"][:] = Cmat
-    outputs["Mmat"][:] = Mmat
+    # outputs["Kmat"][:] = Kmat
+    # outputs["Cmat"][:] = Cmat
+    # outputs["Mmat"][:] = Mmat
 
     return nothing
 end

@@ -9,7 +9,7 @@
 # --- PACKAGES ---
 using SpecialFunctions
 
-function compute_theodorsen(k::DTYPE)
+function compute_theodorsen(k::Number)
     """
     Theodorsen's transfer function for unsteady aero/hydrodynamics of a sinusoidally oscillating foil.
     w/ separate real and imaginary parts. 
@@ -205,7 +205,7 @@ function compute_node_stiff_dcla(
 end
 
 function compute_node_stiff_faster(
-    clα::DTYPE, b::DTYPE, eb::DTYPE, ab::DTYPE, U∞::DTYPE, clambda::DTYPE, slambda::DTYPE, rho_f::DTYPE, Ck_r::DTYPE, Ck_i::DTYPE
+    clα::Number, b::Number, eb::Number, ab::Number, U∞::Number, clambda::Number, slambda::Number, rho_f::Number, Ck_r::Number, Ck_i::Number
 )
     """
     Hydrodynamic stiffness force

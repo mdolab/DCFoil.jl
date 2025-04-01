@@ -232,7 +232,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     # ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="FiDi")
     ∂r∂g = LiftingLine.compute_LLresJacobian(gammas; solverParams=LLNLParams, mode="CS") # use very accurate derivatives only when necessary
 
-    ∂r∂xPt, ∂r∂xdispl = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    ∂r∂xPt, ∂r∂xdispl = LiftingLine.compute_∂r∂Xpt(gammas, ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
     # This definition really breaks my head but it's basically ∂r / ∂ <second-var>
     for (ii, ∂ri∂g) in enumerate(eachrow(∂r∂g))
@@ -253,7 +253,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
         partials["gammas_d", "gammas_d"][ii, :] = ∂ri∂g
     end
 
-    ∂r∂xPt_d, ∂r∂xdispl_d = LiftingLine.compute_∂r∂Xpt(gammas_d, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    ∂r∂xPt_d, ∂r∂xdispl_d = LiftingLine.compute_∂r∂Xpt(gammas_d, ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
     for (ii, ∂ri∂Xpt) in enumerate(eachrow(∂r∂xPt_d))
         partials["gammas_d", "ptVec"][ii, :] = ∂ri∂Xpt
