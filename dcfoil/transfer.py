@@ -56,6 +56,15 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         disp_trans = disp[:, :3]
         disp_rot = disp[:, 3:6]
 
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # HACK: flip sign of X rotation here because the beam model seems to flip it internally
+        # TODO: undo this change once the beam model is fixed
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if isinstance(disp_rot, jnp.ndarray):
+            disp_rot = disp_rot.at[:, 0].multiply(-1)
+        else:
+            disp_rot[:, 0] *= -1
+
         # displacement at each collocation point
         disp_colloc = jnp.zeros((6, n_strips))
 
