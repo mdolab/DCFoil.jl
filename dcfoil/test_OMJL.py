@@ -34,8 +34,8 @@ jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
-from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
-
+### from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
+from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
 ptVec = np.array(
     [
         -0.07,
@@ -422,7 +422,8 @@ if __name__ == "__main__":
         )
 
         # hydroelastic coupled solver
-        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=30, iprint=2, atol=1e-7, rtol=0)
+        ### couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=50, iprint=2, atol=1e-10, rtol=0)
+        couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=30, iprint=2, atol=1e-7, rtol=0)
         couple.linear_solver = om.DirectSolver()   # for adjoint
 
         # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
@@ -489,13 +490,13 @@ if __name__ == "__main__":
         prob.set_val("gammas", np.zeros(npt_wing))
 
         # tip load test
-        loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
-        loads[4 * 9 + 1] = 1000
-        loads[4 * 9 + 2] = 1000   # tip vertical force (z direction)
-        tractions = prob.set_val("traction_forces", loads)
+        # loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
+        # loads[4 * 9 + 1] = 1000
+        # loads[4 * 9 + 2] = 1000   # tip vertical force (z direction)
+        # tractions = prob.set_val("traction_forces", loads)
 
     # set fiber angle
-    fiber_angle = np.deg2rad(0)
+    fiber_angle = np.deg2rad(-15)
     prob.set_val('beamstruct.theta_f', fiber_angle)
     prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
     prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
