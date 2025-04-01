@@ -29,6 +29,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         self.options.declare('n_node', types=int, desc='Number of FEM nodes')
         self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
         self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
+        self.options.declare('use_jit', default=False)
 
     def setup(self):
         n_node = self.options['n_node']
@@ -49,7 +50,10 @@ class DisplacementTransfer(om.JaxExplicitComponent):
 
         # shift collocation pts x axis to be consistent with FEM frame
         colloc_pts = collocationPts * 1.
-        colloc_pts[0, :] -= self.options['xMount']  # shift x  # TODO: does this work in Jax?
+        if isinstance(colloc_pts, jnp.ndarray):
+            colloc_pts = colloc_pts.at[0, :].add(-self.options['xMount'])
+        else:  # regular numpy array
+            colloc_pts[0, :] -= self.options['xMount']
 
         # reshape deflections to 2D array of shape (n_node, 9)
         disp = deflections.reshape(n_node, 9)
@@ -74,11 +78,14 @@ class DisplacementTransfer(om.JaxExplicitComponent):
             y_dist = nodes[:, 1] - colloc_pts[1, i]
 
             # left node: max y_dist for y_dist <= 0
-            left_y_ist = jnp.max(y_dist[y_dist <= 0])
-            left_node_index = int(jnp.where(y_dist == left_y_ist)[0][0])
+            mask = y_dist <= 0
+            masked_y_dist = jnp.where(mask, y_dist, -jnp.inf)
+            left_node_index = jnp.argmax(masked_y_dist)
+            
             # right node: min y_dist but y_dist > 0
-            right_y_dist = jnp.min(y_dist[y_dist >= 0])
-            right_node_index = int(jnp.where(y_dist == right_y_dist)[0][0])
+            mask = y_dist >= 0
+            masked_y_dist = jnp.where(mask, y_dist, jnp.inf)
+            right_node_index = jnp.argmin(masked_y_dist)
 
             if left_node_index == right_node_index:
                 # y-coord of the collocation point is exactly at one of the FEM nodes
@@ -142,6 +149,7 @@ class LoadTransfer(om.JaxExplicitComponent):
         self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
         self.options.declare('n_node', types=int, desc='Number of FEM nodes')
         self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
+        self.options.declare('use_jit', default=False)
 
     def setup(self):
         n_strips = self.options['n_strips']
@@ -162,7 +170,10 @@ class LoadTransfer(om.JaxExplicitComponent):
 
         # shift collocation pts x axis to be consistent with FEM frame
         colloc_pts = collocationPts * 1.
-        colloc_pts[0, :] -= self.options['xMount']  # shift x  # TODO: does this work in Jax?
+        if isinstance(colloc_pts, jnp.ndarray):
+            colloc_pts = colloc_pts.at[0, :].add(-self.options['xMount'])
+        else:  # regular numpy array
+            colloc_pts[0, :] -= self.options['xMount']
 
         # nodal load array
         loads = jnp.zeros((9, n_node))  # [9, n_node]
@@ -173,11 +184,14 @@ class LoadTransfer(om.JaxExplicitComponent):
             y_dist = nodes[:, 1] - colloc_pts[1, i]
 
             # left node: max y_dist for y_dist <= 0
-            left_y_ist = jnp.max(y_dist[y_dist <= 0])
-            left_node_index = int(jnp.where(y_dist == left_y_ist)[0][0])
+            mask = y_dist <= 0
+            masked_y_dist = jnp.where(mask, y_dist, -jnp.inf)
+            left_node_index = jnp.argmax(masked_y_dist)
+            
             # right node: min y_dist but y_dist > 0
-            right_y_dist = jnp.min(y_dist[y_dist >= 0])
-            right_node_index = int(jnp.where(y_dist == right_y_dist)[0][0])
+            mask = y_dist >= 0
+            masked_y_dist = jnp.where(mask, y_dist, jnp.inf)
+            right_node_index = jnp.argmin(masked_y_dist)
 
             if left_node_index == right_node_index:
                 # y-coord of the collocation point is exactly at one of the FEM nodes, so just transfer the loads to that node
@@ -248,16 +262,16 @@ class CLaInterpolation(om.JaxExplicitComponent):
 
     def compute_primal(self, CL_alpha, collocationPts, nodes):
         # spanwise linear interpolation of CL_alpha
-        CL_alpha_node = jnp.interp(nodes[:, 1], collocationPts[1, :], CL_alpha)
+        CL_alpha_node = jnp.interp(nodes[:, 1], collocationPts[1, :], CL_alpha, left="extrapolate", right="extrapolate")
         return (CL_alpha_node,)
 
 
 def test_displacement_transfer():
-    n_strips = 20
-    n_node = 6   # per one side of beam. Total number of nodes = 2 * n_node - 1
+    n_strips = 6
+    n_node = 3   # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
-    collocationPts[1, :] = np.linspace(-1, 1, n_strips)
+    collocationPts[1, :] = np.linspace(-0.9, 0.9, n_strips)
     collocationPts[0, :] = -0.5 + 3.355
 
     # FEM nodes and connectivity
@@ -289,8 +303,9 @@ def test_displacement_transfer():
     prob.set_val('collocationPts', collocationPts)  # collocation points are sorted in spanwise direction
 
     prob.run_model()
-    # prob.check_partials(compact_print=True)
     # om.n2(prob)
+
+    prob.check_partials(compact_print=True, method='fd', step=1e-6)
 
     # plot results
     fig, ax = plt.subplots(3, 2, figsize=(12, 8))
@@ -329,11 +344,11 @@ def test_displacement_transfer():
 
 
 def test_load_transfer():
-    n_strips = 20
-    n_node = 6   # per one side of beam. Total number of nodes = 2 * n_node - 1
+    n_strips = 6  # note: set even number of strips for FD test (to not have a strip at the center which messes up if left_node_index == right_node_index logic when FDing)
+    n_node = 3   # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
-    collocationPts[1, :] = np.linspace(-1, 1, n_strips)
+    collocationPts[1, :] = np.linspace(-0.9, 0.9, n_strips)
     collocationPts[0, :] = -0.5 + 3.355
 
     # FEM nodes and connectivity
@@ -350,7 +365,7 @@ def test_load_transfer():
     # print(elem_conn)
     
     forces_hydro = np.zeros((3, n_strips))
-    # forces_hydro[2, :] = np.sin(np.linspace(-np.pi, np.pi, n_strips)) + 0.3  # out of plane force
+    forces_hydro[2, :] = np.sin(np.linspace(-np.pi, np.pi, n_strips)) + 0.3  # out of plane force
     forces_hydro[0, :] = np.linspace(-0.1, -0.1, n_strips)  # in plane force
 
     prob = om.Problem()
@@ -361,7 +376,7 @@ def test_load_transfer():
     prob.set_val('forces_hydro', forces_hydro)
     prob.run_model()
 
-    ### prob.check_partials(compact_print=True, method='cs')
+    # prob.check_partials(compact_print=True, method='fd', step=1e-6)
 
     # plot forces and moments
     col_pts = prob.get_val('collocationPts')
@@ -410,7 +425,7 @@ def test_CLalpha_transfer():
     n_node = 6   # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
-    collocationPts[1, :] = np.linspace(-1, 1, n_strips)
+    collocationPts[1, :] = np.linspace(-0.9, 0.9, n_strips)
     collocationPts[0, :] = -0.5 + 3.355
 
     # FEM nodes and connectivity
@@ -433,14 +448,14 @@ def test_CLalpha_transfer():
 
     prob.run_model()
 
-    # prob.check_partials(compact_print=True)
+    prob.check_partials(compact_print=True, method='fd', step=1e-6)
 
-    om.n2(prob)
+    # om.n2(prob)
 
     # plot intepolated CL_alpha at FEM nodes
     plt.figure()
     plt.plot(collocationPts[1, :], CL_alpha, 'o-', ms=5, lw=1)
-    CL_alpha_node = prob.get_val('CL_alpha_node')
+    CL_alpha_node = prob.get_val('CL_alpha_node') * 1.
     plt.plot(nodes[:, 1], CL_alpha_node, 's', ms=5, color='C1')
     plt.show()
 
