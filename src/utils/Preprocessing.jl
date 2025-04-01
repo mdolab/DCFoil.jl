@@ -86,11 +86,11 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # println("s_loc_q: ", s_loc_q)
     s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1)))
     # println("s_loc: ", s_loc)
-    chordLengthsWork_interp::Vector{RealOrComplex} = Interpolation.do_linear_interp(s_loc, chordLengths[1:idxTip], s_loc_q)
+    chordLengthsWork_interp::Vector{RealOrComplex} = do_linear_interp(s_loc, chordLengths[1:idxTip], s_loc_q)
     # This is for half of the wing
     chordLengthsWork = vcat(chordLengths[1], chordLengthsWork_interp, chordLengths[idxTip])
     # qtrChordWork = Interpolation.do_linear_interp(s_loc, qtrChords, s_loc_q)
-    twistDistribution = Interpolation.do_linear_interp(s_loc, twistVec[1:idxTip], s_loc_q)
+    twistDistribution = do_linear_interp(s_loc, twistVec[1:idxTip], s_loc_q)
     # println("chords: ", chordLengthsWork)
 
     return midchords, chordLengthsWork, spanwiseVectors, Λ, twistDistribution

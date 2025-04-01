@@ -143,9 +143,9 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
 
 
-    midchordXLocs = Interpolation.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
-    midchordYLocs = Interpolation.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
-    midchordZLocs = Interpolation.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
+    midchordXLocs = do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
+    midchordYLocs = do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
+    midchordZLocs = do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
 
     # mesh = zeros(RealOrComplex, nNodeTot, 3)
     mesh = cat(reshape(midchordXLocs, nNodeTot, 1), reshape(midchordYLocs, nNodeTot, 1), reshape(midchordZLocs, nNodeTot, 1), dims=2)
@@ -1009,6 +1009,7 @@ function set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appe
 
     solverOptions["alphaConst"] = αStruct
     solverOptions["betaConst"] = βStruct
+
     return solverOptions
 end
 
@@ -1341,7 +1342,6 @@ function compute_∂r∂x(
             appendageParamsListCS[iComp]["toc"][ii] -= 1im * dh
             # ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
             ∂r∂xParams["toc"][:, ii] = imag(f_f) / dh
-            # TODO: PICKUP HERE SOMETHING WRONG?
         end
 
         appendageParamsList[iComp]["alfa0"] += dh
