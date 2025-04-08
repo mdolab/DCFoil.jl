@@ -6,7 +6,6 @@
 # @Desc    :   Module to store data specific to the hydrofoil model
 
 
-module DesignConstants
 
 struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     """
@@ -117,5 +116,3 @@ const CONFIGS::Vector{String} =
         "full-wing",
         "t-foil",
     ]
-
-end # end module

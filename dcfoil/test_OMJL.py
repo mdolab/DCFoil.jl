@@ -403,8 +403,8 @@ if __name__ == "__main__":
         # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
         # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
         # --- Dynamic solvers ---
-        # model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
-        # model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
+        model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
+        model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
 
     # ************************************************
     #     Setup problem
@@ -469,6 +469,7 @@ if __name__ == "__main__":
     starttime = time.time()
     prob.final_setup()
     midtime = time.time()
+    breakpoint()
     prob.run_model()
     endtime = time.time()
     print("model run complete\n" + "-" * 50)
@@ -549,12 +550,11 @@ if __name__ == "__main__":
             includes=["liftingline_funcs"],
             method="fd",
             step=1e-4,
-            compact_print=True,
+            # compact_print=True,
         )
         prob.check_partials(
             out_stream=f,
-            includes=["liftingline_funcs"],
-            # includes=["liftingline"],
+            includes=["liftingline"],
             method="fd",
             step=1e-4,  # now we're cooking :)
             compact_print=False,

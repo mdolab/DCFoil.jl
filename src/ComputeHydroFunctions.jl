@@ -271,11 +271,11 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
         ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), gammas)
 
     elseif uppercase(mode) == "FAD"
-        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
-
-
+        
+        
         backend = AD.ForwardDiffBackend()
         # @time ∂Drag∂G, = ReverseDiff.jacobian((xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
+        ∂Drag∂G, ∂Drag∂xdispl = AD.jacobian(backend, (xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
         ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), ptVec)
     else
         error("Mode not recognized")

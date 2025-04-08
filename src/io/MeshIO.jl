@@ -8,7 +8,6 @@
 """
 
 
-module MeshIO
 
 NSKIP = 1 # Number of lines to skip in the mesh file
 
@@ -161,7 +160,5 @@ function read_dcf(gridFile)
     TEMesh = hcat(TEMesh...)
 
     return LEMesh, nodeConn, TEMesh
-
-end
 
 end

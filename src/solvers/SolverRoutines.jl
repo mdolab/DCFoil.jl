@@ -1,4 +1,3 @@
-module SolverRoutines
 """
 Generic routines every solver needs
 
@@ -11,24 +10,24 @@ In julia, the chainrules rrule is '_b'
 """
 
 # --- PACKAGES ---
-using LinearAlgebra
-using Zygote
-using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
-using FLOWMath: abs_cs_safe, atan_cs_safe
-using Printf
+# using LinearAlgebra
+# using Zygote
+# using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
+# using FLOWMath: abs_cs_safe, atan_cs_safe
+# using Printf
 # using Debugger
 
 # --- DCFoil modules ---
-using ..NewtonRaphson
-using ..EigenvalueProblem
+# using ..NewtonRaphson
+# using ..EigenvalueProblem
 
 # --- Globals ---
-using ..EBBeam: EBBeam as BeamElement
+# using ..EBBeam: EBBeam as BeamElement
 # using ..DesignConstants: SORTEDDVS
-using ..DCFoil: RealOrComplex, DTYPE
+# using ..DCFoil: RealOrComplex, DTYPE
 # const RealOrComplex = Union{Real, Complex}
 # const DTYPE = AbstractFloat
-using ..Rotations: get_rotate3dMat
+# using ..Rotations: get_rotate3dMat
 
 # ==============================================================================
 #                         Solver routines
@@ -785,33 +784,6 @@ function ipack1d(A, mask, nFlow)
     return B, nFound
 end # ipack1d
 
-function find_signChange(x)
-    """
-    Find the location where a sign changes in an array
-    Inputs
-    ------
-        x - array which signchange is to be found. Size(n)
-    Outputs
-    -------
-        locs - array of size 2 containing the location of the sign change
-    """
-
-    # Get signs of each element in x
-    sgn = sign.(x)
-    n = length(sgn)
-
-    for ii in 1:n-1
-        @fastmath @inbounds begin
-            if sgn[ii+1] != sgn[ii]
-                return ii, ii + 1
-            else
-                continue
-            end
-        end
-    end
-
-end
-
 function transform_euler_ang(phi, theta, psi; rotType=1)
     """
     Parameters
@@ -925,5 +897,3 @@ function normalize_3Dvector(r)
     rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
     return rhat
 end
-
-end # SolverRoutines

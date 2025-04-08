@@ -779,7 +779,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # ---------------------------
         # Aerodynamics need to happen in global reference frame
         # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
-        Γ = Rotations.get_transMat(dR1, dR2, dR3, 1.0)
+        Γ = get_transMat(dR1, dR2, dR3, 1.0)
         ΓT = transpose(Γ)
         KLocal_trans = ΓT[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
         CLocal_trans = ΓT[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
@@ -834,20 +834,20 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
                     dR3 = -dR3
                 else # strut section
                     sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-                    c = Interpolation.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
-                    ab = Interpolation.do_linear_interp(sDomFoil, strutabVec, zⁿ)
-                    eb = Interpolation.do_linear_interp(sDomFoil, strutebVec, zⁿ)
+                    c = do_linear_interp(sDomFoil, strutChordVec, zⁿ)
+                    ab = do_linear_interp(sDomFoil, strutabVec, zⁿ)
+                    eb = do_linear_interp(sDomFoil, strutebVec, zⁿ)
                 end
             end
         end
-        println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f", eb), "\tyn: $(yⁿ)")
+        # println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f", eb), "\tyn: $(yⁿ)")
     else
         if inode <= FOIL.nNodes # STBD WING
             sDom = aeroMesh[1:FOIL.nNodes, YDIM]
-            clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-            c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-            ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-            eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
+            clα = do_linear_interp(sDom, clαVec, yⁿ)
+            c = do_linear_interp(sDom, chordVec, yⁿ)
+            ab = do_linear_interp(sDom, abVec, yⁿ)
+            eb = do_linear_interp(sDom, ebVec, yⁿ)
         else
             if appendageOptions["config"] == "t-foil"
                 if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
@@ -1338,7 +1338,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
     kDiff = k .- k_sweep
 
     # Find where the sign changes for the interpolation
-    b1, b2 = SolverRoutines.find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
+    b1, b2 = find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
     # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
@@ -1347,10 +1347,10 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
         # This unravels to keep computations in the stack, not the heap
 
         y0L::Array{Number} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
-        Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        Ar_r = lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
-        Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        Ar_i = lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
 
     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
@@ -1416,7 +1416,7 @@ function integrate_hydroLoads(
         "rake" => rake,
         "beta" => 0.0,
     )
-    foilTotalStates = SolverRoutines.return_totalStates(foilStructuralStates, DVDict, elemType;
+    foilTotalStates = return_totalStates(foilStructuralStates, DVDict, elemType;
         appendageOptions=appendageOptions, alphaCorrection=downwashAngles)
 
     # --- Strip theory ---

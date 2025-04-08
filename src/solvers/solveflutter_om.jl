@@ -46,13 +46,11 @@ function OpenMDAOCore.setup(self::OMFlutter)
         # --- Mesh type ---
         OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
         OpenMDAOCore.VarData("displacements_col", val=zeros(6, LiftingLine.NPT_WING)),
-        OpenMDAOCore.VarData("nodes", val=zeros(nNodeTot, 3)),
-        OpenMDAOCore.VarData("elemConn", val=zeros(nElemTot, 2)),
+        # --- Structural variables ---
+        OpenMDAOCore.VarData("theta_f", val=0.0),
+        OpenMDAOCore.VarData("toc", val=ones(nNodeWing)),
         # --- linearized quantities ---
         OpenMDAOCore.VarData("cla", val=zeros(nNodeTot)),
-        OpenMDAOCore.VarData("Mmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
-        OpenMDAOCore.VarData("Cmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
-        OpenMDAOCore.VarData("Kmat", val=zeros(nNodeTot * FEMMethods.NDOF, nNodeTot * FEMMethods.NDOF)),
     ]
 
     outputs = [
@@ -61,9 +59,10 @@ function OpenMDAOCore.setup(self::OMFlutter)
 
     partials = [
         OpenMDAOCore.PartialsData("ksflutter", "cla", method="exact"),
-        OpenMDAOCore.PartialsData("ksflutter", "Mmat", method="exact"),
-        OpenMDAOCore.PartialsData("ksflutter", "Cmat", method="exact"),
-        OpenMDAOCore.PartialsData("ksflutter", "Kmat", method="exact"),
+        OpenMDAOCore.PartialsData("ksflutter", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("ksflutter", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("ksflutter", "theta_f", method="exact"),
+        OpenMDAOCore.PartialsData("ksflutter", "toc", method="exact"),
     ]
 
     return inputs, outputs, partials
@@ -78,13 +77,13 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
     solverOptions = self.solverOptions
 
     cla = inputs["cla"]
-    KKmat = inputs["Kmat"]
-    CCmat = inputs["Cmat"]
-    MMmat = inputs["Mmat"]
     nodes = inputs["nodes"]
     elemConn = inputs["elemConn"]
     ptVec = inputs["ptVec"]
     displacements_col = inputs["displacements_col"]
+    # --- Set struct vars ---
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
 
 
     # --- Deal with options here ---
@@ -93,7 +92,7 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
 
-    obj = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, nodes, elemConn, cla, KKmat, CCmat, MMmat, appendageParams, solverOptions)
+    obj = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, cla, appendageParams, solverOptions)
 
     outputs["ksflutter"][1] = obj
 
@@ -108,12 +107,14 @@ function OpenMDAOCore.compute_partials!(self::OMFlutter, inputs, partials)
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
 
+    # --- Set struct vars ---
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
+
     funcsSens = SolveFlutter.evalFuncsSens()
 
     partials["ksflutter", "cla"][1, :] = funcsSens["cla"]
-    # partials["ksflutter", "Kmat"][1, :] = funcsSens["cla"]
-    # partials["ksflutter", "Cmat"][1, :] = funcsSens["cla"]
-    # partials["ksflutter", "Mmat"][1, :] = funcsSens["cla"]
+    partials["ksflutter", "cla"][1, :] = funcsSens["cla"]
 
     return nothing
 end

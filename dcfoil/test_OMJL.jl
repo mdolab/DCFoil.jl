@@ -215,11 +215,13 @@ solverOptions = Dict(
     # --- p-k (Eigen) solve ---
     "run_modal" => true,
     "run_flutter" => true,
-    "nModes" => 4,
-    "uRange" => [1.0, 30],
+    "nModes" => 2,
+    "uRange" => [29.0, 30],
     "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 500.0,
 )
+displacementsCol = zeros(6, LiftingLine.NPT_WING)
+LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 # ==============================================================================
 #                         Derivatives
 # ==============================================================================
@@ -311,10 +313,8 @@ dcladg = (dcldg_f - dcldg) / dalfa # this makes sense
 # ************************************************
 #     Test twist into lifting line
 # ************************************************
-LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 idxTip = LiftingLine.get_tipnode(LECoords)
 midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
-displacementsCol = zeros(6, LiftingLine.NPT_WING)
 
 # Here's a twist distribution
 displacementsCol[5, :] .= vcat(LinRange(deg2rad(10.0), deg2rad(0.0), LiftingLine.NPT_WING ÷ 2), LinRange(deg2rad(0.0), deg2rad(10.0), LiftingLine.NPT_WING ÷ 2))
@@ -450,13 +450,18 @@ mesh = [[0.0 0.0 0.0]
     [0.0 -0.1665 0.0]
     [0.0 -0.24975 0.0]
     [0.0 -0.333 0.0]]
-elemConn = [[1.0 2.0]
-    [2.0 3.0]
-    [3.0 4.0]
-    [4.0 5.0]
-    [1.0 6.0]
-    [6.0 7.0]
-    [7.0 8.0]
-    [8.0 9.0]]
-# TODO: GPICKUP HERE
-SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, mesh, elemConn, claVec, appendageParams, solverOptions)
+elemConn = [[1 2]
+    [2 3]
+    [3 4]
+    [4 5]
+    [1 6]
+    [6 7]
+    [7 8]
+    [8 9]]
+# TODO: GPICKUP HERE GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+claVecMod = claVec[end-4:end] .+ 1.1
+SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+GridStruct = SolveFlutter.Grid(LECoords, nodeConn, TECoords)
+evalFuncsSensList = ["ksflutter"]
+SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
+SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")

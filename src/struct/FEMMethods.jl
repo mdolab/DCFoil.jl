@@ -48,7 +48,7 @@ using StaticArrays
 using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 
 # --- DCFoil modules ---
-using .DesignConstants: DesignConstants, DynamicFoil, CONFIGS, Foil
+# using .DesignConstants: DesignConstants, DynamicFoil, CONFIGS, Foil
 using .MaterialLibrary
 
 export ELEMTYPE, NDOF, UIND, VIND, WIND, ΦIND, ΘIND, ΨIND
