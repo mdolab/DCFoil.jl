@@ -2284,8 +2284,15 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
                 # dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
                 #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
 
-                dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                # # Full case
+                # dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                #         cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                # # debug case
+                # dIdxDV = Zygote.gradient((xpt, xtheta, xtoc, xalpha) ->
+                #         cost_funcsFromDVsOM(xpt, nodeConn, displacementsCol, claVec, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                # debug case
+                dIdxDV = Zygote.gradient((xtheta, xalpha) ->
+                        cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), appendageParams["theta_f"], appendageParams["alfa0"])
 
             elseif uppercase(mode) == "FAD"
                 error("FAD not implemented yet")
@@ -2299,7 +2306,7 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
         DesignVariables = ["displCol", "cla", "theta_f", "toc", "alfa0"] # in order
         # for (ii, dvkey) in enumerate(alldesignvariables) # old
         for (ii, dvkey) in enumerate(DesignVariables)
-            dfdxparams[dvkey] = dIdxDV[1+ii]
+            dfdxParams[dvkey] = dIdxDV[1+ii]
         end
 
         funcsSens = Dict(

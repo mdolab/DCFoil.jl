@@ -170,7 +170,7 @@ if __name__ == "__main__":
     ]
     files["FFDFile"] = f"{args.input}/{args.foil}_ffd.xyz"
 
-    Grid = jl.DCFoil.MeshIO.add_meshfiles(files["gridFile"], {"junction-first": True})
+    Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
     # Unpack for this code. Remember Julia is transposed from Python
     LECoords = np.array(Grid.LEMesh).T
     TECoords = np.array(Grid.TEMesh).T

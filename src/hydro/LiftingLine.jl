@@ -13,6 +13,9 @@
              x is positive streamwise
              y is positive to stbd
              z is positive in the vertical direction
+
+             KNOWN BUGS:
+             If there are NaNs, check the TV influence functions
 """
 
 module LiftingLine
@@ -52,7 +55,8 @@ for headerName in [
 end
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
-const NPT_WING = 40
+# const NPT_WING = 40 # this is known to be accurate
+const NPT_WING = 20
 
 export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
     compute_KS, GRAV
@@ -506,8 +510,10 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements;
     wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, wing_joint_xyz_zcomp, dims=1)
     wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, wing_joint_xyz_eff_zcomp, dims=1)
 
+    # # Debug stuff 
     # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
+    # println("wing_ctrl_xyz y: $(wing_ctrl_xyz[YDIM,:])")
 
     # println("local sweep values [deg]: $(rad2deg.(localSweeps))")
 
@@ -1304,6 +1310,10 @@ function compute_LLresJacobian(Gi; solverParams, mode="Analytic")
             @ignore_derivatives(Gi[ii] -= dh)
             # ∂r∂G[:, ii] = (r_f - r_i) / dh
             ∂r∂G_z[:, ii] = (r_f - r_i) / dh
+            # println("r:")
+            # println(r_f)
+            # println("r_i:")
+            # println(r_i)
         end
         # J = ∂r∂G
         J = copy(∂r∂G_z)
@@ -1865,11 +1875,12 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     influence = influence ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do
+    # Cannot keep in ignore derivatives block
+    # @ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
-    end
+    # end
 
     return influence
 end

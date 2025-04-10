@@ -435,6 +435,11 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
 
     # Number of mesh points
     npt = size(self.nodeConn, 2) + 1
+    NPT_WING = LiftingLine.NPT_WING
+    if self.appendageOptions["config"] == "wing"
+        NPT_WING = LiftingLine.NPT_WING ÷ 2
+        println("Using half wing for explicit comp")
+    end
 
     inputs = [
         OpenMDAOCore.VarData("ptVec", val=zeros(3 * 2 * npt)),
@@ -451,14 +456,14 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("F_x", val=0.0),
         OpenMDAOCore.VarData("F_y", val=0.0),
         OpenMDAOCore.VarData("F_z", val=0.0),
-        OpenMDAOCore.VarData("forces_dist", val=zeros(3, LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("forces_dist", val=zeros(3, NPT_WING)),
         OpenMDAOCore.VarData("M_x", val=0.0),
         OpenMDAOCore.VarData("M_y", val=0.0),
         OpenMDAOCore.VarData("M_z", val=0.0),
-        OpenMDAOCore.VarData("moments_dist", val=zeros(3, LiftingLine.NPT_WING)), # not really going to use this since we have forces at collocation pts
-        OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
+        OpenMDAOCore.VarData("moments_dist", val=zeros(3, NPT_WING)), # not really going to use this since we have forces at collocation pts
+        OpenMDAOCore.VarData("collocationPts", val=zeros(3, NPT_WING)), # collocation points 
         OpenMDAOCore.VarData("clmax", val=0.0), # KS aggregated clmax
-        OpenMDAOCore.VarData("cl", val=zeros(LiftingLine.NPT_WING)), # all cl along the wing
+        OpenMDAOCore.VarData("cl", val=zeros(NPT_WING)), # all cl along the wing
         # Empirical drag build up
         OpenMDAOCore.VarData("CDw", val=0.0),
         OpenMDAOCore.VarData("CDpr", val=0.0),
@@ -469,7 +474,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("Dj", val=0.0),
         OpenMDAOCore.VarData("Ds", val=0.0),
         # --- lift slopes for dynamic solution ---
-        OpenMDAOCore.VarData("cla_col", val=zeros(LiftingLine.NPT_WING)),
+        OpenMDAOCore.VarData("cla_col", val=zeros(NPT_WING)),
     ]
 
     partials = [
@@ -607,6 +612,12 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     dragOutputs = LiftingLine.compute_dragsFromX(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions)
     CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds = dragOutputs
 
+    START = 1
+    STOP = LiftingLine.NPT_WING
+    if appendageOptions["config"] == "wing"
+        START = LiftingLine.NPT_WING ÷ 2 + 1
+    end
+
     outputs["F_x"][1] = IntegratedForces[XDIM]
     outputs["F_y"][1] = IntegratedForces[YDIM]
     outputs["F_z"][1] = IntegratedForces[ZDIM]
@@ -614,14 +625,14 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["CDi"][1] = CDi
     outputs["CS"][1] = CS
     outputs["clmax"][1] = ksclmax
-    outputs["cl"][:] = clvec
+    outputs["cl"][:] = clvec[START:STOP]
 
-    for (ii, fi) in enumerate(eachrow(DimForces))
+    for (ii, fi) in enumerate(eachrow(DimForces[:, START:STOP]))
         outputs["forces_dist"][ii, :] = fi
     end
 
-    size(outputs["collocationPts"]) == size(LLMesh.collocationPts) || error("Size mismatch for collocationPts")
-    for (ii, collocationi) in enumerate(eachrow(LLMesh.collocationPts))
+    size(outputs["collocationPts"]) == size(LLMesh.collocationPts[:, START:STOP]) || error("Size mismatch for collocationPts")
+    for (ii, collocationi) in enumerate(eachrow(LLMesh.collocationPts[:, START:STOP]))
         outputs["collocationPts"][ii, :] = collocationi
     end
 
@@ -638,7 +649,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     #   Lift slope solution
     # ---------------------------
     cla = LiftingLine.compute_liftslopes(Gconv, Gconv_d, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
-    outputs["cla_col"][:] = cla
+    outputs["cla_col"][:] = cla[START:STOP]
 
     return nothing
 end
