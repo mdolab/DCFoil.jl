@@ -29,6 +29,7 @@ import juliacall
 
 jl = juliacall.newmodule("DCFoil")
 
+jl.include("../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
 jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
@@ -37,139 +38,29 @@ jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
-ptVec = np.array(
-    [
-        -0.07,
-        0.0,
-        0.0,
-        -0.0675,
-        0.037,
-        0.0,
-        -0.065,
-        0.074,
-        0.0,
-        -0.0625,
-        0.111,
-        0.0,
-        -0.06,
-        0.148,
-        0.0,
-        -0.0575,
-        0.185,
-        0.0,
-        -0.055,
-        0.222,
-        0.0,
-        -0.0525,
-        0.259,
-        0.0,
-        -0.05,
-        0.296,
-        0.0,
-        -0.0475,
-        0.333,
-        0.0,
-        -0.0675,
-        -0.037,
-        0.0,
-        -0.065,
-        -0.074,
-        0.0,
-        -0.0625,
-        -0.111,
-        0.0,
-        -0.06,
-        -0.148,
-        0.0,
-        -0.0575,
-        -0.185,
-        0.0,
-        -0.055,
-        -0.222,
-        0.0,
-        -0.0525,
-        -0.259,
-        0.0,
-        -0.05,
-        -0.296,
-        0.0,
-        -0.0475,
-        -0.333,
-        0.0,
-        0.07,
-        0.0,
-        0.0,
-        0.0675,
-        0.037,
-        0.0,
-        0.065,
-        0.074,
-        0.0,
-        0.0625,
-        0.111,
-        0.0,
-        0.06,
-        0.148,
-        0.0,
-        0.0575,
-        0.185,
-        0.0,
-        0.055,
-        0.222,
-        0.0,
-        0.0525,
-        0.259,
-        0.0,
-        0.05,
-        0.296,
-        0.0,
-        0.0475,
-        0.333,
-        0.0,
-        0.0675,
-        -0.037,
-        0.0,
-        0.065,
-        -0.074,
-        0.0,
-        0.0625,
-        -0.111,
-        0.0,
-        0.06,
-        -0.148,
-        0.0,
-        0.0575,
-        -0.185,
-        0.0,
-        0.055,
-        -0.222,
-        0.0,
-        0.0525,
-        -0.259,
-        0.0,
-        0.05,
-        -0.296,
-        0.0,
-        0.0475,
-        -0.333,
-        0.0,
+files = {
+    "gridFile": [
+        "../INPUT/flagstaff_foil_stbd_mesh.dcf",
+        # "../INPUT/flagstaff_foil_port_mesh.dcf",
     ]
-)
-nodeConn = np.array(
-    [
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 12, 13, 14, 15, 16, 17, 18],
-        [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
-    ]
-)
+}
+Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
+# Unpack for this code. Remember Julia is transposed from Python
+LECoords = np.array(Grid.LEMesh).T
+TECoords = np.array(Grid.TEMesh).T
+nodeConn = np.array(Grid.nodeConn)
+ptVec, m, n = jl.FEMMethods.unpack_coords(Grid.LEMesh, Grid.TEMesh)
 nNodes = 5
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
-    "config": "full-wing",
+    # "config": "full-wing",
+    "config": "wing",
     "nNodes": nNodes,
     "nNodeStrut": nNodesStrut,
     "use_tipMass": False,
-    "xMount": 3.355,
+    # "xMount": 3.355,
+    "xMount": 0.0,
     "material": "cfrp",
     "strut_material": "cfrp",
     "path_to_geom_props": "./INPUT/1DPROPS/",
@@ -226,10 +117,7 @@ solverOptions = {
 # 2025-03-17 NOTE GN-SK: this dictionary is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
 appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
     "alfa0": 6.0,  # initial angle of attack [deg]
-    # "sweep": np.deg2rad(0.0),  # sweep angle [rad]
     "zeta": 0.04,  # modal damping ratio at first 2 modes
-    # "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
-    # "s": 0.333,  # semispan [m]
     "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
     "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
     "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
@@ -321,12 +209,8 @@ if __name__ == "__main__":
     expcomp_displacement = JuliaExplicitComp(
         jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    expcomp_flutter = JuliaExplicitComp(
-        jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_forced = JuliaExplicitComp(
-        jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
+    expcomp_flutter = JuliaExplicitComp(jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions))
+    expcomp_forced = JuliaExplicitComp(jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions))
 
     model = om.Group()
 
@@ -402,9 +286,9 @@ if __name__ == "__main__":
         # # --- Now add load transfer capabilities ---
         # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
         # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-        # --- Dynamic solvers ---
-        model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
-        model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
+        # # --- Dynamic solvers ---
+        # model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
+        # model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
 
     # ************************************************
     #     Setup problem
@@ -445,10 +329,11 @@ if __name__ == "__main__":
     prob.setup()
 
     prob.set_val("ptVec", ptVec)
+    prob.set_val("beamstruct.theta_f", np.deg2rad(15))
 
     if args.run_struct:
         tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-6] = 10.0
+        tractions[-7] = 100.0
         prob.set_val("beamstruct.traction_forces", tractions)
     elif args.run_flow:
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
@@ -458,7 +343,7 @@ if __name__ == "__main__":
         prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
         tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-6] = 10.0
+        tractions[-7] = 100.0
         prob.set_val("beamstruct.traction_forces", tractions)
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
 
@@ -469,7 +354,6 @@ if __name__ == "__main__":
     starttime = time.time()
     prob.final_setup()
     midtime = time.time()
-    breakpoint()
     prob.run_model()
     endtime = time.time()
     print("model run complete\n" + "-" * 50)
@@ -505,14 +389,12 @@ if __name__ == "__main__":
         print("nondimensional gammas", prob.get_val("liftingline.gammas"))
         print("nondimensional gammas_d", prob.get_val("liftingline.gammas_d"))
         print("CL", prob.get_val("CL"))
-        print("CLa", prob.get_val("cla_col")) 
+        print("CLa", prob.get_val("cla_col"))
         print("mesh", prob.get_val("nodes"))
         print("elemConn", prob.get_val("elemConn"))
         # Write matrices to a file so we can test them
 
-        # print("Kmatrix", prob.get_val("Kmat"))
-        # print("Cmatrix", prob.get_val("Cmat"))
-        # print("Mmatrix", prob.get_val("Mmat"))
+        print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
         # print("force distribution", prob.get_val("forces_dist"))
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
@@ -522,7 +404,7 @@ if __name__ == "__main__":
         print(
             "spray drag:",
             prob.get_val("Ds"),
-            f"\tprofile drag: {prob.get_val('Dpr')}\t wavedrag: {prob.get_val('Dw')}\t junctiondrag: {prob.get_val('Dj')}",
+            f"\nprofile drag: {prob.get_val('Dpr')}\nwavedrag: {prob.get_val('Dw')}\n junctiondrag: {prob.get_val('Dj')}",
         )
         print(
             "spray drag coeff:",
