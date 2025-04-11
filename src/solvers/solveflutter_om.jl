@@ -18,7 +18,6 @@ end
 
 using .SolveFlutter
 # using .LiftingLine
-# using .FEMMethods
 
 # ==============================================================================
 #                         OpenMDAO operations

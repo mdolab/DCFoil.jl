@@ -41,7 +41,7 @@ from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 files = {
     "gridFile": [
         "../INPUT/flagstaff_foil_stbd_mesh.dcf",
-        # "../INPUT/flagstaff_foil_port_mesh.dcf",
+        # "../INPUT/flagstaff_foil_port_mesh.dcf", # only add this if config is full wing
     ]
 }
 Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     }
 
     prob.model.add_design_var("ptVec")
-    # prob.model.add_objective("CDi")
+    prob.model.add_objective("CDi")
 
     # prob.model.nonlinear_solver = om.NewtonSolver(
     #     solve_subsystems=True,
@@ -418,6 +418,9 @@ if __name__ == "__main__":
     starttime = time.time()
     if args.test_partials:
 
+        # print("computing total derivatives...\n" + "-" * 50)
+        # prob.compute_totals()
+
         np.set_printoptions(linewidth=1000, precision=4)
 
         fileName = "partials.out"
@@ -427,6 +430,13 @@ if __name__ == "__main__":
         f.write("=" * 50)
         f.write("\n liftingline partials\n")
         f.write("=" * 50)
+        prob.check_partials(
+            out_stream=f,
+            includes=["liftingline_funcs"],
+            method="fd",
+            step=1e-4,
+            compact_print=True,
+        )
         prob.check_partials(
             out_stream=f,
             includes=["liftingline_funcs"],

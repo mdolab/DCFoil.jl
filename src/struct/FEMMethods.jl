@@ -522,13 +522,16 @@ function assemble(StructMesh, x_αbVec,
     globalK_z[:, :] = globalK
     globalM_z[:, :] = globalM
     globalF_z[:] = globalF
-    populate_matrices!(globalK_z, globalM_z, globalM_z, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
+    populate_matrices!(globalK_z, globalM_z, globalF_z, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
         config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
-
-
     globalK = copy(globalK_z)
     globalM = copy(globalM_z)
     globalF = copy(globalF_z)
+    # --- Other way ---
+    # populate_matrices!(globalK, globalM, globalF, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
+    #     config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
+
+
 
     return globalK, globalM, globalF
 end
@@ -634,6 +637,16 @@ function populate_matrices!(
         #   Local stiffness matrix
         # ---------------------------
         kLocal = compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
+        # println("kLocal type:\t", typeof(kLocal))
+        # println("lᵉ:\t", typeof(lᵉ))
+        # println("EIₛ:\t", typeof(EIₛ))
+        # println("EIIPₛ:\t", typeof(EIIPₛ))
+        # println("GJₛ:\t", typeof(GJₛ))
+        # println("Kₛ:\t", typeof(Kₛ))
+        # println("Sₛ:\t", typeof(Sₛ))
+        # println("EAₛ:\t", typeof(EAₛ))
+        # println("ab:\t", typeof(ab))
+        # println("x_αb:\t", typeof(x_αb))
 
         # ---------------------------
         #   Local mass matrix

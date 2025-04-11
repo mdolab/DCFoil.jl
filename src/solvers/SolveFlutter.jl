@@ -23,6 +23,7 @@ using FileIO
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
 using Zygote
+using ReverseDiff: ReverseDiff
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
 # --- DCFoil modules ---
@@ -916,14 +917,14 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, idxTip, zeros(2, 2))
 
     # --- Outputs ---
-    p_r::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    p_i::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_r::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_i::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    R_eigs_r::AbstractArray{Number} = zeros(2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i::AbstractArray{Number} = zeros(2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    p_r = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    p_i = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    true_eigs_r = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    true_eigs_i = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r = zeros(Float64, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i = zeros(Float64, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
-    flowHistory::AbstractMatrix{Number} = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
+    flowHistory = zeros(Float64, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
 
 
     # ---------------------------
@@ -936,8 +937,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     m = zeros(Int64, nModes * 3, 2)
 
     # --- Retained eigenvector matrices in the speed sweep ---
-    R_eigs_r_tmp::AbstractArray{Number} = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i_tmp::AbstractArray{Number} = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r_tmp = zeros(Float64, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i_tmp = zeros(Float64, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
 
     # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
@@ -1318,10 +1319,11 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         for mm in 1:3*nModes
             # We need to do some magic here because our eigenvectors are actually stacked
             # evec = [ū ; pn * ū]^T
-            R_eigs_r_z[1:dim-length(DOFBlankingList), mm, qq] = Qr * R_eigs_r_tmp[1:Nr, mm, qq]
-            R_eigs_i_z[1:dim-length(DOFBlankingList), mm, qq] = Qr * R_eigs_i_tmp[1:Nr, mm, qq]
-            R_eigs_r_z[dim+1-length(DOFBlankingList):end, mm, qq] = Qr * R_eigs_r_tmp[Nr+1:end, mm, qq]
-            R_eigs_i_z[dim+1-length(DOFBlankingList):end, mm, qq] = Qr * R_eigs_i_tmp[Nr+1:end, mm, qq]
+            nBlank = length(DOFBlankingList)
+            R_eigs_r_z[1:dim-nBlank, mm, qq] = Qr * R_eigs_r_tmp[1:Nr, mm, qq]
+            R_eigs_i_z[1:dim-nBlank, mm, qq] = Qr * R_eigs_i_tmp[1:Nr, mm, qq]
+            R_eigs_r_z[dim+1-nBlank:end, mm, qq] = Qr * R_eigs_r_tmp[Nr+1:end, mm, qq]
+            R_eigs_i_z[dim+1-nBlank:end, mm, qq] = Qr * R_eigs_i_tmp[Nr+1:end, mm, qq]
         end
     end
 
@@ -1497,11 +1499,11 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     #   Outputs
     # ---------------------------
     # Eigenvalue and vector matrices
-    p_eigs_r::AbstractMatrix{Number} = zeros(2 * Nr, N_MAX_K_ITER)
-    p_eigs_i::AbstractMatrix{Number} = zeros(2 * Nr, N_MAX_K_ITER)
-    R_eigs_r::AbstractArray{Number} = zeros(2 * Nr, 2 * Nr, N_MAX_K_ITER)
-    R_eigs_i::AbstractArray{Number} = zeros(2 * Nr, 2 * Nr, N_MAX_K_ITER)
-    k_history::AbstractVector{Number} = zeros(N_MAX_K_ITER)
+    p_eigs_r = zeros(Float64, 2 * Nr, N_MAX_K_ITER)
+    p_eigs_i = zeros(Float64, 2 * Nr, N_MAX_K_ITER)
+    R_eigs_r = zeros(Float64, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
+    R_eigs_i = zeros(Float64, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
+    k_history = zeros(Float64, N_MAX_K_ITER)
     p_eigs_r_z = Zygote.Buffer(p_eigs_r)
     p_eigs_i_z = Zygote.Buffer(p_eigs_i)
     R_eigs_r_z = Zygote.Buffer(R_eigs_r)
@@ -1688,10 +1690,10 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
         ctr - Number of found matched points
     """
     # --- Initialize outputs ---
-    p_cross_r::AbstractVector{Number} = zeros(2 * dim * 5)
-    p_cross_i::AbstractVector{Number} = zeros(2 * dim * 5)
-    R_cross_r::AbstractMatrix{Number} = zeros(2 * dim, 2 * dim * 5)
-    R_cross_i::AbstractMatrix{Number} = zeros(2 * dim, 2 * dim * 5)
+    p_cross_r = zeros(Float64, 2 * dim * 5)
+    p_cross_i = zeros(Float64, 2 * dim * 5)
+    R_cross_r = zeros(Float64, 2 * dim, 2 * dim * 5)
+    R_cross_i = zeros(Float64, 2 * dim, 2 * dim * 5)
     # --- Good practice Zygote initializations ---
     p_cross_r_z = Zygote.Buffer(p_cross_r)
     p_cross_i_z = Zygote.Buffer(p_cross_i)
@@ -2074,7 +2076,7 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
 
     # This variable stores the aggregated damping for every mode
     # It mutates in the for loop below so we need to use 'Buffer' and work with that variable instead
-    ksTmp::AbstractVector{Number} = zeros(NTotalModesFound)
+    ksTmp = zeros(Float64, NTotalModesFound)
     ksTmp_z = Zygote.Buffer(ksTmp)
 
     # TODO: safety window
@@ -2083,10 +2085,10 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     #     G[1:nFound] = compute_safetyWindow(flowHistory[1:nFlow,1], nFlow)
     # end
 
-    pmG::AbstractMatrix{Number} = zeros(NTotalModesFound, nFlow)
+    pmG = zeros(Float64, NTotalModesFound, nFlow)
     pmG_z = Zygote.Buffer(pmG)
     pmG_z[1:NTotalModesFound, 1:nFlow] = p_r[1:NTotalModesFound, 1:nFlow]
-    pmGTmp::AbstractVector{Number} = zeros(nFlow) # working pmG for the mode
+    pmGTmp = zeros(Float64, nFlow) # working pmG for the mode
 
     # ************************************************
     #     Aggregate damping
@@ -2293,6 +2295,11 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
                 # debug case
                 dIdxDV = Zygote.gradient((xtheta, xalpha) ->
                         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), appendageParams["theta_f"], appendageParams["alfa0"])
+
+                # backend = AD.ReverseDiffBackend()
+                # # There's a weird quirk here with ReverseDiff that the input val has to be the copy of it b/c I guess ReverseDiff modifies the dictionary in place if you do not pass in the copy
+                # dIdxDV = AD.gradient(backend, (xtheta, xalpha) ->
+                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), copy(appendageParams["theta_f"]), copy(appendageParams["alfa0"]))
 
             elseif uppercase(mode) == "FAD"
                 error("FAD not implemented yet")

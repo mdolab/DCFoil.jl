@@ -244,7 +244,9 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     end
 
     for (ii, ∂ri∂xdispl) in enumerate(eachrow(∂r∂xdispl))
-        partials["gammas", "displacements_col"][ii, :] = ∂ri∂xdispl
+        # transpose reshape flatten stuff bc julia and python store arrays differently
+        ∂ri∂xdispl = reshape(∂ri∂xdispl, 6, length(∂ri∂xdispl) ÷ 6)
+        partials["gammas", "displacements_col"][ii, :] = vec(transpose(∂ri∂xdispl))
     end
 
     ∂r∂g_d = LiftingLine.compute_LLresJacobian(gammas_d; solverParams=∂LLNLParams, mode="CS") # use very accurate derivatives only when necessary
@@ -260,7 +262,9 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     end
 
     for (ii, ∂ri∂xdispl) in enumerate(eachrow(∂r∂xdispl_d))
-        partials["gammas_d", "displacements_col"][ii, :] = ∂ri∂xdispl
+        # transpose reshape flatten stuff bc julia and python store arrays differently
+        ∂ri∂xdispl = reshape(∂ri∂xdispl, 6, length(∂ri∂xdispl) ÷ 6)
+        partials["gammas_d", "displacements_col"][ii, :] = vec(transpose(∂ri∂xdispl))
     end
 
     return nothing
@@ -681,6 +685,16 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # mode = "RAD" # broken
     mode = "FAD"
 
+    START = 1
+    STOP = LiftingLine.NPT_WING
+    NPT_WING = LiftingLine.NPT_WING
+    DIV = 1
+    if appendageOptions["config"] == "wing"
+        START = LiftingLine.NPT_WING ÷ 2 + 1
+        NPT_WING = LiftingLine.NPT_WING ÷ 2
+        DIV = 2
+    end
+
     costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist", "cl"]
     FXIND = 1
     CLMAXIND = 7
@@ -693,23 +707,29 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     end
     for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl[FXIND:CLMAXIND, :]))
         # transpose reshape flatten stuff bc julia and python store arrays differently
-        partials[costFuncsInOrder[ii], "displacements_col"][1, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+        # println("start index", 1+(START-1)*6)
+        # println("stop index", STOP*6)
+        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
+        # println("size ∂fi∂xdispl: ", size(∂fi∂xdispl))
+        partials[costFuncsInOrder[ii], "displacements_col"][1, :] = vec(transpose(∂fi∂xdispl))
     end
 
-    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8:end-LiftingLine.NPT_WING])
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
         partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
     end
-    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[8:end-LiftingLine.NPT_WING])
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
         # transpose reshape flatten stuff bc julia and python store arrays differently
-        partials["forces_dist", "displacements_col"][ii, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
+        partials["forces_dist", "displacements_col"][ii, :] = vec(transpose(∂fi∂xdispl))
     end
 
-    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[end-LiftingLine.NPT_WING+1:end])
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[end-LiftingLine.NPT_WING+START:end, :])
         partials["cl", "ptVec"][ii, :] = ∂fi∂x
     end
-    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[end-LiftingLine.NPT_WING+1:end])
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[end-LiftingLine.NPT_WING+START:end, :])
         # transpose reshape flatten stuff bc julia and python store arrays differently
-        partials["cl", "displacements_col"][ii, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
+        partials["cl", "displacements_col"][ii, :] = vec(transpose(∂fi∂xdispl))
     end
 
     # println("size ∂f∂xdispl: ", size(∂f∂xdispl))
@@ -736,12 +756,13 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #   Hydro mesh points
     # ---------------------------
     ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
-    for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt))
+    # println("size of ", size(∂collocationPt∂Xpt[1+(START-1)*3:STOP*3, :]))
+    for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt[1+(START-1)*3:STOP*3, :]))
         partials["collocationPts", "ptVec"][ii, :] = ∂cPti∂xPt
     end
     partials["collocationPts", "displacements_col"] .= 0.0
     # The first 3 of every 6 columns have a one-to-one mapping
-    for ii in 1:length(displCol)
+    for ii in 1:length(displCol)÷DIV
         if mod(ii, 6) in [1, 2, 3]
             partials["collocationPts", "displacements_col"][ii÷6+mod(ii, 6), ii] = 1.0
         end
@@ -754,13 +775,14 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     appendageParams_d = copy(appendageParams)
     appendageParams_d["alfa0"] = alfa0 + LiftingLine.Δα
     ∂f∂x_d, ∂f∂xdispl_d = LiftingLine.compute_∂I∂Xpt(Gconv_d, ptVec, nodeConn, displCol, appendageParams_d, appendageOptions, solverOptions; mode=mode)
-    dcldXpt_f = ∂f∂x_d[end-LiftingLine.NPT_WING+1:end, :]
+    dcldXpt_f = ∂f∂x_d[end-LiftingLine.NPT_WING+START:end, :]
 
     dcldxdispl_i = partials["cl", "displacements_col"]
     dcldxdispl_f = zeros(size(dcldxdispl_i))
-    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl_d)[end-LiftingLine.NPT_WING+1:end])
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl_d)[end-LiftingLine.NPT_WING+START:end, :])
         # transpose reshape flatten stuff bc julia and python store arrays differently
-        dcldxdispl_f[ii, :] = vec(transpose(reshape(∂fi∂xdispl, 6, LiftingLine.NPT_WING)))
+        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
+        dcldxdispl_f[ii, :] = vec(transpose(∂fi∂xdispl))
     end
 
     dcladXpt = (dcldXpt_f - dcldXpt_i) / LiftingLine.Δα
@@ -821,11 +843,11 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         partials[costFuncsInOrder[ii], "gammas"][:] = ∂fi∂g
     end
 
-    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8:end-LiftingLine.NPT_WING])
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
         partials["forces_dist", "gammas"][ii, :] = ∂fi∂g
     end
 
-    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[end-LiftingLine.NPT_WING+1:end])
+    for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g)[end-LiftingLine.NPT_WING+START:end, :])
         partials["cl", "gammas"][ii, :] = ∂fi∂g
     end
 
@@ -837,11 +859,15 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # ---------------------------
     dcldg_i = partials["cl", "gammas"]
     ∂f∂g_d = LiftingLine.compute_∂I∂G(Gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions) # Forward Diff by default
-    dcldg_f = ∂f∂g_d[end-LiftingLine.NPT_WING+1:end, :]
+    dcldg_f = ∂f∂g_d[end-LiftingLine.NPT_WING+START:end, :]
+
+    # println(size(dcldg_i))
+    # println(size(dcldg_f))
     dcladg = (dcldg_f - dcldg_i) / LiftingLine.Δα
-    for (ii, dclaidg) in enumerate(eachcol(dcladg))
+    for (ii, dclaidg) in enumerate(eachrow(dcladg))
         partials["cla_col", "gammas"][ii, :] = dclaidg
     end
+    # TODO GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG FIX THIS
 
     return nothing
 end

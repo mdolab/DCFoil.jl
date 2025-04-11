@@ -779,11 +779,12 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # ---------------------------
         # Aerodynamics need to happen in global reference frame
         # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
-        Γ = get_transMat(dR1, dR2, dR3, 1.0)
-        ΓT = transpose(Γ)
-        KLocal_trans = ΓT[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
-        CLocal_trans = ΓT[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
-        MLocal_trans = ΓT[1:NDOF, 1:NDOF] * MLocal * Γ[1:NDOF, 1:NDOF]
+        transMat = get_transMat(dR1, dR2, dR3, 1.0)
+        Γ = transMat[1:NDOF, 1:NDOF]
+        ΓT = copy(transpose(Γ))
+        KLocal_trans = ΓT * KLocal * Γ
+        CLocal_trans = ΓT * CLocal * Γ
+        MLocal_trans = ΓT * MLocal * Γ
 
         GDOFIdx::Int64 = NDOF * (inode - 1) + 1
 

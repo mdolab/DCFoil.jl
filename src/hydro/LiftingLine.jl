@@ -109,12 +109,12 @@ struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
     airfoil_ctrl_xy::TM # Airfoil control points
 end
 
-struct FlowConditions{TF,TC,TA<:AbstractVector{TC}}
-    Uinfvec::TA # Freestream velocity [m/s] [U, V, W]
+struct FlowConditions{TF,TC,TA<:AbstractVector}
+    Uinfvec::Vector # Freestream velocity [m/s] [U, V, W]
     Uinf::TC # Freestream velocity magnitude [m/s]
     uvec::TA # Freestream velocity unit vector
     alpha::TC # Angle of attack [rad]
-    beta::TF
+    beta::Number
     rhof::TF # Freestream density [kg/m^3]
     depth::TF
 end
@@ -333,6 +333,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements;
     # --- Structural span is not the same as aero span ---
     idxTip = get_tipnode(midchords)
     aeroWingSpan = compute_aeroSpan(midchords, idxTip)
+    # println("Aero span: $(aeroWingSpan) m")
 
     # wingSpan = span * cos(sweepAng) #no
 
@@ -1571,7 +1572,7 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
         return outputVector
     end
 
-    displVec = vec((displCol))
+    displVec = vec(displCol)
 
     # ************************************************
     #     Finite difference
@@ -1811,7 +1812,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
@@ -1876,11 +1877,11 @@ function compute_straightSegment(startpt, endpt, pt, rc)
 
     # Replace NaNs and Infs with 0.0
     # Cannot keep in ignore derivatives block
-    # @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
-    # end
+    end
 
     return influence
 end
