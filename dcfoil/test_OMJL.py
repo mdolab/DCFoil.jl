@@ -40,8 +40,8 @@ NPT_WING = 5
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
-from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
-### from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
+# from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
+from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 ptVec = np.array(
     [
@@ -534,6 +534,17 @@ if __name__ == "__main__":
     # print("model run complete\n" + "-" * 50)
     # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
+    # --- compute total derivatives ---
+    if not args.run_struct:
+        wrt = ['ptVec']
+        of = ['CDw', 'CDpr', 'CDj', 'CDs']
+        print('\ncomputing totals...')
+        prob.compute_totals(of, wrt)
+        print('done!\n')
+        # NOTE: when using hydroelastic (with or without solver, with or without jax), compute_totals fails saying RAD for empirical drag partials is getting complex variables (it works if I set FIDI for empirical drag partials in liftingline_om.jl)
+        #       it still fails even when I used transfer_FD.py (no Jax)
+        #       compute_totals works fine if I do --run_flow 
+    
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
