@@ -224,19 +224,24 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, 
 end
 
 function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
-
+    """
+    This appears to have issues wrt the ptVec inputs
+    """
     # backend = AD.ReverseDiffBackend()
 
     # backend = AD.ZygoteBackend()
 
     # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-    displVec = vec((displCol))
+    displVec = vec(displCol)
 
     if uppercase(mode) == "RAD" # RAD everything except the ptVec ones because this gave NaNs
-        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displCol)
+        # displacements of the collocation nodes also give NaNs
+        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
 
         backend = AD.ForwardDiffBackend()
-        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), ptVec)
+        # Need to FAD displacements too
+        # ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂Xpt, ∂Drag∂xdispl = AD.jacobian(backend, (xPt, xDispl) -> compute_dragsFromX(xPt, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, displVec)
 
     elseif uppercase(mode) == "FIDI"
         outputVector = ["cdw", "cdpr", "cdj", "cds", "dw", "dpr", "dj", "ds"]
@@ -271,12 +276,12 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
         ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), gammas)
 
     elseif uppercase(mode) == "FAD"
-        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
 
 
         backend = AD.ForwardDiffBackend()
         # @time ∂Drag∂G, = ReverseDiff.jacobian((xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
-        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂G, ∂Drag∂xdispl = AD.jacobian(backend, (xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
     else
         error("Mode not recognized")
     end

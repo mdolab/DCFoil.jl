@@ -23,14 +23,19 @@ using FileIO
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
 using Zygote
+using ReverseDiff: ReverseDiff
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
 # --- DCFoil modules ---
 for headerName in [
     "../struct/FEMMethods",
     "../hydro/LiftingLine",
+    "../io/MeshIO",
     "../constants/SolutionConstants",
     "../hydro/HydroStrip",
+    "../solvers/SolverRoutines",
+    "../constants/DesignConstants",
+    "../solvers/DCFoilSolution",
 ]
     include("$(headerName).jl")
 end
@@ -38,14 +43,10 @@ end
 using .FEMMethods
 using .LiftingLine
 using .HydroStrip
-# using ..DCFoil: DTYPE
 # using ..InitModel
 # using ..HydroStrip
 # using ..BeamProperties
-# using ..FEMMethods
-# using ..SolverRoutines
 # using ..Interpolation
-# using ..DCFoilSolution
 # using ..DesignConstants: SORTEDDVS
 # using ..DesignVariables: allDesignVariables
 # using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
@@ -103,7 +104,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
     )
 
     # --- Store solution in struct ---
-    FLUTTERSOL = DCFoilSolution.FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank, p_r)
+    FLUTTERSOL = FlutterSolution(true_eigs_r, true_eigs_i, R_eigs_r, R_eigs_i, NTotalModesFound, N_MAX_Q_ITER, flowHistory, nFlow, iblank, p_r)
 
 
     # ************************************************
@@ -200,7 +201,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
-        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
+        transMat = get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -209,7 +210,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
     # ---------------------------
     u = copy(globalF)
     dim = size(Ks)[1] + length(globalDOFBlankingList)
-    alphaCorrection = zeros(DTYPE, nNodes)
+    alphaCorrection = zeros(nNodes)
     global SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, ELEMTYPE, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
 
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
@@ -223,7 +224,6 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     # ************************************************
     #     Initializations
     # ************************************************
-    outputDir = solverOptions["outputDir"]
     uRange = solverOptions["uRange"]
     fRange = solverOptions["fRange"]
     nModes = solverOptions["nModes"]
@@ -297,7 +297,7 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
-        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
+        transMat = get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         Ms = FEMMethods.apply_tip_mass(Ms, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -405,7 +405,7 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
-        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
+        transMat = get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -469,7 +469,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
         dR = (structMesh[end, :] - structMesh[end-1, :])
         elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
         # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
-        transMat = Rotations.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
+        transMat = get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
         globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
     end
 
@@ -705,7 +705,7 @@ function loop_corrMat(C, N_new)
     while isMaxValZero
 
         # --- Find max value in correlation matrix and location ---
-        maxI, maxJ, maxVal = SolverRoutines.maxLocArr2d(C_work)
+        maxI, maxJ, maxVal = maxLocArr2d(C_work)
 
         # --- Check if max value is zero ---
         if maxVal == 0.0
@@ -917,14 +917,14 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, zeros(2), zeros(2), zeros(2), zeros(2), 0.0, idxTip, zeros(2, 2))
 
     # --- Outputs ---
-    p_r::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    p_i::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_r::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    true_eigs_i::AbstractMatrix{Number} = zeros(3 * nModes, N_MAX_Q_ITER)
-    R_eigs_r::AbstractArray{Number} = zeros(2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i::AbstractArray{Number} = zeros(2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    p_r = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    p_i = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    true_eigs_r = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    true_eigs_i = zeros(Float64, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r = zeros(Float64, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i = zeros(Float64, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
-    flowHistory::AbstractMatrix{Number} = zeros(N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
+    flowHistory = zeros(Float64, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
 
 
     # ---------------------------
@@ -937,8 +937,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     m = zeros(Int64, nModes * 3, 2)
 
     # --- Retained eigenvector matrices in the speed sweep ---
-    R_eigs_r_tmp::AbstractArray{Number} = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
-    R_eigs_i_tmp::AbstractArray{Number} = zeros(2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_r_tmp = zeros(Float64, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
+    R_eigs_i_tmp = zeros(Float64, 2 * Nr, 3 * nModes, N_MAX_Q_ITER)
 
     # --- Others ---
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
@@ -1319,10 +1319,11 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         for mm in 1:3*nModes
             # We need to do some magic here because our eigenvectors are actually stacked
             # evec = [ū ; pn * ū]^T
-            R_eigs_r_z[1:dim-length(DOFBlankingList), mm, qq] = Qr * R_eigs_r_tmp[1:Nr, mm, qq]
-            R_eigs_i_z[1:dim-length(DOFBlankingList), mm, qq] = Qr * R_eigs_i_tmp[1:Nr, mm, qq]
-            R_eigs_r_z[dim+1-length(DOFBlankingList):end, mm, qq] = Qr * R_eigs_r_tmp[Nr+1:end, mm, qq]
-            R_eigs_i_z[dim+1-length(DOFBlankingList):end, mm, qq] = Qr * R_eigs_i_tmp[Nr+1:end, mm, qq]
+            nBlank = length(DOFBlankingList)
+            R_eigs_r_z[1:dim-nBlank, mm, qq] = Qr * R_eigs_r_tmp[1:Nr, mm, qq]
+            R_eigs_i_z[1:dim-nBlank, mm, qq] = Qr * R_eigs_i_tmp[1:Nr, mm, qq]
+            R_eigs_r_z[dim+1-nBlank:end, mm, qq] = Qr * R_eigs_r_tmp[Nr+1:end, mm, qq]
+            R_eigs_i_z[dim+1-nBlank:end, mm, qq] = Qr * R_eigs_i_tmp[Nr+1:end, mm, qq]
         end
     end
 
@@ -1498,11 +1499,11 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     #   Outputs
     # ---------------------------
     # Eigenvalue and vector matrices
-    p_eigs_r = zeros(DTYPE, 2 * Nr, N_MAX_K_ITER)
-    p_eigs_i = zeros(DTYPE, 2 * Nr, N_MAX_K_ITER)
-    R_eigs_r = zeros(DTYPE, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
-    R_eigs_i = zeros(DTYPE, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
-    k_history = zeros(DTYPE, N_MAX_K_ITER)
+    p_eigs_r = zeros(Float64, 2 * Nr, N_MAX_K_ITER)
+    p_eigs_i = zeros(Float64, 2 * Nr, N_MAX_K_ITER)
+    R_eigs_r = zeros(Float64, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
+    R_eigs_i = zeros(Float64, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
+    k_history = zeros(Float64, N_MAX_K_ITER)
     p_eigs_r_z = Zygote.Buffer(p_eigs_r)
     p_eigs_i_z = Zygote.Buffer(p_eigs_i)
     R_eigs_r_z = Zygote.Buffer(R_eigs_r)
@@ -1522,9 +1523,10 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     ChainRulesCore.ignore_derivatives() do
         omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM .+ Mf, Nr)
         Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
+        # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
+        # omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM, Nr)
+        # println("Dry natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
     end
-    # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
-    # println("Δk: ", Δk)
 
     # ************************************************
     #     Perform iterations on k values
@@ -1583,7 +1585,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
             ChainRulesCore.ignore_derivatives() do
                 corr = compute_correlationMatrix(R_eigs_r_z[:, :, ik-1], R_eigs_i_z[:, :, ik-1], R_aa_r, R_aa_i)
                 # Determine location of new eigenvectors
-                idxs = SolverRoutines.argmax2d(transpose(corr))
+                idxs = argmax2d(transpose(corr))
             end
 
             # Check if entries are missing/duplicated
@@ -1688,10 +1690,10 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
         ctr - Number of found matched points
     """
     # --- Initialize outputs ---
-    p_cross_r = zeros(DTYPE, 2 * dim * 5)
-    p_cross_i = zeros(DTYPE, 2 * dim * 5)
-    R_cross_r = zeros(DTYPE, 2 * dim, 2 * dim * 5)
-    R_cross_i = zeros(DTYPE, 2 * dim, 2 * dim * 5)
+    p_cross_r = zeros(Float64, 2 * dim * 5)
+    p_cross_i = zeros(Float64, 2 * dim * 5)
+    R_cross_r = zeros(Float64, 2 * dim, 2 * dim * 5)
+    R_cross_i = zeros(Float64, 2 * dim, 2 * dim * 5)
     # --- Good practice Zygote initializations ---
     p_cross_r_z = Zygote.Buffer(p_cross_r)
     p_cross_i_z = Zygote.Buffer(p_cross_i)
@@ -1908,7 +1910,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # """
 
     # --- Initialize ---
-    iMat = Matrix{DTYPE}(I, dim, dim)
+    iMat = Matrix{Number}(I, dim, dim)
     zeroMat = zeros(dim, dim)
     A_r = zeros(2 * dim, 2 * dim)
     A_i = zeros(2 * dim, 2 * dim) # this will always be zero!
@@ -2005,7 +2007,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # --- Compute the eigenvalues ---
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb(FlutterMat_r, FlutterMat_i, 2 * dim)
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb_fad(FlutterMat_r, FlutterMat_i, 2 * dim)
-    y = SolverRoutines.cmplxStdEigValProb2(FlutterMat_r, FlutterMat_i, 2 * dim)
+    y = cmplxStdEigValProb2(FlutterMat_r, FlutterMat_i, 2 * dim)
     n = 2 * dim
     p_r = y[1:n]
     p_i = y[n+1:2*n]
@@ -2074,7 +2076,7 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
 
     # This variable stores the aggregated damping for every mode
     # It mutates in the for loop below so we need to use 'Buffer' and work with that variable instead
-    ksTmp = zeros(DTYPE, NTotalModesFound)
+    ksTmp = zeros(Float64, NTotalModesFound)
     ksTmp_z = Zygote.Buffer(ksTmp)
 
     # TODO: safety window
@@ -2083,10 +2085,10 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     #     G[1:nFound] = compute_safetyWindow(flowHistory[1:nFlow,1], nFlow)
     # end
 
-    pmG = zeros(DTYPE, NTotalModesFound, nFlow)
+    pmG = zeros(Float64, NTotalModesFound, nFlow)
     pmG_z = Zygote.Buffer(pmG)
     pmG_z[1:NTotalModesFound, 1:nFlow] = p_r[1:NTotalModesFound, 1:nFlow]
-    pmGTmp = zeros(DTYPE, nFlow) # working pmG for the mode
+    pmGTmp = zeros(Float64, nFlow) # working pmG for the mode
 
     # ************************************************
     #     Aggregate damping
@@ -2097,7 +2099,7 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     for modeIdx in 1:NTotalModesFound
 
         # Extract indices from 'idx' using the mask from 'iblank' containing the values for this mode
-        subIdx, nFound = SolverRoutines.ipack1d(idx, iblank[modeIdx, 1:nFlow] .!= 0, nFlow)
+        subIdx, nFound = ipack1d(idx, iblank[modeIdx, 1:nFlow] .!= 0, nFlow)
 
         # if useSafetyWindow
         #     pmG[modeIdx, subIdx[1:nFound]] -= G[subIdx[1:nFound]]
@@ -2195,7 +2197,7 @@ function cost_funcsFromCoordsDVs(
     This does the primal solve but with a function signature compatible with Zygote
     """
 
-    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
     appendageParams["theta_f"] = theta_f
     appendageParams["toc"] = toc
@@ -2214,15 +2216,19 @@ function cost_funcsFromCoordsDVs(
     end
 end
 
-function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, mesh, elemConn, claVec, appendageParams, solverOptions; return_all=false)
+function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, claVec, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=false)
     """
     """
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
+    appendageParams["alfa0"] = alfa0
+
     FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solverOM(displacements_col, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
 
-    obj, _, SOL = solve(mesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, claVec, FlowCond, debug)
+    obj, _, SOL = solve(FEMESH.mesh, FEMESH.elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, claVec, FlowCond, debug)
 
     if return_all
         return obj, SOL
@@ -2231,7 +2237,7 @@ function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, mesh, elemConn,
     end
 end
 
-function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStruct, solverOptions::AbstractDict; mode="FiDi")
+function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStruct, displacementsCol, claVec, solverOptions::AbstractDict; mode="FiDi")
     """
     Wrapper to compute the total sensitivities for this evalFunc
 
@@ -2247,7 +2253,7 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
     # Initialize output dictionary
 
     LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
-    ptVec, mm, NPT = Utilities.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
+    ptVec, mm, NPT = LiftingLine.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
 
     # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
     haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
@@ -2267,15 +2273,33 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
 
                 # dksflutterdx, = AD.gradient(backend, (x) -> cost_funcsFromDVs(x, DVLengths, solverOptions), DVVec)
                 # NOTE: just make sure the xalfa, xtheta, xtoc are in the same order as `allDesignVariables` list
-                dIdxDV = AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) ->
-                        cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+                # dIdxDV = AD.gradient(backend, (xpt, xalpha, xtheta, xtoc) ->
+                #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+
+                dIdxDV = AD.gradient(backend, (xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
 
             elseif uppercase(mode) == "RAD" # use automatic differentiation via Zygote
                 backend = AD.ZygoteBackend()
 
                 # AD backend was screwing up the output so use Zygote directly
-                dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
-                        cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+                # dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
+                #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
+
+                # # Full case
+                # dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                #         cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                # # debug case
+                # dIdxDV = Zygote.gradient((xpt, xtheta, xtoc, xalpha) ->
+                #         cost_funcsFromDVsOM(xpt, nodeConn, displacementsCol, claVec, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                # debug case
+                dIdxDV = Zygote.gradient((xtheta, xalpha) ->
+                        cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), appendageParams["theta_f"], appendageParams["alfa0"])
+
+                # backend = AD.ReverseDiffBackend()
+                # # There's a weird quirk here with ReverseDiff that the input val has to be the copy of it b/c I guess ReverseDiff modifies the dictionary in place if you do not pass in the copy
+                # dIdxDV = AD.gradient(backend, (xtheta, xalpha) ->
+                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), copy(appendageParams["theta_f"]), copy(appendageParams["alfa0"]))
 
             elseif uppercase(mode) == "FAD"
                 error("FAD not implemented yet")
@@ -2286,7 +2310,9 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
         println("Sensitivity time:\t$(tFunc)")
 
         dfdxParams = Dict()
-        for (ii, dvkey) in enumerate(allDesignVariables)
+        DesignVariables = ["displCol", "cla", "theta_f", "toc", "alfa0"] # in order
+        # for (ii, dvkey) in enumerate(alldesignvariables) # old
+        for (ii, dvkey) in enumerate(DesignVariables)
             dfdxParams[dvkey] = dIdxDV[1+ii]
         end
 

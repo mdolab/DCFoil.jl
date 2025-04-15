@@ -227,3 +227,30 @@ function myCrossProd(vec1, vec2)
     ])
     return v1crossv2
 end
+
+function find_signChange(x)
+    """
+    Find the location where a sign changes in an array
+    Inputs
+    ------
+        x - array which signchange is to be found. Size(n)
+    Outputs
+    -------
+        locs - array of size 2 containing the location of the sign change
+    """
+
+    # Get signs of each element in x
+    sgn = sign.(x)
+    n = length(sgn)
+
+    for ii in 1:n-1
+        @fastmath @inbounds begin
+            if sgn[ii+1] != sgn[ii]
+                return ii, ii + 1
+            else
+                continue
+            end
+        end
+    end
+
+end

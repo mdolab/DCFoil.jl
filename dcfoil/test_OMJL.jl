@@ -3,130 +3,26 @@ using Plots
 using OpenMDAO: om, make_component
 include("../src/hydro/LiftingLine.jl")
 include("../src/hydro/liftingline_om.jl")
-include("../src/solvers/solveflutter_om.jl")
 include("../src/struct/beam_om.jl")
+using .LiftingLine
+using .FEMMethods
+include("../src/solvers/solveflutter_om.jl")
+include("../src/io/MeshIO.jl")
 const RealOrComplex = Union{Real,Complex}
 # const RealOrComplex = AbstractFloat
 
 # ==============================================================================
 #                         Setup stuff
 # ==============================================================================
-ptVec = [-0.07,
-    0.0,
-    0.0,
-    -0.0675,
-    0.037,
-    0.0,
-    -0.065,
-    0.074,
-    0.0,
-    -0.0625,
-    0.111,
-    0.0,
-    -0.06,
-    0.148,
-    0.0,
-    -0.0575,
-    0.185,
-    0.0,
-    -0.055,
-    0.222,
-    0.0,
-    -0.0525,
-    0.259,
-    0.0,
-    -0.05,
-    0.296,
-    0.0,
-    -0.0475,
-    0.333,
-    0.0,
-    -0.0675,
-    -0.037,
-    0.0,
-    -0.065,
-    -0.074,
-    0.0,
-    -0.0625,
-    -0.111,
-    0.0,
-    -0.06,
-    -0.148,
-    0.0,
-    -0.0575,
-    -0.185,
-    0.0,
-    -0.055,
-    -0.222,
-    0.0,
-    -0.0525,
-    -0.259,
-    0.0,
-    -0.05,
-    -0.296,
-    0.0,
-    -0.0475,
-    -0.333,
-    0.0,
-    0.07,
-    0.0,
-    0.0,
-    0.0675,
-    0.037,
-    0.0,
-    0.065,
-    0.074,
-    0.0,
-    0.0625,
-    0.111,
-    0.0,
-    0.06,
-    0.148,
-    0.0,
-    0.0575,
-    0.185,
-    0.0,
-    0.055,
-    0.222,
-    0.0,
-    0.0525,
-    0.259,
-    0.0,
-    0.05,
-    0.296,
-    0.0,
-    0.0475,
-    0.333,
-    0.0,
-    0.0675,
-    -0.037,
-    0.0,
-    0.065,
-    -0.074,
-    0.0,
-    0.0625,
-    -0.111,
-    0.0,
-    0.06,
-    -0.148,
-    0.0,
-    0.0575,
-    -0.185,
-    0.0,
-    0.055,
-    -0.222,
-    0.0,
-    0.0525,
-    -0.259,
-    0.0,
-    0.05,
-    -0.296,
-    0.0,
-    0.0475,
-    -0.333,
-    0.0]
-nodeConn = [1 2 3 4 5 6 7 8 9 1 11 12 13 14 15 16 17 18;
-    2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19]
+files = Dict(
+    "gridFile" => ["./INPUT/flagstaff_foil_stbd_mesh.dcf"],
+)
+GridStruct = add_meshfiles(files["gridFile"], Dict("junction-first" => true))
+
+LECoords = (GridStruct.LEMesh)
+TECoords = (GridStruct.TEMesh)
+nodeConn = (GridStruct.nodeConn)
+ptVec, m, n = FEMMethods.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
 nNodes = 5
 nNodesStrut = 3
 appendageParams = Dict(
@@ -155,7 +51,8 @@ paramsList = [appendageParams]
 appendageOptions = Dict(
     "compName" => "rudder",
     # "config" => "t-foil",
-    "config" => "full-wing",
+    # "config" => "full-wing",
+    "config" => "wing",
     "nNodes" => nNodes,
     "nNodeStrut" => nNodesStrut,
     "use_tipMass" => false,
@@ -216,17 +113,17 @@ solverOptions = Dict(
     "run_modal" => true,
     "run_flutter" => true,
     "nModes" => 4,
-    "uRange" => [1.0, 30],
+    "uRange" => [29.0, 30],
     "maxQIter" => 100, # that didn't fix the slow run time...
     "rhoKS" => 500.0,
 )
+displacementsCol = zeros(6, LiftingLine.NPT_WING)
+
+solverOptions = FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[1])
 # ==============================================================================
 #                         Derivatives
 # ==============================================================================
-using .LiftingLine
-using .FEMMethods
 
-solverOptions = FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[1])
 
 # ************************************************
 #     Testing cla d xpt
@@ -311,10 +208,8 @@ dcladg = (dcldg_f - dcldg) / dalfa # this makes sense
 # ************************************************
 #     Test twist into lifting line
 # ************************************************
-LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 idxTip = LiftingLine.get_tipnode(LECoords)
 midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
-displacementsCol = zeros(6, LiftingLine.NPT_WING)
 
 # Here's a twist distribution
 displacementsCol[5, :] .= vcat(LinRange(deg2rad(10.0), deg2rad(0.0), LiftingLine.NPT_WING ÷ 2), LinRange(deg2rad(0.0), deg2rad(10.0), LiftingLine.NPT_WING ÷ 2))
@@ -389,6 +284,7 @@ dfdxpt_fd, dfdxdispl_fd = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn,
 
 # GOOD
 ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
 ∂Drag∂Xpt_fd, ∂Drag∂xdispl_fd, ∂Drag∂G_fd = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
 # These derivatives are good
@@ -450,13 +346,17 @@ mesh = [[0.0 0.0 0.0]
     [0.0 -0.1665 0.0]
     [0.0 -0.24975 0.0]
     [0.0 -0.333 0.0]]
-elemConn = [[1.0 2.0]
-    [2.0 3.0]
-    [3.0 4.0]
-    [4.0 5.0]
-    [1.0 6.0]
-    [6.0 7.0]
-    [7.0 8.0]
-    [8.0 9.0]]
-# TODO: GPICKUP HERE
-SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, mesh, elemConn, claVec, appendageParams, solverOptions)
+elemConn = [[1 2]
+    [2 3]
+    [3 4]
+    [4 5]
+    [1 6]
+    [6 7]
+    [7 8]
+    [8 9]]
+# TODO: GPICKUP HERE GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+claVecMod = claVec[end-4:end] .+ 1.1
+SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+evalFuncsSensList = ["ksflutter"]
+dfdx_rad = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
+dfdx_fd = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")

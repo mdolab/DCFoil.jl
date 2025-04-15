@@ -13,6 +13,9 @@
              x is positive streamwise
              y is positive to stbd
              z is positive in the vertical direction
+
+             KNOWN BUGS:
+             If there are NaNs, check the TV influence functions
 """
 
 module LiftingLine
@@ -105,12 +108,12 @@ struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
     airfoil_ctrl_xy::TM # Airfoil control points
 end
 
-struct FlowConditions{TF,TC,TA<:AbstractVector{TC}}
-    Uinfvec::TA # Freestream velocity [m/s] [U, V, W]
+struct FlowConditions{TF,TC,TA<:AbstractVector}
+    Uinfvec::Vector # Freestream velocity [m/s] [U, V, W]
     Uinf::TC # Freestream velocity magnitude [m/s]
     uvec::TA # Freestream velocity unit vector
     alpha::TC # Angle of attack [rad]
-    beta::TF
+    beta::Number
     rhof::TF # Freestream density [kg/m^3]
     depth::TF
 end
@@ -329,6 +332,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements;
     # --- Structural span is not the same as aero span ---
     idxTip = get_tipnode(midchords)
     aeroWingSpan = compute_aeroSpan(midchords, idxTip)
+    # println("Aero span: $(aeroWingSpan) m")
 
     # wingSpan = span * cos(sweepAng) #no
 
@@ -506,8 +510,10 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements;
     wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, wing_joint_xyz_zcomp, dims=1)
     wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, wing_joint_xyz_eff_zcomp, dims=1)
 
+    # # Debug stuff 
     # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
     # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
+    # println("wing_ctrl_xyz y: $(wing_ctrl_xyz[YDIM,:])")
 
     # println("local sweep values [deg]: $(rad2deg.(localSweeps))")
 
@@ -1304,6 +1310,10 @@ function compute_LLresJacobian(Gi; solverParams, mode="Analytic")
             @ignore_derivatives(Gi[ii] -= dh)
             # ∂r∂G[:, ii] = (r_f - r_i) / dh
             ∂r∂G_z[:, ii] = (r_f - r_i) / dh
+            # println("r:")
+            # println(r_f)
+            # println("r_i:")
+            # println(r_i)
         end
         # J = ∂r∂G
         J = copy(∂r∂G_z)
@@ -1561,7 +1571,7 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
         return outputVector
     end
 
-    displVec = vec((displCol))
+    displVec = vec(displCol)
 
     # ************************************************
     #     Finite difference
@@ -1801,7 +1811,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
@@ -1865,7 +1875,8 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     influence = influence ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do
+    # Cannot keep in ignore derivatives block
+    ChainRulesCore.ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)

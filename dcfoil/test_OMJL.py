@@ -29,6 +29,7 @@ import juliacall
 
 jl = juliacall.newmodule("DCFoil")
 
+jl.include("../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
 jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
@@ -43,140 +44,29 @@ from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 # from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
-ptVec = np.array(
-    [
-        -0.07,
-        0.0,
-        0.0,
-        -0.0675,
-        0.037,
-        0.0,
-        -0.065,
-        0.074,
-        0.0,
-        -0.0625,
-        0.111,
-        0.0,
-        -0.06,
-        0.148,
-        0.0,
-        -0.0575,
-        0.185,
-        0.0,
-        -0.055,
-        0.222,
-        0.0,
-        -0.0525,
-        0.259,
-        0.0,
-        -0.05,
-        0.296,
-        0.0,
-        -0.0475,
-        0.333,
-        0.0,
-        -0.0675,
-        -0.037,
-        0.0,
-        -0.065,
-        -0.074,
-        0.0,
-        -0.0625,
-        -0.111,
-        0.0,
-        -0.06,
-        -0.148,
-        0.0,
-        -0.0575,
-        -0.185,
-        0.0,
-        -0.055,
-        -0.222,
-        0.0,
-        -0.0525,
-        -0.259,
-        0.0,
-        -0.05,
-        -0.296,
-        0.0,
-        -0.0475,
-        -0.333,
-        0.0,
-        0.07,
-        0.0,
-        0.0,
-        0.0675,
-        0.037,
-        0.0,
-        0.065,
-        0.074,
-        0.0,
-        0.0625,
-        0.111,
-        0.0,
-        0.06,
-        0.148,
-        0.0,
-        0.0575,
-        0.185,
-        0.0,
-        0.055,
-        0.222,
-        0.0,
-        0.0525,
-        0.259,
-        0.0,
-        0.05,
-        0.296,
-        0.0,
-        0.0475,
-        0.333,
-        0.0,
-        0.0675,
-        -0.037,
-        0.0,
-        0.065,
-        -0.074,
-        0.0,
-        0.0625,
-        -0.111,
-        0.0,
-        0.06,
-        -0.148,
-        0.0,
-        0.0575,
-        -0.185,
-        0.0,
-        0.055,
-        -0.222,
-        0.0,
-        0.0525,
-        -0.259,
-        0.0,
-        0.05,
-        -0.296,
-        0.0,
-        0.0475,
-        -0.333,
-        0.0,
+files = {
+    "gridFile": [
+        "../INPUT/flagstaff_foil_stbd_mesh.dcf",
+        # "../INPUT/flagstaff_foil_port_mesh.dcf", # only add this if config is full wing
     ]
-)
-
-nodeConn = np.array(
-    [
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 11, 12, 13, 14, 15, 16, 17, 18],
-        [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
-    ]
-)
-nNodes = 4
+}
+Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
+# Unpack for this code. Remember Julia is transposed from Python
+LECoords = np.array(Grid.LEMesh).T
+TECoords = np.array(Grid.TEMesh).T
+nodeConn = np.array(Grid.nodeConn)
+ptVec, m, n = jl.FEMMethods.unpack_coords(Grid.LEMesh, Grid.TEMesh)
+nNodes = 5
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
-    "config": "full-wing",
+    # "config": "full-wing",
+    "config": "wing",
     "nNodes": nNodes,
     "nNodeStrut": nNodesStrut,
     "use_tipMass": False,
-    "xMount": 3.355,
+    # "xMount": 3.355,
+    "xMount": 0.0,
     "material": "cfrp",
     "strut_material": "cfrp",
     "path_to_geom_props": "./INPUT/1DPROPS/",
@@ -232,11 +122,8 @@ solverOptions = {
 
 # 2025-03-17 NOTE GN-SK: this dictionary is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
 appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
-    "alfa0": 2.0,  # initial angle of attack [deg]
-    # "sweep": np.deg2rad(0.0),  # sweep angle [rad]
+    "alfa0": 6.0,  # initial angle of attack [deg]
     "zeta": 0.04,  # modal damping ratio at first 2 modes
-    # "c": np.linspace(0.14, 0.095, nNodes),  # chord length [m]
-    # "s": 0.333,  # semispan [m]
     "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
     "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
     "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
@@ -328,12 +215,8 @@ if __name__ == "__main__":
     expcomp_displacement = JuliaExplicitComp(
         jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    expcomp_flutter = JuliaExplicitComp(
-        jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_forced = JuliaExplicitComp(
-        jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
+    expcomp_flutter = JuliaExplicitComp(jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions))
+    expcomp_forced = JuliaExplicitComp(jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions))
 
     model = om.Group()
 
@@ -473,7 +356,7 @@ if __name__ == "__main__":
     }
 
     prob.model.add_design_var("ptVec")
-    # prob.model.add_objective("CDi")
+    prob.model.add_objective("CDi")
 
     # prob.model.nonlinear_solver = om.NewtonSolver(
     #     solve_subsystems=True,
@@ -488,10 +371,11 @@ if __name__ == "__main__":
     # om.n2(prob)
 
     prob.set_val("ptVec", ptVec)
+    prob.set_val("beamstruct.theta_f", np.deg2rad(15))
 
     if args.run_struct:
         tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-6] = 10.0
+        tractions[-7] = 100.0
         prob.set_val("beamstruct.traction_forces", tractions)
     elif args.run_flow:
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
@@ -501,6 +385,19 @@ if __name__ == "__main__":
         prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
         prob.set_val("gammas", np.zeros(npt_wing))
+
+        # tip load test
+        # loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
+        # loads[4 * 9 + 1] = 1000
+        # loads[4 * 9 + 2] = 1000   # tip vertical force (z direction)
+        # tractions = prob.set_val("traction_forces", loads)
+
+        # set fiber angle
+        fiber_angle = np.deg2rad(-15)
+        prob.set_val('beamstruct.theta_f', fiber_angle)
+        prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
+        prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
+        prob.set_val('beamstruct_funcs.toc', 0.075 * np.ones(nNodes))
 
         # tip load test
         # loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
@@ -568,14 +465,12 @@ if __name__ == "__main__":
         print("nondimensional gammas", prob.get_val("gammas"))
         print("nondimensional gammas_d", prob.get_val("gammas_d"))
         print("CL", prob.get_val("CL"))
-        print("CLa", prob.get_val("cla_col")) 
+        print("CLa", prob.get_val("cla_col"))
         print("mesh", prob.get_val("nodes"))
         print("elemConn", prob.get_val("elemConn"))
         # Write matrices to a file so we can test them
 
-        # print("Kmatrix", prob.get_val("Kmat"))
-        # print("Cmatrix", prob.get_val("Cmat"))
-        # print("Mmatrix", prob.get_val("Mmat"))
+        print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
         # print("force distribution", prob.get_val("forces_dist"))
         print("bending deflections", prob.get_val("deflections")[2::9])
         print("twisting deflections", prob.get_val("deflections")[4::9])
@@ -586,7 +481,7 @@ if __name__ == "__main__":
         print(
             "spray drag:",
             prob.get_val("Ds"),
-            f"\tprofile drag: {prob.get_val('Dpr')}\t wavedrag: {prob.get_val('Dw')}\t junctiondrag: {prob.get_val('Dj')}",
+            f"\nprofile drag: {prob.get_val('Dpr')}\nwavedrag: {prob.get_val('Dw')}\n junctiondrag: {prob.get_val('Dj')}",
         )
         print(
             "spray drag coeff:",
@@ -719,6 +614,9 @@ if __name__ == "__main__":
     starttime = time.time()
     if args.test_partials:
 
+        # print("computing total derivatives...\n" + "-" * 50)
+        # prob.compute_totals()
+
         np.set_printoptions(linewidth=1000, precision=4)
 
         fileName = "partials.out"
@@ -738,7 +636,13 @@ if __name__ == "__main__":
         prob.check_partials(
             out_stream=f,
             includes=["liftingline_funcs"],
-            # includes=["liftingline"],
+            method="fd",
+            step=1e-4,
+            # compact_print=True,
+        )
+        prob.check_partials(
+            out_stream=f,
+            includes=["liftingline"],
             method="fd",
             step=1e-4,  # now we're cooking :)
             compact_print=False,
