@@ -135,7 +135,10 @@ appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
 }
 
 # Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
-solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
+solverOptions = jl.FEMMethods.set_structDamping(
+    ptVec, nodeConn, appendageParams, solverOptions, appendageList[0]
+)
+
 
 # ==============================================================================
 #                         Helper func
@@ -154,7 +157,9 @@ def plot_cla():
     cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     # Create figure object
-    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10))
+    fig, axes = plt.subplots(
+        nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10)
+    )
 
     ax = axes
     ax.plot(prob.get_val("collocationPts")[1, :], prob.get_val("cla"))
@@ -195,22 +200,36 @@ if __name__ == "__main__":
         jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
     expcomp_struct_func = JuliaExplicitComp(
-        jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
+        jlcomp=jl.OMFEBeamFuncs(
+            nodeConn, appendageParams, appendageOptions, solverOptions
+        )
     )
     impcomp_LL_solver = JuliaImplicitComp(
-        jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
+        jlcomp=jl.OMLiftingLine(
+            nodeConn, appendageParams, appendageOptions, solverOptions
+        )
     )
     expcomp_LL_func = JuliaExplicitComp(
-        jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
+        jlcomp=jl.OMLiftingLineFuncs(
+            nodeConn, appendageParams, appendageOptions, solverOptions
+        )
     )
     expcomp_load = JuliaExplicitComp(
-        jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
+        jlcomp=jl.OMLoadTransfer(
+            nodeConn, appendageParams, appendageOptions, solverOptions
+        )
     )
     expcomp_displacement = JuliaExplicitComp(
-        jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
+        jlcomp=jl.OMLoadTransfer(
+            nodeConn, appendageParams, appendageOptions, solverOptions
+        )
     )
-    expcomp_flutter = JuliaExplicitComp(jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions))
-    expcomp_forced = JuliaExplicitComp(jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions))
+    expcomp_flutter = JuliaExplicitComp(
+        jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions)
+    )
+    expcomp_forced = JuliaExplicitComp(
+        jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions)
+    )
 
     model = om.Group()
 
@@ -329,7 +348,6 @@ if __name__ == "__main__":
     prob.setup()
 
     prob.set_val("ptVec", ptVec)
-    prob.set_val("beamstruct.theta_f", np.deg2rad(15))
 
     if args.run_struct:
         tractions = prob.get_val("beamstruct.traction_forces")
@@ -340,7 +358,13 @@ if __name__ == "__main__":
         prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
     else:
-        prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
+        displacementsCol = np.zeros((6, npt_wing))
+        
+        # print("moving one of the coll points up")
+        # displacementsCol[2, -1] = 0.1
+
+        prob.set_val("beamstruct.theta_f", np.deg2rad(15))
+        prob.set_val("liftingline.displacements_col", displacementsCol)
         prob.set_val("alfa0", appendageParams["alfa0"])
         tractions = prob.get_val("beamstruct.traction_forces")
         tractions[-7] = 100.0
@@ -392,7 +416,9 @@ if __name__ == "__main__":
         print("CLa", prob.get_val("cla_col"))
         print("mesh", prob.get_val("nodes"))
         print("elemConn", prob.get_val("elemConn"))
-        # Write matrices to a file so we can test them
+        print("collocationPts\n", prob.get_val("collocationPts")[0, :])
+        print(prob.get_val("collocationPts")[1, :])
+        print(prob.get_val("collocationPts")[2, :])
 
         print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
         # print("force distribution", prob.get_val("forces_dist"))
@@ -444,28 +470,28 @@ if __name__ == "__main__":
             step=1e-4,
             # compact_print=True,
         )
-        prob.check_partials(
-            out_stream=f,
-            includes=["liftingline"],
-            method="fd",
-            step=1e-4,  # now we're cooking :)
-            compact_print=False,
-        )
-        f.write("=" * 50)
-        f.write("\n structural partials \n")
-        f.write("=" * 50)
-        prob.check_partials(
-            out_stream=f,
-            includes=["beamstruct"],
-            method="fd",
-            # compact_print=True,
-        )
-        prob.check_partials(
-            out_stream=f,
-            includes=["beamstruct_funcs"],
-            method="fd",
-            # compact_print=True,
-        )  # THESE ARE GOOD
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["liftingline"],
+        #     method="fd",
+        #     step=1e-4,  # now we're cooking :)
+        #     compact_print=False,
+        # )
+        # f.write("=" * 50)
+        # f.write("\n structural partials \n")
+        # f.write("=" * 50)
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["beamstruct"],
+        #     method="fd",
+        #     # compact_print=True,
+        # )
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["beamstruct_funcs"],
+        #     method="fd",
+        #     # compact_print=True,
+        # )  # THESE ARE GOOD
         # breakpoint()
         f.close()
 

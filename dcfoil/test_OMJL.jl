@@ -278,7 +278,8 @@ drdx, drdxdisp = LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displace
 drdx_FD, drdxdisp_FD = LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 # @time LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
 
-# GOOD
+# GOOD when full wing
+# --- No longer good with half wing formulation ---
 dfdxpt, dfdxdispl = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 dfdxpt_fd, dfdxdispl_fd = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
