@@ -28,6 +28,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # ************************************************
     # Midchords
     midchords::Matrix{RealOrComplex} = 0.5 .* (LECoords .+ TECoords)
+    # println("midchords", midchords)
 
     # Chord lengths
     chordVectors = LECoords .- TECoords
@@ -47,7 +48,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     dxVec = midchords[XDIM, n2vec] - midchords[XDIM, n1vec]
     dyVec = midchords[YDIM, n2vec] - midchords[YDIM, n1vec]
     dzVec = midchords[ZDIM, n2vec] - midchords[ZDIM, n1vec]
-    spanwiseVectors = [dxVec; dyVec; dzVec] # 3 x nNodes
+    spanwiseVectors = [dxVec, dyVec, dzVec] # 3 x nNodes
     # Compute the angle
     # sweepAngle = -atan_cs_safe.(dxVec, dyVec)
 
@@ -96,6 +97,48 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     return midchords, chordLengthsWork, spanwiseVectors, Λ, twistDistribution
 end
 
+function compute_midchords(LECoords, TECoords)
+
+    # LECoords = reshape(LECoordsVec, 3, length(LECoordsVec) ÷ 3)
+    # TECoords = reshape(TECoordsVec, 3, length(TECoordsVec) ÷ 3)
+
+    midchordsX = 0.5 * (LECoords[XDIM, :] .+ TECoords[XDIM, :])
+    midchordsY = 0.5 * (LECoords[YDIM, :] .+ TECoords[YDIM, :])
+    midchordsZ = 0.5 * (LECoords[ZDIM, :] .+ TECoords[ZDIM, :])
+    midchords::typeof(LECoords) = transpose(hcat(midchordsX, midchordsY, midchordsZ))
+
+    return (midchords)
+end
+
+function ChainRulesCore.rrule(::typeof(compute_midchords), LECoords, TECoords)
+
+    y = compute_midchords(LECoords, TECoords)
+
+    function pullback(ȳ)
+        """
+        Pullback for compute_midchords
+
+        ȳ - the seed for the pullback, same size as output of function, in this case (3,NPT)
+        """
+
+        # dydLECoords = 0.5 * ones(size(LECoords))
+        # dydTECoords = 0.5 * ones(size(TECoords))
+        dydLECoords = 0.5 * ones(size(LECoords, 1), size(LECoords, 2))
+        dydTECoords = 0.5 * ones(size(TECoords, 1), size(TECoords, 2))
+
+        # Compute the pullback
+        LECoordsb = ȳ .* dydLECoords # should be size (3, NPT)
+        TECoordsb = ȳ .* dydTECoords # should be size (3, NPT)
+        # println("size(LECoordsb): ", size(LECoordsb))
+
+        # Return the pullback
+        return NoTangent(), LECoordsb, TECoordsb
+    end
+
+    return y, pullback
+end
+
+
 function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)
     """
     Compute the approximate sweep angle of the aerodynamic center (1/4 chord assumption)
@@ -135,6 +178,9 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)
 end
 
 function compute_aeroSpan(midchords, idxTip)
+    """
+    Compute the full wing span
+    """
 
     # ymax = Utilities.compute_KS(midchords[YDIM, :], 100.0)
     # ymin = -Utilities.compute_KS(-midchords[YDIM, :], 100.0)

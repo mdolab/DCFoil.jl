@@ -679,11 +679,12 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
 
     # ************************************************
     #     Derivatives wrt ptVec (2025-03-02 agree)
+    #     for the half-wing, only finite differences work
     # ************************************************
-    # mode = "FiDi" # slow
+    # mode = "FiDi" # slow 
     # mode = "CS" # broken
     # mode = "RAD" # broken
-    mode = "FAD"
+    mode = "FAD" # use this mode for full wing
 
     START = 1
     STOP = LiftingLine.NPT_WING
@@ -693,6 +694,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         START = LiftingLine.NPT_WING ÷ 2 + 1
         NPT_WING = LiftingLine.NPT_WING ÷ 2
         DIV = 2
+        mode = "FiDi"
     end
 
     costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist", "cl"]
@@ -705,6 +707,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x[FXIND:CLMAXIND, :]))
         partials[costFuncsInOrder[ii], "ptVec"][1, :] = ∂fi∂x
     end
+
     for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl[FXIND:CLMAXIND, :]))
         # transpose reshape flatten stuff bc julia and python store arrays differently
         # println("start index", 1+(START-1)*6)
@@ -717,6 +720,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
         partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
     end
+
     for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
         # transpose reshape flatten stuff bc julia and python store arrays differently
         ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
@@ -738,7 +742,12 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # ---------------------------
     #   Drag build up derivatives
     # --------------------------- 
-    ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    dragMode = "RAD"
+    if appendageOptions["config"] == "wing"
+        dragMode = "FiDi"
+    end 
+    # TODO PICKUP CHECKING IF THESE pt VEC Derivs are fixed now
+    ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode=dragMode)
     partials["CDw", "ptVec"][1, :] = ∂Drag∂Xpt[1, :]
     partials["CDpr", "ptVec"][1, :] = ∂Drag∂Xpt[2, :]
     partials["CDj", "ptVec"][1, :] = ∂Drag∂Xpt[3, :]
@@ -764,7 +773,9 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # The first 3 of every 6 columns have a one-to-one mapping
     for ii in 1:length(displCol)÷DIV
         if mod(ii, 6) in [1, 2, 3]
-            partials["collocationPts", "displacements_col"][ii÷6+mod(ii, 6), ii] = 1.0
+            # displCol index offsets by NPT_WING if half-wing, otherwise not
+            displColIdx = ii + NPT_WING * (DIV - 1)
+            partials["collocationPts", "displacements_col"][ii÷6+mod(ii, 6), displColIdx] = 1.0
         end
     end
 
@@ -867,7 +878,6 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     for (ii, dclaidg) in enumerate(eachrow(dcladg))
         partials["cla_col", "gammas"][ii, :] = dclaidg
     end
-    # TODO GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG FIX THIS
 
     return nothing
 end
