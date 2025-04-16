@@ -220,7 +220,9 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, 
         compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions,
             dynP, areaRef, aeroSpan, CL, meanChord, rootChord, chordVec)
 
-    return vec([CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds])
+    # NOTE: chordVec type is Vector{Union{Real, Complex}} and that makes CDpr, CDj, Dpr, Dj complex (but 0 for imag part) under compute_totals in hydroelastic derivatives
+    #       Zygote doesn't accept complex data type so we convert to real here
+    return vec([CDw, real(CDpr), real(CDj), CDs, Dw, real(Dpr), real(Dj), Ds])
 end
 
 function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")

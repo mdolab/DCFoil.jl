@@ -36,8 +36,6 @@ jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 jl.include("../src/solvers/solveflutter_om.jl")  # discipline 4 flutter solver
 jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
-# number of flow strips (must be consistent with liftingline.jl)
-NPT_WING = 5
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
@@ -47,7 +45,7 @@ from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
 files = {
     "gridFile": [
         "../INPUT/flagstaff_foil_stbd_mesh.dcf",
-        # "../INPUT/flagstaff_foil_port_mesh.dcf", # only add this if config is full wing
+        "../INPUT/flagstaff_foil_port_mesh.dcf", # only add this if config is full wing
     ]
 }
 Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
@@ -60,8 +58,8 @@ nNodes = 5
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
-    # "config": "full-wing",
-    "config": "wing",
+    "config": "full-wing",
+    # "config": "wing",
     "nNodes": nNodes,
     "nNodeStrut": nNodesStrut,
     "use_tipMass": False,
@@ -178,7 +176,19 @@ def plot_cla():
     plt.close()
 
 
-npt_wing = jl.LiftingLine.NPT_WING
+# number of strips and FEM nodes
+if appendageOptions["config"] == "full-wing":
+    npt_wing = jl.LiftingLine.NPT_WING
+    n_node_fullspan = nNodes * 2 - 1
+else:
+    npt_wing = jl.LiftingLine.NPT_WING / 2
+    # check if npt_wing is integer
+    if npt_wing % 1 != 0:
+        raise ValueError("NPT_WING must be an even number for symmetric analysis")
+    npt_wing = int(npt_wing)
+    n_node_fullspan = nNodes
+
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -265,7 +275,6 @@ if __name__ == "__main__":
     else:
         # --- Combined hydroelastic ---
         couple = model.add_subsystem("hydroelastic", om.Group(), promotes=["*"])
-        n_node_fullspan = nNodes * 2 - 1
 
         # structure
         couple.add_subsystem(
@@ -284,7 +293,7 @@ if __name__ == "__main__":
         # displacement transfer
         couple.add_subsystem(
             "disp_transfer",
-            DisplacementTransfer(n_node=n_node_fullspan, n_strips=NPT_WING, xMount=appendageOptions["xMount"]),
+            DisplacementTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
             promotes_inputs=["nodes", "deflections", "collocationPts"],
             promotes_outputs=[("disp_colloc", "displacements_col")],
         )
@@ -312,20 +321,20 @@ if __name__ == "__main__":
         # load transfer
         couple.add_subsystem(
             "load_transfer",
-            LoadTransfer(n_node=n_node_fullspan, n_strips=NPT_WING, xMount=appendageOptions["xMount"]),
+            LoadTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
             promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
             promotes_outputs=[("loads_str", "traction_forces")],
         )
 
         # hydroelastic coupled solver
-        ### couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=50, iprint=2, atol=1e-10, rtol=0)
-        couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
+        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=10, iprint=2, atol=1e-10, rtol=0)
+        ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
         couple.linear_solver = om.DirectSolver()   # for adjoint
 
         # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
         model.add_subsystem(
             "CLa_interp",
-            CLaInterpolation(n_node=n_node_fullspan, n_strips=NPT_WING),
+            CLaInterpolation(n_node=n_node_fullspan, n_strips=npt_wing),
             promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla")],
             promotes_outputs=[("CL_alpha_node", "cla_node")],
         )
@@ -371,7 +380,6 @@ if __name__ == "__main__":
     # om.n2(prob)
 
     prob.set_val("ptVec", ptVec)
-    prob.set_val("beamstruct.theta_f", np.deg2rad(15))
 
     if args.run_struct:
         tractions = prob.get_val("beamstruct.traction_forces")
@@ -393,20 +401,7 @@ if __name__ == "__main__":
         # tractions = prob.set_val("traction_forces", loads)
 
         # set fiber angle
-        fiber_angle = np.deg2rad(-15)
-        prob.set_val('beamstruct.theta_f', fiber_angle)
-        prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
-        prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
-        prob.set_val('beamstruct_funcs.toc', 0.075 * np.ones(nNodes))
-
-        # tip load test
-        # loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
-        # loads[4 * 9 + 1] = 1000
-        # loads[4 * 9 + 2] = 1000   # tip vertical force (z direction)
-        # tractions = prob.set_val("traction_forces", loads)
-
-        # set fiber angle
-        fiber_angle = np.deg2rad(-15)
+        fiber_angle = np.deg2rad(0)
         prob.set_val('beamstruct.theta_f', fiber_angle)
         prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
         prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
@@ -492,7 +487,7 @@ if __name__ == "__main__":
     om.n2(prob, show_browser=False)
 
     # --- plot ---
-    ptVec = prob.get_val('ptVec').reshape(2, 19, 3)
+    ptVec = prob.get_val('ptVec').reshape(2, 20, 3)
     nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
     collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
     force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
