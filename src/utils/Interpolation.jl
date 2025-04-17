@@ -193,7 +193,7 @@ function ChainRulesCore.rrule(::typeof(lagrangeArrInterp_differentiable), xj, yj
         """
         Pullback for lagrangeArrInterp
 
-        ȳ - the seed for the pullback, size(m, n)
+        ȳ - the seed for the pullback, size(m * n)
         """
 
         dydxArr = zeros(m, n)

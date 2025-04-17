@@ -20,20 +20,16 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
 
     # Double check coords shape 
     # println("LECoords shape: ", size(LECoords))
-    size(LECoords)[1] == 3 || error("LECoords shape is wrong")
-    size(nodeConn)[1] == 2 || error("nodeConn shape is wrong")
+    ChainRulesCore.ignore_derivatives() do # these lines caused NaNs
+        size(LECoords)[1] == 3 || error("LECoords shape is wrong")
+        size(nodeConn)[1] == 2 || error("nodeConn shape is wrong")
+    end
 
     # ************************************************
     #     Compute 1D quantities
     # ************************************************
     # Midchords
-    midchords::Matrix{RealOrComplex} = 0.5 .* (LECoords .+ TECoords)
-    # println("midchords", midchords)
-
-    # Chord lengths
-    chordVectors = LECoords .- TECoords
-    chordLengths::Vector{RealOrComplex} = vec(sqrt.(sum(chordVectors .^ 2, dims=1)))
-
+    midchords = compute_midchords(LECoords, TECoords)
 
     # About midchord
     # spanwiseVectors = zeros(RealOrComplex, 3, size(nodeConn)[2])
@@ -56,8 +52,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # ---------------------------
     #   Twist distribution
     # ---------------------------
-    twistVec = compute_twist(chordVectors)
-
+    twistVec = compute_twist(LECoords, TECoords)
 
     # ---------------------------
     #   Sweep distribution
@@ -66,7 +61,6 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # Λ = sweepAngles
     Λ = sum(sweepAngles) / length(sweepAngles)
     # println("AC Sweep angle: $(rad2deg(Λ)) deg")
-
 
     # ---------------------------
     #   Span
@@ -78,18 +72,26 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # ************************************************
     #     Finally, spline them to the discretization
     # ************************************************
-    semispan = structSemispan
+    # semispan = structSemispan
+    semispan = LECoords[YDIM, idxTip]
     nNodes = appendageOptions["nNodes"]
-    s_loc_q = LinRange(0.0, semispan, nNodes)
+    # s_loc_q = LinRange(0.0, semispan, nNodes) # old way
 
     ds = semispan / (nNodes - 1)
     s_loc_q = LinRange(ds, semispan - ds, nNodes - 2)
     # println("s_loc_q: ", s_loc_q)
-    s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1)))
+    # s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1))) # this line gave NaNs in the derivatives!
+    # s_loc = compute_spanwiseLocations(midchords[XDIM, :], midchords[YDIM, :], midchords[ZDIM, :])
     # println("s_loc: ", s_loc)
-    chordLengthsWork_interp::Vector{RealOrComplex} = do_linear_interp(s_loc, chordLengths[1:idxTip], s_loc_q)
+    s_loc = LECoords[YDIM, 1:idxTip]
+
+    chordLengths = compute_chordLengths(LECoords[XDIM, :], TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :])
+    # How is this line giving NaNs?
+    chordLengthsWork_interp = do_linear_interp(s_loc, chordLengths[1:idxTip], s_loc_q)
+
     # This is for half of the wing
     chordLengthsWork = vcat(chordLengths[1], chordLengthsWork_interp, chordLengths[idxTip])
+
     # qtrChordWork = Interpolation.do_linear_interp(s_loc, qtrChords, s_loc_q)
     twistDistribution = do_linear_interp(s_loc, twistVec[1:idxTip], s_loc_q)
     # println("chords: ", chordLengthsWork)
@@ -98,16 +100,15 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
 end
 
 function compute_midchords(LECoords, TECoords)
-
-    # LECoords = reshape(LECoordsVec, 3, length(LECoordsVec) ÷ 3)
-    # TECoords = reshape(TECoordsVec, 3, length(TECoordsVec) ÷ 3)
-
+    """
+    AD safe
+    """
     midchordsX = 0.5 * (LECoords[XDIM, :] .+ TECoords[XDIM, :])
     midchordsY = 0.5 * (LECoords[YDIM, :] .+ TECoords[YDIM, :])
     midchordsZ = 0.5 * (LECoords[ZDIM, :] .+ TECoords[ZDIM, :])
     midchords::typeof(LECoords) = transpose(hcat(midchordsX, midchordsY, midchordsZ))
 
-    return (midchords)
+    return midchords
 end
 
 function ChainRulesCore.rrule(::typeof(compute_midchords), LECoords, TECoords)
@@ -121,8 +122,6 @@ function ChainRulesCore.rrule(::typeof(compute_midchords), LECoords, TECoords)
         ȳ - the seed for the pullback, same size as output of function, in this case (3,NPT)
         """
 
-        # dydLECoords = 0.5 * ones(size(LECoords))
-        # dydTECoords = 0.5 * ones(size(TECoords))
         dydLECoords = 0.5 * ones(size(LECoords, 1), size(LECoords, 2))
         dydTECoords = 0.5 * ones(size(TECoords, 1), size(TECoords, 2))
 
@@ -138,6 +137,128 @@ function ChainRulesCore.rrule(::typeof(compute_midchords), LECoords, TECoords)
     return y, pullback
 end
 
+function compute_chordLengths(xLE, xTE, yLE, yTE, zLE, zTE)
+    """
+    Compute chord lengths
+    """
+
+    LECoords = transpose(hcat(xLE, yLE, zLE))
+    TECoords = transpose(hcat(xTE, yTE, zTE))
+    chordVectors = LECoords .- TECoords
+    # This is a 3 x NPT matrix
+
+    # Chord lengths
+    chordLengths = zeros(size(chordVectors)[2])
+    for ii in eachindex(eachcol(chordVectors))
+        chordLengths[ii] = √(chordVectors[XDIM, ii] .^ 2 + chordVectors[YDIM, ii] .^ 2 + chordVectors[ZDIM, ii] .^ 2)
+    end
+
+    return chordLengths
+end
+
+function ChainRulesCore.rrule(::typeof(compute_chordLengths), xLE, xTE, yLE, yTE, zLE, zTE)
+
+    y = compute_chordLengths(xLE, xTE, yLE, yTE, zLE, zTE)
+
+    function chordLengths_pullback(ȳ)
+        """
+        Pullback for compute_chordLengths
+
+        ȳ - the seed for the pullback, same size as output of function, in this case (NPT)
+        """
+
+        # ∂Chordlength∂LECoords -->
+        NPT = length(ȳ)
+        dydxLE = zeros(NPT, NPT)
+        dydxTE = zeros(NPT, NPT)
+        dydyLE = zeros(NPT, NPT)
+        dydyTE = zeros(NPT, NPT)
+        dydzLE = zeros(NPT, NPT)
+        dydzTE = zeros(NPT, NPT)
+        for ii in 1:NPT # populate main diagonal entries
+            dxii = xLE[ii] - xTE[ii]
+            dyii = yLE[ii] - yTE[ii]
+            dzii = zLE[ii] - zTE[ii]
+            denom = sqrt(dxii^2 + dyii^2 + dzii^2)
+            dydxLE[ii, ii] = (dxii) / denom
+            dydyLE[ii, ii] = (dyii) / denom
+            dydzLE[ii, ii] = (dzii) / denom
+            dydxTE[ii, ii] = -(dxii) / denom
+            dydyTE[ii, ii] = -(dyii) / denom
+            dydzTE[ii, ii] = -(dzii) / denom
+        end
+
+        # Compute the pullback (vector - matrix products)
+        xLEb = vec(transpose(ȳ) * dydxLE)
+        xTEb = vec(transpose(ȳ) * dydxTE)
+        yLEb = vec(transpose(ȳ) * dydyLE)
+        yTEb = vec(transpose(ȳ) * dydyTE)
+        zLEb = vec(transpose(ȳ) * dydzLE)
+        zTEb = vec(transpose(ȳ) * dydzTE)
+        # LECoordsb = ȳ # dummy
+        # TECoordsb = ȳ # dummy
+
+        # Return the pullback
+        return NoTangent(), xLEb, xTEb, yLEb, yTEb, zLEb, zTEb
+    end
+
+    return y, chordLengths_pullback
+
+end
+
+# TODO: GN - make this AD safe, for now, using LECoords YDIM is OK
+function compute_spanwiseLocations(xMC, yMC, zMC)
+    """
+    Compute the spanwise locations of the mesh points
+    """
+
+    # Compute the spanwise locations
+    s = zeros(size(xMC))
+    for ii in eachindex(xMC)
+        s[ii] = √(xMC[ii] .^ 2 + yMC[ii] .^ 2 + zMC[ii] .^ 2)
+    end
+
+    return s
+end
+
+function ChainRulesCore.rrule(::typeof(compute_spanwiseLocations), xMC, yMC, zMC)
+
+    y = compute_spanwiseLocations(xMC, yMC, zMC)
+
+    function spanwiseLocations_pullback(ȳ)
+        """
+        Pullback for compute_spanwiseLocations
+
+        ȳ - the seed for the pullback, same size as output of function, in this case (NPT)
+        """
+
+        # ∂spanLoc∂MCCoords -->
+        NPT = length(ȳ)
+        dydxMC = zeros(NPT, NPT)
+        dydyMC = zeros(NPT, NPT)
+        dydzMC = zeros(NPT, NPT)
+        for ii in 1:NPT # populate main diagonal entries
+            dxii = xMC[ii]
+            dyii = yMC[ii]
+            dzii = zMC[ii]
+            denom = sqrt(dxii^2 + dyii^2 + dzii^2)
+            dydxMC[ii, ii] = (dxii) / denom
+            dydyMC[ii, ii] = (dyii) / denom
+            dydzMC[ii, ii] = (dzii) / denom
+        end
+
+        # Compute the pullback (vector - matrix products)
+        xMCb = vec(transpose(ȳ) * dydxMC)
+        yMCb = vec(transpose(ȳ) * dydyMC)
+        zMCb = vec(transpose(ȳ) * dydzMC)
+
+        # Return the pullback
+        return NoTangent(), xMCb, yMCb, zMCb
+    end
+
+    return y, spanwiseLocations_pullback
+
+end
 
 function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)
     """
@@ -201,7 +322,8 @@ function compute_structSpan(midchords, idxTip)
     return smax
 end
 
-function compute_twist(chordVectors)
+function compute_twist(LECoords, TECoords)
+    chordVectors = LECoords .- TECoords
 
     # Compute the twist distribution based off of angle about midchord
     dxVec = chordVectors[XDIM, :]

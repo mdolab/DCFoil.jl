@@ -36,7 +36,7 @@ end
 # ==============================================================================
 #                         Functions
 # ==============================================================================
-function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
+function ChainRulesCore.rrule(::typeof(*), A::AbstractMatrix, B::AbstractMatrix)
     """
     MATRIX MULTIPLY RULE
     """
@@ -49,8 +49,8 @@ function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix
 end
 
 function ChainRulesCore.frule((_, ΔA, ΔB), ::typeof(*),
-    A::Matrix{<:RealOrComplex},
-    B::Matrix{<:RealOrComplex},
+    A::AbstractMatrix,
+    B::AbstractMatrix,
 )
     Ω = A * B
     ∂Ω = ΔA * B + A * ΔB

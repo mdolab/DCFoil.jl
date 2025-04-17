@@ -25,8 +25,9 @@ module FEMMethods
 for headerName in [
     "../constants/DataTypes",
     "../constants/SolutionConstants",
-    "../struct/BeamProperties",
     "../constants/DesignConstants",
+    "../adrules/CustomRules",
+    "../struct/BeamProperties",
     "../utils/Utilities",
     "../utils/Interpolation",
     "../utils/Rotations",
@@ -61,7 +62,7 @@ struct StructMesh{TF,TC,TI}
     elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
     # sectionVectors::TM
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
-    chord::Vector{TC}
+    chord::AbstractVector
     toc::Vector{TC}
     ab::Vector{TC}
     x_αb::Vector{TC}
@@ -113,19 +114,10 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
 
     """
     config = appendageOptions["config"]
-    semispan = compute_structSpan(abs.(midchords), idxTip)
+    # semispan = compute_structSpan(abs.(midchords), idxTip) # NaNing
+    semispan = midchords[YDIM, idxTip]
 
     nNodeTot, nNodeWing, nElemTot, nElemWing = get_numnodes(config, appendageOptions["nNodes"], appendageOptions["nNodeStrut"])
-    # nElemWing = appendageOptions["nNodes"] - 1
-    # nElemTot = nothing
-    # if config == "wing"
-    #     nElemTot = nElemWing
-    # elseif config == "full-wing"
-    #     nElemTot = 2 * nElemWing
-    # end
-    # nNodeTot = nElemTot + 1
-    # nNodeWing = nElemWing + 1
-
 
 
     # --- Spline quantities ---
@@ -138,9 +130,12 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     end
 
     # Find where node connectivivity jumps and has index of 1
-    junctionIdxs = findall(x -> x == 1, nodeConn)
+    ChainRulesCore.ignore_derivatives() do
+        junctionIdxs = findall(x -> x == 1, nodeConn)
+    end
 
-    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
+    # s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :]) #NaNing
+    s_loc = midchords[YDIM, :]
 
 
     midchordXLocs = do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
@@ -154,12 +149,12 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     # mesh[:, ZDIM] = midchordZLocs
 
     elemConn = zeros(Int64, nElemWing, 2)
-    elemConn_z = Zygote.Buffer(elemConn)
-    # --- Element connectivity ---
-    for ee in 1:nElemWing
-        elemConn_z[ee, :] = [ee, ee + 1]
+    ChainRulesCore.ignore_derivatives() do
+        # --- Element connectivity ---
+        for ee in 1:nElemWing
+            elemConn[ee, :] = [ee, ee + 1]
+        end
     end
-    elemConn = copy(elemConn_z)
 
     # println("span loc query", s_loc_q)
     # for coord in eachrow(mesh)
@@ -167,10 +162,10 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     # end
     if config == "full-wing"
         modifiedConn = elemConn .+ nNodeWing .- 1
-        modifiedConn_z = Zygote.Buffer(modifiedConn)
-        modifiedConn_z[:, :] = modifiedConn
-        modifiedConn_z[1, 1] = 1
-        modifiedConn = copy(modifiedConn_z)
+        ChainRulesCore.ignore_derivatives() do
+            modifiedConn[:, :] = modifiedConn
+            modifiedConn[1, 1] = 1
+        end
         elemConn = vcat(elemConn, modifiedConn)
     end
 
@@ -668,8 +663,10 @@ function populate_matrices!(
         # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, lᵉ, elemType)
         Γ = get_transMat(dR1, dR2, dR3, lᵉ)
         ΓT = transpose(Γ)
-        kElem = ΓT * kLocal * Γ
-        mElem = ΓT * mLocal * Γ
+        kElem_int = my_matmul(kLocal, Γ)
+        kElem = my_matmul(ΓT, kElem_int)
+        mElem_int = my_matmul(mLocal, Γ)
+        mElem = my_matmul(ΓT, mElem_int)
         fElem = ΓT * fLocal
         @ignore_derivatives() do
             if any(isnan.(kElem))
@@ -996,7 +993,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
 
 end
 
-function compute_modal(K::AbstractMatrix, M::AbstractMatrix, nEig::Int64)
+function compute_modal(K::Matrix{<:RealOrComplex}, M::Matrix{<:RealOrComplex}, nEig::Int64)
     """
     Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
     i.e., this is structural dynamics, not hydroelastics.
@@ -1016,9 +1013,9 @@ end
 function set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageOptions)
 
     LECoords, TECoords = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    globalKs, globalMs, globalF, globalDOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    globalKs, globalMs, globalF, globalDOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
     Ks, Ms, _ = apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
-    αStruct, βStruct = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
+    αStruct, βStruct = compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
 
     solverOptions["alphaConst"] = αStruct
     solverOptions["betaConst"] = βStruct
@@ -1044,7 +1041,7 @@ function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, 
     return αStruct, βStruct
 end
 
-function compute_proportional_damping(K::AbstractMatrix, M::AbstractMatrix, ζ::RealOrComplex, nMode::Int64)
+function compute_proportional_damping(K::AbstractMatrix, M::AbstractMatrix, ζ, nMode::Int64)
     """
     MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
     Compute the proportional (Rayleigh) damping matrix

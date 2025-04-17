@@ -540,8 +540,9 @@ function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     Write out the p-k flutter results
     """
     # Store solutions here
-    workingOutput = outputDir * "pkFlutter/"
+    workingOutput = outputDir * "/pkFlutter/"
     mkpath(workingOutput)
+    println("Writing out flutter solution to ", workingOutput)
 
     true_eigs_r = FLUTTERSOL.eigs_r
     true_eigs_i = FLUTTERSOL.eigs_i
@@ -844,7 +845,7 @@ function print_flutter_text(nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalMo
 end
 
 function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVec, abVec, ebVec,
-    FOIL, dim::Int64, Nr::Int64, DOFBlankingList, idxTip,
+    FOIL, dim::Int64, Nr::Int64, DOFBlankingList, idxTip::Int64,
     N_MAX_Q_ITER, nModes, Mmat, Kmat, Cmat, LLSystem, claVec, FlowCond;
     ΔdynP=nothing, Δu=nothing, debug=false, solverOptions=Dict(), appendageOptions=Dict()
 )
@@ -925,7 +926,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     R_eigs_i = zeros(Float64, 2 * (dim - length(DOFBlankingList)), 3 * nModes, N_MAX_Q_ITER)
     iblank = zeros(Int64, 3 * nModes, N_MAX_Q_ITER) # stores which modes are blanked and therefore have a failed solution
     flowHistory = zeros(Float64, N_MAX_Q_ITER, 3) # stores [velocity, density, dynamic pressure]
-
 
     # ---------------------------
     #   Working arrays
@@ -1101,7 +1101,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                 # Let's check the fail flag, if yes then accept
                 if (is_failed)
                     # We should keep all modes that have high correlations, drop others
-                    nKeep::Int64 = 0
+                    nKeep = 0
                     ChainRulesCore.ignore_derivatives() do
                         for ii in 1:nCorr
                             if corr[ii] > 0.5
@@ -1910,7 +1910,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # """
 
     # --- Initialize ---
-    iMat = Matrix{Number}(I, dim, dim)
+    iMat = Matrix{Int}(I, dim, dim)
     zeroMat = zeros(dim, dim)
     A_r = zeros(2 * dim, 2 * dim)
     A_i = zeros(2 * dim, 2 * dim) # this will always be zero!
@@ -2286,20 +2286,24 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
                 # dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
                 #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
 
-                # # Full case
-                # dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                #         cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                # Full case
+                dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
                 # # debug case
                 # dIdxDV = Zygote.gradient((xpt, xtheta, xtoc, xalpha) ->
                 #         cost_funcsFromDVsOM(xpt, nodeConn, displacementsCol, claVec, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
-                # debug case
-                dIdxDV = Zygote.gradient((xtheta, xalpha) ->
-                        cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), appendageParams["theta_f"], appendageParams["alfa0"])
+                # # debug case
+                # dIdxDV = Zygote.gradient((xtheta) ->
+                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions), appendageParams["theta_f"])
 
                 # backend = AD.ReverseDiffBackend()
                 # # There's a weird quirk here with ReverseDiff that the input val has to be the copy of it b/c I guess ReverseDiff modifies the dictionary in place if you do not pass in the copy
+                # theta_val = copy(appendageParams["theta_f"])
+                # toc_val = copy(appendageParams["toc"])
+                # alfa0_val = copy(appendageParams["alfa0"])
+
                 # dIdxDV = AD.gradient(backend, (xtheta, xalpha) ->
-                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], xalpha, appendageParams, solverOptions), copy(appendageParams["theta_f"]), copy(appendageParams["alfa0"]))
+                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, toc_val, xalpha, appendageParams, solverOptions), theta_val, alfa0_val)
 
             elseif uppercase(mode) == "FAD"
                 error("FAD not implemented yet")

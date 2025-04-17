@@ -745,8 +745,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     dragMode = "RAD"
     if appendageOptions["config"] == "wing"
         dragMode = "FiDi"
-    end 
-    # TODO PICKUP CHECKING IF THESE pt VEC Derivs are fixed now
+    end
     ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode=dragMode)
     partials["CDw", "ptVec"][1, :] = ∂Drag∂Xpt[1, :]
     partials["CDpr", "ptVec"][1, :] = ∂Drag∂Xpt[2, :]
@@ -764,7 +763,11 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # ---------------------------
     #   Hydro mesh points
     # ---------------------------
-    ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    nodeMode = "FAD"
+    if appendageOptions["config"] == "wing"
+        nodeMode = "FiDi"
+    end
+    ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=nodeMode)
     # println("size of ", size(∂collocationPt∂Xpt[1+(START-1)*3:STOP*3, :]))
     for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt[1+(START-1)*3:STOP*3, :]))
         partials["collocationPts", "ptVec"][ii, :] = ∂cPti∂xPt

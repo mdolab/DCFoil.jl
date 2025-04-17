@@ -13,7 +13,7 @@ function get_rotate3dMat(ψ, axis="x")
     Give rotation matrix about axis by 
     ψ radians (RH rule!)
     """
-    rotMat::AbstractMatrix = zeros(DTYPE, 3, 3)
+    rotMat::Matrix = zeros(DTYPE, 3, 3)
 
     cosψ = cos(ψ)
     sinψ = sin(ψ)
