@@ -38,6 +38,7 @@ jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
+outputDir = "output"
 files = {
     "gridFile": [
         "../INPUT/flagstaff_foil_stbd_mesh.dcf",
@@ -76,7 +77,7 @@ solverOptions = {
     # "gridFile": files["gridFile"],
     "debug": False,
     "writeTecplotSolution": True,
-    # "outputDir": outputDir,
+    "outputDir": outputDir,
     # ---------------------------
     #   General appendage options
     # ---------------------------
@@ -109,7 +110,8 @@ solverOptions = {
     "run_modal": False,
     "run_flutter": False,
     "nModes": 4,
-    "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
+    # "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
+    "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
     "maxQIter": 100,  # that didn't fix the slow run time...
     "rhoKS": 500.0,
 }
@@ -305,8 +307,8 @@ if __name__ == "__main__":
         # # --- Now add load transfer capabilities ---
         # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
         # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-        # # --- Dynamic solvers ---
-        # model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
+        # --- Dynamic solvers ---
+        model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
         # model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
 
     # ************************************************
@@ -335,7 +337,8 @@ if __name__ == "__main__":
     }
 
     prob.model.add_design_var("ptVec")
-    prob.model.add_objective("CDi")
+    # prob.model.add_objective("CDi")
+    prob.model.add_objective("ksflutter")
 
     # prob.model.nonlinear_solver = om.NewtonSolver(
     #     solve_subsystems=True,
@@ -370,6 +373,10 @@ if __name__ == "__main__":
         tractions[-7] = 100.0
         prob.set_val("beamstruct.traction_forces", tractions)
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
+
+
+        prob.set_val("flutter_funcs.cla", 2*np.pi*np.ones_like(appendageParams["toc"]))
+        prob.set_val("flutter_funcs.toc", appendageParams["toc"])
 
     # ************************************************
     #     Evaluate model
@@ -439,13 +446,13 @@ if __name__ == "__main__":
         )
 
     # plot_cla()
+    # print("computing total derivatives...\n" + "-" * 50)
+    # prob.compute_totals()
 
     # --- Check partials after you've solve the system!! ---
     starttime = time.time()
     if args.test_partials:
 
-        # print("computing total derivatives...\n" + "-" * 50)
-        # prob.compute_totals()
 
         np.set_printoptions(linewidth=1000, precision=4)
 
@@ -454,22 +461,32 @@ if __name__ == "__main__":
         f.write("PARTIALS\n")
         # prob.set_check_partial_options(wrt=[""],)
         f.write("=" * 50)
-        f.write("\n liftingline partials\n")
+        f.write("\n flutter partials\n")
         f.write("=" * 50)
         prob.check_partials(
             out_stream=f,
-            includes=["liftingline_funcs"],
-            method="fd",
-            step=1e-4,
-            compact_print=True,
-        )
-        prob.check_partials(
-            out_stream=f,
-            includes=["liftingline_funcs"],
+            includes=["flutter_funcs"],
             method="fd",
             step=1e-4,
             # compact_print=True,
         )
+        # f.write("=" * 50)
+        # f.write("\n liftingline partials\n")
+        # f.write("=" * 50)
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["liftingline_funcs"],
+        #     method="fd",
+        #     step=1e-4,
+        #     compact_print=True,
+        # )
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["liftingline_funcs"],
+        #     method="fd",
+        #     step=1e-4,
+        #     # compact_print=True,
+        # )
         # prob.check_partials(
         #     out_stream=f,
         #     includes=["liftingline"],

@@ -23,7 +23,7 @@ LECoords = (GridStruct.LEMesh)
 TECoords = (GridStruct.TEMesh)
 nodeConn = (GridStruct.nodeConn)
 ptVec, m, n = FEMMethods.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
-nNodes = 5
+nNodes = 4
 nNodesStrut = 3
 appendageParams = Dict(
     "alfa0" => 6.0, # initial angle of attack [deg] (angle of flow vector)
@@ -31,7 +31,8 @@ appendageParams = Dict(
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
     "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
-    "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
+    # "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
+    "toc" => 0.06 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean) #FLAGSTAFF
     "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
@@ -74,7 +75,8 @@ solverOptions = Dict(
     "name" => "mothrudder-nofs",
     "debug" => false,
     # "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf", "./INPUT/mothrudder_foil_strut_mesh.dcf"],
-    "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf"], #, "./INPUT/mothrudder_foil_strut_mesh.dcf"],
+    # "gridFile" => ["./INPUT/mothrudder_foil_stbd_mesh.dcf", "./INPUT/mothrudder_foil_port_mesh.dcf"], #, "./INPUT/mothrudder_foil_strut_mesh.dcf"],
+    "gridFile" => files["gridFile"],
     "writeTecplotSolution" => true,
     # ---------------------------
     #   General appendage options
@@ -355,9 +357,117 @@ elemConn = [[1 2]
     [6 7]
     [7 8]
     [8 9]]
+
+
 # TODO: GPICKUP HERE GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-claVecMod = claVec[end-4:end] .+ 1.1
-SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+claVecMod = claVec[end-nNodes+1:end] .+ 1.1
+obj, SOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true)
+SolveFlutter.write_sol(SOL, "./output/")
 evalFuncsSensList = ["ksflutter"]
 dfdx_rad = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
 dfdx_fd = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")
+
+dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                        SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+                    ptVec,
+                    displacementsCol,
+                    claVecMod,
+                    appendageParams["theta_f"],
+                    appendageParams["toc"],
+                    appendageParams["alfa0"],
+                )
+dIdxDV_fd = FiniteDifferences.jacobian(forward_fdm(2,1),(xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                        SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+                    ptVec,
+                    displacementsCol,
+                    claVecMod,
+                    appendageParams["theta_f"],
+                    appendageParams["toc"],
+                    appendageParams["alfa0"],
+                )
+
+
+FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+    SolveFlutter.setup_solverOM(displacementsCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+
+
+DOFBlankingList = FEMMethods.get_fixed_dofs(SolveFlutter.ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+SolveFlutter.compute_pkFlutterAnalysis(
+    uRange, FEMESH.mesh, FEMESH.elemConn, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, N_R, DOFBlankingList, FEMESH.idxTip, N_MAX_Q_ITER, nModes, CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], CONSTANTS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], LLSystem, claVecMod, FlowCond;
+    solverOptions=solverOptions, appendageOptions=appendageOptions
+)
+using ReverseDiff, AbstractDifferentiation, Zygote
+backend = AbstractDifferentiation.ReverseDiffBackend()
+dfdx = AbstractDifferentiation.gradient(backend, (x) ->
+        SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, x, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true),
+    appendageParams["theta_f"],
+)
+
+
+
+# replace(TECoords, 0.0 => 1e-5)
+# replace(LECoords, 0.0 => 1e-5)
+# FEMMethods.compute_chordLengths(LECoords[XDIM, :], TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :])
+# dfdx, = Zygote.jacobian((x) ->
+# FEMMethods.compute_chordLengths(x, TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :]),
+# (LECoords[XDIM, :])
+# )
+
+# using FiniteDifferences
+# dfdx_fd, = FiniteDifferences.jacobian(forward_fdm(3, 1), (x) ->
+#         FEMMethods.compute_midchords(x, TECoords),
+#     (LECoords)
+# )
+# # chordLengths
+# dfdx_fd, = FiniteDifferences.jacobian(forward_fdm(3, 1), (x) ->
+#         FEMMethods.compute_chordLengths(x, TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :]),
+#     (LECoords[XDIM, :])
+# )
+
+# idxTip = FEMMethods.get_tipnode(LECoords)
+# dfdx, = Zygote.jacobian((x) ->
+#         FEMMethods.compute_1DPropsFromGrid(x,TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[1],
+#     LECoords,
+# )
+# dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3,1),(x) ->
+#         FEMMethods.compute_1DPropsFromGrid(x,TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[1],
+#     LECoords,
+# )
+
+# --- make_FEMesh ---
+midchords, chordLengths, spanwiseVectors, sweepAng, pretwistDist = FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
+dfdx, = Zygote.jacobian((x) ->
+        FEMMethods.make_FEMeshFromCoords(x, nodeConn, idxTip, appendageParams, appendageOptions)[1],
+    midchords
+)
+dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+        FEMMethods.make_FEMeshFromCoords(x, nodeConn, idxTip, appendageParams, appendageOptions)[1],
+    midchords
+)
+
+FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+dfdx, = Zygote.jacobian((x) ->
+        FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, x, [appendageParams], appendageOptions, solverOptions)[1],
+    TECoords
+)
+dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+        FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, x, [appendageParams], appendageOptions, solverOptions)[1],
+    TECoords
+)
+
+
+
+
+# Full test
+@time dfdx = Zygote.gradient((x1, x2) ->
+# @profview dfdx = Zygote.gradient((x1, x2) ->
+        SolveFlutter.cost_funcsFromDVsOM(x1, nodeConn, displacementsCol, claVecMod, x2, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=false),
+    ptVec,
+    appendageParams["theta_f"],
+)
+dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+        SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, x, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=false),
+    appendageParams["theta_f"],
+    # ptVec
+)

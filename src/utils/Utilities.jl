@@ -218,6 +218,36 @@ function cross3D(arr1, arr2)
 
 end
 
+# I can't believe I have to write my own matrix-matrix multiply that's AD safe
+function my_matmul(A::AbstractMatrix, B::AbstractMatrix)
+    """
+    Matrix matrix multiplication
+    """
+
+    C = A * B
+    return C
+end
+
+function ChainRulesCore.rrule(::typeof(my_matmul), A::AbstractMatrix, B::AbstractMatrix)
+    """
+    MATRIX MULTIPLY RULE
+    """
+    function times_pullback(ΔΩ)
+        ∂A = @thunk(ΔΩ * B')
+        ∂B = @thunk(A' * ΔΩ)
+        return (NoTangent(), ∂A, ∂B)
+    end
+    return A * B, times_pullback
+end
+
+function ChainRulesCore.frule((_, ΔA, ΔB), ::typeof(my_matmul),
+    A::AbstractMatrix,
+    B::AbstractMatrix,
+)
+    Ω = A * B
+    ∂Ω = ΔA * B + A * ΔB
+    return (Ω, ∂Ω)
+end
 
 function myCrossProd(vec1, vec2)
     v1crossv2 = vec([
