@@ -1522,8 +1522,9 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     Δk = 0.0
     ChainRulesCore.ignore_derivatives() do
         omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM .+ Mf, Nr)
-        Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
         # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
+        # println(real.(omegaSquared))
+        Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
         # omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM, Nr)
         # println("Dry natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
     end
@@ -2277,25 +2278,32 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
                 #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
 
                 dIdxDV = AD.gradient(backend, (xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
+                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+                    ptVec,
+                    displacementsCol,
+                    claVec,
+                    appendageParams["theta_f"],
+                    appendageParams["toc"],
+                    appendageParams["alfa0"])
 
             elseif uppercase(mode) == "RAD" # use automatic differentiation via Zygote
-                backend = AD.ZygoteBackend()
+                # backend = AD.ZygoteBackend()
 
                 # AD backend was screwing up the output so use Zygote directly
                 # dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
                 #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
 
-                # Full case
                 dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
-                # # debug case
-                # dIdxDV = Zygote.gradient((xpt, xtheta, xtoc, xalpha) ->
-                #         cost_funcsFromDVsOM(xpt, nodeConn, displacementsCol, claVec, xtheta, xtoc, xalpha, appendageParams, solverOptions), ptVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"])
-                # # debug case
-                # dIdxDV = Zygote.gradient((xtheta) ->
-                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions), appendageParams["theta_f"])
+                        cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+                    ptVec,
+                    displacementsCol,
+                    claVec,
+                    appendageParams["theta_f"],
+                    appendageParams["toc"],
+                    appendageParams["alfa0"],
+                )
 
+                # --- In the future, reverse diff would be better and faster, but for now it doesn't work ---
                 # backend = AD.ReverseDiffBackend()
                 # # There's a weird quirk here with ReverseDiff that the input val has to be the copy of it b/c I guess ReverseDiff modifies the dictionary in place if you do not pass in the copy
                 # theta_val = copy(appendageParams["theta_f"])
@@ -2314,7 +2322,7 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
         println("Sensitivity time:\t$(tFunc)")
 
         dfdxParams = Dict()
-        DesignVariables = ["displCol", "cla", "theta_f", "toc", "alfa0"] # in order
+        DesignVariables = ["displCol", "cla", "theta_f", "toc", "alfa0"] # every DV except ptVec in order
         # for (ii, dvkey) in enumerate(alldesignvariables) # old
         for (ii, dvkey) in enumerate(DesignVariables)
             dfdxParams[dvkey] = dIdxDV[1+ii]

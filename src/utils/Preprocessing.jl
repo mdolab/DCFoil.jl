@@ -73,7 +73,8 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     #     Finally, spline them to the discretization
     # ************************************************
     # semispan = structSemispan
-    semispan = LECoords[YDIM, idxTip]
+    # semispan = LECoords[YDIM, idxTip]
+    semispan = midchords[YDIM, idxTip]
     nNodes = appendageOptions["nNodes"]
     # s_loc_q = LinRange(0.0, semispan, nNodes) # old way
 
@@ -83,7 +84,8 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1))) # this line gave NaNs in the derivatives!
     # s_loc = compute_spanwiseLocations(midchords[XDIM, :], midchords[YDIM, :], midchords[ZDIM, :])
     # println("s_loc: ", s_loc)
-    s_loc = LECoords[YDIM, 1:idxTip]
+    # s_loc = LECoords[YDIM, 1:idxTip]
+    s_loc = midchords[YDIM, 1:idxTip]
 
     chordLengths = compute_chordLengths(LECoords[XDIM, :], TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :])
     # How is this line giving NaNs?
