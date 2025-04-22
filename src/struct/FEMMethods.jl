@@ -1408,5 +1408,68 @@ function compute_∂r∂x(
     return ∂r∂xPt, ∂r∂xParams
 end
 
+function compute_∂nodes∂x(ptVec, nodeConn, appendageParamsList, appendageOptions; mode="RAD")
+    """
+    Compute Jacobian of nodes wrt ptVec in the transposed fashion for the python layer
+    """
+
+    function compute_nodes(xPt)
+        appendageParams = appendageParamsList[1]
+
+        LECoords, TECoords = FEMMethods.repack_coords(xPt, 3, length(xPt) ÷ 3)
+        idxTip = get_tipnode(LECoords)
+        midchords, chordLengths, spanwiseVectors, sweepAng, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        structMesh, _ = make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
+
+        output = vec(transpose(structMesh)) # transpose so it's in the same shape as what python needs
+        return output
+    end
+
+
+    f_i = compute_nodes(ptVec)
+    ∂nodes∂xPt = zeros(DTYPE, length(f_i), length(ptVec))
+
+    if uppercase(mode) == "FIDI"
+        dh = 1e-4
+
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = compute_nodes(ptVec)
+            ptVec[ii] -= dh
+            ∂nodes∂xPt[:, ii] = (f_f - f_i) / dh
+        end
+
+
+    elseif uppercase(mode) == "CS" # this mode is busted
+        dh = 1e-100
+
+        ptVecWork = complex(ptVec)
+        for ii in eachindex(ptVec)
+            ptVecWork[ii] += 1im * dh
+            f_f = compute_nodes(ptVecWork)
+            ptVecWork[ii] -= 1im * dh
+            ∂nodes∂xPt[:, ii] = imag(f_f) / dh
+        end
+
+    elseif uppercase(mode) == "RAD"
+        backend = AD.ZygoteBackend()
+        backend = AD.ReverseDiffBackend()
+        ∂nodes∂xPt, = AD.jacobian(
+            backend,
+            x -> compute_nodes(x),
+            ptVec, # compute deriv at this DV
+        )
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂nodes∂xPt, = AD.jacobian(
+            backend,
+            x -> compute_nodes(x),
+            ptVec, # compute deriv at this DV
+        )
+    end
+
+    return ∂nodes∂xPt
+end
 
 end # end module

@@ -286,31 +286,32 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
 
     size(FEMESH.mesh) == size(outputs["nodes"]) || error("Size mismatch")
     size(FEMESH.elemConn) == size(outputs["elemConn"]) || error("Size mismatch")
-    outputs["nodes"][:] = FEMESH.mesh
-    outputs["elemConn"][:] = FEMESH.elemConn
-
-    # outputs["Kmat"][:] = Kmat
-    # outputs["Cmat"][:] = Cmat
-    # outputs["Mmat"][:] = Mmat
+    outputs["nodes"][:, :] = FEMESH.mesh
+    outputs["elemConn"][:, :] = FEMESH.elemConn
 
     return nothing
 end
 
 function OpenMDAOCore.compute_partials!(self::OMFEBeamFuncs, inputs, partials)
     # states = inputs["deflections"]
-    # ptVec = inputs["ptVec"]
+    ptVec = inputs["ptVec"]
     # theta_f = inputs["theta_f"][1]
     # toc = inputs["toc"]
 
-    # # --- Deal with options here ---
-    # nodeConn = self.nodeConn
-    # appendageParams = self.appendageParams
-    # appendageOptions = self.appendageOptions
+    # --- Deal with options here ---
+    nodeConn = self.nodeConn
+    appendageParams = self.appendageParams
+    appendageOptions = self.appendageOptions
     # solverOptions = self.solverOptions
 
     # --- Set struct vars ---
     # appendageParams["theta_f"] = theta_f
     # appendageParams["toc"] = toc
+
+    ∂nodes∂x = FEMMethods.compute_∂nodes∂x(ptVec, nodeConn, [appendageParams], appendageOptions; mode="RAD")
+    for (ii, ∂nodei∂xPt) in enumerate(eachrow(∂nodes∂x))
+        partials["nodes", "ptVec"][ii, :] = ∂nodei∂xPt
+    end
 
     zv1 = zeros(length(inputs["deflections"]))
     zv1[end-NDOF+WIND] = 1.0
