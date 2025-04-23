@@ -237,6 +237,7 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
     if uppercase(mode) == "RAD" # RAD everything except the ptVec ones because this gave NaNs
         # displacements of the collocation nodes also give NaNs
         ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
+        # ∂Drag∂Xpt, ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xPt, xGamma, xDispl) -> compute_dragsFromX(xPt, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, gammas, displVec)
 
         backend = AD.ForwardDiffBackend()
         # Need to FAD displacements too

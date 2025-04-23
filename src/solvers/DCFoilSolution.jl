@@ -6,7 +6,7 @@
 because you'll need it for the costfunc and sensitivity calls
 """
 
-using ..FEMMethods: StructMesh
+# using ..FEMMethods: StructMesh
 # using ..DesignConstants: Foil, DynamicFoil
 
 struct StaticSolution{TF}

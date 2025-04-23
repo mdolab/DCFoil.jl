@@ -35,6 +35,7 @@ for headerName in [
     "../utils/Preprocessing",
     "../struct/MaterialLibrary",
     "../solvers/EigenvalueProblem",
+    "../solvers/DCFoilSolution",
 ]
     include(headerName * ".jl")
 end
@@ -63,10 +64,10 @@ struct StructMesh{TF,TC,TI}
     # sectionVectors::TM
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
     chord::AbstractVector
-    toc::Vector{TC}
+    toc::AbstractVector
     ab::Vector{TC}
     x_αb::Vector{TC}
-    theta_f::TC # global fiber frame orientation
+    theta_f::RealOrComplex # global fiber frame orientation (this is complex stepped)
     idxTip::TI # index of the tip node
     airfoilCoords::AbstractMatrix # airfoil coordinates
 end
@@ -135,7 +136,7 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     end
 
     # s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :]) #NaNing
-    s_loc = midchords[YDIM, :]
+    s_loc = midchords[YDIM, :] .* sign.(midchords[YDIM, :])
 
 
     midchordXLocs = do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
@@ -213,7 +214,7 @@ function make_componentMesh(
         nNodeTot = 2 * nElem + nElStrut + 1
         nElemTot = 2 * nElem + nElStrut
     end
-    mesh = zeros(RealOrComplex, nNodeTot, 3)
+    mesh = zeros(Real, nNodeTot, 3)
     elemConn = zeros(Int64, nElemTot, 2)
 
     mesh_z = Zygote.Buffer(mesh)
@@ -501,6 +502,7 @@ function assemble(StructMesh, x_αbVec,
     # --- Initialize matrices ---
     nElem = size(StructMesh.elemConn)[1]
     nNodes = nElem + 1
+    # These need to be complex step-able
     globalK = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
     globalM = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
     globalF = zeros(RealOrComplex, NDOF * (nNodes))
@@ -941,8 +943,8 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     # ---------------------------
     #   Geometry
     # ---------------------------
-    eb::Vector{RealOrComplex} = 0.25 * chordLengths .+ ab
-    t::Vector{RealOrComplex} = toc .* chordLengths
+    eb::typeof(ab) = 0.25 * chordLengths .+ ab
+    t::typeof(toc) = toc .* chordLengths
 
     # ---------------------------
     #   Structure
@@ -1022,7 +1024,6 @@ function set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appe
 
     return solverOptions
 end
-
 
 function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, appendageParams, appendageOptions, solverOptions)
     """

@@ -263,7 +263,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
 end
 
-function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements;
+function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -1486,7 +1486,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
     if uppercase(mode) == "FIDI"
         ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
         ∂r∂Xdispl = zeros(DTYPE, length(Gconv), length(displCol))
-        dh = 1e-5
+        dh = 1e-4
 
         resVec_i = compute_resFromXpt(ptVec, displVec) # initialize the solver
 
@@ -1554,7 +1554,7 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
 
     function compute_OutputFromXpt(xPt, xDisplCol::AbstractVector)
 
-        displCol_in = reshape(xDisplCol, size(displCol)...)
+        displCol_in = transpose(reshape(xDisplCol, length(xDisplCol) ÷ 6, 6)) # this is the correct order
 
         solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
 
@@ -1572,7 +1572,10 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
         return outputVector
     end
 
-    displVec = vec(displCol)
+    # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+    # displCol is of shape (6, NPT_WING)
+    # We need to make sure it is ordered such that we loop over NPT_WING first, then the 6 elements
+    displVec = vec(transpose(displCol))
 
     # ************************************************
     #     Finite difference
@@ -1685,7 +1688,7 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        dh = 1e-4
         CDi_i = compute_cdifromxpt(ptVec)
 
         for ii in eachindex(ptVec)
@@ -1728,7 +1731,7 @@ function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, append
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        dh = 1e-4 # do not use smaller finite difference steps
 
         resVec_i = compute_collocationFromXpt(ptVec) # initialize the solver
 
@@ -1781,11 +1784,7 @@ function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendag
         # println("xdisplCol: $(xdisplCol)")
         solverParams, _ = setup_solverparams(ptVec, nodeConn, idxTip, xdisplCol, appendageOptions, appendageParams, solverOptions)
 
-        println("collocationPts perturbed:")
-        show(stdout, "text/plain", solverParams.LLSystem.collocationPts)
-        println("")
-
-        outputVec = vec(transpose(solverParams.LLSystem.collocationPts)) # this should be right...
+        outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
 
         return outputVec
     end

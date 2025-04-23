@@ -7,7 +7,7 @@
 
 
 
-struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
+struct Foil{TI,TS,TA<:AbstractVector,TB<:AbstractVector}
     """
     DO NOT STORE DVS HERE
     Foil object with key properties for the system solution
@@ -32,7 +32,7 @@ struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     constitutive::TS # constitutive model
 end
 
-struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC},TV<:AbstractVector}
+struct DynamicFoil{TI,TS,TA<:AbstractVector,TB<:AbstractVector,TV<:AbstractVector}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """

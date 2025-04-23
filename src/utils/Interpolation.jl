@@ -458,7 +458,7 @@ function do_linear_interp(xpt, ypt, xqvec)
     """
     npt = length(xpt)
     n = length(xqvec)
-    y = zeros(RealOrComplex, n)
+    y = zeros(Real, n)
     y_z = Zygote.Buffer(y)
     if length(xpt) != length(ypt)
         println("xpt length: ", length(xpt))

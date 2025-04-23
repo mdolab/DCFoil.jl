@@ -579,34 +579,9 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
     idxTip = LiftingLine.get_tipnode(LECoords)
-    midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    LLNLParams, FlowCond = LiftingLine.setup_solverparams(ptVec, nodeConn, idxTip, displCol, appendageOptions, appendageParams, solverOptions)
 
-    # ---------------------------
-    #   Hydrodynamics
-    # ---------------------------
-    α0 = appendageParams["alfa0"]
-    β0 = appendageParams["beta"]
-    rake = appendageParams["rake"]
-    depth0 = appendageParams["depth0"]
-    airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
-        npt_wing=npt_wing,
-        npt_airfoil=npt_airfoil,
-        rhof=solverOptions["rhof"],
-        # airfoilCoordFile=airfoilCoordFile,
-        airfoil_ctrl_xy=airfoilCtrlXY,
-        airfoil_xy=airfoilXY,
-        options=options,
-    )
-
-    # ---------------------------
-    #   Calculate influence matrix
-    # ---------------------------
-    TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
-
-    LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
-
-    DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
+    DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, LLNLParams.TV_influence, FlowCond, LLNLParams.LLSystem, LLNLParams)
 
     ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
@@ -635,8 +610,8 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
         outputs["forces_dist"][ii, :] = fi
     end
 
-    size(outputs["collocationPts"]) == size(LLMesh.collocationPts[:, START:STOP]) || error("Size mismatch for collocationPts")
-    for (ii, collocationi) in enumerate(eachrow(LLMesh.collocationPts[:, START:STOP]))
+    size(outputs["collocationPts"]) == size(LLNLParams.LLSystem.collocationPts[:, START:STOP]) || error("Size mismatch for collocationPts")
+    for (ii, collocationi) in enumerate(eachrow(LLNLParams.LLSystem.collocationPts[:, START:STOP]))
         outputs["collocationPts"][ii, :] = collocationi
     end
 
@@ -652,7 +627,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     # ---------------------------
     #   Lift slope solution
     # ---------------------------
-    cla = LiftingLine.compute_liftslopes(Gconv, Gconv_d, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
+    cla = LiftingLine.compute_liftslopes(Gconv, Gconv_d, LLNLParams.LLSystem, FlowCond, LLNLParams.LLHydro, LLNLParams.Airfoils, LLNLParams.AirfoilInfluences, appendageOptions, solverOptions)
     outputs["cla_col"][:] = cla[START:STOP]
 
     return nothing
@@ -709,30 +684,36 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     end
 
     for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl[FXIND:CLMAXIND, :]))
-        # transpose reshape flatten stuff bc julia and python store arrays differently
-        # println("start index", 1+(START-1)*6)
-        # println("stop index", STOP*6)
-        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
-        # println("size ∂fi∂xdispl: ", size(∂fi∂xdispl))
-        partials[costFuncsInOrder[ii], "displacements_col"][1, :] = vec(transpose(∂fi∂xdispl))
+        partials[costFuncsInOrder[ii], "displacements_col"][1, :] = ∂fi∂xdispl
     end
 
-    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
+    for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[CLMAXIND+1+(START-1)*6:end-LiftingLine.NPT_WING, :])
         partials["forces_dist", "ptVec"][ii, :] = ∂fi∂x
     end
 
-    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[8+(START-1)*6:end-LiftingLine.NPT_WING, :])
-        # transpose reshape flatten stuff bc julia and python store arrays differently
-        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
-        partials["forces_dist", "displacements_col"][ii, :] = vec(transpose(∂fi∂xdispl))
+    ctr = 1
+    for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[CLMAXIND+1:end-LiftingLine.NPT_WING, :])
+
+        if appendageOptions["config"] == "wing"
+
+            whichHalf = div(ii - 1, LiftingLine.NPT_WING ÷ 2) # divisor
+            if !iseven(whichHalf)
+                partials["forces_dist", "displacements_col"][ctr, :] = ∂fi∂xdispl
+                ctr += 1
+            end
+
+        else
+            partials["forces_dist", "displacements_col"][ii, :] = ∂fi∂xdispl
+        end
     end
 
     for (ii, ∂fi∂x) in enumerate(eachrow(∂f∂x)[end-LiftingLine.NPT_WING+START:end, :])
         partials["cl", "ptVec"][ii, :] = ∂fi∂x
     end
+
     for (ii, ∂fi∂xdispl) in enumerate(eachrow(∂f∂xdispl)[end-LiftingLine.NPT_WING+START:end, :])
         # transpose reshape flatten stuff bc julia and python store arrays differently
-        ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
+        # ∂fi∂xdispl = reshape(∂fi∂xdispl, 6, length(∂fi∂xdispl) ÷ 6)
         partials["cl", "displacements_col"][ii, :] = vec(transpose(∂fi∂xdispl))
     end
 
@@ -764,15 +745,13 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #   Hydro mesh points
     # ---------------------------
     nodeMode = "FAD"
-    if appendageOptions["config"] == "wing"
-        nodeMode = "FiDi"
-    end
+
     ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=nodeMode)
     ctr = 1
     for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt))
         if appendageOptions["config"] == "wing"
             whichHalf = div(ii - 1, LiftingLine.NPT_WING ÷ 2) # divisor
-            if !iseven(whichHalf) 
+            if !iseven(whichHalf)
                 partials["collocationPts", "ptVec"][ctr, :] = ∂cPti∂xPt
                 ctr += 1
             end

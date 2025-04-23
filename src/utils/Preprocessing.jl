@@ -32,7 +32,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     midchords = compute_midchords(LECoords, TECoords)
 
     # About midchord
-    # spanwiseVectors = zeros(RealOrComplex, 3, size(nodeConn)[2])
+    # spanwiseVectors = zeros(Real, 3, size(nodeConn)[2])
     # for (ii, inds) in enumerate(eachcol(nodeConn))
     #     dx = midchords[XDIM, inds[2]] - midchords[XDIM, inds[1]]
     #     dy = midchords[YDIM, inds[2]] - midchords[YDIM, inds[1]]
@@ -108,7 +108,7 @@ function compute_midchords(LECoords, TECoords)
     midchordsX = 0.5 * (LECoords[XDIM, :] .+ TECoords[XDIM, :])
     midchordsY = 0.5 * (LECoords[YDIM, :] .+ TECoords[YDIM, :])
     midchordsZ = 0.5 * (LECoords[ZDIM, :] .+ TECoords[ZDIM, :])
-    midchords::typeof(LECoords) = transpose(hcat(midchordsX, midchordsY, midchordsZ))
+    midchords = transpose(hcat(midchordsX, midchordsY, midchordsZ))
 
     return midchords
 end
@@ -150,7 +150,7 @@ function compute_chordLengths(xLE, xTE, yLE, yTE, zLE, zTE)
     # This is a 3 x NPT matrix
 
     # Chord lengths
-    chordLengths = zeros(size(chordVectors)[2])
+    chordLengths = zeros(Real, size(chordVectors)[2])
     for ii in eachindex(eachcol(chordVectors))
         chordLengths[ii] = √(chordVectors[XDIM, ii] .^ 2 + chordVectors[YDIM, ii] .^ 2 + chordVectors[ZDIM, ii] .^ 2)
     end
@@ -278,7 +278,7 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)
 
     # Compute the angle
     # --- Vectorized ---
-    sweepAngles = zeros(RealOrComplex, size(dxVec))
+    sweepAngles = zeros(Real, size(dxVec))
     sweepAngles_z = Zygote.Buffer(sweepAngles)
     for (ii, dy) in enumerate(dyVec)
         if real(dy) < 0.0
@@ -372,6 +372,7 @@ function get_tipnode(LECoords)
     """
 
     idxTip = argmax(real(LECoords)[YDIM, :])
+    # println("idx of the tip node: ", idxTip)
     # if idxTip != 10
     #     println("Tip node index (hopefully not changing): ", idxTip)
     # end
