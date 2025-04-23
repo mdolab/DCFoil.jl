@@ -201,10 +201,10 @@ function init_modelFromDVDict(DVDict::AbstractDict, solverOptions::AbstractDict,
     sweepAng = DVDict["sweep"]
     rake = DVDict["rake"]
     span = DVDict["s"] * 2
-    c::Vector{RealOrComplex} = DVDict["c"]
-    toc::Vector{RealOrComplex} = DVDict["toc"]
-    ab::Vector{RealOrComplex} = DVDict["ab"]
-    x_ab::Vector{RealOrComplex} = DVDict["x_ab"]
+    c = DVDict["c"]
+    toc = DVDict["toc"]
+    ab = DVDict["ab"]
+    x_ab = DVDict["x_ab"]
     # toc = DVDict["toc"]
     # ab = DVDict["ab"]
     # x_ab = DVDict["x_ab"]
@@ -269,9 +269,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   else
     rake = appendageParams["rake"]
     # span = appendageParams["s"] * 2
-    toc::Vector{RealOrComplex} = appendageParams["toc"]
-    ab::Vector{RealOrComplex} = appendageParams["ab"]
-    x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+    toc = appendageParams["toc"]
+    ab = appendageParams["ab"]
+    x_ab = appendageParams["x_ab"]
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     beta = appendageParams["beta"]

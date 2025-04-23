@@ -10,7 +10,7 @@
 using FLOWMath: abs_cs_safe
 using LinearAlgebra
 using Zygote
-
+using ChainRulesCore
 
 
 function unpack_dvdict(DVDict::AbstractDict)
@@ -125,8 +125,8 @@ function unpack_appendageParams(appendageParams, appendageOptions)
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]
-        ab::Vector{RealOrComplex} = appendageParams["ab"]
-        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+        ab::Vector{Real} = appendageParams["ab"]
+        x_ab::Vector{Real} = appendageParams["x_ab"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -202,7 +202,7 @@ function cross3D(arr1, arr2)
     @assert size(arr2, 1) == 3
     M, N = size(arr1, 2), size(arr1, 3)
 
-    arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    arr1crossarr2 = zeros(Real, 3, M, N)
     # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
     arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
 
@@ -218,6 +218,36 @@ function cross3D(arr1, arr2)
 
 end
 
+# I can't believe I have to write my own matrix-matrix multiply that's AD safe
+function my_matmul(A::AbstractMatrix, B::AbstractMatrix)
+    """
+    Matrix matrix multiplication
+    """
+
+    C = A * B
+    return C
+end
+
+function ChainRulesCore.rrule(::typeof(my_matmul), A::AbstractMatrix, B::AbstractMatrix)
+    """
+    MATRIX MULTIPLY RULE
+    """
+    function times_pullback(ΔΩ)
+        ∂A = @thunk(ΔΩ * B')
+        ∂B = @thunk(A' * ΔΩ)
+        return (NoTangent(), ∂A, ∂B)
+    end
+    return A * B, times_pullback
+end
+
+function ChainRulesCore.frule((_, ΔA, ΔB), ::typeof(my_matmul),
+    A::AbstractMatrix,
+    B::AbstractMatrix,
+)
+    Ω = A * B
+    ∂Ω = ΔA * B + A * ΔB
+    return (Ω, ∂Ω)
+end
 
 function myCrossProd(vec1, vec2)
     v1crossv2 = vec([

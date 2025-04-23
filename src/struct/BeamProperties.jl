@@ -17,7 +17,7 @@ struct SectionProperty{TF,TC,T}
     E₂::TF # Young's modulus in-plane fiber normal direction (y)
     G₁₂::TF # In-plane Shear modulus
     ν₁₂::TF # Poisson ratio
-    theta_f # global fiber frame orientation
+    theta_f::RealOrComplex # global fiber frame orientation (this gets complex-stepped)
     airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 

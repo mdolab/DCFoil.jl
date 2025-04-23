@@ -670,7 +670,7 @@ function cross3D(arr1, arr2)
     @assert size(arr2, 1) == 3
     M, N = size(arr1, 2), size(arr1, 3)
 
-    arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    arr1crossarr2 = zeros(Real, 3, M, N)
     # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
     arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
 
@@ -812,86 +812,6 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
 end
 
 
-
-
-# function do_linear_interp(xpt, ypt, xqvec)
-#     """
-#     KNOWN BUG, DOES NOT LIKE NEGATIVE DOMAINS
-#     """
-#     npt = length(xpt)
-#     n = length(xqvec)
-#     y = zeros(RealOrComplex, n)
-#     y_z = Zygote.Buffer(y)
-#     if length(xpt) != length(ypt)
-#         throw(ArgumentError("xpt and ypt must be the same length"))
-#     end
-#     loop_interp!(y_z, xpt, ypt, xqvec, n, npt)
-#     y = copy(y_z)
-#     if n == 1 # need it returned as a float
-#         return y[1]
-#     else
-#         return y
-#     end
-# end
-
-# function do_linear_interp(xpt::Vector, ypt::Vector, xqvec)
-#     npt = length(xpt)
-#     n = length(xqvec)
-#     y = zeros(RealOrComplex, n)
-#     if length(xpt) != length(ypt)
-#         throw(ArgumentError("xpt and ypt must be the same length"))
-#     end
-#     loop_interp!(y, xpt, ypt, xqvec, n, npt)
-#     if n == 1 # need it returned as a float
-#         return y[1]
-#     else
-#         return y
-#     end
-# end
-
-# function loop_interp!(y, xpt, ypt, xqvec, n, npt)
-#     for jj in 1:n
-#         @inbounds @fastmath begin
-#             xq = xqvec[jj]
-
-#             # Catch cases in case we're just outside the domain
-#             # This extends the slope of the first/last segment
-#             if real(xq) <= real(xpt)[1]
-#                 x0 = xpt[1]
-#                 x1 = xpt[2]
-#                 y0 = ypt[1]
-#                 y1 = ypt[2]
-#             elseif real(xq) >= real(xpt)[npt]
-#                 x0 = xpt[npt-1]
-#                 x1 = xpt[npt]
-#                 y0 = ypt[npt-1]
-#                 y1 = ypt[npt]
-#             else
-#                 # Perform search
-#                 ii = 1
-#                 while real(xq) > real(xpt)[ii+1]
-#                     ii += 1
-#                 end
-
-#                 x0 = xpt[ii]
-#                 x1 = xpt[ii+1]
-#                 y0 = ypt[ii]
-#                 y1 = ypt[ii+1]
-
-#             end
-
-#             m = (y1 - y0) / (x1 - x0) # slope
-#             y[jj] = y0 + m * (xq - x0)
-
-#             # # actually just use end value if we're at the end
-#             # if real(xq) >= real(xpt)[npt]
-#             #     y[jj] = ypt[npt]
-#             # elseif real(xq) <= real(xpt)[1]
-#             #     y[jj] = ypt[1]
-#             # end
-#         end
-#     end
-# end
 
 function normalize_3Dvector(r)
     rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)

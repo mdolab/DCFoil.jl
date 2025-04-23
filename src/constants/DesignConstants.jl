@@ -7,7 +7,7 @@
 
 
 
-struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
+struct Foil{TI,TS,TA<:AbstractVector,TB<:AbstractVector}
     """
     DO NOT STORE DVS HERE
     Foil object with key properties for the system solution
@@ -26,13 +26,13 @@ struct Foil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC}}
     # clα::Vector # lift slopes [1/rad]
     eb::TB # distance from center of pressure ahead of elastic axis [m]
     ab::TB # distance from midchord to EA, +ve for EA aft [m]
-    chord::TB # chord vector [m]
+    chord::AbstractVector # chord vector [m]
     # ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model
 end
 
-struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC},TV<:AbstractVector}
+struct DynamicFoil{TI,TS,TA<:AbstractVector,TB<:AbstractVector,TV<:AbstractVector}
     """
     Dynamic foil object that inherits initially form the static foil mutable struct
     """
@@ -49,7 +49,7 @@ struct DynamicFoil{TF,TC,TI,TS,TA<:AbstractVector{TF},TB<:AbstractVector{TC},TV<
     # clα::Vector # lift slopes [1/rad]
     eb::TB
     ab::TB
-    chord::TB
+    chord::AbstractVector
     # ρ_f::TF # fluid density [kg/m³]
     nNodes::TI # number of evaluation points on span
     constitutive::TS # constitutive model

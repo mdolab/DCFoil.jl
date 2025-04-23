@@ -262,7 +262,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
 end
 
-function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements;
+function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -1485,7 +1485,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
     if uppercase(mode) == "FIDI"
         ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
         ∂r∂Xdispl = zeros(DTYPE, length(Gconv), length(displCol))
-        dh = 1e-5
+        dh = 1e-4
 
         resVec_i = compute_resFromXpt(ptVec, displVec) # initialize the solver
 
@@ -1553,7 +1553,7 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
 
     function compute_OutputFromXpt(xPt, xDisplCol::AbstractVector)
 
-        displCol_in = reshape(xDisplCol, size(displCol)...)
+        displCol_in = transpose(reshape(xDisplCol, length(xDisplCol) ÷ 6, 6)) # this is the correct order
 
         solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
 
@@ -1571,7 +1571,10 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
         return outputVector
     end
 
-    displVec = vec(displCol)
+    # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+    # displCol is of shape (6, NPT_WING)
+    # We need to make sure it is ordered such that we loop over NPT_WING first, then the 6 elements
+    displVec = vec(transpose(displCol))
 
     # ************************************************
     #     Finite difference
@@ -1684,7 +1687,7 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        dh = 1e-4
         CDi_i = compute_cdifromxpt(ptVec)
 
         for ii in eachindex(ptVec)
@@ -1727,7 +1730,7 @@ function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, append
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        dh = 1e-4 # do not use smaller finite difference steps
 
         resVec_i = compute_collocationFromXpt(ptVec) # initialize the solver
 
@@ -1765,6 +1768,78 @@ function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, append
     end
 
     return ∂collocationPt∂Xpt
+end
+
+function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
+    ∂collocationPt∂displCol = zeros(DTYPE, NPT_WING * 3, length(displCol))
+
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
+
+    function compute_collocationFromdisplCol(xDispl)
+
+        xdisplCol = transpose(reshape(xDispl, length(xDispl) ÷ 6, 6)) # this is the correct order
+        # println("xdisplCol: $(xdisplCol)")
+        solverParams, _ = setup_solverparams(ptVec, nodeConn, idxTip, xdisplCol, appendageOptions, appendageParams, solverOptions)
+
+        outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
+
+        return outputVec
+    end
+
+    # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+    # displCol is of shape (6, NPT_WING)
+    # We need to make sure it is ordered such that we loop over NPT_WING first, then the 6 elements
+    displVec = vec(transpose(displCol))
+
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-4 # do not use smaller finite difference steps
+
+        resVec_i = compute_collocationFromdisplCol(displVec) # initialize the solver
+
+        # @inbounds begin # no speedup
+        for ii in eachindex(displVec)
+
+            # only do it for the first 3 elements
+            # if mod(ii, 6) in [1, 2, 3]
+
+            displVec[ii] += dh
+            # println("displCol perturbed:")
+            # show(stdout, "text/plain", transpose(reshape(displVec, length(displVec) ÷ 6, 6)))
+            # println("")
+
+
+            resVec_f = compute_collocationFromdisplCol(displVec)
+
+            displVec[ii] -= dh
+
+            ∂collocationPt∂displCol[:, ii] = (resVec_f - resVec_i) / dh
+            # println("column of jacobian:")
+            # println((resVec_f - resVec_i) / dh)
+            # end
+
+        end
+        # end
+    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to a few sec in pure Fidi julia
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteBackend()
+        ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
+
+    elseif uppercase(mode) == "FAD" # use this, same speed as Fidi
+        backend = AD.ForwardDiffBackend()
+        ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
+
+    elseif uppercase(mode) == "ANALYTIC"
+        for ii in 1:NPT_WING*3
+            ∂collocationPt∂displCol[ii, ii] = 1.0
+        end
+    end
+
+    return ∂collocationPt∂displCol
 end
 
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)

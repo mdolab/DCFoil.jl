@@ -80,7 +80,7 @@ solverOptions = {
     # "gridFile": files["gridFile"],
     "debug": False,
     "writeTecplotSolution": True,
-    # "outputDir": outputDir,
+    "outputDir": outputDir,
     # ---------------------------
     #   General appendage options
     # ---------------------------
@@ -113,7 +113,8 @@ solverOptions = {
     "run_modal": False,
     "run_flutter": False,
     "nModes": 4,
-    "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
+    # "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
+    "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
     "maxQIter": 100,  # that didn't fix the slow run time...
     "rhoKS": 500.0,
 }
@@ -384,7 +385,8 @@ if __name__ == "__main__":
     }
 
     prob.model.add_design_var("ptVec")
-    prob.model.add_objective("CDi")
+    # prob.model.add_objective("CDi")
+    prob.model.add_objective("ksflutter")
 
     # prob.model.nonlinear_solver = om.NewtonSolver(
     #     solve_subsystems=True,
@@ -631,8 +633,6 @@ if __name__ == "__main__":
     starttime = time.time()
     if args.test_partials:
 
-        # print("computing total derivatives...\n" + "-" * 50)
-        # prob.compute_totals()
 
         np.set_printoptions(linewidth=1000, precision=4)
 
@@ -641,22 +641,32 @@ if __name__ == "__main__":
         f.write("PARTIALS\n")
         # prob.set_check_partial_options(wrt=[""],)
         f.write("=" * 50)
-        f.write("\n liftingline partials\n")
+        f.write("\n flutter partials\n")
         f.write("=" * 50)
         prob.check_partials(
             out_stream=f,
-            includes=["liftingline_funcs"],
-            method="fd",
-            step=1e-4,
-            compact_print=True,
-        )
-        prob.check_partials(
-            out_stream=f,
-            includes=["liftingline_funcs"],
+            includes=["flutter_funcs"],
             method="fd",
             step=1e-4,
             # compact_print=True,
         )
+        # f.write("=" * 50)
+        # f.write("\n liftingline partials\n")
+        # f.write("=" * 50)
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["liftingline_funcs"],
+        #     method="fd",
+        #     step=1e-4,
+        #     compact_print=True,
+        # )
+        # prob.check_partials(
+        #     out_stream=f,
+        #     includes=["liftingline_funcs"],
+        #     method="fd",
+        #     step=1e-4,
+        #     # compact_print=True,
+        # )
         # prob.check_partials(
         #     out_stream=f,
         #     includes=["liftingline"],

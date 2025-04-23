@@ -44,19 +44,6 @@ for headerName in [
 
     include(headerName * ".jl")
 end
-# using ..SolverRoutines
-# using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
-# using ..GlauertLL: GlauertLL
-# using ..LiftingLine: LiftingLine, Δα
-# using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
-# using ..EBBeam: EBBeam as BeamElement, NDOF
-# using ..DCFoil: RealOrComplex, DTYPE
-# using ..DesignConstants: CONFIGS
-# using ..Preprocessing
-# using ..Utilities
-# using ..FEMMethods
-# using ..Interpolation
-# using ..Rotations
 
 # ==============================================================================
 #                         Free surface effects
@@ -716,6 +703,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
     aeroMesh = AEROMESH.mesh
     junctionNodeX = aeroMesh[1, :]
 
+    GDOFIdx::Int64 = 0
     for (inode, XN) in enumerate(eachrow(aeroMesh)) # loop aero strips (located at FEM nodes)
         # --- compute strip quantities ---
         yⁿ = XN[YDIM]
@@ -762,7 +750,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # --- Compute Compute local AIC matrix for this element ---
         K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
         C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
-        M_f = compute_node_mass(b, ab, ϱ)
+        M_f0 = compute_node_mass(b, ab, ϱ)
         p_i = 1.0
         if solverOptions["use_freeSurface"]
             if appendageOptions["config"] == "full-wing"
@@ -771,7 +759,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
             p_i = compute_pFactor(localchord, localspan)
             # println("local span:\t $(localspan)\nyn:\t$(yⁿ)\np factor:\t$(p_i)")
         end
-        M_f *= p_i
+        M_f = M_f0 * p_i
         KLocal, CLocal, MLocal = compute_localAIC(K_f, K̂_f, C_f, Ĉ_f, M_f, elemType)
 
         # ---------------------------
@@ -782,11 +770,21 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         transMat = get_transMat(dR1, dR2, dR3, 1.0)
         Γ = transMat[1:NDOF, 1:NDOF]
         ΓT = copy(transpose(Γ))
-        KLocal_trans = ΓT * KLocal * Γ
-        CLocal_trans = ΓT * CLocal * Γ
-        MLocal_trans = ΓT * MLocal * Γ
+        KLocal_trans_int = my_matmul(ΓT, KLocal)
+        KLocal_trans = my_matmul(KLocal_trans_int, Γ)
+        CLocal_trans_int = my_matmul(ΓT, CLocal)
+        CLocal_trans = my_matmul(CLocal_trans_int, Γ)
+        MLocal_trans_int = my_matmul(ΓT, MLocal)
+        MLocal_trans = my_matmul(MLocal_trans_int, Γ)
+        # KLocal_trans = ΓT * KLocal * Γ
+        # CLocal_trans = ΓT * CLocal * Γ
+        # MLocal_trans = ΓT * MLocal * Γ
+        # println("type: $(typeof(ΓT)), $(typeof(KLocal)), $(typeof(CLocal)), $(typeof(MLocal))")
+        # MLocal_trans = copy(MLocal_trans_z)
 
-        GDOFIdx::Int64 = NDOF * (inode - 1) + 1
+        ChainRulesCore.ignore_derivatives() do 
+            GDOFIdx = NDOF * (inode - 1) + 1
+        end
 
         # Add local AIC to global AIC and remember to multiply by strip width to get the right result
         globalKf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(KLocal_trans) * Δy
