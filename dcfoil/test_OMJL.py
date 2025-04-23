@@ -39,8 +39,8 @@ jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
-# from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
-from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
+from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
+# from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 files = {
     "gridFile": [
@@ -346,7 +346,7 @@ if __name__ == "__main__":
         )
 
         # hydroelastic coupled solver
-        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=10, iprint=2, atol=1e-10, rtol=0)
+        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=50, iprint=2, atol=1e-10, rtol=0)
         ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
         couple.linear_solver = om.DirectSolver()   # for adjoint
 
@@ -508,7 +508,8 @@ if __name__ == "__main__":
     om.n2(prob, show_browser=False)
 
     # --- plot ---
-    ptVec = prob.get_val('ptVec').reshape(2, 20, 3)
+    ny = 39 if appendageOptions["config"] == "full-wing" else 20
+    ptVec = prob.get_val('ptVec').reshape(2, ny, 3)
     nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
     collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
     force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
