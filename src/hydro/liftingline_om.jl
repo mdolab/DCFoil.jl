@@ -768,17 +768,31 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         nodeMode = "FiDi"
     end
     ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=nodeMode)
-    # println("size of ", size(∂collocationPt∂Xpt[1+(START-1)*3:STOP*3, :]))
-    for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt[1+(START-1)*3:STOP*3, :]))
-        partials["collocationPts", "ptVec"][ii, :] = ∂cPti∂xPt
+    ctr = 1
+    for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt))
+        if appendageOptions["config"] == "wing"
+            whichHalf = div(ii - 1, LiftingLine.NPT_WING ÷ 2) # divisor
+            if !iseven(whichHalf) 
+                partials["collocationPts", "ptVec"][ctr, :] = ∂cPti∂xPt
+                ctr += 1
+            end
+        else
+            partials["collocationPts", "ptVec"][ii, :] = ∂cPti∂xPt
+        end
     end
+
     partials["collocationPts", "displacements_col"] .= 0.0
-    # The first 3 of every 6 columns have a one-to-one mapping
-    for ii in 1:length(displCol)÷DIV
-        if mod(ii, 6) in [1, 2, 3]
-            # displCol index offsets by NPT_WING if half-wing, otherwise not
-            displColIdx = ii + NPT_WING * (DIV - 1)
-            partials["collocationPts", "displacements_col"][ii÷6+mod(ii, 6), displColIdx] = 1.0
+    ∂collocationPt∂displCol = LiftingLine.compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="Analytic")
+    ctr = 1
+    for (ii, ∂cPti∂xdispl) in enumerate(eachrow(∂collocationPt∂displCol))
+        if appendageOptions["config"] == "wing"
+            whichHalf = div(ii - 1, LiftingLine.NPT_WING ÷ 2) # divisor
+            if !iseven(whichHalf)
+                partials["collocationPts", "displacements_col"][ctr, :] = ∂cPti∂xdispl
+                ctr += 1
+            end
+        else
+            partials["collocationPts", "displacements_col"][ii, :] = ∂cPti∂xdispl
         end
     end
 
