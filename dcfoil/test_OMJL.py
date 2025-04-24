@@ -42,6 +42,7 @@ from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 # from transfer_FD import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
+outputDir = "output"
 files = {
     "gridFile": [
         "../INPUT/flagstaff_foil_stbd_mesh.dcf",
@@ -347,7 +348,7 @@ if __name__ == "__main__":
         )
 
         # hydroelastic coupled solver
-        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=50, iprint=2, atol=1e-10, rtol=0)
+        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=2, iprint=2, atol=1e-10, rtol=0)
         ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
         couple.linear_solver = om.DirectSolver()   # for adjoint
 
@@ -386,7 +387,7 @@ if __name__ == "__main__":
 
     prob.model.add_design_var("ptVec")
     # prob.model.add_objective("CDi")
-    prob.model.add_objective("ksflutter")
+    # prob.model.add_objective("ksflutter")
 
     # prob.model.nonlinear_solver = om.NewtonSolver(
     #     solve_subsystems=True,
@@ -403,8 +404,17 @@ if __name__ == "__main__":
     prob.set_val("ptVec", ptVec)
 
     if args.run_struct:
-        tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-7] = 100.0
+        # tractions = prob.get_val("beamstruct.traction_forces")
+        # tractions[-7] = 100.0
+        # prob.set_val("beamstruct.traction_forces", tractions)
+
+        for comp in ['beamstruct', 'beamstruct_funcs']:
+            prob.set_val(f"{comp}.theta_f", np.deg2rad(0))
+            prob.set_val(f"{comp}.toc", 0.075 * np.ones(nNodes))
+
+        # apply uniform Z force
+        tractions = np.zeros_like(prob.get_val("beamstruct.traction_forces"))
+        tractions[2::9] = 100  # apply force in Z direction
         prob.set_val("beamstruct.traction_forces", tractions)
     elif args.run_flow:
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
@@ -448,15 +458,15 @@ if __name__ == "__main__":
     # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
     # --- compute total derivatives ---
-    if not args.run_struct:
-        wrt = ['ptVec']
-        of = ['CDw', 'CDpr', 'CDj', 'CDs']
-        print('\ncomputing totals...')
-        prob.compute_totals(of, wrt)
-        print('done!\n')
-        # NOTE: when using hydroelastic (with or without solver, with or without jax), compute_totals fails saying RAD for empirical drag partials is getting complex variables (it works if I set FIDI for empirical drag partials in liftingline_om.jl)
-        #       it still fails even when I used transfer_FD.py (no Jax)
-        #       compute_totals works fine if I do --run_flow 
+    # if not args.run_struct:
+    #     wrt = ['ptVec']
+    #     of = ['CDw', 'CDpr', 'CDj', 'CDs']
+    #     print('\ncomputing totals...')
+    #     prob.compute_totals(of, wrt)
+    #     print('done!\n')
+    #     # NOTE: when using hydroelastic (with or without solver, with or without jax), compute_totals fails saying RAD for empirical drag partials is getting complex variables (it works if I set FIDI for empirical drag partials in liftingline_om.jl)
+    #     #       it still fails even when I used transfer_FD.py (no Jax)
+    #     #       compute_totals works fine if I do --run_flow 
     
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
