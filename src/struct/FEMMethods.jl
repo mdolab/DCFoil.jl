@@ -136,12 +136,13 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     end
 
     # s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :]) #NaNing
-    s_loc = midchords[YDIM, :] .* sign.(midchords[YDIM, :])
+    s_loc = midchords[YDIM, :]
+    idxTmp = sortperm(s_loc) # sort the indices based on spanwise location from smallest to largest (make continuous)
 
 
-    midchordXLocs = do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
-    midchordYLocs = do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
-    midchordZLocs = do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
+    midchordXLocs = do_linear_interp(s_loc[idxTmp], midchords[XDIM, idxTmp], s_loc_q)
+    midchordYLocs = do_linear_interp(s_loc[idxTmp], midchords[YDIM, idxTmp], s_loc_q)
+    midchordZLocs = do_linear_interp(s_loc[idxTmp], midchords[ZDIM, idxTmp], s_loc_q)
 
     # mesh = zeros(RealOrComplex, nNodeTot, 3)
     mesh = cat(reshape(midchordXLocs, nNodeTot, 1), reshape(midchordYLocs, nNodeTot, 1), reshape(midchordZLocs, nNodeTot, 1), dims=2)
