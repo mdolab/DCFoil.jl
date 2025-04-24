@@ -240,9 +240,11 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
         # ∂Drag∂Xpt, ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xPt, xGamma, xDispl) -> compute_dragsFromX(xPt, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, gammas, displVec)
 
         backend = AD.ForwardDiffBackend()
+        
         # Need to FAD displacements too
-        # ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
-        ∂Drag∂Xpt, ∂Drag∂xdispl = AD.jacobian(backend, (xPt, xDispl) -> compute_dragsFromX(xPt, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, displVec)
+        # Weird bug, but you can't do the jacobian using multiple inputs at once I guess
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂xdispl, = AD.jacobian(backend, (xDispl) -> compute_dragsFromX(ptVec, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), displVec)
 
     elseif uppercase(mode) == "FIDI"
         outputVector = ["cdw", "cdpr", "cdj", "cds", "dw", "dpr", "dj", "ds"]
