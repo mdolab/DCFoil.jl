@@ -420,6 +420,29 @@ if __name__ == "__main__":
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
         prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
+
+        # set symmetric displacements_col for debugging
+        disp_col = np.array([
+            [-2.59517621e-05, -1.16898946e-05, -7.82499519e-07, -7.82499519e-07, -1.16898946e-05, -2.59517621e-05],  # x (flow direction)
+            [ 3.38378035e-06,  3.04119675e-06,  1.29805963e-06, -1.29805963e-06, -3.04119675e-06, -3.38378035e-06],  # y (spanwise)
+            [ 1.71557384e-01,  7.69623401e-02,  7.60969408e-03,  7.60969408e-03, 7.69623401e-02,  1.71557384e-01],   # z (vertical)
+            [-3.22570724e-01, -2.53959646e-01, -9.33918993e-02,  9.33918993e-02, 2.53959646e-01,  3.22570724e-01],   # Rx (bending) (NOTE: this is not used)
+            [ 3.45306127e-01,  2.42679608e-01,  7.04053297e-02,  7.04053297e-02, 2.42679608e-01,  3.45306127e-01],   # Ry (twist)
+            [-4.88850989e-05, -4.39358317e-05, -1.87529233e-05,  1.87529233e-05, 4.39358317e-05,  4.88850989e-05]    # Rz (in-plane bending) (NOTE: this is not used)
+        ])
+        # TODO: check x and Rz sign, should be positive (bending backwords)
+        # NOTE: twist only gives symmetric
+        #       verical only -> small asymmetry
+        #       vertical & twist -> bad
+        #       others (x, y, Rx, Ry, Rz) are good, Z is bad
+        # disp_col[0, :] = 0
+        # disp_col[1, :] = 0
+        # disp_col[2, :] = 0
+        # disp_col[3, :] = 0
+        # disp_col[4, :] = 0
+        # disp_col[5, :] = 0
+        prob.set_val("displacements_col", disp_col)
+
     else:
         prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
@@ -432,7 +455,7 @@ if __name__ == "__main__":
         # tractions = prob.set_val("traction_forces", loads)
 
         # set fiber angle
-        fiber_angle = np.deg2rad(0)
+        fiber_angle = np.deg2rad(-15)
         prob.set_val('beamstruct.theta_f', fiber_angle)
         prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
         prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
@@ -485,7 +508,9 @@ if __name__ == "__main__":
         print("nondimensional gammas", prob.get_val("gammas"))
         print("CL", prob.get_val("CL"))  # should be around CL = 0.507 something
         print("CLa", prob.get_val("cla_col"))  #
-        # print("force distribution", prob.get_val("forces_dist"))
+        print("\nforce x", prob.get_val("forces_dist")[0, :])
+        print("force y", prob.get_val("forces_dist")[1, :])
+        print("force z", prob.get_val("forces_dist")[2, :])
 
     else:
         print("nondimensional gammas", prob.get_val("gammas"))

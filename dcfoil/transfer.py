@@ -4,6 +4,39 @@ import openmdao.api as om
 import matplotlib.pyplot as plt
 
 
+def _debug_print(name, var, mode):
+    # print full-span variables at collocation point or FEM points
+    if mode == 'flow':
+        left = var[:int(len(var) / 2)][::-1]   # center to tip
+        right = var[int(len(var) / 2):]
+        
+        # Format arrays with consistent scientific notation
+        left_str = np.array2string(left, precision=6, suppress_small=True, 
+                                   formatter={'float_kind': lambda x: f"{x:+10.6e}"})
+        right_str = np.array2string(right, precision=6, suppress_small=True, 
+                                    formatter={'float_kind': lambda x: f"{x:+10.6e}"})
+        
+        print(f'{name} left :', left_str)
+        print(f'{name} right:', right_str)
+    elif mode == 'FEM':
+        center = var[0]
+        left = var[1:int(len(var) / 2) + 1]
+        right = var[int(len(var) / 2) + 1:]
+        
+        # Format arrays with consistent scientific notation
+        center_str = f"{center:+10.6e}"
+        left_str = np.array2string(left, precision=6, suppress_small=True, 
+                                   formatter={'float_kind': lambda x: f"{x:+10.6e}"})
+        right_str = np.array2string(right, precision=6, suppress_small=True, 
+                                    formatter={'float_kind': lambda x: f"{x:+10.6e}"})
+        
+        print(f'{name} center:', center_str)
+        print(f'{name} left  :', left_str)
+        print(f'{name} right :', right_str)
+
+    print('\n')
+
+
 class DisplacementTransfer(om.JaxExplicitComponent):
     """
     Displacement transfer
@@ -30,6 +63,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
         self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
         self.options.declare('use_jit', default=False)
+        self.options.declare('config', default='full-wing', desc='`full-wing` for the entire wing or `wing` for half wing')
 
     def setup(self):
         n_node = self.options['n_node']
@@ -59,6 +93,14 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         disp = deflections.reshape(n_node, 9)
         disp_trans = disp[:, :3]
         disp_rot = disp[:, 3:6]
+
+        print('\n\n --- FEM deflections (in disp transfer) ---')
+        _debug_print('x', disp_trans[:, 0], 'FEM')
+        _debug_print('y', disp_trans[:, 1], 'FEM')
+        _debug_print('z', disp_trans[:, 2], 'FEM')
+        _debug_print('rx', disp_rot[:, 0], 'FEM')
+        _debug_print('ry', disp_rot[:, 1], 'FEM')
+        _debug_print('rz', disp_rot[:, 2], 'FEM')
 
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # HACK: flip sign of X rotation here because the beam model seems to flip it internally
@@ -119,6 +161,14 @@ class DisplacementTransfer(om.JaxExplicitComponent):
                 disp_colloc = disp_colloc.at[:3, i].set(w1 * disp_trans_1 + w2 * disp_trans_2)
                 disp_colloc = disp_colloc.at[3:6, i].set(w1 * disp_rot_1 + w2 * disp_rot_2)
 
+        print('\n\n --- Collcation point displacements (in disp transfer) ---')
+        _debug_print('x', disp_colloc[0, :], 'flow')
+        _debug_print('y', disp_colloc[1, :], 'flow')
+        _debug_print('z', disp_colloc[2, :], 'flow')
+        _debug_print('rx', disp_colloc[3, :], 'flow')
+        _debug_print('ry', disp_colloc[4, :], 'flow')
+        _debug_print('rz', disp_colloc[5, :], 'flow')
+
         return (disp_colloc,)
 
 
@@ -165,6 +215,11 @@ class LoadTransfer(om.JaxExplicitComponent):
         self.declare_partials('loads_str', '*')
 
     def compute_primal(self, collocationPts, forces_hydro, nodes):
+        print('\n\n --- Hydro force (in load transfer) ---')
+        _debug_print('x', forces_hydro[0, :], 'flow')
+        _debug_print('y', forces_hydro[1, :], 'flow')
+        _debug_print('z', forces_hydro[2, :], 'flow')
+        
         n_node = self.options['n_node']
         n_strips = self.options['n_strips']
 
@@ -216,6 +271,19 @@ class LoadTransfer(om.JaxExplicitComponent):
 
                 loads = loads.at[3:6, left_node_index].add(moment1)
                 loads = loads.at[3:6, right_node_index].add(moment2)
+
+                # breakpoint()
+
+        print('\n\n --- FEM nodal force (in disp transfer) ---')
+        _debug_print('x', loads[0, :], 'FEM')
+        _debug_print('y', loads[1, :], 'FEM')
+        _debug_print('z', loads[2, :], 'FEM')
+        _debug_print('rx', loads[3, :], 'FEM')
+        _debug_print('ry', loads[4, :], 'FEM')
+        _debug_print('rz', loads[5, :], 'FEM')
+        _debug_print('xrate', loads[6, :], 'FEM')
+        _debug_print('yrate', loads[7, :], 'FEM')
+        _debug_print('zrate', loads[8, :], 'FEM')
 
         # flatten loads to 1D array
         loads_str = loads.flatten(order='F')

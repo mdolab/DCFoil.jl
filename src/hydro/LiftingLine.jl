@@ -55,7 +55,7 @@ for headerName in [
 end
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
-const NPT_WING = 5
+const NPT_WING = 6
 
 export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
     compute_KS, GRAV
@@ -395,6 +395,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     rotationDisplacementsCtrl = displacements[4:end, :]
     # For the displacements on the panel edges, we'll use the edge values for the tips and the average for the inner vals
     midVals = (translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end]) * 0.5
+    midVals[:, NPT_WING ÷ 2].= 0.0  # wing center should have 0 displacements
     # midVals = zeros(3, npt_wing - 1)
     # for (ii, xyzDisp) in enumerate(eachcol(translatDisplCtrl[:, 1:end-1]))
     #     xyzDisp_n = translatDisplCtrl[:, ii+1]
