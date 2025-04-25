@@ -235,14 +235,20 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
     displVec = vec(displCol)
 
     if uppercase(mode) == "RAD" # RAD everything except the ptVec ones because this gave NaNs
+        # TODO: BUG here, fix this
         # displacements of the collocation nodes also give NaNs
-        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
+        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian(
+            (xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions),
+            gammas,
+            displVec
+        )
         # ∂Drag∂Xpt, ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xPt, xGamma, xDispl) -> compute_dragsFromX(xPt, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, gammas, displVec)
 
         backend = AD.ForwardDiffBackend()
-        
+
         # Need to FAD displacements too
         # Weird bug, but you can't do the jacobian using multiple inputs at once I guess
+        # ∂Drag∂Xpt, ∂Drag∂xdispl = AD.jacobian(backend, (xPt, xDispl) -> compute_dragsFromX(xPt, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, displVec) # this is bad
         ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
         ∂Drag∂xdispl, = AD.jacobian(backend, (xDispl) -> compute_dragsFromX(ptVec, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), displVec)
 
