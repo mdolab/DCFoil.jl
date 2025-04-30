@@ -11,6 +11,7 @@ for headerName in [
     "../src/struct/FEMMethods",
     "../src/InitModel",
     "../src/utils/Utilities",
+    "../src/solvers/SolveFlutter"
 ]
     include(headerName * ".jl")
 end

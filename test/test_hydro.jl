@@ -12,7 +12,7 @@ for headerName in [
     # "../src/InitModel",
     "../src/struct/FEMMethods",
     # "../src/VPM",
-    # "../src/LiftingLine",
+    "../src/hydro/LiftingLine",
     # "../src/TecplotIO",
     # "../src/ComputeFunctions",
     "../src/hydro/HydroStrip",
@@ -24,6 +24,7 @@ end
 using Plots, Printf
 using DelimitedFiles
 using .HydroStrip
+using .LiftingLine
 
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -1113,6 +1114,6 @@ end
 # test_VPM()
 # LLOutputs, FlowCond, LLSystem = test_LL()
 # vals, FncRange = test_wavedrag()
-test_45degwingLL()
+# test_45degwingLL()
 # TecplotIO.write_hydroLoads(LLOutputs, FlowCond, LLSystem, "./OUTPUT/")
 # TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, "./OUTPUT/")
