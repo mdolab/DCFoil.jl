@@ -1338,9 +1338,9 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             α₀ = appendageParams["alfa0"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
-            toc::Vector{RealOrComplex} = appendageParams["toc"]
-            ab::Vector{RealOrComplex} = appendageParams["ab"]
-            x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+            toc::Vector{Real} = appendageParams["toc"]
+            ab::Vector{Real} = appendageParams["ab"]
+            x_ab::Vector{Real} = appendageParams["x_ab"]
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1434,9 +1434,9 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         α₀ = appendageParams["alfa0"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
-        toc::Vector{RealOrComplex} = appendageParams["toc"]
-        ab::Vector{RealOrComplex} = appendageParams["ab"]
-        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+        toc::Vector{Real} = appendageParams["toc"]
+        ab::Vector{Real} = appendageParams["ab"]
+        x_ab::Vector{Real} = appendageParams["x_ab"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -1486,9 +1486,9 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-    toc::Vector{RealOrComplex} = appendageParams["toc"]
-    ab::Vector{RealOrComplex} = appendageParams["ab"]
-    x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+    toc::Vector{Real} = appendageParams["toc"]
+    ab::Vector{Real} = appendageParams["ab"]
+    x_ab::Vector{Real} = appendageParams["x_ab"]
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     toc_strut = appendageParams["toc_strut"]

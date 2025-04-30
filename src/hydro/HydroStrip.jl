@@ -11,9 +11,9 @@ module HydroStrip
 
 
 # --- Public functions ---
-export compute_theodorsen, compute_glauert_circ
-export compute_node_mass, compute_node_damp, compute_node_stiff
-export compute_AICs, apply_BCs
+# export compute_theodorsen, compute_glauert_circ
+# export compute_node_mass, compute_node_damp, compute_node_stiff
+# export compute_AICs, apply_BCs
 
 # --- PACKAGES ---
 using SpecialFunctions
@@ -27,6 +27,7 @@ using FLOWMath: norm_cs_safe, abs_cs_safe
 # using SparseArrays
 # using Debugger
 # using Cthulhu
+using ..LiftingLine # by the time this code is compiled, the module is already loaded
 
 # --- DCFoil modules ---
 for headerName in [
@@ -40,6 +41,7 @@ for headerName in [
     "../utils/Preprocessing",
     "../hydro/Unsteady",
     "../utils/Interpolation",
+    "../hydro/GlauertLL",
 ]
 
     include(headerName * ".jl")
@@ -184,10 +186,10 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     """
     This is a wrapper
     """
-    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    LECoords, TECoords = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    idxTip = Preprocessing.get_tipnode(LECoords)
-    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    idxTip = get_tipnode(LECoords)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Hydrodynamics
@@ -305,141 +307,141 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
     return dcladXpt
 end
 
-function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-    """
-    Derivative of the induced drag wrt the design variables
-    """
+# function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+#     """
+#     Derivative of the induced drag wrt the design variables
+#     """
 
-    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
+#     npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
 
-    dcdidXpt = zeros(1, length(ptVec))
-    LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-
-
-    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
-
-        dh = 1e-5
-        idh = 1 / dh
-
-        f_i = LLOutputs_i.CDi
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
-
-            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-
-            f_f = LLOutputs_f.CDi
-
-            dcdidXpt[1, ii] = (f_f - f_i) * idh
-
-            ptVec[ii] -= dh
-        end
+#     dcdidXpt = zeros(1, length(ptVec))
+#     LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
 
-    elseif uppercase(mode) == "ADJOINT"
+#     if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
 
-        function compute_adjointVec(∂r∂u, ∂f∂uT)
-            ψ = transpose(∂r∂u) \ ∂f∂uT
-            return ψ
-        end
+#         dh = 1e-5
+#         idh = 1 / dh
 
-        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+#         f_i = LLOutputs_i.CDi
+#         for ii in eachindex(ptVec)
+#             ptVec[ii] += dh
 
-        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#             LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
-        ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # GOOD
-        ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+#             f_f = LLOutputs_f.CDi
 
-        ∂f∂uT = reshape(∂cdi∂Γ, size(∂cdi∂Γ)..., 1)
+#             dcdidXpt[1, ii] = (f_f - f_i) * idh
 
-        Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
-        dcdidXpt = ∂cdi∂X - transpose(Ψ) * ∂r∂xPt
-
-        # println("∂cdi∂X", ∂cdi∂X)
-        # println("∂cdi∂Γ", ∂cdi∂Γ)
+#             ptVec[ii] -= dh
+#         end
 
 
-    elseif uppercase(mode) == "DIRECT"
-        function compute_directMatrix(∂r∂u, ∂r∂xPt)
-            Φ = ∂r∂u \ ∂r∂xPt
-            return Φ
-        end
-        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
-        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#     elseif uppercase(mode) == "ADJOINT"
+
+#         function compute_adjointVec(∂r∂u, ∂f∂uT)
+#             ψ = transpose(∂r∂u) \ ∂f∂uT
+#             return ψ
+#         end
+
+#         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+#         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+#         ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # GOOD
+#         ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+
+#         ∂f∂uT = reshape(∂cdi∂Γ, size(∂cdi∂Γ)..., 1)
+
+#         Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
+#         dcdidXpt = ∂cdi∂X - transpose(Ψ) * ∂r∂xPt
+
+#         # println("∂cdi∂X", ∂cdi∂X)
+#         # println("∂cdi∂Γ", ∂cdi∂Γ)
 
 
-        ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # NEW
-        ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions) # NEW
-        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
-        dcdidXpt = ∂cdi∂X - reshape(∂cdi∂Γ, 1, length(∂cdi∂Γ)) * Φ
-    end
-
-    # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
-    # println("writing dcdidXpt-$(mode).csv")
-
-    return dcdidXpt
-end
-
-function compute_dDidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-    """
-    Derivative of the induced drag wrt the design variables
-    Dimensional 
-    """
-
-    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
-
-    dDidXpt = zeros(1, length(ptVec))
-    LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+#     elseif uppercase(mode) == "DIRECT"
+#         function compute_directMatrix(∂r∂u, ∂r∂xPt)
+#             Φ = ∂r∂u \ ∂r∂xPt
+#             return Φ
+#         end
+#         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+#         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
 
-    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+#         ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # NEW
+#         ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions) # NEW
+#         Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+#         dcdidXpt = ∂cdi∂X - reshape(∂cdi∂Γ, 1, length(∂cdi∂Γ)) * Φ
+#     end
 
-        dh = 1e-5
-        idh = 1 / dh
+#     # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
+#     # println("writing dcdidXpt-$(mode).csv")
 
-        f_i = LLOutputs_i.F[1]
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
+#     return dcdidXpt
+# end
 
-            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+# function compute_dDidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+#     """
+#     Derivative of the induced drag wrt the design variables
+#     Dimensional 
+#     """
 
-            f_f = LLOutputs_f.F[1]
+#     npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
 
-            dDidXpt[1, ii] = (f_f - f_i) * idh
-
-            ptVec[ii] -= dh
-        end
-
-
-    elseif uppercase(mode) == "ADJOINT"
-
-        function compute_adjointVec(∂r∂u, ∂f∂uT)
-            ψ = transpose(∂r∂u) \ ∂f∂uT
-            return ψ
-        end
-
-        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
-
-        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-
-        ∂Di∂Γ = LiftingLine.compute_∂Di∂Γ(Gconv, LLMesh, FlowCond) # GOOD
-        ∂Di∂X = LiftingLine.compute_∂Di∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
-
-        ∂f∂uT = reshape(∂Di∂Γ, size(∂Di∂Γ)..., 1)
-
-        Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
-        dDidXpt = ∂Di∂X - transpose(Ψ) * ∂r∂xPt
+#     dDidXpt = zeros(1, length(ptVec))
+#     LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
 
-    end
+#     if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
 
-    # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
-    # println("writing dcdidXpt-$(mode).csv")
+#         dh = 1e-5
+#         idh = 1 / dh
 
-    return dDidXpt
-end
+#         f_i = LLOutputs_i.F[1]
+#         for ii in eachindex(ptVec)
+#             ptVec[ii] += dh
+
+#             LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+#             f_f = LLOutputs_f.F[1]
+
+#             dDidXpt[1, ii] = (f_f - f_i) * idh
+
+#             ptVec[ii] -= dh
+#         end
+
+
+#     elseif uppercase(mode) == "ADJOINT"
+
+#         function compute_adjointVec(∂r∂u, ∂f∂uT)
+#             ψ = transpose(∂r∂u) \ ∂f∂uT
+#             return ψ
+#         end
+
+#         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+#         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+#         ∂Di∂Γ = LiftingLine.compute_∂Di∂Γ(Gconv, LLMesh, FlowCond) # GOOD
+#         ∂Di∂X = LiftingLine.compute_∂Di∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+
+#         ∂f∂uT = reshape(∂Di∂Γ, size(∂Di∂Γ)..., 1)
+
+#         Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
+#         dDidXpt = ∂Di∂X - transpose(Ψ) * ∂r∂xPt
+
+
+#     end
+
+#     # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
+#     # println("writing dcdidXpt-$(mode).csv")
+
+#     return dDidXpt
+# end
 
 function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams, solverOptions, appendageOptions)
     """
@@ -458,7 +460,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
     depth0 = appendageParams["depth0"]
     if solverOptions["use_nlll"]
 
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if appendageOptions["config"] == "wing"
                 println("WARNING: NL LL is only for symmetric wings")
             end
@@ -466,7 +468,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         # println("Using nonlinear lifting line")
 
         # Hard-coded NACA0012
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
         end
 
@@ -490,7 +492,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
 
     else
         span = appendageParams["s"] * 2
-        cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α0 + rake), solverOptions["Uinf"];
+        cla, Fxind, CDi = compute_glauert_circ(0.5 * span, chordVec, deg2rad(α0 + rake), solverOptions["Uinf"];
             h=depth0,
             useFS=solverOptions["use_freeSurface"],
             rho=solverOptions["rhof"],
@@ -504,7 +506,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         ZH = zeros(2, 2, 2)
         LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, sweepAng, 0.0, ZH, ZH, ZA, ZM, ZA)
         FlowCond = LiftingLine.FlowConditions([uinf, 0.0, 0.0], uinf, [uinf, 0.0, 0.0], appendageParams["alfa0"], 0.0, solverOptions["rhof"], appendageParams["depth0"])
-        LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), real(cla), zeros(3), F, 0.0, CDi, 0.0)
+        LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), convert(Vector{Float64}, cla), zeros(3), F, 0.0, CDi, 0.0)
     end
 
     return LLOutputs, LLSystem, FlowCond
@@ -736,7 +738,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
         # --- Linearly interpolate values based on y loc ---
         # TODO: GWN DEBUG THIS AND GENERALIZE IT
-        clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
+        clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
 
         b = 0.5 * localchord # semichord for more readable code
 
@@ -782,7 +784,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # println("type: $(typeof(ΓT)), $(typeof(KLocal)), $(typeof(CLocal)), $(typeof(MLocal))")
         # MLocal_trans = copy(MLocal_trans_z)
 
-        ChainRulesCore.ignore_derivatives() do 
+        ChainRulesCore.ignore_derivatives() do
             GDOFIdx = NDOF * (inode - 1) + 1
         end
 
@@ -799,7 +801,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z)
 end
 
-function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll)
+function compute_stripValues(nVec, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll)
     """
     This chunk of code is super hacky based on assuming wing and t-foil strut order
     TODO: FIX LATER TO BE GENERAL
@@ -1141,9 +1143,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
-            toc::Vector{RealOrComplex} = appendageParams["toc"]
-            ab::Vector{RealOrComplex} = appendageParams["ab"]
-            x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+            toc = appendageParams["toc"]
+            ab = appendageParams["ab"]
+            x_ab = appendageParams["x_ab"]
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1241,7 +1243,7 @@ function get_strip_vecs(
 
     nStrips = size(aeroMesh)[1]
 
-    stripVecs = zeros(RealOrComplex, nStrips, 3)
+    stripVecs = zeros(Float64, nStrips, 3)
     stripVecs_z = Zygote.Buffer(stripVecs)
     stripVecs_z[:, :] = stripVecs
     nElemWing = solverOptions["nNodes"] - 1
@@ -1448,7 +1450,7 @@ function integrate_hydroLoads(
         error("Invalid element type")
     end
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if solverOptions["debug"]
             config = appendageOptions["config"]
             println("Plotting hydrodynamic loads")

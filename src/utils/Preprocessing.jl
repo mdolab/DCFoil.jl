@@ -7,6 +7,7 @@
 @Desc          :   Routines to derive 1D quantities from a mesh
 """
 
+using FLOWMath: atan_cs_safe
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions, appendageParams)
     """

@@ -7,8 +7,15 @@ using LinearAlgebra
 # using Dates
 # using Debugger: @run
 
-include("../src/DCFoil.jl")
-using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, SolveFlutter, SolveForced, SolveStatic, RealOrComplex
+for headerName in [
+    "../src/struct/FEMMethods",
+    "../src/InitModel",
+    "../src/utils/Utilities",
+]
+    include(headerName * ".jl")
+end
+
+using .FEMMethods
 
 # ==============================================================================
 #                         Test Static Solver
@@ -35,11 +42,11 @@ function test_SolveStaticRigid()
         "alfa0" => 6.0, # initial angle of attack [deg]
         "sweep" => deg2rad(0.0), # sweep angle [rad]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(RealOrComplex, nNodes), # chord length [m]
+        "c" => 0.1 * ones(Real, nNodes), # chord length [m]
         "s" => 0.3, # semispan [m]
-        "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio
-        "x_ab" => 0.0 * ones(RealOrComplex, nNodes), # static imbalance [m]
+        "ab" => 0.0 * ones(Real, nNodes), # dist from midchord to EA [m]
+        "toc" => 0.12 * ones(Real, nNodes), # thickness-to-chord ratio
+        "x_ab" => 0.0 * ones(Real, nNodes), # static imbalance [m]
         "theta_f" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
         "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
@@ -47,9 +54,9 @@ function test_SolveStaticRigid()
         "beta" => 0.0, # yaw angle wrt flow [deg]
         "s_strut" => 1.0, # [m]
         "c_strut" => 0.14 * collect(LinRange(1.0, 1.0, nNodesStrut)), # chord length [m]
-        "toc_strut" => 0.095 * ones(RealOrComplex, nNodesStrut), # thickness-to-chord ratio (mean)
-        "ab_strut" => 0.0 * ones(RealOrComplex, nNodesStrut), # dist from midchord to EA [m]
-        "x_ab_strut" => 0.0 * ones(RealOrComplex, nNodesStrut), # static imbalance [m]
+        "toc_strut" => 0.095 * ones(Real, nNodesStrut), # thickness-to-chord ratio (mean)
+        "ab_strut" => 0.0 * ones(Real, nNodesStrut), # dist from midchord to EA [m]
+        "x_ab_strut" => 0.0 * ones(Real, nNodesStrut), # static imbalance [m]
         "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
     )
 
@@ -109,13 +116,14 @@ function test_SolveStaticRigid()
     for nNodes in nNodess
         # --- Resize some stuff ---
         solverOptions["nNodes"] = nNodes
-        DVDict["c"] = 0.1 * ones(RealOrComplex, nNodes)
-        DVDict["ab"] = 0.0 * ones(RealOrComplex, nNodes)
-        DVDict["x_ab"] = 0.0 * ones(RealOrComplex, nNodes)
+        DVDict["c"] = 0.1 * ones(Real, nNodes)
+        DVDict["ab"] = 0.0 * ones(Real, nNodes)
+        DVDict["x_ab"] = 0.0 * ones(Real, nNodes)
 
         DCFoil.setup_model([DVDict]; solverOptions=solverOptions)
         DCFoil.init_model(zeros(10, 10), zeros(10, 10), zeros(10, 10); solverOptions=solverOptions, appendageParamsList=[DVDict])
         DCFoil.run_model(zeros(10, 10), zeros(10, 10), zeros(10, 10), evalFuncs; solverOptions=solverOptions, appendageParamsList=[DVDict])
+
         # DCFoil.run_model(DVDict, evalFuncs; solverOptions)
         costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
         tipBendData[meshlvl] = costFuncs["wtip"]
@@ -403,10 +411,12 @@ function test_modal(DVDict, solverOptions)
     nNodes = 40 # spatial nodes
 
     # --- Mesh ---
-    DCFoil.set_defaultOptions!(solverOptions)
+    set_defaultOptions!(solverOptions)
     solverOptions["gridFile"] = nothing
     appendageOptions = solverOptions["appendageList"][1]
-    FOIL, _, _ = InitModel.init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
+    
+    FOIL, _, _ = init_modelFromDVDict(DVDict, solverOptions, appendageOptions)
+    
     nElem = nNodes - 1
     structMesh, elemConn = FEMMethods.make_componentMesh(nElem, DVDict["s"])
     # structNatFreqs, _, wetNatFreqs, _ = SolveFlutter.solve_frequencies(FEMESH, DVDict, solverOptions, appendageOptions)
@@ -448,158 +458,6 @@ function test_eigensolve()
     w_r, w_i, _, _, VR_r, VR_i = SolverRoutines.cmplxStdEigValProb(A_r, A_i, 2)
 
     err = LinearAlgebra.norm(w_r1 - w_r, 2) + LinearAlgebra.norm(w_i1 - w_i, 2)
-end
-
-function test_pk_staticDiv()
-    """
-    Test flutter solver for the static divergence case
-    """
-
-    ref_val = 0.2346166
-
-    nNodes = 10
-    df = 1
-    fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
-    uRange = [20.0, 40.0] # flow speed [m/s] sweep for flutter
-    tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
-
-    DVDict = Dict(
-        "alfa0" => 6.0, # initial angle of attack [deg]
-        "sweep" => deg2rad(0.0), # sweep angle [rad]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
-        "theta_f" => deg2rad(-15), # fiber angle global [rad]
-        "s_strut" => 0.4, # from Yingqian
-    )
-
-    solverOptions = Dict(
-        # --- I/O ---
-        "name" => "akcabay",
-        "debug" => true,
-        # --- General solver options ---
-        "config" => "wing",
-        "nNodes" => nNodes,
-        "nNodeStrut" => 10,
-        "Uinf" => 5.0, # free stream velocity [m/s]
-        "rhof" => 1000.0, # fluid density [kg/m³]
-        "rotation" => 0.0, # deg
-        "material" => "cfrp", # preselect from material library
-        "gravityVector" => [0.0, 0.0, -9.81],
-        "use_tipMass" => false,
-        "use_freeSurface" => false,
-        "use_cavitation" => false,
-        "use_ventilation" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fRange" => fRange,
-        "tipForceMag" => tipForceMag,
-        # --- Eigen solve ---
-        "run_modal" => true,
-        "run_flutter" => true,
-        "nModes" => 4,
-        "uRange" => uRange,
-        "maxQIter" => 4000,
-        "rhoKS" => 100.0,
-    )
-    evalFuncs = ["ksflutter"]
-
-    outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
-        string(Dates.today()),
-        solverOptions["name"],
-        solverOptions["material"],
-        rad2deg(DVDict["theta_f"]),
-        rad2deg(DVDict["sweep"]))
-    mkpath(outputDir)
-
-    solverOptions["outputDir"] = outputDir
-
-    DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
-
-    err = (ref_val - costFuncs["ksflutter"]) / ref_val
-    return err
-end
-
-# test_pk_staticDiv()
-
-function test_pk_flutter()
-    """
-    Test flutter solver for the fluttering case
-    """
-    ref_val = 0.05347
-    nNodes = 10
-    df = 1
-    fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
-    uRange = [170.0, 190.0] # flow speed [m/s] sweep for flutter
-    tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
-
-    DVDict = Dict(
-        "alfa0" => 6.0, # initial angle of attack [deg]
-        "sweep" => deg2rad(-15.0), # sweep angle [rad]
-        "zeta" => 0.04, # modal damping ratio at first 2 modes
-        "c" => 0.1 * ones(nNodes), # chord length [m]
-        "s" => 0.3, # semispan [m]
-        "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.12, # thickness-to-chord ratio
-        "x_ab" => 0 * ones(nNodes), # static imbalance [m]
-        "theta_f" => deg2rad(15), # fiber angle global [rad]
-        "s_strut" => 0.4, # from Yingqian
-    )
-
-    solverOptions = Dict(
-        # --- I/O ---
-        "name" => "akcabay",
-        "debug" => true,
-        # --- General solver options ---
-        "config" => "wing",
-        "nNodes" => nNodes,
-        "nNodeStrut" => 10,
-        "Uinf" => 5.0, # free stream velocity [m/s]
-        "rhof" => 1000.0, # fluid density [kg/m³]
-        "rotation" => 0.0, # deg
-        "material" => "cfrp", # preselect from material library
-        "gravityVector" => [0.0, 0.0, -9.81],
-        "use_tipMass" => false,
-        "use_freeSurface" => false,
-        "use_cavitation" => false,
-        "use_ventilation" => false,
-        # --- Static solve ---
-        "run_static" => false,
-        # --- Forced solve ---
-        "run_forced" => false,
-        "fRange" => fRange,
-        "tipForceMag" => tipForceMag,
-        # --- Eigen solve ---
-        "run_modal" => true,
-        "run_flutter" => true,
-        "nModes" => 4,
-        "uRange" => uRange,
-        "maxQIter" => 4000,
-        "rhoKS" => 100.0,
-    )
-    evalFuncs = ["ksflutter"]
-
-    outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
-        string(Dates.today()),
-        solverOptions["name"],
-        solverOptions["material"],
-        rad2deg(DVDict["theta_f"]),
-        rad2deg(DVDict["sweep"]))
-    mkpath(outputDir)
-
-    solverOptions["outputDir"] = outputDir
-
-    DCFoil.run_model(DVDict, evalFuncs; solverOptions=solverOptions)
-    costFuncs = DCFoil.evalFuncs(evalFuncs, solverOptions)
-    err = (ref_val - costFuncs["ksflutter"]) / ref_val
-
-    return err
 end
 
 # test_pk_flutter()

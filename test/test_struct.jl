@@ -10,7 +10,12 @@ using Plots, DelimitedFiles
 
 # include("../src/DCFoil.jl")
 # using .DCFoil: BeamProperties, InitModel, SolverRoutines, EBBeam as BeamElem, FEMMethods, Rotations
-include("../src/struct/FEMMethods.jl")
+for headerName in [
+    "../src/struct/FEMMethods",
+    "../src/InitModel",
+]
+    include(headerName * ".jl")
+end
 using .FEMMethods
 
 # ==============================================================================
@@ -49,8 +54,8 @@ function test_struct()
 
     for i in 1:N
         θₗ = θₐ[i]
-        section = BeamProperties.SectionProperty(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ, zeros(20, 2))
-        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = BeamProperties.compute_section_property(section, "orthotropic")
+        section = FEMMethods.SectionProperty(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ, zeros(20, 2))
+        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = FEMMethods.compute_section_property(section, "orthotropic")
 
         EIₛₐ[i] = EIₛ
         EIIPₛₐ[i] = EIIP
