@@ -9,7 +9,7 @@ Some big picture notes:
 """
 
 using Test
-
+using ChainRulesCore
 include("test_struct.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
@@ -102,6 +102,7 @@ wingOptions2 = Dict(
     "material" => "cfrp", # preselect from material library
     "config" => "wing",
     "nNodes" => nNodes,
+    "nNodeStrut" => nNodesStrut, # nodes on strut
     "use_tipMass" => false,
     "xMount" => 0.0,
 )

@@ -392,6 +392,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # --- Handle displacements of collocation nodes ---
     size(displacements) == (6, npt_wing) || error("Displacements must be 6 x $(npt_wing). Size is $(size(displacements))")
     translatDisplCtrl = displacements[1:3, :]
+    translatDisplCtrl[ZDIM, :] .= 0.0 # Ignore any effect of dihedral on the wing GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
     rotationDisplacementsCtrl = displacements[4:end, :]
     # For the displacements on the panel edges, we'll use the extrapolated edge values for the tips and the average for the inner vals
     midVals = (translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end]) * 0.5
@@ -450,6 +451,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
 
     fprimeEff = compute_dLACdseffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
+
+    # --- Compute local dihedrals ---
+    # TODO: need to do this eventually to generalize the code.
 
     # --- Other section properties ---
     sectionVectors = wing_xyz[:, 1:end-1] - wing_xyz[:, 2:end] # dℓᵢ
@@ -661,17 +665,6 @@ function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann
     else
         println("Model not implemented yet")
     end
-
-    # println("Λk: $(Λₖ)")
-    # println("K: $(K)")
-    # println("====================================")
-    # println("y: $(y)")
-    # println("c: $(c)")
-    # println("tanl: $(tanl)")
-    # println("lam: $(lam)")
-    # println("lamp: $(lamp)")
-    # println("dx:\n $(dx)") # good
-    # println("====================================")
 
     return dx
 end
@@ -1071,7 +1064,9 @@ function compute_TVinfluences(FlowCond, LLMesh)
     ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
     # Mask for the bound segment (npt_wing x npt_wing)
+    # This is a matrix of ones with a main diagonal of zeros
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
+
 
     # --- TODO: these routines will eventually need to be generalized to work with dihedral wings without relying on a small dz approximation ---
     influence_semiinfa = compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LLMesh.rc)
@@ -1852,10 +1847,12 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     -------
     startpt : ndarray
         Starting point of the semi-infinite vortex filament
+        This should be on a panel edge
     endvec : Array{Float64, 3}
         Unit vector of the semi-infinite vortex filament
     pt : ndarray
-        Point at which the influence is computed (field point)
+        Point at which the influence is computed (field point).
+        This should match where the collocation points are
     rc : scalar
         Vortex core radius (viscous correction)
 
@@ -1866,11 +1863,20 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     """
 
 
-    r1 = pt .- startpt
+    r1 = pt .- startpt # this is an array of shape (3, NPT_WING, NPT_WING) describing the vectors from the semi-inf vortex filament to the field points
+    # println("r1")
+    # show(stdout, "text/plain", r1[ZDIM, :, :]) # wrong
+    # println("")
+    # # --- Hack it so the z distances are zero (should generalize in the future) ---
+    # # The assumption here is that collocation points and horseshoe vortices are all at the same 'z', which is only valid for small amounts of dihedral
+    # r1[ZDIM, :, :] .= 0.0
+
     r1mag = .√(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     uinf = endvec
 
-    r1dotuinf = r1[XDIM, :, :] .* uinf[XDIM, :, :] .+ r1[YDIM, :, :] .* uinf[YDIM, :, :] .+ r1[ZDIM, :, :] .* uinf[ZDIM, :, :]
+    r1dotuinf = r1[XDIM, :, :] .* uinf[XDIM, :, :] .+
+                r1[YDIM, :, :] .* uinf[YDIM, :, :] .+
+                r1[ZDIM, :, :] .* uinf[ZDIM, :, :]
 
     r1crossuinf = cross3D(r1, uinf)
     uinfcrossr1 = cross3D(uinf, r1)
@@ -1881,7 +1887,8 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     # Reshape d to have a singleton dimension for correct broadcasting
     d = reshape(d, 1, size(d)...)
 
-    numerator = uinfcrossr1 .* (d .^ 2 ./ .√(rc^4 .+ d .^ 4))
+    numerator = uinfcrossr1 .*
+                (d .^ 2 ./ .√(rc^4 .+ d .^ 4))
 
     denominator = (4π * r1mag .* (r1mag .- r1dotuinf))
     denominator = reshape(denominator, 1, size(denominator)...)
@@ -1925,6 +1932,12 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     r1 = pt .- startpt
     r1mag = .√(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     r2 = pt .- endpt
+
+    # # --- Hack it so the z distances are zero (should generalize in the future) ---
+    # # The assumption here is that collocation points and horseshoe vortices are all at the same 'z', which is only valid for small amounts of dihedral
+    # r1[ZDIM, :, :] .= 0.0
+    # r2[ZDIM, :, :] .= 0.0
+
     r2mag = .√(r2[XDIM, :, :] .^ 2 + r2[YDIM, :, :] .^ 2 + r2[ZDIM, :, :] .^ 2)
     r1r2 = r1 .- r2
 
@@ -1943,14 +1956,14 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     # Reshape d to have a singleton dimension for correct broadcasting
     d = reshape(d, 1, size(d)...)
 
-    influence = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
-    influence = influence .* (d .^ 2) ./ .√(rc^4 .+ d .^ 4)
+    numerator = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
+    numerator = numerator .* (d .^ 2) ./ .√(rc^4 .+ d .^ 4)
     denominator = (4π * r1mag .* r2mag .* (r1mag .* r2mag .+ r1dotr2))
 
     # Reshape the denominator to have the same dimensions as the influence    
     denominator = reshape(denominator, 1, size(denominator)...)
 
-    influence = influence ./ denominator
+    influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
     # Cannot keep in ignore derivatives block

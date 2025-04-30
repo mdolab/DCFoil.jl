@@ -37,6 +37,7 @@ for headerName in [
     "../solvers/SolverRoutines",
     "../constants/DesignConstants",
     "../solvers/DCFoilSolution",
+    "../InitModel",
 ]
     include("$(headerName).jl")
 end
@@ -211,7 +212,7 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
     u = copy(globalF)
     dim = size(Ks)[1] + length(globalDOFBlankingList)
     alphaCorrection = zeros(nNodes)
-    global SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, ELEMTYPE, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
+    global SOLVERPARAMS = DCFoilSolverParams(globalKs, globalMs, globalCs, ELEMTYPE, zeros(2, 2), derivMode, 0.0, globalDOFBlankingList, alphaCorrection)
 
     return structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
@@ -307,7 +308,7 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     u = copy(globalF)
     dim = size(Ks)[1] + length(DOFBlankingList)
     alphaCorrection = 0.0
-    SOLVERPARAMS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
+    SOLVERPARAMS = DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
 
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
@@ -432,7 +433,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     debug = solverOptions["debug"]
     # --- Initialize the model ---
     # global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(appendageParams, solverOptions, appendageOptions)
-    global FOIL, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    global FOIL, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -487,7 +488,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
     alphaCorrection = 0.0
-    global CONSTANTS = SolutionConstants.DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), zeros(2, 2), 0.0, alphaCorrection)
+    global CONSTANTS = DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), zeros(2, 2), 0.0, alphaCorrection)
 
     # ---------------------------
     #   Test eigensolver
@@ -507,7 +508,12 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # --- Wetted solve ---
     # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
+    if solverOptions["use_nlll"]
+        error("NLLL not implemented yet for natural freq")
+    else 
+        claVec = LLOutputs.cla
+    end
+    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, claVec, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
     wetOmegaSquared, wetModeShapes = FEMMethods.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = .√(wetOmegaSquared) / (2π)
