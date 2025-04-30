@@ -306,7 +306,7 @@ function fill_mesh(
             # Add foil wing first
             for nodeIdx in 1:nElem
                 mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     elemConn[nodeCtr, 1] = nodeIdx
                     elemConn[nodeCtr, 2] = nodeIdx + 1
                 end
@@ -319,13 +319,13 @@ function fill_mesh(
             nodeCtr += 1
 
             # Mirror wing nodes skipping first, but adding junction connectivity
-            @ignore_derivatives() do
+            ChainRulesCore.ignore_derivatives() do
                 elemConn[elemCtr, 1] = 1
                 elemConn[elemCtr, 2] = nodeCtr
             end
             for nodeIdx in 2:nElem
                 mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     elemConn[nodeCtr, 1] = nodeCtr
                     elemConn[nodeCtr, 2] = nodeCtr + 1
                 end
@@ -335,7 +335,7 @@ function fill_mesh(
 
             # Grab end of wing
             mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-            @ignore_derivatives() do
+            ChainRulesCore.ignore_derivatives() do
                 elemConn[elemCtr, 1] = nodeCtr - 1
                 elemConn[elemCtr, 2] = nodeCtr
             end
@@ -343,7 +343,7 @@ function fill_mesh(
             elemCtr += 1
 
             # in the extreme case of 3 elements, elem conn is wrong
-            @ignore_derivatives() do
+            ChainRulesCore.ignore_derivatives() do
                 if (2 * nElem == 2)
                     elemConn[2, 1] = 1
                     elemConn[2, 2] = 3
@@ -371,7 +371,7 @@ function fill_mesh(
         nodeCtr = 1 # node counter traversing nodes
 
         # Add foil wing first
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             for nodeIdx in 1:nElem
                 # mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
                 elemConn[nodeCtr, 1] = nodeIdx
@@ -391,7 +391,7 @@ function fill_mesh(
         nodeCtr += 1
 
         # Mirror wing nodes skipping first, but adding junction connectivity
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             elemConn[elemCtr, 1] = 1
             elemConn[elemCtr, 2] = nodeCtr
             for nodeIdx in 2:nElem
@@ -406,7 +406,7 @@ function fill_mesh(
         foilMeshPort = hcat(zeros(nElem), -foilwingMesh[2:end], zeros(nElem))
         # Grab end of wing
         # mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             elemConn[elemCtr, 1] = nodeCtr - 1
             elemConn[elemCtr, 2] = nodeCtr
         end
@@ -418,7 +418,7 @@ function fill_mesh(
         # ************************************************
         # Add strut going up in z
         nodeIdx = 1
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             for istrut in 1:nElStrut # loop elem, not nodes
                 # if nodeIdx <= nElStrut 
                 # mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
@@ -444,7 +444,7 @@ function fill_mesh(
         mesh[:, :] = vcat(foilMesh, foilMeshPort, strutMesh)
 
         # in the extreme case of 3 elements, elem conn is wrong
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if (2 * nElem + nElStrut == 3)
                 elemConn[2, 1] = 1
                 elemConn[2, 2] = 3
@@ -543,7 +543,7 @@ function populate_matrices!(
     elemConn = StructMesh.elemConn
     coordMat = StructMesh.mesh
     # --- Debug printout for initialization ---
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if verbose
             println("+----------------------------------------+")
             println("|        Assembling beam matrices        |")
@@ -635,16 +635,6 @@ function populate_matrices!(
         #   Local stiffness matrix
         # ---------------------------
         kLocal = compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
-        # println("kLocal type:\t", typeof(kLocal))
-        # println("lᵉ:\t", typeof(lᵉ))
-        # println("EIₛ:\t", typeof(EIₛ))
-        # println("EIIPₛ:\t", typeof(EIIPₛ))
-        # println("GJₛ:\t", typeof(GJₛ))
-        # println("Kₛ:\t", typeof(Kₛ))
-        # println("Sₛ:\t", typeof(Sₛ))
-        # println("EAₛ:\t", typeof(EAₛ))
-        # println("ab:\t", typeof(ab))
-        # println("x_αb:\t", typeof(x_αb))
 
         # ---------------------------
         #   Local mass matrix
@@ -671,7 +661,7 @@ function populate_matrices!(
         mElem_int = my_matmul(mLocal, Γ)
         mElem = my_matmul(ΓT, mElem_int)
         fElem = ΓT * fLocal
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if any(isnan.(kElem))
                 println("NaN in elem stiffness matrix")
             end
@@ -703,7 +693,7 @@ function populate_matrices!(
                 end
             end
         end
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if any(isnan.(globalK))
                 println("NaN in global stiffness matrix")
             end
@@ -734,7 +724,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
         error("BCCond not recognized")
     end
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if verbose
             println("BCType: ", BCCond)
         end
@@ -848,7 +838,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
         error("Not implemented")
     end
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         println("+------------------------------------+")
         println("|    Tip mass added!                 |")
         println("+------------------------------------+")

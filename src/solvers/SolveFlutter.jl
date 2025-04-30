@@ -31,6 +31,7 @@ for headerName in [
     "../struct/FEMMethods",
     "../hydro/LiftingLine",
     "../io/MeshIO",
+    "../io/TecplotIO",
     "../constants/SolutionConstants",
     "../hydro/HydroStrip",
     "../solvers/SolverRoutines",
@@ -44,7 +45,6 @@ using .FEMMethods
 using .LiftingLine
 using .HydroStrip
 # using ..InitModel
-# using ..HydroStrip
 # using ..BeamProperties
 # using ..Interpolation
 # using ..DesignConstants: SORTEDDVS
@@ -596,7 +596,7 @@ function write_tecplot(DVDict, FLUTTERSOL, chords, mesh, outputDir="./OUTPUT/"; 
     """
     General purpose tecplot writer wrapper for flutter solution
     """
-    TecplotIO.write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir, "mode"; appendageOptions=solverOptions["appendageList"][1])
+    write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir, "mode"; appendageOptions=solverOptions["appendageList"][1])
 
 end
 
@@ -604,7 +604,7 @@ function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatF
     """
     General purpose tecplot writer wrapper for modal solution
     """
-    TecplotIO.write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir; solverOptions=solverOptions)
+    write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir; solverOptions=solverOptions)
 
 end
 # ==============================================================================
@@ -2130,92 +2130,92 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function get_sol(DVDict::AbstractDict, solverOptions::AbstractDict)
-    """
-    Wrapper function
-    This does the primal solve and returns the solution
-    It is used in the top-level evalFuncs call in DCFoil 
-    to return the sol struct
-    """
+# function get_sol(DVDict::AbstractDict, solverOptions::AbstractDict)
+#     """
+#     Wrapper function
+#     This does the primal solve and returns the solution
+#     It is used in the top-level evalFuncs call in DCFoil 
+#     to return the sol struct
+#     """
 
-    # # Setup
-    # structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-    #     setup_solverFromDVs(DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions)
+#     # # Setup
+#     # structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+#     #     setup_solverFromDVs(DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions)
 
-    # # Solve
-    # obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
-    DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
-    SOL = cost_funcsFromDVs(DVVec, DVLengths, solverOptions)
+#     # # Solve
+#     # obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, globalDOFBlankingList, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+#     DVVec, DVLengths = Utilities.unpack_dvdict(DVDict)
+#     SOL = cost_funcsFromDVs(DVVec, DVLengths, solverOptions)
 
-    return SOL
-end
+#     return SOL
+# end
 
-function compute_solFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+# function compute_solFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
 
-    ptVec, _, _ = Utilities.unpack_coords(LECoords, TECoords)
-    alfa0 = appendageParams["alfa0"]
-    theta_f = appendageParams["theta_f"]
-    toc = appendageParams["toc"]
+#     ptVec, _, _ = Utilities.unpack_coords(LECoords, TECoords)
+#     alfa0 = appendageParams["alfa0"]
+#     theta_f = appendageParams["theta_f"]
+#     toc = appendageParams["toc"]
 
-    # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
-    haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
+#     # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
+#     haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
 
-    obj, SOL = cost_funcsFromCoordsDVs(ptVec, nodeConn, alfa0, theta_f, toc, appendageParams, solverOptions; return_all=true)
-    return SOL
-end
+#     obj, SOL = cost_funcsFromCoordsDVs(ptVec, nodeConn, alfa0, theta_f, toc, appendageParams, solverOptions; return_all=true)
+#     return SOL
+# end
 
-function cost_funcsFromDVs(
-    # α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
-    DVVec, DVLengths,
-    solverOptions
-)
-    """
-    This does the primal solve but with a function signature compatible with Zygote
-    """
+# function cost_funcsFromDVs(
+#     # α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
+#     DVVec, DVLengths,
+#     solverOptions
+# )
+#     """
+#     This does the primal solve but with a function signature compatible with Zygote
+#     """
 
-    DVDict = Utilities.repack_dvdict(DVVec, DVLengths)
-    # Setup
-    structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-        setup_solverFromDVs(DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions)
+#     DVDict = Utilities.repack_dvdict(DVVec, DVLengths)
+#     # Setup
+#     structMesh, elemConn, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+#         setup_solverFromDVs(DVDict["alfa0"], DVDict["sweep"], DVDict["s"], DVDict["c"], DVDict["toc"], DVDict["ab"], DVDict["x_ab"], DVDict["zeta"], DVDict["theta_f"], solverOptions)
 
-    # Solve
-    obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
+#     # Solve
+#     obj, _, SOL = solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug)
 
-    return obj
-end
+#     return obj
+# end
 
-function cost_funcsFromCoordsDVs(
-    ptVec,
-    nodeConn,
-    alfa0,
-    theta_f,
-    toc,
-    appendageParams,
-    solverOptions;
-    return_all=false
-)
-    """
-    This does the primal solve but with a function signature compatible with Zygote
-    """
+# function cost_funcsFromCoordsDVs(
+#     ptVec,
+#     nodeConn,
+#     alfa0,
+#     theta_f,
+#     toc,
+#     appendageParams,
+#     solverOptions;
+#     return_all=false
+# )
+#     """
+#     This does the primal solve but with a function signature compatible with Zygote
+#     """
 
-    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+#     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    appendageParams["theta_f"] = theta_f
-    appendageParams["toc"] = toc
-    appendageParams["alfa0"] = alfa0
+#     appendageParams["theta_f"] = theta_f
+#     appendageParams["toc"] = toc
+#     appendageParams["alfa0"] = alfa0
 
-    # Setup
-    FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
-        setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+#     # Setup
+#     FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
+#         setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions)
 
-    # Solve
-    obj, _, SOL = solve(FEMESH.mesh, FEMESH.elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, LLOutputs, FlowCond, debug)
-    if return_all
-        return obj, SOL
-    else
-        return obj
-    end
-end
+#     # Solve
+#     obj, _, SOL = solve(FEMESH.mesh, FEMESH.elemConn, solverOptions, uRange, b_ref, chordVec, abVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, FEMESH.idxTip, LLSystem, LLOutputs, FlowCond, debug)
+#     if return_all
+#         return obj, SOL
+#     else
+#         return obj
+#     end
+# end
 
 function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, claVec, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=false)
     """

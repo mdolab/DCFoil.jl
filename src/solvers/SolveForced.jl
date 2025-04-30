@@ -75,7 +75,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
 
     # # --- Tip twist approach ---
     # extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
-    # @ignore_derivatives() do
+    # ChainRulesCore.ignore_derivatives() do
     #     extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
     #     extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
     # end
