@@ -391,17 +391,21 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     #   Shift collocation points
     # ---------------------------
     # --- Handle displacements of collocation nodes ---
-    size(displacements) == (6, NPT_WING) || error("Displacements must be 6 x $(NPT_WING). Size is $(size(displacements))")
+    size(displacements) == (6, npt_wing) || error("Displacements must be 6 x $(npt_wing). Size is $(size(displacements))")
     translatDisplCtrl = displacements[1:3, :]
     rotationDisplacementsCtrl = displacements[4:end, :]
-    # For the displacements on the panel edges, we'll use the edge values for the tips and the average for the inner vals
+    # For the displacements on the panel edges, we'll use the extrapolated edge values for the tips and the average for the inner vals
     midVals = (translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end]) * 0.5
-    # midVals = zeros(3, npt_wing - 1)
-    # for (ii, xyzDisp) in enumerate(eachcol(translatDisplCtrl[:, 1:end-1]))
-    #     xyzDisp_n = translatDisplCtrl[:, ii+1]
-    #     midVals[:, ii] = 0.5 * (xyzDisp + xyzDisp_n)
-    # end
-    translatDispl = cat(translatDisplCtrl[:, 1], midVals, translatDisplCtrl[:, end], dims=2)
+    midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
+    portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
+    halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
+    portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
+    # println("Port tip: $(portTip)")
+    stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
+    halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
+    stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
+    # println("Stbd tip: $(stbdTip)")
+    translatDispl = cat(portTip, midVals, stbdTip, dims=2)
 
     # --- x shift setup ---
     # Apply translation wrt using the root airfoil midchord as origin 
@@ -424,8 +428,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
 
     # Need a mess of LAC's for each control point
     LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
-    # This is a 3D array
+    # This is a 3D array of a shape
     # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
+    # The idea is that for the 'npt_wing' control points
     # Make sure to also add the translation vector to the effective locus of aerodynamic centers
     wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...) .+ translationVec[XDIM]
     wing_xyz_eff_ycomp = reshape(repeat(transpose(wing_xyz[YDIM, :]), npt_wing, 1), 1, npt_wing, npt_wing + 1)
@@ -458,7 +463,6 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # ---------------------------
     #   Aero section properties
     # ---------------------------
-    # TODO: you can add the twist distribution here probably
     # Where the 2D VPM comes into play
     Airfoils = Vector(undef, npt_wing)
     AirfoilInfluences = Vector(undef, npt_wing)
@@ -473,7 +477,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
         airfoil_xy_rot = ryMat * airfoil_xy
         airfoil_ctrl_xy_rot = ryMat * airfoil_ctrl_xy
 
-        # p1 = plot(airfoil_xy_rot[XDIM, :], airfoil_xy_rot[YDIM, :], aspect_ratio=:equal)
+        # p1 = plot(airfoil_xy_rot[XDIM, :], airfoil_xy_rot[YDIM, :], aspect_ratio=:equal, label="$(twistAngle)")
         # p2 = plot(airfoil_ctrl_xy_rot[XDIM, :], airfoil_ctrl_xy_rot[YDIM, :], aspect_ratio=:equal)
         # plot(p1, p2, layout=(1, 2), size=(1200, 400))
 
@@ -506,24 +510,22 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     wing_joint_xyz_eff_ycomp = reshape(transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
     wing_joint_xyz_zcomp = reshape(wing_xyz[ZDIM, :], 1, npt_wing + 1)
-    wing_joint_xyz_eff_zcomp = reshape(transpose(wing_xyz_eff[ZDIM, :, :]), 1, npt_wing, npt_wing + 1)
+    wing_joint_xyz_eff_zcomp = reshape(wing_xyz_eff[ZDIM, :, :], 1, npt_wing, npt_wing + 1)
 
     wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, wing_joint_xyz_zcomp, dims=1)
     wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, wing_joint_xyz_eff_zcomp, dims=1)
-
-    # # Debug stuff 
-    # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
-    # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
-    # println("wing_ctrl_xyz y: $(wing_ctrl_xyz[YDIM,:])")
-
-    # println("local sweep values [deg]: $(rad2deg.(localSweeps))")
 
     # Store all computed quantities here
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, local_chords_ctrl, ζ, sectionLengths, sectionAreas,
         npt_airfoil, aeroWingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
 
-    FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof, options["depth"])
+    submergence = 20.0
+    if !isnothing(options) && haskey(options, "depth")
+        submergence = options["depth"]
+    end
+
+    FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof, submergence)
 
     return LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences
 end
@@ -611,14 +613,7 @@ function compute_LACeffective(AR, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr
 
         LACeff = (1.0 .- blend) .* LACwork .+
                  blend .* (fprime0 .* (ywork .- y0work) .+ LAC0work)
-        # println("c: $(c)")
-        # println("cr: $(cr)")
-        # println("sweep: $(Λ)")
-        # println("y: $(y)")
-        # println("y0: $(y0)")
-        # println("LACwork: $(LACwork[1,:])")
-        # println("LAC0work: $(LAC0work[:,1])")
-        # println("LACeff: $(LACeff[1,:])")
+
         return LACeff
     else
         println("Model not implemented yet")
@@ -974,6 +969,7 @@ end
 function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     """
     """
+
     Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
     Gjvji = TV_influence .* Gi
     Gjvjix = TV_influence[XDIM, :, :] * Gconv
@@ -1055,6 +1051,12 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
 end
 
 function compute_TVinfluences(FlowCond, LLMesh)
+    """
+    Outputs
+    -------
+    TV_influence : array_like (3, npt_wing, npt_wing)
+        Influence matrix for the lifting line system
+    """
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
@@ -1069,15 +1071,16 @@ function compute_TVinfluences(FlowCond, LLMesh)
     ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
     ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
-
     # Mask for the bound segment (npt_wing x npt_wing)
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
 
+    # --- TODO: these routines will eventually need to be generalized to work with dihedral wings without relying on a small dz approximation ---
     influence_semiinfa = compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LLMesh.rc)
     influence_straightsega = compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
     influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
     influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
     influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
+
 
     TV_influence = -influence_semiinfa +
                    influence_straightsega +
@@ -1306,9 +1309,9 @@ function compute_LLresJacobian(Gi; solverParams, mode="Analytic")
         ∂r∂G_z = Zygote.Buffer(∂r∂G)
         r_i = compute_LLresiduals(Gi; solverParams=solverParams)
         for ii in eachindex(Gi)
-            @ignore_derivatives(Gi[ii] += dh)
+            ChainRulesCore.ignore_derivatives(Gi[ii] += dh)
             r_f = compute_LLresiduals(Gi; solverParams=solverParams)
-            @ignore_derivatives(Gi[ii] -= dh)
+            ChainRulesCore.ignore_derivatives(Gi[ii] -= dh)
             # ∂r∂G[:, ii] = (r_f - r_i) / dh
             ∂r∂G_z[:, ii] = (r_f - r_i) / dh
             # println("r:")

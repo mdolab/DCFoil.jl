@@ -97,7 +97,7 @@ function compute_glauert_circ(
     end
 
     if useFS
-        # @ignore_derivatives() do
+        # ChainRulesCore.ignore_derivatives() do
         #     println("Using free surface")
         # end
         γ_FS = use_free_surface(γ, α₀, U∞, chordVec, h)

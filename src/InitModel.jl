@@ -26,7 +26,7 @@ function init_static(
   depth0,
   appendageOptions::AbstractDict, solverOptions::AbstractDict
 )
-  """
+"""
   Initialize a static hydrofoil model
 
   Inputs:
@@ -122,7 +122,7 @@ function init_staticHydro(LECoords, TECoords, nodeConn, appendageParams,
     appendageParams["depth0"] = 20.0
   end
 
-  ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
+  ptVec, mm, nn = unpack_coords(LECoords, TECoords)
   # println("ptVec: ", ptVec)
   # println("nodeConn", nodeConn)
   LLOutputs, LLSystem, FlowCond = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
@@ -144,7 +144,7 @@ function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_
 
   statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
-  WingStructModel = DesignConstants.DynamicFoil(
+  WingStructModel = FEMMethods.DynamicFoil(
     statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
     statWingStructModel.eb, statWingStructModel.ab, statWingStructModel.chord, statWingStructModel.nNodes, statWingStructModel.constitutive,
     fRange, uRange
@@ -153,7 +153,7 @@ function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_
   if isnothing(statStrutStructModel)
     StrutStructModel = nothing
   else
-    StrutStructModel = DesignConstants.DynamicFoil(
+    StrutStructModel = FEMMethods.DynamicFoil(
       statStrutStructModel.mₛ, statStrutStructModel.Iₛ, statStrutStructModel.EIₛ, statStrutStructModel.EIIPₛ, statStrutStructModel.GJₛ, statStrutStructModel.Kₛ, statStrutStructModel.Sₛ, statStrutStructModel.EAₛ, statStrutStructModel.U∞, statStrutStructModel.ζ,
       statStrutStructModel.clα, statStrutStructModel.eb, statStrutStructModel.ab, statStrutStructModel.chord, statStrutStructModel.nNodes, statStrutStructModel.constitutive, fRange, uRange
     )

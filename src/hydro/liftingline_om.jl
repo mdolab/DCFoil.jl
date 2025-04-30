@@ -18,6 +18,7 @@ using SpecialFunctions
 # --- Module to om wrap ---
 for headerName = [
     "../hydro/LiftingLine",
+    "../io/TecplotIO",
 ]
     include(headerName * ".jl")
 end
@@ -147,11 +148,13 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
          (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
+
     ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     # --- Nonlinear solve for circulation distribution ---
     Gconv0, _, _ = LiftingLine.do_newton_raphson(
         LiftingLine.compute_LLresiduals, LiftingLine.compute_LLresJacobian, g0, nothing;
+        # is_verbose=true,
         maxIters=50, tol=1e-6, mode="FiDi", solverParams=LLNLParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     Gconv_d, _, _ = LiftingLine.do_newton_raphson(
@@ -629,6 +632,10 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     # ---------------------------
     cla = LiftingLine.compute_liftslopes(Gconv, Gconv_d, LLNLParams.LLSystem, FlowCond, LLNLParams.LLHydro, LLNLParams.Airfoils, LLNLParams.AirfoilInfluences, appendageOptions, solverOptions)
     outputs["cla_col"][:] = cla[START:STOP]
+
+
+    # outputDir = "./"
+    # write_hydromesh(LLNLParams.LLSystem, FlowCond.uvec, outputDir)
 
     return nothing
 end
