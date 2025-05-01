@@ -5,7 +5,7 @@
 # @Author  :   Galen Ng
 # @Desc    :   Main executable for the project
 
-using Printf, Dates
+using Printf#, Dates
 
 for headerName in [
     "../../src/solvers/SolveFlutter"
@@ -142,8 +142,8 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
-    string(Dates.today()),
+outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    # string(Dates.today()),
     solverOptions["name"],
     solverOptions["material"],
     rad2deg(DVDict["theta_f"]),
