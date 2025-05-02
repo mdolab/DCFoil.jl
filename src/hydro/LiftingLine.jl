@@ -8,6 +8,14 @@
              for a highly swept wing at the root AND the mathematical requirement that the LAC 
              be locally perpendicular to the trailing vortex (TV). Reid 2020 overcame this by
              using a blending function at the wing root and a jointed TV
+
+             Note: The origin is at the midchord of the root airfoil.
+             x is positive streamwise
+             y is positive to stbd
+             z is positive in the vertical direction
+
+             KNOWN BUGS:
+             If there are NaNs, check the TV influence functions
 """
 
 module LiftingLine
@@ -16,54 +24,79 @@ module LiftingLine
 using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 using Plots
 using LinearAlgebra
+using Statistics
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
-using Zygote
+using Zygote, ReverseDiff, ForwardDiff
 using FiniteDifferences
 using PythonCall
+using Printf
+
 # using Debugger
+using DelimitedFiles
 
 # --- DCFoil modules ---
-using ..VPM: VPM
-using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..Utilities: Utilities, compute_KS
-using ..Preprocessing: Preprocessing
-using ..DCFoil: DTYPE
-using ..SolverRoutines: SolverRoutines, normalize_3Dvector, cross3D
-using ..Rotations: Rotations, compute_vectorFromAngles, compute_cartAnglesFromVector
+for headerName in [
+    "../constants/DataTypes",
+    "../constants/SolutionConstants",
+    "../adrules/CustomRules",
+    "../constants/DesignConstants",
+    "../utils/Utilities",
+    "../utils/Interpolation",
+    "../utils/Rotations",
+    "../struct/EBBeam",
+    "../utils/Preprocessing",
+    "../hydro/Unsteady",
+    "../hydro/VPM",
+    "../solvers/NewtonRaphson",
+    "../ComputeHydroFunctions",
+]
+    include(headerName * ".jl")
+end
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
+# const NPT_WING = 40 # this is known to be accurate
+const NPT_WING = 20
+
+export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
+    compute_KS, GRAV
 
 # ==============================================================================
 #                         Structs
 # ==============================================================================
-struct LiftingLineMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF},TH<:AbstractArray{TF,3}}
+struct LiftingLineMesh{T<:Number,TF<:Number,TI,TA<:AbstractVector,TM<:AbstractMatrix,TH<:AbstractArray}
     """
     Only geometry and mesh information
+    Coordinates use the midchord root airfoil as the origin
     """
     nodePts::TM # LL node points
-    collocationPts::TM # Control points
-    jointPts::TM # TV joint points
+    collocationPts::TM # Control points [3 x npt]
+    jointPts::AbstractMatrix # TV joint points
     npt_wing::TI # Number of wing points
-    localChords::TA # Local chord lengths of the panel edges [m]
-    localChordsCtrl::TA # Local chord lengths of the control points [m]
+    localChords::AbstractVector # Local chord lengths of the panel edges [m]
+    localChordsCtrl::AbstractVector # Local chord lengths of the control points [m]
     sectionVectors::TM # Nondimensional section vectors, "dζi" in paper
     sectionLengths::TA # Section lengths
     sectionAreas::TA # Section areas
     # HydroProperties # Hydro properties at the cross sections
     npt_airfoil::TI # Number of airfoil points
     span::TF # Span of one wing
-    planformArea::TF
-    SRef::TF # Reference area [m^2]
-    AR::TF # Aspect ratio
-    rootChord::TF # Root chord [m]
-    sweepAng::TF # Wing sweep angle [rad]
-    rc::TF # Finite-core vortex radius (viscous correction) [m]
+    # planformArea::TF
+    # SRef::TF # Reference area [m^2]
+    # AR::TF # Aspect ratio
+    # span::Number # Span of one wing
+    planformArea::Number
+    SRef::Number # Reference area [m^2]
+    AR::Number # Aspect ratio
+    rootChord::Number # Root chord [m]
+    # sweepAng::TF # Wing sweep angle [rad]
+    sweepAng::Number # Wing sweep angle [rad]
+    rc::T # Finite-core vortex radius (viscous correction) [m]
     wing_xyz_eff::TH # Effective wing LAC coordinates per control point
     wing_joint_xyz_eff::TH # Effective TV joint locations per control point
-    local_sweeps::TA
+    local_sweeps::AbstractVector
     local_sweeps_eff::TM
-    local_sweeps_ctrl::TA
+    local_sweeps_ctrl::AbstractVector
 end
 
 struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
@@ -76,12 +109,12 @@ struct LiftingLineHydro{TF,TM<:AbstractMatrix{TF}}
     airfoil_ctrl_xy::TM # Airfoil control points
 end
 
-struct FlowConditions{TF,TC,TA<:AbstractVector{TC}}
-    Uinfvec::TA # Freestream velocity [m/s] [U, V, W]
+struct FlowConditions{TF,TC,TA<:AbstractVector}
+    Uinfvec::Vector # Freestream velocity [m/s] [U, V, W]
     Uinf::TC # Freestream velocity magnitude [m/s]
     uvec::TA # Freestream velocity unit vector
     alpha::TC # Angle of attack [rad]
-    beta::TF
+    beta::Number
     rhof::TF # Freestream density [kg/m^3]
     depth::TF
 end
@@ -91,11 +124,11 @@ struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     Nondimensional and dimensional outputs of interest
     Redimensionalize with the reference area and velocity
     """
-    Fdist::TM # Loads distribution vector (Dimensional) [N]
+    Fdist::TM # Loads distribution vector (Dimensional) [N] [3 x npt]
     Γdist::TA # Converged circulation distribution (Γᵢ) [m^2/s]
     cla::TA # Spanwise lift slopes [1/rad]
     cl::TA # Spanwise lift coefficients
-    F::TA # Total integrated loads vector [Fx, Fy, Fz, Mx, My, Mz]
+    F::TA # Total integrated loads vector [Fx, Fy, Fz] 
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
     CDi::TF # Induced drag coefficient (aligned w/ freestream)
     CS::TF # Side force coefficient
@@ -204,7 +237,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
 
     airfoilXY = copy(transpose(hcat(airfoilX, airfoilY)))
     airfoilCtrlXY = copy(transpose(hcat(airfoilCtrlX, airfoilCtrlY)))
-    npt_wing = 40
+    npt_wing = NPT_WING
     npt_airfoil = 99
 
     rootChord = chordVec[1]
@@ -213,7 +246,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     Uvec = [cos(deg2rad(α0)), 0.0, sin(deg2rad(α0))] * solverOptions["Uinf"]
 
     # Rotate by RH rule by leeway angle
-    Tz = Rotations.get_rotate3dMat(deg2rad(β0), "z")
+    Tz = get_rotate3dMat(deg2rad(β0), "z")
     Uvec = Tz * Uvec
 
     if solverOptions["use_freeSurface"]
@@ -230,7 +263,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
 end
 
-function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
+function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -238,6 +271,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
 
     Inputs:
     -------
+    displacements : array
+        The displacements of the wing collocation nodes [m] size 6 x npt_wing.
+        This modifies the collocation nodes
     wingSpan : scalar
         The span of the wing [m] (after sweep is applied, so this is not the structural span!)
     sweepAng : scalar
@@ -295,8 +331,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     #     Preproc stuff
     # ************************************************
     # --- Structural span is not the same as aero span ---
-    idxTip = Preprocessing.get_tipnode(midchords)
-    aeroWingSpan = Preprocessing.compute_aeroSpan(midchords, idxTip)
+    idxTip = get_tipnode(midchords)
+    aeroWingSpan = compute_aeroSpan(midchords, idxTip)
+    # println("Aero span: $(aeroWingSpan) m")
 
     # wingSpan = span * cos(sweepAng) #no
 
@@ -309,15 +346,6 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     # Wing area
     SRef = rootChord * aeroWingSpan * (1 + taperRatio) * 0.5
     AR = aeroWingSpan^2 / SRef
-
-    translation = zeros(3)
-    if !isnothing(options) && haskey(options, "translation")
-        translation = options["translation"] # [m] 3d translation of the wing
-    end
-    # Apply translation wrt midchords TODO: this translation is actually incorrect for swept wings. need to revise this
-    translatMatCtrl = repeat(reshape(translation, size(translation)..., 1), 1, npt_wing)
-    translatMat = repeat(reshape(translation, size(translation)..., 1), 1, npt_wing + 1)
-    #     wing_ctrl_xyz[:, ii] .+= translation #- 0.25 * vec([local_chords_ctrl[ii] + rootChord, 0.0, 0.0])
 
     # ************************************************
     #     Make wing coordinates
@@ -359,6 +387,39 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     local_dchords = 2.0 * rootChord * (-iTR) * sign.(wing_xyz_ycomp[1, :]) / aeroWingSpan
     local_dchords_ctrl = 2.0 * rootChord * (-iTR) * sign.(wing_ctrl_xyz_ycomp[1, :]) / aeroWingSpan
 
+    # ---------------------------
+    #   Shift collocation points
+    # ---------------------------
+    # --- Handle displacements of collocation nodes ---
+    size(displacements) == (6, npt_wing) || error("Displacements must be 6 x $(npt_wing). Size is $(size(displacements))")
+    translatDisplCtrl = displacements[1:3, :]
+    translatDisplCtrl[ZDIM, :] .= 0.0 # Ignore any effect of dihedral on the wing GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+    rotationDisplacementsCtrl = displacements[4:end, :]
+    # For the displacements on the panel edges, we'll use the extrapolated edge values for the tips and the average for the inner vals
+    midVals = (translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end]) * 0.5
+    midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
+    portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
+    halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
+    portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
+    # println("Port tip: $(portTip)")
+    stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
+    halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
+    stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
+    # println("Stbd tip: $(stbdTip)")
+    translatDispl = cat(portTip, midVals, stbdTip, dims=2)
+
+    # --- x shift setup ---
+    # Apply translation wrt using the root airfoil midchord as origin 
+    # This origin is different from Reid 2020 who used the root airfoil LE as the origin
+    rootsemichord = 0.5 * rootChord
+    translationVec = zeros(3) - vec([rootsemichord, 0.0, 0.0])
+    if !isnothing(options) && haskey(options, "translation")
+        translationVec = options["translation"] - vec([rootsemichord, 0.0, 0.0]) # [m] 3d translation of the wing
+    end
+    translatMatCtrl = repeat(reshape(translationVec, size(translationVec)..., 1), 1, npt_wing) + translatDisplCtrl # [3, npt_wing]
+    translatMat = repeat(reshape(translationVec, size(translationVec)..., 1), 1, npt_wing + 1) + translatDispl # [3, npt_wing + 1]
+
+
     # --- Locus of aerodynamic centers (LAC) ---
     LAC = compute_LAC(AR, LLHydro, wing_xyz_ycomp[1, :], local_chords, rootChord, sweepAng, aeroWingSpan)
     wing_xyz = cat(reshape(LAC, 1, size(LAC)...), wing_xyz_ycomp, Zeros, dims=1) .+ translatMat
@@ -368,14 +429,17 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
 
     # Need a mess of LAC's for each control point
     LACeff = compute_LACeffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
-    # This is a 3D array
+    # This is a 3D array of a shape
     # wing_xyz_eff = zeros(3, npt_wing, npt_wing + 1)
-    wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...)
+    # The idea is that for the 'npt_wing' control points
+    # Make sure to also add the translation vector to the effective locus of aerodynamic centers
+    wing_xyz_eff_xcomp = reshape(LACeff, 1, size(LACeff)...) .+ translationVec[XDIM]
     wing_xyz_eff_ycomp = reshape(repeat(transpose(wing_xyz[YDIM, :]), npt_wing, 1), 1, npt_wing, npt_wing + 1)
+    wing_xyz_eff_zcomp = reshape(repeat(transpose(wing_xyz[ZDIM, :]), npt_wing, 1), 1, npt_wing, npt_wing + 1)
     wing_xyz_eff = cat(
         wing_xyz_eff_xcomp,
         wing_xyz_eff_ycomp,
-        zeros(size(wing_xyz_eff_ycomp)),
+        wing_xyz_eff_zcomp,
         dims=1)
 
     # --- Compute local sweeps ---
@@ -389,6 +453,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     fprimeEff = compute_dLACdseffective(AR, LLHydro, wing_xyz[YDIM, :], wing_ctrl_xyz[YDIM, :], local_chords, local_chords_ctrl, local_dchords, local_dchords_ctrl, σ, sweepAng, rootChord, aeroWingSpan)
     localSweepEff = -atan_cs_safe.(fprimeEff, ones(size(fprimeEff)))
 
+    # --- Compute local dihedrals ---
+    # TODO: need to do this eventually to generalize the code.
+
     # --- Other section properties ---
     sectionVectors = wing_xyz[:, 1:end-1] - wing_xyz[:, 2:end] # dℓᵢ
 
@@ -400,23 +467,38 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     # ---------------------------
     #   Aero section properties
     # ---------------------------
-    # TODO: you can add the twist distribution here probably
     # Where the 2D VPM comes into play
     Airfoils = Vector(undef, npt_wing)
     AirfoilInfluences = Vector(undef, npt_wing)
     Airfoils_z = Zygote.Buffer(Airfoils)
     AirfoilInfluences_z = Zygote.Buffer(AirfoilInfluences)
     for (ii, sweep) in enumerate(localSweepsCtrl)
+
+        twistAngle = rotationDisplacementsCtrl[YDIM, ii]
+
+        # The airfoils are rotated by the negative twist angle to be consistent with the wing
+        ryMat = get_rotate3dMat(-twistAngle, "z")[1:2, 1:2]
+        airfoil_xy_rot = ryMat * airfoil_xy
+        airfoil_ctrl_xy_rot = ryMat * airfoil_ctrl_xy
+
+        # p1 = plot(airfoil_xy_rot[XDIM, :], airfoil_xy_rot[YDIM, :], aspect_ratio=:equal, label="$(twistAngle)")
+        # p2 = plot(airfoil_ctrl_xy_rot[XDIM, :], airfoil_ctrl_xy_rot[YDIM, :], aspect_ratio=:equal)
+        # plot(p1, p2, layout=(1, 2), size=(1200, 400))
+
+        # savefig("airfoil_rotated_$(ii).png")
+
         # Pass in copies because this routine was modifying the input
-        Airfoil, Airfoil_influences = VPM.setup(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep)
+        Airfoil, Airfoil_influences = setup_VPM(copy(airfoil_xy_rot[XDIM, :]), copy(airfoil_xy_rot[YDIM, :]), copy(airfoil_ctrl_xy_rot), sweep)
         Airfoils_z[ii] = Airfoil
         AirfoilInfluences_z[ii] = Airfoil_influences
-        # println("Airfoil control: $(airfoil_ctrl_xy[XDIM,:])")
+        # Airfoils[ii] = Airfoil
+        # AirfoilInfluences[ii] = Airfoil_influences
     end
-    # # List comprehension version
-    # Airfoils, AirfoilInfluences = [VPM.setup(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep) for sweep in localSweepsCtrl]
     Airfoils = copy(Airfoils_z)
     AirfoilInfluences = copy(AirfoilInfluences_z)
+
+    # # List comprehension version
+    # Airfoils, AirfoilInfluences = [ setup_VPM(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep) for sweep in localSweepsCtrl]
 
     # ---------------------------
     #   TV joint locations
@@ -428,24 +510,26 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords;
     wing_joint_xyz_xcomp = reshape(wing_xyz[XDIM, :] + δ * local_chords .* cos.(localSweeps), 1, npt_wing + 1)
     wing_joint_xyz_eff_xcomp = reshape(wing_xyz_eff[XDIM, :, :] + δ * local_chords_colmat .* cos.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
-
     wing_joint_xyz_ycomp = reshape(wing_xyz[YDIM, :] + δ * local_chords .* sin.(localSweeps), 1, npt_wing + 1)
     wing_joint_xyz_eff_ycomp = reshape(transpose(wing_xyz[YDIM, :]) .+ δ * local_chords_colmat .* sin.(localSweepEff), 1, npt_wing, npt_wing + 1)
 
-    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, Zeros, dims=1)
-    wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, zeros(1, npt_wing, npt_wing + 1), dims=1)
+    wing_joint_xyz_zcomp = reshape(wing_xyz[ZDIM, :], 1, npt_wing + 1)
+    wing_joint_xyz_eff_zcomp = reshape(wing_xyz_eff[ZDIM, :, :], 1, npt_wing, npt_wing + 1)
 
-    # println("wing_joint_xyz_eff y: $(wing_joint_xyz_eff[YDIM,1,2:end])")
-    # println("wing_ctrl_xyz x: $(wing_ctrl_xyz[XDIM,:])")
-
-    # println("local sweep values [deg]: $(rad2deg.(localSweeps))")
+    wing_joint_xyz = cat(wing_joint_xyz_xcomp, wing_joint_xyz_ycomp, wing_joint_xyz_zcomp, dims=1)
+    wing_joint_xyz_eff = cat(wing_joint_xyz_eff_xcomp, wing_joint_xyz_eff_ycomp, wing_joint_xyz_eff_zcomp, dims=1)
 
     # Store all computed quantities here
     LLMesh = LiftingLineMesh(wing_xyz, wing_ctrl_xyz, wing_joint_xyz, npt_wing, local_chords, local_chords_ctrl, ζ, sectionLengths, sectionAreas,
         npt_airfoil, aeroWingSpan, SRef, SRef, AR, rootChord, sweepAng, rc, wing_xyz_eff, wing_joint_xyz_eff,
         localSweeps, localSweepEff, localSweepsCtrl)
 
-    FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof, options["depth"])
+    submergence = 20.0
+    if !isnothing(options) && haskey(options, "depth")
+        submergence = options["depth"]
+    end
+
+    FlowCond = FlowConditions(Uvec, Uinf, uvec, alpha, beta, rhof, submergence)
 
     return LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences
 end
@@ -533,14 +617,7 @@ function compute_LACeffective(AR, LLHydro, y, y0, c, c_y0, dc, dc_y0, σ, Λ, cr
 
         LACeff = (1.0 .- blend) .* LACwork .+
                  blend .* (fprime0 .* (ywork .- y0work) .+ LAC0work)
-        # println("c: $(c)")
-        # println("cr: $(cr)")
-        # println("sweep: $(Λ)")
-        # println("y: $(y)")
-        # println("y0: $(y0)")
-        # println("LACwork: $(LACwork[1,:])")
-        # println("LAC0work: $(LAC0work[:,1])")
-        # println("LACeff: $(LACeff[1,:])")
+
         return LACeff
     else
         println("Model not implemented yet")
@@ -589,17 +666,6 @@ function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann
     else
         println("Model not implemented yet")
     end
-
-    # println("Λk: $(Λₖ)")
-    # println("K: $(K)")
-    # println("====================================")
-    # println("y: $(y)")
-    # println("c: $(c)")
-    # println("tanl: $(tanl)")
-    # println("lam: $(lam)")
-    # println("lamp: $(lamp)")
-    # println("dx:\n $(dx)") # good
-    # println("====================================")
 
     return dx
 end
@@ -698,38 +764,9 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
-    uinf = reshape(FlowCond.uvec, 3, 1, 1)
-    uinfMat = repeat(uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
-    ∂uinf = reshape(∂FlowCond.uvec, 3, 1, 1)
-    ∂uinfMat = repeat(∂uinf, 1, LLMesh.npt_wing, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
-
-    P1 = LLMesh.wing_joint_xyz_eff[:, :, 2:end]
-    P2 = LLMesh.wing_xyz_eff[:, :, 2:end]
-    P3 = LLMesh.wing_xyz_eff[:, :, 1:end-1]
-    P4 = LLMesh.wing_joint_xyz_eff[:, :, 1:end-1]
-
-    ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
-    ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
-
-
-    # Mask for the bound segment (npt_wing x npt_wing)
-    bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
-
-    influence_straightsega = compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
-    influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
-    influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
-
-    ∂influence_semiinfa = compute_straightSemiinfinite(P1, ∂uinfMat, ctrlPtMat, LLMesh.rc)
-    ∂influence_semiinfb = compute_straightSemiinfinite(P4, ∂uinfMat, ctrlPtMat, LLMesh.rc)
-
     TV_influence = compute_TVinfluences(FlowCond, LLMesh)
 
-    ∂TV_influence = -∂influence_semiinfa +
-                    influence_straightsega +
-                    influence_straightsegb +
-                    influence_straightsegc +
-                    ∂influence_semiinfb
-
+    ∂TV_influence = compute_TVinfluences(∂FlowCond, LLMesh)
 
     # ---------------------------
     #   Solve for circulation
@@ -756,24 +793,177 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
     # --- Nonlinear solve for circulation distribution ---
-    Gconv, residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
+    Gconv, _, _ = do_newton_raphson(compute_LLresiduals, compute_LLresJacobian, g0, nothing;
         solverParams=LLNLParams, is_verbose=is_verbose,
-        # mode="CS" # 
         mode="FiDi" # this is the fastest
-        # mode="Analytic"
     )
-    # println(Gconv)
-    # println("Secondary solve for lift slope")
-    ∂Gconv, ∂residuals = SolverRoutines.converge_resNonlinear(compute_LLresiduals, compute_LLJacobian, g0;
+    ∂Gconv, _, _ = do_newton_raphson(compute_LLresiduals, compute_LLresJacobian, g0, nothing;
         solverParams=∂LLNLParams, is_verbose=is_verbose,
-        #  is_cmplx=true,
-        # mode="CS" # 
-        mode="FiDi"  # this is the fastest
-        # mode="ANALYTIC"
+        mode="FiDi" # this is the fastest
     )
 
+    DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
+
+    # --- Compute the lift curve slope ---
+    # ∂G∂α = imag(∂Gconv) / Δα # CS
+    ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
+    ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
+
+    return DimForces, Γdist, ∂cl∂α, clvec, IntegratedForces, CL, CDi, CS
+
+end
+
+function compute_liftslopes(Gconv::AbstractVector, ∂Gconv::AbstractVector, LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences, appendageOptions, solverOptions)
+    """
+    Compute the lift curve slope of the wing at the converged solution
+    """
+
+    # ************************************************
+    #     Method 1
+    # ************************************************
+    # --- Compute the lift curve slope ---
+    ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
+    ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
+
+    # # TODO: perturb beta as well to get the lift curve slope wrt to sideslip angle for the strut sections
+
+    # # ************************************************
+    # #     Method 2
+    # # ************************************************
+    # ∂α = FlowCond.alpha + Δα # FD
+
+    # ∂Uinfvec = FlowCond.Uinf * [cos(∂α), 0, sin(∂α)]
+    # ∂Uinf = norm_cs_safe(∂Uinfvec)
+    # ∂uvec = ∂Uinfvec / FlowCond.Uinf
+    # ∂FlowCond = FlowConditions(∂Uinfvec, ∂Uinf, ∂uvec, ∂α, FlowCond.beta, FlowCond.rhof, FlowCond.depth)
+
+    # # ---------------------------
+    # #   Calculate influence matrix
+    # # ---------------------------
+    # ∂TV_influence = compute_TVinfluences(∂FlowCond, LLMesh)
+
+    # # ---------------------------
+    # #   Solve for circulation
+    # # ---------------------------
+    # # --- Pack up parameters for the NL solve ---
+    # ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
+
+    # # --- Nonlinear solve for circulation distribution ---
+    # ∂Gconv, ∂residuals = do_newton_raphson(compute_LLresiduals, compute_LLresJacobian, Gconv, nothing;
+    #     solverParams=∂LLNLParams, is_verbose=false,
+    #     appendageOptions=appendageOptions, solverOptions=solverOptions,
+    #     mode="FiDi"  # this is the fastest
+    # )
+    # # --- Compute the lift curve slope ---
+    # ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
+    # ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl # this thing changes when you change the mesh
+
+    return ∂cl∂α
+end
+
+function compute_dcladXpt(Gconv_i, Gconv_f, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="FiDi")
+    """
+    Derivative of the lift slope wrt the design variables
+    """
+
+    dcldX_f = zeros(npt_wing, length(ptVec))
+    dcldX_i = zeros(npt_wing, length(ptVec))
+    appendageParams_da = copy(appendageParams)
+    appendageParams_da["alfa0"] = appendageParams["alfa0"] + Δα
+
+    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+
+        dh = 1e-7
+        idh = 1 / dh
+
+        # ************************************************
+        #     First time with current angle of attack
+        # ************************************************
+        LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+        f_i = LLOutputs_i.cl
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+            f_f = LLOutputs_f.cl
+
+            dcldX_i[:, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+
+        # writedlm("dcldX_i-$(mode).csv", dcldX_i, ',')
+
+        # ************************************************
+        #     Second time with perturbed angle of attack
+        # ************************************************
+
+        LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+        f_i = LLOutputs_i.cl
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
+            f_f = LLOutputs_f.cl
+            dcldX_f[:, ii] = (f_f - f_i) * idh
+
+            ptVec[ii] -= dh
+        end
+        # writedlm("dcldX_f-$(mode).csv", dcldX_f, ',')
+
+
+    elseif uppercase(mode) == "IMPLICIT"
+        function compute_directMatrix(∂r∂u, ∂r∂xPt)
+
+            Φ = ∂r∂u \ ∂r∂xPt
+            return Φ
+        end
+        # ************************************************
+        #     First time with current converged solution
+        # ************************************************
+
+        # println("∂r∂Γ") # 2 sec, so it's fast
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv_i, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+        # println("∂r∂Xpt") # ACCELERATE THIS!!?
+        # Takes about 4 sec in pure julia and about 20sec from python
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv_i, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions;
+            # mode="FAD",
+            mode="FiDi", # fastest
+        )
+
+        ∂cl∂Γ = diagm(2 * LLOutputs_i.cl ./ LLOutputs_i.Γdist)
+        ∂cl∂X = zeros(npt_wing, length(ptVec)) # There's no dependence
+
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        dcldX_i = ∂cl∂X - ∂cl∂Γ * Φ
+
+
+        # ************************************************
+        #     Second time with perturbed angle of attack
+        # ************************************************
+
+        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv_f, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
+
+        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv_f, ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions)
+        ∂cl∂Γ = diagm(2 * LLOutputs_f.cl ./ LLOutputs_f.Γdist)
+
+        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+        dcldX_f = ∂cl∂X - ∂cl∂Γ * Φ
+
+    end
+
+    dcladXpt = (dcldX_f - dcldX_i) ./ Δα
+
+    return dcladXpt
+end
+
+function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
+    """
+    """
+
     Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-    ∂Gi = reshape(∂Gconv, 1, size(∂Gconv)...) # now it's a (1, npt) matrix
     Gjvji = TV_influence .* Gi
     Gjvjix = TV_influence[XDIM, :, :] * Gconv
     Gjvjiy = TV_influence[YDIM, :, :] * Gconv
@@ -785,20 +975,33 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
 
     ui = Gjvji .+ u∞ # Local velocities (nondimensional)
 
+    ζi = LLMesh.sectionVectors
+    dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
+    ux, uy, uz = FlowCond.uvec
+
     # This is the Biot--Savart law but nondimensional
     # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
     #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
-    uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-    uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+    # uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+    # uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+
+    uicrossζi_z = Zygote.Buffer(zeros(Number, 3, LLMesh.npt_wing))
+    for ii in 1:LLMesh.npt_wing
+        uicrossζi_z[:, ii] = -myCrossProd(ui[:, ii], ζi[:, ii])
+    end
+    uicrossζi = copy(uicrossζi_z)
+
     coeff = 2.0 / LLMesh.SRef
     NondimForces = coeff * (uicrossζi .* Gi) .* dAi
 
     # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
     IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+    # These integrated forces are about the origin
 
     Γdist = Gconv * FlowCond.Uinf # dimensionalize the circulation distribution
     # Forces = NondimForces .* LLMesh.SRef * 0.5 * ϱ * FlowCond.Uinf^2 # dimensionalize the forces
     # println(Γdist)
+    cmvec = compute_cm_LE(Gconv; solverParams=LLNLParams)
 
     # --- Dimensional forces ---
     Γi = Gi * FlowCond.Uinf
@@ -824,6 +1027,7 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     # --- Final outputs ---
     CL = -IntegratedForces[XDIM] * uz +
          IntegratedForces[ZDIM] * ux / (ux^2 + uz^2)
+
     CDi = IntegratedForces[XDIM] * ux +
           IntegratedForces[YDIM] * uy +
           IntegratedForces[ZDIM] * uz
@@ -834,16 +1038,18 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     ) / √(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
 
     # --- Compute the lift curve slope ---
-    # ∂G∂α = imag(∂Gconv) / Δα # CS
-    ∂G∂α = (∂Gconv .- Gconv) / Δα # Forward Difference
-    ∂cl∂α = 2 * ∂G∂α ./ LLMesh.localChordsCtrl
     clvec = 2 * Gconv ./ LLMesh.localChordsCtrl
 
-    return DimForces, Γdist, ∂cl∂α, clvec, IntegratedForces, CL, CDi, CS
-
+    return DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS
 end
 
 function compute_TVinfluences(FlowCond, LLMesh)
+    """
+    Outputs
+    -------
+    TV_influence : array_like (3, npt_wing, npt_wing)
+        Influence matrix for the lifting line system
+    """
     # ---------------------------
     #   Calculate influence matrix
     # ---------------------------
@@ -858,15 +1064,18 @@ function compute_TVinfluences(FlowCond, LLMesh)
     ctrlPts = reshape(LLMesh.collocationPts, size(LLMesh.collocationPts)..., 1)
     ctrlPtMat = repeat(ctrlPts, 1, 1, LLMesh.npt_wing) # end up with size (3, npt_wing, npt_wing)
 
-
     # Mask for the bound segment (npt_wing x npt_wing)
+    # This is a matrix of ones with a main diagonal of zeros
     bound_mask = ones(LLMesh.npt_wing, LLMesh.npt_wing) - diagm(ones(LLMesh.npt_wing))
 
+
+    # --- TODO: these routines will eventually need to be generalized to work with dihedral wings without relying on a small dz approximation ---
     influence_semiinfa = compute_straightSemiinfinite(P1, uinfMat, ctrlPtMat, LLMesh.rc)
     influence_straightsega = compute_straightSegment(P1, P2, ctrlPtMat, LLMesh.rc)
     influence_straightsegb = compute_straightSegment(P2, P3, ctrlPtMat, LLMesh.rc) .* reshape(bound_mask, 1, size(bound_mask)...)
     influence_straightsegc = compute_straightSegment(P3, P4, ctrlPtMat, LLMesh.rc)
     influence_semiinfb = compute_straightSemiinfinite(P4, uinfMat, ctrlPtMat, LLMesh.rc)
+
 
     TV_influence = -influence_semiinfa +
                    influence_straightsega +
@@ -925,7 +1134,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
 
     c_l::Vector{Number} = [
-        VPM.solve(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[1]
+        solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[1]
         for (ii, V_local) in enumerate(eachcol(Ui))
     ] # remember to only grab CL out of VPM solve
 
@@ -939,7 +1148,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     return dFimag - c_l
 end
 
-function compute_LLJacobian(Gi; solverParams, mode="Analytic")
+function compute_LLresJacobian(Gi; solverParams, mode="Analytic")
     """
     Compute the Jacobian of the nonlinear, nondimensional lifting line equation
 
@@ -1095,11 +1304,15 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
         ∂r∂G_z = Zygote.Buffer(∂r∂G)
         r_i = compute_LLresiduals(Gi; solverParams=solverParams)
         for ii in eachindex(Gi)
-            @ignore_derivatives(Gi[ii] += dh)
+            ChainRulesCore.ignore_derivatives(Gi[ii] += dh)
             r_f = compute_LLresiduals(Gi; solverParams=solverParams)
-            @ignore_derivatives(Gi[ii] -= dh)
+            ChainRulesCore.ignore_derivatives(Gi[ii] -= dh)
             # ∂r∂G[:, ii] = (r_f - r_i) / dh
             ∂r∂G_z[:, ii] = (r_f - r_i) / dh
+            # println("r:")
+            # println(r_f)
+            # println("r_i:")
+            # println(r_i)
         end
         # J = ∂r∂G
         J = copy(∂r∂G_z)
@@ -1115,13 +1328,13 @@ function compute_LLJacobian(Gi; solverParams, mode="Analytic")
     return J
 end
 
-function setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, appendageParams, solverOptions)
     """
     This is a convenience function that sets up the solver parameters for the lifting line algorithm from xPt
     """
 
-    LECoords, TECoords = Utilities.repack_coords(xPt, 3, length(xPt) ÷ 3)
-    midchords, chordVec, spanwiseVectors, sweepAng = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    LECoords, TECoords = repack_coords(xPt, 3, length(xPt) ÷ 3)
+    midchords, chordVec, spanwiseVectors, sweepAng = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
@@ -1129,7 +1342,7 @@ function setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendagePa
     depth0 = appendageParams["depth0"]
 
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
         npt_wing=npt_wing,
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -1147,124 +1360,291 @@ function setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendagePa
     return solverParams, FlowCond
 end
 
-function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
+# function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
 
-    function compute_cdi(Gconv)
-        # ---------------------------
-        #   Calculate influence matrix
-        # ---------------------------
+#     function compute_cdi(Gconv)
+#         # ---------------------------
+#         #   Calculate influence matrix
+#         # ---------------------------
+#         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+
+#         ux, uy, uz = FlowCond.uvec
+#         ζi = LLMesh.sectionVectors
+#         dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
+
+
+#         Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
+#         Gjvji = TV_influence .* Gi
+#         Gjvjix = TV_influence[XDIM, :, :] * Gconv
+#         Gjvjiy = TV_influence[YDIM, :, :] * Gconv
+#         Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
+#         Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
+#         Gjvji = permutedims(Gjvji, [2, 1])
+#         u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
+
+#         ui = Gjvji .+ u∞ # Local velocities (nondimensional)
+
+#         # This is the Biot--Savart law but nondimensional
+#         # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
+#         uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
+#         uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
+#         coeff = 2.0 / LLMesh.SRef
+
+#         # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
+#         IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+
+
+#         # --- Final outputs ---
+#         CDi = IntegratedForces[XDIM] * ux +
+#               IntegratedForces[YDIM] * uy +
+#               IntegratedForces[ZDIM] * uz
+#         return CDi
+#     end
+
+#     backend = AD.ReverseDiffBackend()
+#     ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+#     ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
+
+#     # Compares well with finite difference 2024-12-07
+#     # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+#     # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
+#     # println("∂cdi∂Γ: $(∂cdi∂Γ)")
+#     # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+
+#     return ∂cdi∂Γ
+# end
+
+function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
+
+    NFORCES = 3
+    NFORCECOEFFS = 3
+    NQUANTS = 1
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS + NPT_WING)
+    ∂I∂G = zeros(DTYPE, length(outputVector), length(Gconv))
+
+    function compute_outputsFromGConv(Gconv)
         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
+        DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
 
-        ux, uy, uz = FlowCond.uvec
-        ζi = LLMesh.sectionVectors
-        dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
+        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
 
+        # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
 
-        Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-        Gjvji = TV_influence .* Gi
-        Gjvjix = TV_influence[XDIM, :, :] * Gconv
-        Gjvjiy = TV_influence[YDIM, :, :] * Gconv
-        Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
-        Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
-        Gjvji = permutedims(Gjvji, [2, 1])
-        u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
-
-        ui = Gjvji .+ u∞ # Local velocities (nondimensional)
-
-        # This is the Biot--Savart law but nondimensional
-        # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
-        uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-        uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-        coeff = 2.0 / LLMesh.SRef
-
-        # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-        IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
-
-
-        # --- Final outputs ---
-        CDi = IntegratedForces[XDIM] * ux +
-              IntegratedForces[YDIM] * uy +
-              IntegratedForces[ZDIM] * uz
-        return CDi
+        return outputvector
     end
 
-    backend = AD.ReverseDiffBackend()
-    ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-    ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
+    if uppercase(mode) == "FAD"
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ForwardDiffBackend()
+        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
 
-    # Compares well with finite difference 2024-12-07
-    # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-    # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-    # println("∂cdi∂Γ: $(∂cdi∂Γ)")
-    # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
+    elseif uppercase(mode) == "FIDI"
+        # Compares well with finite difference 
+        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+    end
 
-    return ∂cdi∂Γ
+    return ∂I∂G
 end
 
 function compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
-    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    idxTip = Preprocessing.get_tipnode(LECoords)
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
     solverParams, FlowCond = setup_solverparams(ptVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
 
-    ∂r∂G = LiftingLine.compute_LLJacobian(Gconv; solverParams=solverParams, mode="CS")
+    ∂r∂G = LiftingLine.compute_LLresJacobian(Gconv; solverParams=solverParams, mode="CS")
     ∂r∂Γ = ∂r∂G / FlowCond.Uinf
 
     return ∂r∂Γ
 end
 
-function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
-    ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
 
-    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    idxTip = Preprocessing.get_tipnode(LECoords)
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
 
-    function compute_resFromXpt(xPt)
-        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+    function compute_resFromXpt(xPt, xDisplCol::AbstractVector)
+
+        displCol_in = reshape(xDisplCol, size(displCol)...)
+
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
 
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
         return resVec
     end
 
+    displVec = vec(displCol)
+
     # ************************************************
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
+        ∂r∂Xdispl = zeros(DTYPE, length(Gconv), length(displCol))
+        dh = 1e-4
 
-        resVec_i = compute_resFromXpt(ptVec) # initialize the solver
+        resVec_i = compute_resFromXpt(ptVec, displVec) # initialize the solver
 
         # @inbounds begin # no speedup
         for ii in eachindex(ptVec)
             ptVec[ii] += dh
 
-            resVec_f = compute_resFromXpt(ptVec)
+            resVec_f = compute_resFromXpt(ptVec, displVec)
 
             ptVec[ii] -= dh
 
             ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
         end
+
+        for ii in eachindex(displVec)
+            displVec[ii] += dh
+
+            resVec_f = compute_resFromXpt(ptVec, displVec)
+
+            displVec[ii] -= dh
+
+            ∂r∂Xdispl[:, ii] = (resVec_f - resVec_i) / dh
+
+        end
         # end
-    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to 4 sec in pure julia
-        # backend = AD.ReverseDiffBackend()
-        backend = AD.ZygoteBackend()
+    elseif uppercase(mode) == "CS" # does not work
+        dh = 1e-100
+
+        ptVecCS = complex(copy(ptVec))
+
+        for ii in eachindex(ptVec)
+            ptVecCS[ii] += 1im * dh
+            resVec_f = compute_resFromXpt(ptVecCS)
+            ptVecCS[ii] -= 1im * dh
+            ∂r∂Xpt[:, ii] = imag(resVec_f) / dh
+        end
+    elseif uppercase(mode) == "RAD" # It's broken
+
+        backend = AD.ReverseDiffBackend() # stack overflow errors?
+        # backend = AD.ZygoteBackend() # Broken and does not work without buffering over VPM solve
         ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
 
     elseif uppercase(mode) == "FAD"
         backend = AD.ForwardDiffBackend()
-        ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
+        # ∂r∂Xpt, = AD.jacobian(backend, (xPt, xDisplCol) -> compute_resFromXpt(xPt, xDisplCol), ptVec, vec(displCol))
+        ∂r∂Xpt = ForwardDiff.jacobian((xPt) -> compute_resFromXpt(xPt, displVec), ptVec)
+        ∂r∂Xdispl = ForwardDiff.jacobian((xDisplCol) -> compute_resFromXpt(ptVec, xDisplCol), displVec)
 
     end
 
-    return ∂r∂Xpt
+    return ∂r∂Xpt, ∂r∂Xdispl
+end
+
+function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    """
+    Compute cost function Jacobian
+    """
+
+    NFORCES = 3
+    NFORCECOEFFS = 3
+    NQUANTS = 1
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS + NPT_WING)
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
+
+    function compute_OutputFromXpt(xPt, xDisplCol::AbstractVector)
+
+        displCol_in = transpose(reshape(xDisplCol, length(xDisplCol) ÷ 6, 6)) # this is the correct order
+
+        solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
+
+        TV_influence = solverParams.TV_influence
+        LLMesh = solverParams.LLSystem
+
+        DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, solverParams)
+
+        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+
+        # THIS ORDER MATTER. Check CostFuncsInOrder variable
+        # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
+
+        return outputVector
+    end
+
+    # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+    # displCol is of shape (6, NPT_WING)
+    # We need to make sure it is ordered such that we loop over NPT_WING first, then the 6 elements
+    displVec = vec(transpose(displCol))
+
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        ∂I∂Xpt = zeros(DTYPE, length(outputVector), length(ptVec))
+        ∂I∂Xdispl = zeros(DTYPE, length(outputVector), length(displCol))
+        dh = 1e-4
+
+        f_i = compute_OutputFromXpt(ptVec, displVec)
+
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            f_f = compute_OutputFromXpt(ptVec, displVec)
+
+            ptVec[ii] -= dh
+
+            ∂I∂Xpt[:, ii] = (f_f - f_i) / dh
+        end
+        for ii in eachindex(displVec)
+            displVec[ii] += dh
+
+            f_f = compute_OutputFromXpt(ptVec, displVec)
+
+            displVec[ii] -= dh
+
+            ∂I∂Xdispl[:, ii] = (f_f - f_i) / dh
+        end
+    elseif uppercase(mode) == "CS" # broken right now
+
+        dh = 1e-100
+
+        ptVecCS = complex(copy(ptVec))
+        for ii in eachindex(ptVec)
+            ptVecCS[ii] += 1im * dh
+
+            f_f = compute_OutputFromXpt(ptVecCS)
+
+            ptVecCS[ii] -= 1im * dh
+
+            ∂I∂Xpt[:, ii] = imag(f_f) / dh
+        end
+
+    elseif uppercase(mode) == "RAD" # not working
+        backend = AD.ReverseDiffBackend()
+        # backend = AD.ZygoteBackend()
+        ∂I∂Xpt, = AD.jacobian(backend, x -> compute_OutputFromXpt(x), ptVec)
+        println("shape", size(∂I∂Xpt))
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+
+
+        ∂I∂Xpt, = AD.jacobian(backend, xPt -> compute_OutputFromXpt(xPt, displVec), ptVec)
+        ∂I∂Xdispl, = AD.jacobian(backend, xDispl -> compute_OutputFromXpt(ptVec, xDispl), displVec)
+    end
+
+    # println("writing ∂I∂Xpt-$(mode).csv")
+    # for ii in eachindex(outputVector)
+    #     
+    #     writedlm("∂I∂Xpt-$(ii)-$(mode).csv", ∂I∂Xpt[ii, :], ",")
+    # end
+
+    return ∂I∂Xpt, ∂I∂Xdispl
 end
 
 function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
     ∂cdi∂Xpt = zeros(DTYPE, 1, length(ptVec))
-    LECoords, _ = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    idxTip = Preprocessing.get_tipnode(LECoords)
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
     function compute_cdifromxpt(xPt)
 
         solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
@@ -1306,7 +1686,7 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     #     Finite difference
     # ************************************************
     if uppercase(mode) == "FIDI"
-        dh = 1e-5
+        dh = 1e-4
         CDi_i = compute_cdifromxpt(ptVec)
 
         for ii in eachindex(ptVec)
@@ -1329,6 +1709,138 @@ function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendage
     return ∂cdi∂Xpt
 end
 
+function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
+    ∂collocationPt∂Xpt = zeros(DTYPE, NPT_WING * 3, length(ptVec))
+
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
+
+    function compute_collocationFromXpt(xPt)
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, zeros(6, NPT_WING), appendageOptions, appendageParams, solverOptions)
+
+        # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+        outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
+
+        return outputVec
+    end
+
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-4 # do not use smaller finite difference steps
+
+        resVec_i = compute_collocationFromXpt(ptVec) # initialize the solver
+
+        # @inbounds begin # no speedup
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+
+            resVec_f = compute_collocationFromXpt(ptVec)
+
+            ptVec[ii] -= dh
+
+            ∂collocationPt∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+        end
+        # end
+    elseif uppercase(mode) == "CS"
+        dh = 1e-100
+
+        ptVecCS = complex(copy(ptVec))
+
+        for ii in eachindex(ptVec)
+            ptVecCS[ii] += 1im * dh
+            resVec_f = compute_collocationFromXpt(ptVecCS)
+            ptVecCS[ii] -= 1im * dh
+            ∂collocationPt∂Xpt[:, ii] = imag(resVec_f) / dh
+        end
+    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to a few sec in pure Fidi julia
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteBackend()
+        ∂collocationPt∂Xpt, = AD.jacobian(backend, x -> compute_collocationFromXpt(x), ptVec)
+
+    elseif uppercase(mode) == "FAD" # use this, same speed as Fidi
+        backend = AD.ForwardDiffBackend()
+        ∂collocationPt∂Xpt, = AD.jacobian(backend, x -> compute_collocationFromXpt(x), ptVec)
+
+    end
+
+    return ∂collocationPt∂Xpt
+end
+
+function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+
+    ∂collocationPt∂displCol = zeros(DTYPE, NPT_WING * 3, length(displCol))
+
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
+
+    function compute_collocationFromdisplCol(xDispl)
+
+        xdisplCol = transpose(reshape(xDispl, length(xDispl) ÷ 6, 6)) # this is the correct order
+        # println("xdisplCol: $(xdisplCol)")
+        solverParams, _ = setup_solverparams(ptVec, nodeConn, idxTip, xdisplCol, appendageOptions, appendageParams, solverOptions)
+
+        outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
+
+        return outputVec
+    end
+
+    # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
+    # displCol is of shape (6, NPT_WING)
+    # We need to make sure it is ordered such that we loop over NPT_WING first, then the 6 elements
+    displVec = vec(transpose(displCol))
+
+    # ************************************************
+    #     Finite difference
+    # ************************************************
+    if uppercase(mode) == "FIDI"
+        dh = 1e-4 # do not use smaller finite difference steps
+
+        resVec_i = compute_collocationFromdisplCol(displVec) # initialize the solver
+
+        # @inbounds begin # no speedup
+        for ii in eachindex(displVec)
+
+            # only do it for the first 3 elements
+            # if mod(ii, 6) in [1, 2, 3]
+
+            displVec[ii] += dh
+            # println("displCol perturbed:")
+            # show(stdout, "text/plain", transpose(reshape(displVec, length(displVec) ÷ 6, 6)))
+            # println("")
+
+
+            resVec_f = compute_collocationFromdisplCol(displVec)
+
+            displVec[ii] -= dh
+
+            ∂collocationPt∂displCol[:, ii] = (resVec_f - resVec_i) / dh
+            # println("column of jacobian:")
+            # println((resVec_f - resVec_i) / dh)
+            # end
+
+        end
+        # end
+    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to a few sec in pure Fidi julia
+        # backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteBackend()
+        ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
+
+    elseif uppercase(mode) == "FAD" # use this, same speed as Fidi
+        backend = AD.ForwardDiffBackend()
+        ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
+
+    elseif uppercase(mode) == "ANALYTIC"
+        for ii in 1:NPT_WING*3
+            ∂collocationPt∂displCol[ii, ii] = 1.0
+        end
+    end
+
+    return ∂collocationPt∂displCol
+end
+
 function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     """
     Compute the influence of a straight semi-infinite vortex filament
@@ -1336,10 +1848,12 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     -------
     startpt : ndarray
         Starting point of the semi-infinite vortex filament
+        This should be on a panel edge
     endvec : Array{Float64, 3}
         Unit vector of the semi-infinite vortex filament
     pt : ndarray
-        Point at which the influence is computed (field point)
+        Point at which the influence is computed (field point).
+        This should match where the collocation points are
     rc : scalar
         Vortex core radius (viscous correction)
 
@@ -1350,11 +1864,20 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     """
 
 
-    r1 = pt .- startpt
+    r1 = pt .- startpt # this is an array of shape (3, NPT_WING, NPT_WING) describing the vectors from the semi-inf vortex filament to the field points
+    # println("r1")
+    # show(stdout, "text/plain", r1[ZDIM, :, :]) # wrong
+    # println("")
+    # # --- Hack it so the z distances are zero (should generalize in the future) ---
+    # # The assumption here is that collocation points and horseshoe vortices are all at the same 'z', which is only valid for small amounts of dihedral
+    # r1[ZDIM, :, :] .= 0.0
+
     r1mag = .√(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     uinf = endvec
 
-    r1dotuinf = r1[XDIM, :, :] .* uinf[XDIM, :, :] .+ r1[YDIM, :, :] .* uinf[YDIM, :, :] .+ r1[ZDIM, :, :] .* uinf[ZDIM, :, :]
+    r1dotuinf = r1[XDIM, :, :] .* uinf[XDIM, :, :] .+
+                r1[YDIM, :, :] .* uinf[YDIM, :, :] .+
+                r1[ZDIM, :, :] .* uinf[ZDIM, :, :]
 
     r1crossuinf = cross3D(r1, uinf)
     uinfcrossr1 = cross3D(uinf, r1)
@@ -1365,7 +1888,8 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     # Reshape d to have a singleton dimension for correct broadcasting
     d = reshape(d, 1, size(d)...)
 
-    numerator = uinfcrossr1 .* (d .^ 2 ./ .√(rc^4 .+ d .^ 4))
+    numerator = uinfcrossr1 .*
+                (d .^ 2 ./ .√(rc^4 .+ d .^ 4))
 
     denominator = (4π * r1mag .* (r1mag .- r1dotuinf))
     denominator = reshape(denominator, 1, size(denominator)...)
@@ -1373,7 +1897,7 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
@@ -1409,6 +1933,12 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     r1 = pt .- startpt
     r1mag = .√(r1[XDIM, :, :] .^ 2 + r1[YDIM, :, :] .^ 2 + r1[ZDIM, :, :] .^ 2)
     r2 = pt .- endpt
+
+    # # --- Hack it so the z distances are zero (should generalize in the future) ---
+    # # The assumption here is that collocation points and horseshoe vortices are all at the same 'z', which is only valid for small amounts of dihedral
+    # r1[ZDIM, :, :] .= 0.0
+    # r2[ZDIM, :, :] .= 0.0
+
     r2mag = .√(r2[XDIM, :, :] .^ 2 + r2[YDIM, :, :] .^ 2 + r2[ZDIM, :, :] .^ 2)
     r1r2 = r1 .- r2
 
@@ -1427,17 +1957,18 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     # Reshape d to have a singleton dimension for correct broadcasting
     d = reshape(d, 1, size(d)...)
 
-    influence = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
-    influence = influence .* (d .^ 2) ./ .√(rc^4 .+ d .^ 4)
+    numerator = reshape(r1mag .+ r2mag, 1, size(r1mag)...) .* r1crossr2
+    numerator = numerator .* (d .^ 2) ./ .√(rc^4 .+ d .^ 4)
     denominator = (4π * r1mag .* r2mag .* (r1mag .* r2mag .+ r1dotr2))
 
     # Reshape the denominator to have the same dimensions as the influence    
     denominator = reshape(denominator, 1, size(denominator)...)
 
-    influence = influence ./ denominator
+    influence = numerator ./ denominator
 
     # Replace NaNs and Infs with 0.0
-    @ignore_derivatives() do
+    # Cannot keep in ignore derivatives block
+    ChainRulesCore.ignore_derivatives() do
         influence = replace(influence, NaN => 0.0)
         influence = replace(influence, Inf => 0.0)
         influence = replace(influence, -Inf => 0.0)
@@ -1477,12 +2008,12 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
     airfoil_xy, airfoil_ctrl_xy = compute_scaledAndSweptAirfoilCoords(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
 
     # --- VPM of airfoil ---
-    Airfoil, Airfoil_influences = VPM.setup(airfoil_xy[XDIM, :], airfoil_xy[YDIM, :], airfoil_ctrl_xy, 0.0) # setup with no sweep
+    Airfoil, Airfoil_influences = setup_VPM(airfoil_xy[XDIM, :], airfoil_xy[YDIM, :], airfoil_ctrl_xy, 0.0) # setup with no sweep
     # println("airfoil x:", airfoil_xy[XDIM, :]) #close enough
     # println("airfoil y:", airfoil_xy[YDIM, :]) #close enough
-    _, _, Γ1, _ = VPM.solve(Airfoil, Airfoil_influences, V1)
-    _, _, Γ2, _ = VPM.solve(Airfoil, Airfoil_influences, V2)
-    _, _, Γ3, _ = VPM.solve(Airfoil, Airfoil_influences, V3)
+    _, cm1, Γ1, _ = solve_VPM(Airfoil, Airfoil_influences, V1)
+    _, cm2, Γ2, _ = solve_VPM(Airfoil, Airfoil_influences, V2)
+    _, cm3, Γ3, _ = solve_VPM(Airfoil, Airfoil_influences, V3)
     Γairfoils = [Γ1 Γ2 Γ3]
     Γbar = (Γ1 + Γ2 + Γ3) / 3.0
 
@@ -1495,6 +2026,7 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
     # println("Circulation values: $(Γairfoils) ") # close enough
     # println("Γbar: $(Γbar)") # close enough
     # println("Γa: $(airfoil_Γa)") #  close enough
+    # println("cm1: $(cm1) cm2: $(cm2) cm3: $(cm3)")
 
     airfoil_aL0 = -Γbar / airfoil_Γa
     airfoil_CLa = 2.0 * airfoil_Γa / cos(Λ)
@@ -1502,6 +2034,65 @@ function compute_hydroProperties(Λ, airfoil_xy_orig, airfoil_ctrl_xy_orig)
     LLHydro = LiftingLineHydro(airfoil_CLa, airfoil_aL0, airfoil_xy, airfoil_ctrl_xy)
 
     return LLHydro, Airfoil, Airfoil_influences
+end
+
+function compute_cm_LE(G; solverParams=nothing)
+    """
+    Nonlinear , nondimensional lifting - line equation .
+    Parameters
+    ----------
+    G : vector
+    Circulation distribution normalized by the freestream velocity
+    magnitude.
+
+    Returns
+    -------
+    R : array_like
+    Array of the residuals between the lift values predicted from
+    section properties and from circulation.
+    """
+
+    if isnothing(solverParams)
+        println("WARNING: YOU NEED TO PASS IN SOLVER PARAMETERS")
+    end
+
+    TV_influence = solverParams.TV_influence
+    LLSystem = solverParams.LLSystem
+    Airfoils = solverParams.Airfoils
+    AirfoilInfluences = solverParams.AirfoilInfluences
+    FlowCond = solverParams.FlowCond
+    ζi = LLSystem.sectionVectors
+
+
+    # This is a (3 , npt, npt) × (npt,) multiplication
+    # PYTHON: _Vi = TV_influence * G .+ transpose(LLSystem.uvec)
+    uix = TV_influence[XDIM, :, :] * G .+ FlowCond.uvec[XDIM]
+    #   TODO: might come other places too NOTE: Because I use Z as vertical, the influences are negative for ZDIM because the axes point spanwise in the opposite direction
+    uiy = TV_influence[YDIM, :, :] * G .+ FlowCond.uvec[YDIM]
+    uiz = -TV_influence[ZDIM, :, :] * G .+ FlowCond.uvec[ZDIM]
+    ui = cat(uix, uiy, uiz, dims=2)
+    ui = permutedims(ui, [2, 1])
+
+
+    # Actually solve VPM for each local velocity c
+    Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
+
+    hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
+
+
+    # c_m::AbstractVector{Number} = [
+    #     solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[2]
+    #     for (ii, V_local) in enumerate(eachcol(Ui))
+    # ] # remember to only grab CM out of VPM solve
+
+    c_m_z = Zygote.Buffer(zeros(size(Airfoils)))
+    c_m_z = [
+        solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[2]
+        for (ii, V_local) in enumerate(eachcol(Ui))
+    ] # remember to only grab CM out of VPM solve
+    c_m = copy(c_m_z)
+
+    return c_m
 end
 
 function compute_scaledAndSweptAirfoilCoords(Λ, airfoil_xy, airfoil_ctrl_xy, factor=1.0)

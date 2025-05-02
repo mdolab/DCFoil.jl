@@ -7,12 +7,10 @@
 This is not a module on purpose so it's in the namespace when it's first included
 """
 
-# --- PACKAGES ---
+# # --- PACKAGES ---
 using ChainRulesCore
-using LinearAlgebra
+# using LinearAlgebra
 
-# # --- DCFoil modules ---
-# using ..SolverRoutines: cmplxStdEigValProb2
 
 # ==============================================================================
 #                         Constructors
@@ -38,7 +36,7 @@ end
 # ==============================================================================
 #                         Functions
 # ==============================================================================
-function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix{<:RealOrComplex})
+function ChainRulesCore.rrule(::typeof(*), A::AbstractMatrix, B::AbstractMatrix)
     """
     MATRIX MULTIPLY RULE
     """
@@ -51,15 +49,13 @@ function ChainRulesCore.rrule(::typeof(*), A::Matrix{<:RealOrComplex}, B::Matrix
 end
 
 function ChainRulesCore.frule((_, ΔA, ΔB), ::typeof(*),
-    A::Matrix{<:RealOrComplex},
-    B::Matrix{<:RealOrComplex},
+    A::AbstractMatrix,
+    B::AbstractMatrix,
 )
     Ω = A * B
     ∂Ω = ΔA * B + A * ΔB
     return (Ω, ∂Ω)
 end
-
-# @ForwardDiff_frule Base.:*(A::AbstractMatrix{<:ForwardDiff.Dual}, B::AbstractMatrix{<:ForwardDiff.Dual})
 
 function ChainRulesCore.rrule(::typeof(inv), A::Matrix{<:RealOrComplex})
     """

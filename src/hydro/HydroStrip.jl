@@ -9,10 +9,11 @@
 
 module HydroStrip
 
+
 # --- Public functions ---
-export compute_theodorsen, compute_glauert_circ
-export compute_node_mass, compute_node_damp, compute_node_stiff
-export compute_AICs, apply_BCs
+# export compute_theodorsen, compute_glauert_circ
+# export compute_node_mass, compute_node_damp, compute_node_stiff
+# export compute_AICs, apply_BCs
 
 # --- PACKAGES ---
 using SpecialFunctions
@@ -26,21 +27,25 @@ using FLOWMath: norm_cs_safe, abs_cs_safe
 # using SparseArrays
 # using Debugger
 # using Cthulhu
+using ..LiftingLine # by the time this code is compiled, the module is already loaded
 
 # --- DCFoil modules ---
-using ..SolverRoutines
-using ..Unsteady: compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass, compute_node_stiff_dcla
-using ..GlauertLL: GlauertLL
-using ..LiftingLine: LiftingLine, Δα
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV, ELEMTYPE
-using ..EBBeam: EBBeam as BeamElement, NDOF
-using ..DCFoil: RealOrComplex, DTYPE
-using ..DesignConstants: CONFIGS
-using ..Preprocessing
-using ..Utilities
-using ..FEMMethods
-using ..Interpolation
-using ..Rotations
+for headerName in [
+    "../constants/DataTypes",
+    "../constants/SolutionConstants",
+    "../adrules/CustomRules",
+    "../constants/DesignConstants",
+    "../utils/Utilities",
+    "../utils/Rotations",
+    "../struct/EBBeam",
+    "../utils/Preprocessing",
+    "../hydro/Unsteady",
+    "../utils/Interpolation",
+    "../hydro/GlauertLL",
+]
+
+    include(headerName * ".jl")
+end
 
 # ==============================================================================
 #                         Free surface effects
@@ -181,10 +186,10 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     """
     This is a wrapper
     """
-    LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    LECoords, TECoords = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-    idxTip = Preprocessing.get_tipnode(LECoords)
-    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    idxTip = get_tipnode(LECoords)
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Hydrodynamics
@@ -237,7 +242,6 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
         # ************************************************
         #     Second time with perturbed angle of attack
         # ************************************************
-
 
         LLOutputs_i, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams_da, appendageOptions, solverOptions; return_all=true)
         f_i = LLOutputs_i.cl
@@ -303,142 +307,141 @@ function compute_dcladX(ptVec, nodeConn, appendageOptions, appendageParams, solv
     return dcladXpt
 end
 
-function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-    """
-    Derivative of the induced drag wrt the design variables
-    """
+# function compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+#     """
+#     Derivative of the induced drag wrt the design variables
+#     """
 
-    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
+#     npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
 
-    dcdidXpt = zeros(1, length(ptVec))
-    LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-
-
-    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
-
-        dh = 1e-5
-        idh = 1 / dh
-
-        f_i = LLOutputs_i.CDi
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
-
-            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
-
-            f_f = LLOutputs_f.CDi
-
-            dcdidXpt[1, ii] = (f_f - f_i) * idh
-
-            ptVec[ii] -= dh
-        end
+#     dcdidXpt = zeros(1, length(ptVec))
+#     LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
 
-    elseif uppercase(mode) == "ADJOINT"
+#     if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
 
-        function compute_adjointVec(∂r∂u, ∂f∂uT)
-            ψ = transpose(∂r∂u) \ ∂f∂uT
-            return ψ
-        end
+#         dh = 1e-5
+#         idh = 1 / dh
 
-        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+#         f_i = LLOutputs_i.CDi
+#         for ii in eachindex(ptVec)
+#             ptVec[ii] += dh
 
-        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#             LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
-        ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # GOOD
-        ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+#             f_f = LLOutputs_f.CDi
 
-        ∂f∂uT = reshape(∂cdi∂Γ, size(∂cdi∂Γ)..., 1)
+#             dcdidXpt[1, ii] = (f_f - f_i) * idh
 
-        Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
-        dcdidXpt = ∂cdi∂X - transpose(Ψ) * ∂r∂xPt
-
-        # println("∂cdi∂X", ∂cdi∂X)
-        # println("∂cdi∂Γ", ∂cdi∂Γ)
+#             ptVec[ii] -= dh
+#         end
 
 
-    elseif uppercase(mode) == "DIRECT"
-        function compute_directMatrix(∂r∂u, ∂r∂xPt)
-            Φ = ∂r∂u \ ∂r∂xPt
-            return Φ
-        end
-        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
-        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#     elseif uppercase(mode) == "ADJOINT"
+
+#         function compute_adjointVec(∂r∂u, ∂f∂uT)
+#             ψ = transpose(∂r∂u) \ ∂f∂uT
+#             return ψ
+#         end
+
+#         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+#         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+#         ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # GOOD
+#         ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+
+#         ∂f∂uT = reshape(∂cdi∂Γ, size(∂cdi∂Γ)..., 1)
+
+#         Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
+#         dcdidXpt = ∂cdi∂X - transpose(Ψ) * ∂r∂xPt
+
+#         # println("∂cdi∂X", ∂cdi∂X)
+#         # println("∂cdi∂Γ", ∂cdi∂Γ)
 
 
-        ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # NEW
-        ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions) # NEW
-        Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
-        dcdidXpt = ∂cdi∂X - reshape(∂cdi∂Γ, 1, length(∂cdi∂Γ)) * Φ
-    end
-
-    # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
-    # println("writing dcdidXpt-$(mode).csv")
-
-    return dcdidXpt
-end
-
-function compute_dDidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-    """
-    Derivative of the induced drag wrt the design variables
-    Dimensional 
-    TODO PICKUP WRITING THIS
-    """
-
-    npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
-
-    dDidXpt = zeros(1, length(ptVec))
-    LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+#     elseif uppercase(mode) == "DIRECT"
+#         function compute_directMatrix(∂r∂u, ∂r∂xPt)
+#             Φ = ∂r∂u \ ∂r∂xPt
+#             return Φ
+#         end
+#         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+#         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
 
 
-    if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
+#         ∂cdi∂Γ = LiftingLine.compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond) # NEW
+#         ∂cdi∂X = LiftingLine.compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions) # NEW
+#         Φ = compute_directMatrix(∂r∂Γ, ∂r∂xPt)
+#         dcdidXpt = ∂cdi∂X - reshape(∂cdi∂Γ, 1, length(∂cdi∂Γ)) * Φ
+#     end
 
-        dh = 1e-5
-        idh = 1 / dh
+#     # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
+#     # println("writing dcdidXpt-$(mode).csv")
 
-        f_i = LLOutputs_i.F[1]
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
+#     return dcdidXpt
+# end
 
-            LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+# function compute_dDidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+#     """
+#     Derivative of the induced drag wrt the design variables
+#     Dimensional 
+#     """
 
-            f_f = LLOutputs_f.F[1]
+#     npt_wing = 40 # HARDCODED IN LIFTING LINE CODE
 
-            dDidXpt[1, ii] = (f_f - f_i) * idh
-
-            ptVec[ii] -= dh
-        end
-
-
-    elseif uppercase(mode) == "ADJOINT"
-
-        function compute_adjointVec(∂r∂u, ∂f∂uT)
-            ψ = transpose(∂r∂u) \ ∂f∂uT
-            return ψ
-        end
-
-        Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
-
-        ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-        ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
-
-        ∂Di∂Γ = LiftingLine.compute_∂Di∂Γ(Gconv, LLMesh, FlowCond) # GOOD
-        ∂Di∂X = LiftingLine.compute_∂Di∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
-
-        ∂f∂uT = reshape(∂Di∂Γ, size(∂Di∂Γ)..., 1)
-
-        Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
-        dDidXpt = ∂Di∂X - transpose(Ψ) * ∂r∂xPt
+#     dDidXpt = zeros(1, length(ptVec))
+#     LLOutputs_i, LLMesh, FlowCond = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
 
 
-    end
+#     if uppercase(mode) == "FIDI" # very different from what adjoint gives. I think it's because of edge nodes as those show the highest discrepancy in the derivatives
 
-    # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
-    # println("writing dcdidXpt-$(mode).csv")
+#         dh = 1e-5
+#         idh = 1 / dh
 
-    return dDidXpt
-end
+#         f_i = LLOutputs_i.F[1]
+#         for ii in eachindex(ptVec)
+#             ptVec[ii] += dh
+
+#             LLOutputs_f, _, _ = compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
+
+#             f_f = LLOutputs_f.F[1]
+
+#             dDidXpt[1, ii] = (f_f - f_i) * idh
+
+#             ptVec[ii] -= dh
+#         end
+
+
+#     elseif uppercase(mode) == "ADJOINT"
+
+#         function compute_adjointVec(∂r∂u, ∂f∂uT)
+#             ψ = transpose(∂r∂u) \ ∂f∂uT
+#             return ψ
+#         end
+
+#         Gconv = LLOutputs_i.Γdist / FlowCond.Uinf
+
+#         ∂r∂Γ = LiftingLine.compute_∂r∂Γ(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+#         ∂r∂xPt = LiftingLine.compute_∂r∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
+
+#         ∂Di∂Γ = LiftingLine.compute_∂Di∂Γ(Gconv, LLMesh, FlowCond) # GOOD
+#         ∂Di∂X = LiftingLine.compute_∂Di∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi") # GOOD
+
+#         ∂f∂uT = reshape(∂Di∂Γ, size(∂Di∂Γ)..., 1)
+
+#         Ψ = compute_adjointVec(∂r∂Γ, ∂f∂uT)
+#         dDidXpt = ∂Di∂X - transpose(Ψ) * ∂r∂xPt
+
+
+#     end
+
+#     # writedlm("dcdidXpt-$(mode).csv", dcdidXpt, ',')
+#     # println("writing dcdidXpt-$(mode).csv")
+
+#     return dDidXpt
+# end
 
 function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams, solverOptions, appendageOptions)
     """
@@ -457,7 +460,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
     depth0 = appendageParams["depth0"]
     if solverOptions["use_nlll"]
 
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if appendageOptions["config"] == "wing"
                 println("WARNING: NL LL is only for symmetric wings")
             end
@@ -465,7 +468,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         # println("Using nonlinear lifting line")
 
         # Hard-coded NACA0012
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             airfoilCoordFile = "$(pwd())/INPUT/PROFILES/NACA0012.dat"
         end
 
@@ -489,7 +492,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
 
     else
         span = appendageParams["s"] * 2
-        cla, Fxind, CDi = GlauertLL.compute_glauert_circ(0.5 * span, chordVec, deg2rad(α0 + rake), solverOptions["Uinf"];
+        cla, Fxind, CDi = compute_glauert_circ(0.5 * span, chordVec, deg2rad(α0 + rake), solverOptions["Uinf"];
             h=depth0,
             useFS=solverOptions["use_freeSurface"],
             rho=solverOptions["rhof"],
@@ -503,7 +506,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
         ZH = zeros(2, 2, 2)
         LLSystem = LiftingLine.LiftingLineMesh(ZM, ZM, ZM, 1, ZA, ZA, ZM, ZA, ZA, 1, span, 0.0, 0.0, 0.0, 0.0, sweepAng, 0.0, ZH, ZH, ZA, ZM, ZA)
         FlowCond = LiftingLine.FlowConditions([uinf, 0.0, 0.0], uinf, [uinf, 0.0, 0.0], appendageParams["alfa0"], 0.0, solverOptions["rhof"], appendageParams["depth0"])
-        LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), real(cla), zeros(3), F, 0.0, CDi, 0.0)
+        LLOutputs = LiftingLine.LiftingLineOutputs(zeros(3, 3), zeros(3), convert(Vector{Float64}, cla), zeros(3), F, 0.0, CDi, 0.0)
     end
 
     return LLOutputs, LLSystem, FlowCond
@@ -512,7 +515,7 @@ end
 
 
 function correct_downwash(
-    iComp::Int64, CLMain::DTYPE, DVDictList, solverOptions
+    iComp::Int64, CLMain::Number, DVDictList, solverOptions
 )
     """
     """
@@ -608,50 +611,6 @@ function compute_wavePatternDWAng(clM, chordM, Fnc, Fnh, ξ)
     return αiwave
 end
 
-function compute_biplanefreesurface(λ)
-    """
-    Based on Breslin 1957
-    """
-    plamsq = 1 + λ^2
-    k = 1 / √(1 + λ^2)
-    Ek = SpecialFunctions.ellipe(k^2)
-    Kk = SpecialFunctions.ellipk(k^2)
-
-    # Biplane function
-    σλ = 1 - 4 / π * λ * √(1 + λ^2) * (Kk - Ek)
-    # Free surface function
-    γλ = 4 / (3π) * ((2 / π) * plamsq^(1.5) * Ek - 1.5 * λ)
-
-    return σλ, γλ
-end
-
-function compute_besselint(Uinf, span, Fnh)
-
-    function compute_integrand(θ)
-
-        J1 = SpecialFunctions.besselj1(GRAV / Uinf^2 * 0.5 * span * (sec(θ))^2 * sin(θ))
-        exponent = exp(-2 * (sec(θ))^2 / Fnh^2)
-
-
-        int = J1^2 * exponent / ((sin(θ))^2 * cos(θ))
-
-        return int
-    end
-
-    dθ = 0.01
-    # Starting at 0 breaks this, so start close
-    θ = 0.001:dθ:π/2
-    heights = compute_integrand.(θ)
-
-    # # Trapezoid integration seems to introduce oscillations... wrt Fnc
-    # I = 0.5 * dθ * (heights[1] + heights[end] + 2 * sum(heights[2:end-1]))
-
-    # --- Riemann integration ---
-    I = sum(heights * dθ)
-
-    return I
-end
-
 function compute_LL_ventilated(semispan, submergedDepth, α₀, cl_α_FW)
     """
     Slope of the 3D lift coefficient with respect to the angle of attack considering surface-piercing vertical strut
@@ -670,7 +629,7 @@ end
 #                         Static drag
 # ==============================================================================
 function compute_AICs(
-    AEROMESH, FOIL, LLSystem, LLOutputs, ϱ, dim, Λ, U∞, ω, elemType="BT2";
+    AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
     solverOptions=Dict(),
 )
@@ -699,9 +658,6 @@ function compute_AICs(
     NOTE: Do not actually call these AIC when talking to other people because this is technically incorrect.
     AIC is the A matrix in potential flow
     """
-
-    # Spline to get lift slope in the right spots if using nonlinear LL
-    clαVec = LLOutputs.cla
 
     globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
@@ -749,6 +705,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
     aeroMesh = AEROMESH.mesh
     junctionNodeX = aeroMesh[1, :]
 
+    GDOFIdx::Int64 = 0
     for (inode, XN) in enumerate(eachrow(aeroMesh)) # loop aero strips (located at FEM nodes)
         # --- compute strip quantities ---
         yⁿ = XN[YDIM]
@@ -780,94 +737,9 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
 
         # --- Linearly interpolate values based on y loc ---
-        clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
-        # # THis chunk of code is super hacky based on assuming wing and t-foil strut order
-        # if use_nlll # TODO: FIX LATER TO BE GENERAL
-        #     xeval = LLSystem.collocationPts[YDIM, :]
-        #     clα = Interpolation.do_linear_interp(xeval, clαVec, yⁿ)
-        #     sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
-        #     if inode <= FOIL.nNodes # STBD WING
-        #         c = Interpolation.do_linear_interp(sDomFoil, chordVec, yⁿ)
-        #         ab = Interpolation.do_linear_interp(sDomFoil, abVec, yⁿ)
-        #         eb = Interpolation.do_linear_interp(sDomFoil, ebVec, yⁿ)
-        #         # c = chordVec[inode]
-        #         # ab = abVec[inode]
-        #         # eb = ebVec[inode]
+        # TODO: GWN DEBUG THIS AND GENERALIZE IT
+        clα, localchord, ab, eb, dR1, dR2, dR3 = compute_stripValues(nVec, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, solverOptions["use_nlll"])
 
-        #     else
-        #         if appendageOptions["config"] in ["t-foil", "full-wing"]
-        #             if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
-        #                 # Put negative sign on the linear interp routine bc there is a bug!
-        #                 sDomFoil = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-
-        #                 c = Interpolation.do_linear_interp(sDomFoil, chordVec, -yⁿ)
-        #                 ab = Interpolation.do_linear_interp(sDomFoil, abVec, -yⁿ)
-        #                 eb = Interpolation.do_linear_interp(sDomFoil, ebVec, -yⁿ)
-        #                 # c = chordVec[inode-FOIL.nNodes+1]
-        #                 # ab = abVec[inode-FOIL.nNodes+1]
-        #                 # eb = ebVec[inode-FOIL.nNodes+1]
-        #                 # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-        #                 dR1 = -dR1
-        #                 dR2 = -dR2
-        #                 dR3 = -dR3
-        #             else # strut section
-        #                 sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-        #                 c = Interpolation.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
-        #                 ab = Interpolation.do_linear_interp(sDomFoil, strutabVec, zⁿ)
-        #                 eb = Interpolation.do_linear_interp(sDomFoil, strutebVec, zⁿ)
-        #             end
-        #         end
-        #     end
-        #     # println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f",eb), "\tyn: $(yⁿ)")
-        # else
-        #     # if inode <= FOIL.nNodes # STBD WING
-        #     #     sDom = aeroMesh[1:FOIL.nNodes, YDIM]
-        #     #     clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-        #     #     c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-        #     #     ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-        #     #     eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
-        #     # else
-        #     #     if appendageOptions["config"] == "t-foil"
-        #     #         if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
-        #     #             # Put negative sign on the linear interp routine bc there is a bug!
-        #     #             sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-        #     #             yⁿ = -1 * yⁿ
-
-        #     #             clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-        #     #             c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-        #     #             ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-        #     #             eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
-        #     #             # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-        #     #             dR1 = -dR1
-        #     #             dR2 = -dR2
-        #     #             dR3 = -dR3
-        #     #             # println("I'm a port wing strip")
-        #     #         else
-        #     #             sDom = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-        #     #             clα = Interpolation.do_linear_interp(sDom, strutclαVec, zⁿ)
-        #     #             c = Interpolation.do_linear_interp(sDom, strutChordVec, zⁿ)
-        #     #             ab = Interpolation.do_linear_interp(sDom, strutabVec, zⁿ)
-        #     #             eb = Interpolation.do_linear_interp(sDom, strutebVec, zⁿ)
-        #     #             # println("I'm a strut strip")
-        #     #         end
-        #     #     elseif appendageOptions["config"] == "full-wing"
-        #     #         if inode <= nElemWing * 2 + 1
-        #     #             # Put negative sign on the linear interp routine bc there is a bug!
-        #     #             sDom = -1 * vcat(junctionNodeX[YDIM], aeroMesh[FOIL.nNodes+1:FOIL.nNodes*2-1, YDIM])
-        #     #             yⁿ = -1 * yⁿ
-
-        #     #             clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-        #     #             c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-        #     #             ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-        #     #             eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
-        #     #             # For the PORT wing, we want the AICs to be equal to the STBD wing, just mirrored through the origin
-        #     #             dR1 = -dR1
-        #     #             dR2 = -dR2
-        #     #             dR3 = -dR3
-        #     #         end
-        #     #     end
-        #     # end
-        # end
         b = 0.5 * localchord # semichord for more readable code
 
         # --- Precomputes ---
@@ -880,7 +752,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # --- Compute Compute local AIC matrix for this element ---
         K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
         C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
-        M_f = compute_node_mass(b, ab, ϱ)
+        M_f0 = compute_node_mass(b, ab, ϱ)
         p_i = 1.0
         if solverOptions["use_freeSurface"]
             if appendageOptions["config"] == "full-wing"
@@ -889,7 +761,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
             p_i = compute_pFactor(localchord, localspan)
             # println("local span:\t $(localspan)\nyn:\t$(yⁿ)\np factor:\t$(p_i)")
         end
-        M_f *= p_i
+        M_f = M_f0 * p_i
         KLocal, CLocal, MLocal = compute_localAIC(K_f, K̂_f, C_f, Ĉ_f, M_f, elemType)
 
         # ---------------------------
@@ -897,13 +769,24 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # ---------------------------
         # Aerodynamics need to happen in global reference frame
         # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, 1.0, elemType) # yes
-        Γ = Rotations.get_transMat(dR1, dR2, dR3, 1.0)
-        ΓT = transpose(Γ)
-        KLocal_trans = ΓT[1:NDOF, 1:NDOF] * KLocal * Γ[1:NDOF, 1:NDOF]
-        CLocal_trans = ΓT[1:NDOF, 1:NDOF] * CLocal * Γ[1:NDOF, 1:NDOF]
-        MLocal_trans = ΓT[1:NDOF, 1:NDOF] * MLocal * Γ[1:NDOF, 1:NDOF]
+        transMat = get_transMat(dR1, dR2, dR3, 1.0)
+        Γ = transMat[1:NDOF, 1:NDOF]
+        ΓT = copy(transpose(Γ))
+        KLocal_trans_int = my_matmul(ΓT, KLocal)
+        KLocal_trans = my_matmul(KLocal_trans_int, Γ)
+        CLocal_trans_int = my_matmul(ΓT, CLocal)
+        CLocal_trans = my_matmul(CLocal_trans_int, Γ)
+        MLocal_trans_int = my_matmul(ΓT, MLocal)
+        MLocal_trans = my_matmul(MLocal_trans_int, Γ)
+        # KLocal_trans = ΓT * KLocal * Γ
+        # CLocal_trans = ΓT * CLocal * Γ
+        # MLocal_trans = ΓT * MLocal * Γ
+        # println("type: $(typeof(ΓT)), $(typeof(KLocal)), $(typeof(CLocal)), $(typeof(MLocal))")
+        # MLocal_trans = copy(MLocal_trans_z)
 
-        GDOFIdx::Int64 = NDOF * (inode - 1) + 1
+        ChainRulesCore.ignore_derivatives() do
+            GDOFIdx = NDOF * (inode - 1) + 1
+        end
 
         # Add local AIC to global AIC and remember to multiply by strip width to get the right result
         globalKf_r_z[GDOFIdx:GDOFIdx+NDOF-1, GDOFIdx:GDOFIdx+NDOF-1] = real(KLocal_trans) * Δy
@@ -918,7 +801,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
     return copy(globalMf_z), copy(globalCf_r_z), copy(globalCf_i_z), copy(globalKf_r_z), copy(globalKf_i_z)
 end
 
-function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll)
+function compute_stripValues(nVec, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, aeroMesh, appendageOptions, inode, use_nlll)
     """
     This chunk of code is super hacky based on assuming wing and t-foil strut order
     TODO: FIX LATER TO BE GENERAL
@@ -929,9 +812,12 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
     nElemWing = length(chordVec) - 1
 
     if use_nlll
-        xeval = LLSystem.collocationPts[YDIM, :]
-        clα = Interpolation.do_linear_interp(xeval, clαVec, yⁿ)
+        # xeval = LLSystem.collocationPts[YDIM, :]
         sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
+        # println("sDomFoil: ", sDomFoil)
+        # println("yⁿ: ", yⁿ)
+        # println("clαVec length: ", length(clαVec))
+        clα = do_linear_interp(sDomFoil, clαVec, yⁿ)
         if inode <= FOIL.nNodes # STBD WING
             c = chordVec[inode]
             ab = abVec[inode]
@@ -949,19 +835,20 @@ function compute_stripValues(nVec, LLSystem, clαVec, yⁿ, FOIL, chordVec, abVe
                     dR3 = -dR3
                 else # strut section
                     sDomFoil = vcat(junctionNodeX[ZDIM], aeroMesh[FOIL.nNodes*2:end, ZDIM])
-                    c = Interpolation.do_linear_interp(sDomFoil, strutChordVec, zⁿ)
-                    ab = Interpolation.do_linear_interp(sDomFoil, strutabVec, zⁿ)
-                    eb = Interpolation.do_linear_interp(sDomFoil, strutebVec, zⁿ)
+                    c = do_linear_interp(sDomFoil, strutChordVec, zⁿ)
+                    ab = do_linear_interp(sDomFoil, strutabVec, zⁿ)
+                    eb = do_linear_interp(sDomFoil, strutebVec, zⁿ)
                 end
             end
         end
+        # println("clα: ", @sprintf("%.4f", clα), "\teb: ", @sprintf("%.4f", eb), "\tyn: $(yⁿ)")
     else
         if inode <= FOIL.nNodes # STBD WING
             sDom = aeroMesh[1:FOIL.nNodes, YDIM]
-            clα = Interpolation.do_linear_interp(sDom, clαVec, yⁿ)
-            c = Interpolation.do_linear_interp(sDom, chordVec, yⁿ)
-            ab = Interpolation.do_linear_interp(sDom, abVec, yⁿ)
-            eb = Interpolation.do_linear_interp(sDom, ebVec, yⁿ)
+            clα = do_linear_interp(sDom, clαVec, yⁿ)
+            c = do_linear_interp(sDom, chordVec, yⁿ)
+            ab = do_linear_interp(sDom, abVec, yⁿ)
+            eb = do_linear_interp(sDom, ebVec, yⁿ)
         else
             if appendageOptions["config"] == "t-foil"
                 if inode <= nElemWing * 2 + 1 # fix this logic for elems based!
@@ -1256,9 +1143,9 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
-            toc::Vector{RealOrComplex} = appendageParams["toc"]
-            ab::Vector{RealOrComplex} = appendageParams["ab"]
-            x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+            toc = appendageParams["toc"]
+            ab = appendageParams["ab"]
+            x_ab = appendageParams["x_ab"]
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1356,7 +1243,7 @@ function get_strip_vecs(
 
     nStrips = size(aeroMesh)[1]
 
-    stripVecs = zeros(RealOrComplex, nStrips, 3)
+    stripVecs = zeros(Float64, nStrips, 3)
     stripVecs_z = Zygote.Buffer(stripVecs)
     stripVecs_z[:, :] = stripVecs
     nElemWing = solverOptions["nNodes"] - 1
@@ -1390,7 +1277,7 @@ function get_strip_vecs(
     return copy(stripVecs_z)
 end
 
-function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, LLOutputs, rhof, elemType; appendageOptions, solverOptions)
+function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, rhof, elemType; appendageOptions, solverOptions)
     """
     Computes the hydrodynamic coefficients for a sweep of reduced frequencies
 
@@ -1416,7 +1303,7 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
         ω = k * U∞ * (cos(Λ)) / b_ref
 
         # Compute AIC
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = compute_AICs(AEROMESH, FOIL, LLSystem, claVec, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
 
         # Accumulate in frequency sweep matrix
         # @inbounds begin
@@ -1452,19 +1339,19 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
     kDiff = k .- k_sweep
 
     # Find where the sign changes for the interpolation
-    b1, b2 = SolverRoutines.find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
+    b1, b2 = find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
     # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L::Vector{DTYPE} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+        x0L::Vector{Number} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
 
         # This unravels to keep computations in the stack, not the heap
 
-        y0L::Array{DTYPE} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
-        Ar_r = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        y0L::Array{Number} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+        Ar_r = lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
-        Ar_i = Interpolation.lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        Ar_i = lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
 
 
     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types
@@ -1506,7 +1393,7 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
 end
 
 function integrate_hydroLoads(
-    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::DTYPE, elemType="BT2";
+    foilStructuralStates, fullAIC, α₀, rake, dofBlank, downwashAngles::Number, elemType="BT2";
     appendageOptions=Dict(), solverOptions=Dict()
 )
     """
@@ -1530,7 +1417,7 @@ function integrate_hydroLoads(
         "rake" => rake,
         "beta" => 0.0,
     )
-    foilTotalStates = SolverRoutines.return_totalStates(foilStructuralStates, DVDict, elemType;
+    foilTotalStates = return_totalStates(foilStructuralStates, DVDict, elemType;
         appendageOptions=appendageOptions, alphaCorrection=downwashAngles)
 
     # --- Strip theory ---
@@ -1563,7 +1450,7 @@ function integrate_hydroLoads(
         error("Invalid element type")
     end
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if solverOptions["debug"]
             config = appendageOptions["config"]
             println("Plotting hydrodynamic loads")

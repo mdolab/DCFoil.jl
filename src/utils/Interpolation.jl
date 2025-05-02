@@ -6,13 +6,7 @@
 @Desc    :   Interpolation schemes
 """
 
-module Interpolation
-
-using Zygote
 using ChainRulesCore
-# using ..DCFoil: DTYPE
-
-const RealOrComplex = Union{Real,Complex}
 
 function lagrangeArrInterp(xj, yj, m::Int64, n::Int64, d::Int64, x)
     """
@@ -199,7 +193,7 @@ function ChainRulesCore.rrule(::typeof(lagrangeArrInterp_differentiable), xj, yj
         """
         Pullback for lagrangeArrInterp
 
-        ȳ - the seed for the pullback, size(m, n)
+        ȳ - the seed for the pullback, size(m * n)
         """
 
         dydxArr = zeros(m, n)
@@ -464,9 +458,11 @@ function do_linear_interp(xpt, ypt, xqvec)
     """
     npt = length(xpt)
     n = length(xqvec)
-    y = zeros(RealOrComplex, n)
+    y = zeros(Real, n)
     y_z = Zygote.Buffer(y)
     if length(xpt) != length(ypt)
+        println("xpt length: ", length(xpt))
+        println("ypt length: ", length(ypt))
         throw(ArgumentError("xpt and ypt must be the same length"))
     end
     loop_interp!(y_z, xpt, ypt, xqvec, n, npt)
@@ -522,4 +518,3 @@ function loop_interp!(y, xpt, ypt, xqvec, n, npt)
     end
 end
 
-end # module

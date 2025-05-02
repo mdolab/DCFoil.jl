@@ -9,7 +9,7 @@ Some big picture notes:
 """
 
 using Test
-
+using ChainRulesCore
 include("test_struct.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
@@ -102,6 +102,7 @@ wingOptions2 = Dict(
     "material" => "cfrp", # preselect from material library
     "config" => "wing",
     "nNodes" => nNodes,
+    "nNodeStrut" => nNodesStrut, # nodes on strut
     "use_tipMass" => false,
     "xMount" => 0.0,
 )
@@ -115,6 +116,7 @@ solverOptions2 = Dict(
     "use_freeSurface" => false,
     "Uinf" => 5.0, # free stream velocity [m/s]
     "rhof" => 1000.0, # fluid density [kg/m³]
+    "use_nlll" => false,
     # --- Static solve ---
     "run_static" => false,
     # --- Forced solve ---
@@ -145,7 +147,7 @@ solverOptions2 = Dict(
     @test test_mass() <= 1e-10
     # @test test_FSeffect() <= 1e-5 # not ready yet
     # @test test_dwWake() <= 1e-5
-    # @test test_45degwingLL() <= 2e-2
+    @test test_45degwingLL() <= 1.5e-2
 
     # ************************************************
     #     Solver tests

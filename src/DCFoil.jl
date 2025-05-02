@@ -17,7 +17,6 @@ using Printf
 
 # Set the default data type
 include("constants/DataTypes.jl")
-const DTYPE = DblPrec # Cmplx
 
 # ==============================================================================
 #                         HEADER FILES
@@ -140,9 +139,14 @@ function set_structDamping(LECoords, TECoords, nodeConn, appendageParams, solver
     Run this routine at the beginning of any dynamic analysis or optimization to fix the damping
     """
 
-    FOIL, STRUT, _, FEMESH, _, _, _ = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
-    x_αbVec = appendageParams["x_ab"]
-    αStruct, βStruct = FEMMethods.compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, ELEMTYPE, appendageParams, appendageOptions, solverOptions)
+    # FOIL, STRUT, _, FEMESH, _, _, _ = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    # x_αbVec = appendageParams["x_ab"]
+    # αStruct, βStruct = FEMMethods.compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, ELEMTYPE, appendageParams, appendageOptions, solverOptions)
+
+    # --- Alternative way ---
+    globalKs, globalMs, globalF, globalDOFBlankingList, FEMESH = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    Ks, Ms, _ = FEMMethods.apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    αStruct, βStruct = FEMMethods.compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
 
     solverOptions["alphaConst"] = αStruct
     solverOptions["betaConst"] = βStruct
@@ -526,104 +530,6 @@ function evalFuncsSens(
 
 
     return costFuncsSens
-end
-
-function set_defaultOptions!(solverOptions)
-    """
-    Set default options
-    """
-
-    function check_key!(solverOptions, key, default)
-        if !haskey(solverOptions, key)
-            println("Setting default option: $(key) to ", default)
-            solverOptions[key] = default
-        end
-    end
-    keys = [
-        # ************************************************
-        #     I/O
-        # ************************************************
-        "name",
-        "outputDir",
-        "debug",
-        "writeTecplotSolution",
-        "gridFile",
-        # ************************************************
-        #     Flow
-        # ************************************************
-        "Uinf",
-        "rhof",
-        "nu",
-        "use_freeSurface",
-        "use_cavitation",
-        "use_ventilation",
-        "use_dwCorrection",
-        "use_nlll",
-        # ************************************************
-        #     Hull properties
-        # ************************************************
-        "hull",
-        # ************************************************
-        #     Solver modes
-        # ************************************************
-        "run_static",
-        "res_jacobian",
-        "onlyStructDerivs",
-        "run_forced",
-        "run_modal",
-        "run_flutter",
-        "run_body",
-        "rhoKS",
-        "maxQIter",
-        "fRange",
-        "tipForceMag",
-        "nModes",
-        "uRange",
-    ]
-    defaults = [
-        # ************************************************
-        #     I/O
-        # ************************************************
-        "default",
-        "./OUTPUT/",
-        false,
-        false,
-        nothing,
-        # ************************************************
-        #     Flow
-        # ************************************************
-        1.0,
-        1000.0,
-        1.1892E-06, # kinematic viscosity of seawater at 15C
-        false,
-        false,
-        false,
-        false,
-        false, # use_nlll
-        # ************************************************
-        #     Hull properties
-        # ************************************************
-        nothing,
-        # ************************************************
-        #     Solver modes
-        # ************************************************
-        false,
-        "analytic", # residual jacobian
-        false,
-        false,
-        false,
-        false,
-        false, # run_body
-        80.0,
-        100, # maxQIter
-        [0.1, 10.0], # fRange
-        0.0, # tipForceMag
-        10, # nModes
-        [1.0, 2.0] # uRange
-    ]
-    for ii in eachindex(keys)
-        check_key!(solverOptions, keys[ii], defaults[ii])
-    end
 end
 
 # ==============================================================================

@@ -8,8 +8,13 @@ using Printf
 using LinearAlgebra
 using JLD2
 
-include("../src/DCFoil.jl")
-using .DCFoil: DCFoil, SolverRoutines, HydroStrip, SolveFlutter, SolveStatic, FEMMethods, Interpolation
+# include("../src/DCFoil.jl")
+# using .DCFoil: DCFoil, SolverRoutines, HydroStrip, SolveFlutter, SolveStatic, FEMMethods, Interpolation
+for headerName in [
+    "../src/solvers/SolverRoutines"
+]
+    include("$(headerName).jl")
+end
 # ==============================================================================
 #                         Aero-node tests
 # ==============================================================================
@@ -184,7 +189,7 @@ function test_eigenvalueAD()
     # TODO: this is not working for imaginary seed
     # A_id .= 1.0
     # A_id[1, 1] = 1.0
-    w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id = SolverRoutines.cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, dim)
+    w_r, w_rd, w_i, w_id, VR_r, VR_rd, VR_i, VR_id = cmplxStdEigValProb_d(A_r, A_rd, A_i, A_id, dim)
     println("Primal forward values:")
     println("----------------------")
     println("w_r = ", w_r)
@@ -215,7 +220,7 @@ function test_eigenvalueAD()
     w_ib = [1, 1]
     Vrb_r = zeros(Float64, dim, dim)
     Vrb_i = zeros(Float64, dim, dim)
-    A_rb, A_ib, w_r, w_rbz, w_i, w_ibz, _, _, _, _ = SolverRoutines.cmplxStdEigValProb_b(A_r, A_i, dim, w_rb, w_ib, Vrb_r, Vrb_i)
+    A_rb, A_ib, w_r, w_rbz, w_i, w_ibz, _, _, _, _ = cmplxStdEigValProb_b(A_r, A_i, dim, w_rb, w_ib, Vrb_r, Vrb_i)
     println("Primal reverse values:")
     println("w_r = ", w_r)
     println("w_i = ", w_i)

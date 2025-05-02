@@ -2,7 +2,7 @@
 """
 @File    :   pyDCFoil.py
 @Time    :   2024/01/22
-@Author  :   Galen Ng, Prof. Sicheng He
+@Author  :   Galen Ng, Sicheng He
 @Desc    :   Python interface to DCFoil containing two classes
 """
 
@@ -18,10 +18,9 @@ from pathlib import Path
 # ==============================================================================
 import numpy as np
 
-# from julia import Main, Pkg
 from juliacall import Main, Pkg
-import juliacall
 import openmdao.api as om
+from .multipoint import Multipoint
 
 
 class DCFOILWarning(object):
@@ -46,7 +45,7 @@ class DCFOILWarning(object):
 class DCFOIL:
     def __init__(self, appendageParamsList: list, evalFuncs, options=None, debug=False):
         """
-        Create the flutter solver class
+        Create the solver class
 
         Parameters
         ----------
@@ -77,10 +76,12 @@ class DCFOIL:
                 # Pull from local directory
                 repoDir = Path(__file__).parent.parent
                 Pkg.activate(f"{repoDir}")
+
                 # --- This was for PyCall ---
                 Main.include(f"{repoDir}/src/DCFoil.jl")
                 # Main.using(".DCFoil")
                 # DCFoil = Main.DCFoil
+
                 # --- PythonCall ---
                 # jl = juliacall.newmodule("DCFoil")
                 Main.seval("using .DCFoil")
@@ -90,6 +91,7 @@ class DCFOIL:
                 # Pull from Julia package registry (online)
                 Pkg.add("DCFoil")
                 from julia import DCFoil
+
             self.DCFoil = DCFoil
 
         except Exception:

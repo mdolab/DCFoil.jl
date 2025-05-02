@@ -2,25 +2,22 @@
 """
 @File          :   ComputeFunctions.jl
 @Date created  :   2024/11/22
-@Last modified :   2024/11/22
+@Last modified :   2025/02/10
 @Author        :   Galen Ng
 @Desc          :   Compute cost functions
 """
 
 
-module ComputeFunctions
 
-using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..Utilities: Utilities, compute_KS
 using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
 using ..HydroStrip
-using Debugger
 
 function compute_maxtipbend(states)
     W = states[WIND:NDOF:end]
 
     return W[end]
 end
+
 function compute_maxtiptwist(states)
     Theta = states[ΘIND:NDOF:end]
 
@@ -262,5 +259,3 @@ function compute_responsePeak(dynDeflections, limit, solverOptions)
     ksmax = compute_KS(dynDeflections, solverOptions["rhoKS"])
     return ksmax - limit
 end
-
-end # module

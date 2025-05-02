@@ -80,7 +80,7 @@ Only use **parametric** types for structs. Concrete types in function arguments 
 https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
 
 Data typing code that you will AD is very tricky.
-You do not want to be too specific
+You do not want to be too specific.
 
 ### Derivatives
 
@@ -90,6 +90,7 @@ You do not want to be too specific
 
 #### Try not to do this
 
+* Use `RealOrComplex` sparingly for when complex-step derivatives are needed
 * NOTE: as of February 24, 2024, `LinRange` is actually better and improves the flutter prediction accuracy.
 I wrote the custom rule with the help of the Julia slack channel.
 * Careful of mutating operations because Julia is pass by reference! Use `copy()`
@@ -98,17 +99,19 @@ I wrote the custom rule with the help of the Julia slack channel.
 It also doesn't fit with the data types.
 * Unicode characters are nice for readability of math-heavy code, but do not use them for interface-level code
 * `hypot()` function for calculating the L2 norm is slower than typing it out
-* `@ignore_derivatives` macro from `ChainRulesCore` sometimes messes with the scope of operations
+* `@ignore_derivatives` macro from `ChainRulesCore` sometimes messes with the scope of operations. `ChainRulesCore.ignore_derivatives()` is better.
 
 #### AD Packages
 
 * `AbstractDifferentiation` is a wrapper level tool
 * `Zygote` is an RAD package
+* `ReverseDiff` is another RAD package that is more performant but restrictive on data types
 
 ### Performance
 
 * Don't add type annotations for function arguments unless for multiple dispatch
-* Don't do ```zeros(n)```, but rather ```zeros(typeof(x), n)```
+* Don't do ```zeros(n)```, but rather ```zeros(typeof(x), n)``` or better ```::Abstract<type> = zeros()``` so it works with dual numbers.
+* Make use of `similar()` to make uninitialized arrays or `typeof()`
 
 ### DCFoil as a package
 
@@ -164,13 +167,6 @@ A juliapkg.json file is in your python environment (e.g., venv or conda).
 For the first time running, run the `update_juliapkg.py` script.
 For any other problems arising, look at the [juliapkg documentation](https://github.com/JuliaPy/PyJuliaPkg)
 
-<!-- On MacOS, I have only gotten the Conda.jl method to work which requires these runs
-```
-Conda.pip_interop(true, Conda.ROOTENV) # allow pip installation
-Conda.pip("install", ["<package-names>"], Conda.ROOTENV) # generic call to pip install a package
-```
-and for package names, you can install any python package that supports pip installation. -->
-
 The list of dependencies is:
 ```
 baseclasses
@@ -179,15 +175,7 @@ prefoil
 pygeo
 ```
 
-<!-- The MACH2DCFoil wrapper requires:
-```
-pip install julia
-```
-to install the pyjulia package and then in a python prompt
-```
-import julia
-julia.install("<your-version>") # if multiple versions of julia are installed
-``` -->
+You will need to set this up in a Linux environment because of the above dependencies. Sorry mac users.
 
 ### Tests
 
@@ -203,7 +191,8 @@ Wrap certain code in `@run` to put the execution in debug mode to get the breakp
 You can also use `@show`, `@debug` commands for pesky bugs.
 
 Debugging AD code is a bit trickier.
-`Cthulhu.jl` is a package that offers the `@descend` macro that helps step into
+`Cthulhu.jl` is a package that offers the `@descend` macro that helps step into your code.
+`ascend` is also helpful and can be used on stacktraces.
 
 ## Citation
 

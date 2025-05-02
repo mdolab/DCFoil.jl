@@ -5,10 +5,13 @@
 # @Author  :   Galen Ng
 # @Desc    :   Main executable for the project
 
-using Printf, Dates
-include("../../src/DCFoil.jl")
+using Printf#, Dates
 
-using .DCFoil
+for headerName in [
+    "../../src/solvers/SolveFlutter"
+]
+    include("$(headerName).jl")
+end
 
 # ==============================================================================
 # Setup hydrofoil model and solver settings
@@ -72,6 +75,7 @@ DVDict = Dict(
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
+    "depth0" => 10.0, # depth of the strut [m]
 )
 paramsList = [DVDict]
 wingOptions = Dict(
@@ -111,6 +115,7 @@ solverOptions = Dict(
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
+    "use_nlll" => false,
     # --- Static solve ---
     "run_static" => run_static,
     # --- Forced solve ---
@@ -137,8 +142,8 @@ evalFuncs = ["wtip", "psitip", "cl", "cmy", "lift", "moment", "ksflutter"]
 # The file directory has the convention:
 # <name>_<material-name>_f<fiber-angle>_w<sweep-angle>
 # But we write the DVDict to a human readable file in the directory anyway so you can double check
-outputDir = @sprintf("./OUTPUT/%s_%s_%s_f%.1f_w%.1f/",
-    string(Dates.today()),
+outputDir = @sprintf("./OUTPUT/%s_%s_f%.1f_w%.1f/",
+    # string(Dates.today()),
     solverOptions["name"],
     solverOptions["material"],
     rad2deg(DVDict["theta_f"]),
@@ -150,25 +155,31 @@ solverOptions["outputDir"] = outputDir
 # ==============================================================================
 #                         Call DCFoil
 # ==============================================================================
-# DCFoil.init_model(DVDict, evalFuncs; solverOptions = solverOptions)
-# SOL = DCFoil.run_model(
-#     DVDict,
-#     evalFuncs;
-#     # --- Optional args ---
-#     solverOptions=solverOptions
-# )
-# costFuncs = DCFoil.evalFuncs(SOL, evalFuncs, solverOptions)
-GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+GridStruct = SolveFlutter.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
-DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
-solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
-SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
-DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
-costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
+ptVec, m, n = SolveFlutter.FEMMethods.unpack_coords(LECoords, TECoords)
+solverOptions = SolveFlutter.FEMMethods.set_structDamping(ptVec, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
+
+# --- Pre-computes to get lift slopes ---
+displacements_col = zeros(6, SolveFlutter.LiftingLine.NPT_WING)
+idxTip = SolveFlutter.FEMMethods.get_tipnode(LECoords)
+midchords, chordVec, _, sweepAng, _ = SolveFlutter.FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip, appendageOptions=appendageOptions[1], appendageParams=paramsList[1])
+LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
+claVec = LLOutputs.cla
+
+obj, SOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, claVec, paramsList[1]["theta_f"], paramsList[1]["toc"], paramsList[1]["alfa0"], paramsList[1], solverOptions; return_all=true)
+SolveFlutter.write_sol(SOL, solverOptions["outputDir"])
+# GridStruct = DCFoil.MeshIO.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
+# LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+# DCFoil.init_model(LECoords, nodeConn, TECoords; solverOptions=solverOptions, appendageParamsList=paramsList)
+# solverOptions = DCFoil.set_structDamping(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
+# SOLDICT = DCFoil.run_model(LECoords, nodeConn, TECoords, evalFuncs; solverOptions=solverOptions, appendageParamsList=paramsList)
+# DCFoil.write_solution(SOLDICT, solverOptions, paramsList)
+# costFuncs = DCFoil.evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, paramsList, evalFuncs, solverOptions)
 using Test
 
 @testset "test static div" begin
 
-    @test abs(costFuncs["ksflutter"] - 0.361) < 1e-2
+    @test abs(obj - 0.361) < 1e-2
 end
 

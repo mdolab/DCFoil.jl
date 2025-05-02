@@ -7,13 +7,8 @@
 """
 
 
-module OceanWaves
 
-using ..Unsteady: compute_sears
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, GRAV
 
-using Plots
-# using Debugger
 
 function compute_PMwave_spectrum(Vwind, w)
     """
@@ -194,5 +189,3 @@ function compute_AWave(ωRange, ωe, waveamp)
 
     return ampDist
 end
-
-end # end module

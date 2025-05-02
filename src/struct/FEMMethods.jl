@@ -5,6 +5,11 @@
 @Author  :   Galen Ng
 @Desc    :   Finite element library
 Module with generic FEM methods
+the governing equation is
+
+r ( u_s ) =  0
+where
+r ( u_s ) = K u_s - f and f is the vector of traction forces with direct dependence on the displacement field u_s
 
 # KNOWN BUGS:
     span derivative may result in array size being wrong
@@ -17,38 +22,52 @@ Module with generic FEM methods
 
 module FEMMethods
 
+for headerName in [
+    "../constants/DataTypes",
+    "../constants/SolutionConstants",
+    "../constants/DesignConstants",
+    "../adrules/CustomRules",
+    "../struct/BeamProperties",
+    "../utils/Utilities",
+    "../utils/Interpolation",
+    "../utils/Rotations",
+    "../struct/EBBeam",
+    "../utils/Preprocessing",
+    "../struct/MaterialLibrary",
+    "../solvers/EigenvalueProblem",
+    "../solvers/DCFoilSolution",
+]
+    include(headerName * ".jl")
+end
+
 # --- PACKAGES ---
+using AbstractDifferentiation: AbstractDifferentiation as AD
 using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using DelimitedFiles
 using LinearAlgebra
 using StaticArrays
+using FLOWMath: abs_cs_safe, atan_cs_safe, norm_cs_safe
 
 # --- DCFoil modules ---
-using ..DCFoil: RealOrComplex, DTYPE
-using ..EBBeam: EBBeam as BeamElement, NDOF
-using ..SolverRoutines
-using ..Interpolation
-using ..BeamProperties
-using ..DesignConstants: DesignConstants, DynamicFoil, CONFIGS
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE, ELEMTYPE
-using ..Preprocessing
-using ..MaterialLibrary
-using ..Rotations
+# using .DesignConstants: DesignConstants, DynamicFoil, CONFIGS, Foil
+using .MaterialLibrary
+
+export ELEMTYPE, NDOF, UIND, VIND, WIND, ΦIND, ΘIND, ΨIND
 
 struct StructMesh{TF,TC,TI}
     """
     Struct to hold the mesh, element connectivity, and node properties
     """
-    mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes)
+    mesh::AbstractMatrix{TF} # node xyz coords (2D array of coordinates of nodes) => [nnodes, ndim]
     elemConn::Matrix{TI} # element-node connectivity [elemIdx] => [globalNode1Idx, globalNode2Idx]
     # sectionVectors::TM
     # The stuff below is only stored for output file writing. DO NOT USE IN CALCULATIONS
-    chord::Vector{TC}
-    toc::Vector{TC}
+    chord::AbstractVector
+    toc::AbstractVector
     ab::Vector{TC}
     x_αb::Vector{TC}
-    theta_f::TC # global fiber frame orientation
+    theta_f::RealOrComplex # global fiber frame orientation (this is complex stepped)
     idxTip::TI # index of the tip node
     airfoilCoords::AbstractMatrix # airfoil coordinates
 end
@@ -96,17 +115,10 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
 
     """
     config = appendageOptions["config"]
-    semispan = Preprocessing.compute_structSpan(abs.(midchords), idxTip)
-    nElemWing = appendageOptions["nNodes"] - 1
-    nElemTot = nothing
-    if config == "wing"
-        nElemTot = nElemWing
-    elseif config == "full-wing"
-        nElemTot = 2 * nElemWing
-    end
-    nNodeTot = nElemTot + 1
-    nNodeWing = nElemWing + 1
+    # semispan = compute_structSpan(abs.(midchords), idxTip) # NaNing
+    semispan = midchords[YDIM, idxTip]
 
+    nNodeTot, nNodeWing, nElemTot, nElemWing = get_numnodes(config, appendageOptions["nNodes"], appendageOptions["nNodeStrut"])
 
 
     # --- Spline quantities ---
@@ -119,14 +131,18 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     end
 
     # Find where node connectivivity jumps and has index of 1
-    junctionIdxs = findall(x -> x == 1, nodeConn)
+    ChainRulesCore.ignore_derivatives() do
+        junctionIdxs = findall(x -> x == 1, nodeConn)
+    end
 
-    s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :])
+    # s_loc = vec(sqrt.(sum(midchords .^ 2, dims=1))) .* sign.(midchords[YDIM, :]) #NaNing
+    s_loc = midchords[YDIM, :]
+    idxTmp = sortperm(s_loc) # sort the indices based on spanwise location from smallest to largest (make continuous)
 
 
-    midchordXLocs = Interpolation.do_linear_interp(s_loc, midchords[XDIM, :], s_loc_q)
-    midchordYLocs = Interpolation.do_linear_interp(s_loc, midchords[YDIM, :], s_loc_q)
-    midchordZLocs = Interpolation.do_linear_interp(s_loc, midchords[ZDIM, :], s_loc_q)
+    midchordXLocs = do_linear_interp(s_loc[idxTmp], midchords[XDIM, idxTmp], s_loc_q)
+    midchordYLocs = do_linear_interp(s_loc[idxTmp], midchords[YDIM, idxTmp], s_loc_q)
+    midchordZLocs = do_linear_interp(s_loc[idxTmp], midchords[ZDIM, idxTmp], s_loc_q)
 
     # mesh = zeros(RealOrComplex, nNodeTot, 3)
     mesh = cat(reshape(midchordXLocs, nNodeTot, 1), reshape(midchordYLocs, nNodeTot, 1), reshape(midchordZLocs, nNodeTot, 1), dims=2)
@@ -135,12 +151,12 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     # mesh[:, ZDIM] = midchordZLocs
 
     elemConn = zeros(Int64, nElemWing, 2)
-    elemConn_z = Zygote.Buffer(elemConn)
-    # --- Element connectivity ---
-    for ee in 1:nElemWing
-        elemConn_z[ee, :] = [ee, ee + 1]
+    ChainRulesCore.ignore_derivatives() do
+        # --- Element connectivity ---
+        for ee in 1:nElemWing
+            elemConn[ee, :] = [ee, ee + 1]
+        end
     end
-    elemConn = copy(elemConn_z)
 
     # println("span loc query", s_loc_q)
     # for coord in eachrow(mesh)
@@ -148,10 +164,10 @@ function make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, app
     # end
     if config == "full-wing"
         modifiedConn = elemConn .+ nNodeWing .- 1
-        modifiedConn_z = Zygote.Buffer(modifiedConn)
-        modifiedConn_z[:, :] = modifiedConn
-        modifiedConn_z[1, 1] = 1
-        modifiedConn = copy(modifiedConn_z)
+        ChainRulesCore.ignore_derivatives() do
+            modifiedConn[:, :] = modifiedConn
+            modifiedConn[1, 1] = 1
+        end
         elemConn = vcat(elemConn, modifiedConn)
     end
 
@@ -188,7 +204,7 @@ function make_componentMesh(
     """
     rot = deg2rad(rake)
     # transMat = SolverRoutines.get_rotate3dMat(rot; axis="y")
-    transMat = Rotations.get_rotate3dMat(rot, "y")
+    transMat = get_rotate3dMat(rot, "y")
     if config == "wing"
         nNodeTot = nElem + 1
         nElemTot = nElem
@@ -199,7 +215,7 @@ function make_componentMesh(
         nNodeTot = 2 * nElem + nElStrut + 1
         nElemTot = 2 * nElem + nElStrut
     end
-    mesh = zeros(RealOrComplex, nNodeTot, 3)
+    mesh = zeros(Real, nNodeTot, 3)
     elemConn = zeros(Int64, nElemTot, 2)
 
     mesh_z = Zygote.Buffer(mesh)
@@ -226,6 +242,36 @@ function make_componentMesh(
     # println("")
 
     return mesh, elemConn
+end
+
+function get_numnodes(config, nNodeWing, nNodeStrut)
+
+    nElemWing = nNodeWing - 1
+    if config == "wing"
+        nElemTot = nElemWing
+    elseif config == "full-wing"
+        nElemTot = 2 * nElemWing
+    elseif config == "t-foil"
+        nElemTot = 2 * nElemWing + nNodeStrut - 1
+        nElStrut = nNodeStrut - 1
+    else
+        error("Invalid configuration")
+    end
+
+    nNodeTot = nElemTot + 1
+    if config == "wing"
+        nNodeTot = nElemWing + 1
+        nElemTot = nElemWing
+    elseif config == "full-wing"
+        nNodeTot = 2 * nElemWing + 1
+        nElemTot = 2 * nElemWing
+    elseif config == "t-foil"
+        nNodeTot = 2 * nElemWing + nElStrut + 1
+        nElemTot = 2 * nElemWing + nElStrut
+    else
+        error("Invalid configuration")
+    end
+    return nNodeTot, nNodeWing, nElemTot, nElemWing
 end
 
 function fill_mesh(
@@ -260,7 +306,7 @@ function fill_mesh(
             # Add foil wing first
             for nodeIdx in 1:nElem
                 mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     elemConn[nodeCtr, 1] = nodeIdx
                     elemConn[nodeCtr, 2] = nodeIdx + 1
                 end
@@ -273,13 +319,13 @@ function fill_mesh(
             nodeCtr += 1
 
             # Mirror wing nodes skipping first, but adding junction connectivity
-            @ignore_derivatives() do
+            ChainRulesCore.ignore_derivatives() do
                 elemConn[elemCtr, 1] = 1
                 elemConn[elemCtr, 2] = nodeCtr
             end
             for nodeIdx in 2:nElem
                 mesh[nodeCtr, :] = [0.0, -foilwingMesh[nodeIdx], 0.0]
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     elemConn[nodeCtr, 1] = nodeCtr
                     elemConn[nodeCtr, 2] = nodeCtr + 1
                 end
@@ -289,7 +335,7 @@ function fill_mesh(
 
             # Grab end of wing
             mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-            @ignore_derivatives() do
+            ChainRulesCore.ignore_derivatives() do
                 elemConn[elemCtr, 1] = nodeCtr - 1
                 elemConn[elemCtr, 2] = nodeCtr
             end
@@ -297,7 +343,7 @@ function fill_mesh(
             elemCtr += 1
 
             # in the extreme case of 3 elements, elem conn is wrong
-            @ignore_derivatives() do
+            ChainRulesCore.ignore_derivatives() do
                 if (2 * nElem == 2)
                     elemConn[2, 1] = 1
                     elemConn[2, 2] = 3
@@ -325,7 +371,7 @@ function fill_mesh(
         nodeCtr = 1 # node counter traversing nodes
 
         # Add foil wing first
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             for nodeIdx in 1:nElem
                 # mesh[nodeCtr, :] = [0.0, foilwingMesh[nodeIdx], 0.0]
                 elemConn[nodeCtr, 1] = nodeIdx
@@ -345,7 +391,7 @@ function fill_mesh(
         nodeCtr += 1
 
         # Mirror wing nodes skipping first, but adding junction connectivity
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             elemConn[elemCtr, 1] = 1
             elemConn[elemCtr, 2] = nodeCtr
             for nodeIdx in 2:nElem
@@ -360,7 +406,7 @@ function fill_mesh(
         foilMeshPort = hcat(zeros(nElem), -foilwingMesh[2:end], zeros(nElem))
         # Grab end of wing
         # mesh[nodeCtr, :] = [0.0, -foilwingMesh[end], 0.0]
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             elemConn[elemCtr, 1] = nodeCtr - 1
             elemConn[elemCtr, 2] = nodeCtr
         end
@@ -372,7 +418,7 @@ function fill_mesh(
         # ************************************************
         # Add strut going up in z
         nodeIdx = 1
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             for istrut in 1:nElStrut # loop elem, not nodes
                 # if nodeIdx <= nElStrut 
                 # mesh[nodeCtr, 1:3] = [0.0, 0.0, strutMesh[istrut]]
@@ -398,7 +444,7 @@ function fill_mesh(
         mesh[:, :] = vcat(foilMesh, foilMeshPort, strutMesh)
 
         # in the extreme case of 3 elements, elem conn is wrong
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if (2 * nElem + nElStrut == 3)
                 elemConn[2, 1] = 1
                 elemConn[2, 2] = 3
@@ -457,6 +503,7 @@ function assemble(StructMesh, x_αbVec,
     # --- Initialize matrices ---
     nElem = size(StructMesh.elemConn)[1]
     nNodes = nElem + 1
+    # These need to be complex step-able
     globalK = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
     globalM = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
     globalF = zeros(RealOrComplex, NDOF * (nNodes))
@@ -473,13 +520,16 @@ function assemble(StructMesh, x_αbVec,
     globalK_z[:, :] = globalK
     globalM_z[:, :] = globalM
     globalF_z[:] = globalF
-    populate_matrices!(globalK_z, globalM_z, globalM_z, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
+    populate_matrices!(globalK_z, globalM_z, globalF_z, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
         config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
-
-
     globalK = copy(globalK_z)
     globalM = copy(globalM_z)
     globalF = copy(globalF_z)
+    # --- Other way ---
+    # populate_matrices!(globalK, globalM, globalF, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
+    #     config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
+
+
 
     return globalK, globalM, globalF
 end
@@ -493,7 +543,7 @@ function populate_matrices!(
     elemConn = StructMesh.elemConn
     coordMat = StructMesh.mesh
     # --- Debug printout for initialization ---
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if verbose
             println("+----------------------------------------+")
             println("|        Assembling beam matrices        |")
@@ -584,12 +634,12 @@ function populate_matrices!(
         # ---------------------------
         #   Local stiffness matrix
         # ---------------------------
-        kLocal = BeamElement.compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
+        kLocal = compute_elem_stiff(EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, lᵉ, ab, elemType, constitutive, false)
 
         # ---------------------------
         #   Local mass matrix
         # ---------------------------
-        mLocal = BeamElement.compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
+        mLocal = compute_elem_mass(mₛ, iₛ, lᵉ, x_αb, elemType)
 
         # ---------------------------
         #   Local force vector
@@ -604,12 +654,14 @@ function populate_matrices!(
         # {u} = [Γ] * {U}
         # where [Γ] is the transformation matrix
         # Γ = SolverRoutines.get_transMat(dR1, dR2, dR3, lᵉ, elemType)
-        Γ = Rotations.get_transMat(dR1, dR2, dR3, lᵉ)
+        Γ = get_transMat(dR1, dR2, dR3, lᵉ)
         ΓT = transpose(Γ)
-        kElem = ΓT * kLocal * Γ
-        mElem = ΓT * mLocal * Γ
+        kElem_int = my_matmul(kLocal, Γ)
+        kElem = my_matmul(ΓT, kElem_int)
+        mElem_int = my_matmul(mLocal, Γ)
+        mElem = my_matmul(ΓT, mElem_int)
         fElem = ΓT * fLocal
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if any(isnan.(kElem))
                 println("NaN in elem stiffness matrix")
             end
@@ -641,7 +693,7 @@ function populate_matrices!(
                 end
             end
         end
-        @ignore_derivatives() do
+        ChainRulesCore.ignore_derivatives() do
             if any(isnan.(globalK))
                 println("NaN in global stiffness matrix")
             end
@@ -657,12 +709,12 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
     """
     if BCCond == "clamped"
         if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
-            fixedDOFs = Vector(1:BeamElement.NDOF)
+            fixedDOFs = Vector(1:NDOF)
 
         elseif appendageOptions["config"] == "t-foil"
             nElemTot = (appendageOptions["nNodes"] - 1) * 2 + appendageOptions["nNodeStrut"] - 1
             nNodeTot = nElemTot + 1
-            fixedDOFs = Vector(nNodeTot*BeamElement.NDOF:-1:nElemTot*BeamElement.NDOF+1)
+            fixedDOFs = Vector(nNodeTot*NDOF:-1:nElemTot*NDOF+1)
 
         else
             error("config not recognized")
@@ -672,7 +724,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
         error("BCCond not recognized")
     end
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if verbose
             println("BCType: ", BCCond)
         end
@@ -765,7 +817,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
         # Parallel axis theorem
         Iea = inertia + mass * (x_αbBulb)^2
         is = Iea / elemLength
-        tipMassMat = BeamElement.compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
+        tipMassMat = compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
         tipMassMat = transMat' * tipMassMat * transMat
 
         # --- Assemble into global matrix ---
@@ -777,7 +829,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
         # Parallel axis theorem
         Iea = inertia + mass * (x_αbBulb)^2
         is = Iea / elemLength
-        tipMassMat = BeamElement.compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
+        tipMassMat = compute_elem_mass(ms, is, elemLength, x_αbBulb, elemType)
         tipMassMat = transMat' * tipMassMat * transMat
 
         # --- Assemble into global matrix ---
@@ -786,7 +838,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
         error("Not implemented")
     end
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         println("+------------------------------------+")
         println("|    Tip mass added!                 |")
         println("+------------------------------------+")
@@ -808,9 +860,9 @@ function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
 end
 
 function apply_BCs(
-    K::Matrix, M::Matrix,
-    F::Vector,
-    globalDOFBlankingList::Vector{Int64}
+    K::AbstractMatrix, M::AbstractMatrix,
+    F::AbstractVector,
+    globalDOFBlankingList::AbstractVector{Int64}
 )
     """
     Applies BCs for nodal displacements and sets them to zero
@@ -859,7 +911,7 @@ function put_BC_back(q, elemType::String, BCType="clamped"; appendageOptions=Dic
     return uSol, length(uSol)
 end
 
-function solve_structure(K::Matrix, M::Matrix, F::Vector)
+function solve_structure(K::AbstractMatrix, F::AbstractVector)
     """
     Solve the structural system
     """
@@ -876,14 +928,14 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     similar to above but shortcircuiting the hydroside
     """
 
-    idxTip = Preprocessing.get_tipnode(real.(LECoords))
-    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    idxTip = get_tipnode(real.(LECoords))
+    midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     # ---------------------------
     #   Geometry
     # ---------------------------
-    eb::Vector{RealOrComplex} = 0.25 * chordLengths .+ ab
-    t::Vector{RealOrComplex} = toc .* chordLengths
+    eb::typeof(ab) = 0.25 * chordLengths .+ ab
+    t::typeof(toc) = toc .* chordLengths
 
     # ---------------------------
     #   Structure
@@ -895,15 +947,15 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
 
     if haskey(appendageOptions, "path_to_struct_props") && !isnothing(appendageOptions["path_to_struct_props"])
         println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
-        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = Preprocessing.get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
+        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
     else
-        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
+        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
     end
 
     # ---------------------------
     #   Build final model
     # ---------------------------
-    wingModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb, ab, chordLengths, appendageOptions["nNodes"], constitutive)
+    wingModel = Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb, ab, chordLengths, appendageOptions["nNodes"], constitutive)
 
     # ************************************************
     #     Strut properties
@@ -921,7 +973,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
         # ---------------------------
         #   Build final model
         # ---------------------------
-        strutModel = DesignConstants.Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb_strut, ab_strut, c_strut, appendageOptions["nNodeStrut"], constitutive)
+        strutModel = Foil(mₛ, Iₛ, EIₛ, EIIPₛ, GJₛ, Kₛ, Sₛ, EAₛ, eb_strut, ab_strut, c_strut, appendageOptions["nNodeStrut"], constitutive)
 
     elseif appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
         strutModel = nothing
@@ -934,7 +986,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
 
 end
 
-function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
+function compute_modal(K::Matrix{<:RealOrComplex}, M::Matrix{<:RealOrComplex}, nEig::Int64)
     """
     Compute the eigenvalues (natural frequencies) and eigenvectors (mode shapes) of the in-vacuum system.
     i.e., this is structural dynamics, not hydroelastics.
@@ -944,13 +996,25 @@ function compute_modal(K::Matrix, M::Matrix, nEig::Int64)
 
     # use krylov method to get first few smallest eigenvalues
     # Solve [K]{x} = λ[M]{x} where λ = ω²
-    eVals, eVecs = SolverRoutines.compute_eigsolve(K, M, nEig)
+    eVals, eVecs = compute_eigsolve(K, M, nEig)
 
     naturalFreqs = .√(eVals) / (2π)
 
     return naturalFreqs, eVecs
 end
 
+function set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageOptions)
+
+    LECoords, TECoords = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    globalKs, globalMs, globalF, globalDOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+    Ks, Ms, _ = apply_BCs(globalKs, globalMs, globalF, globalDOFBlankingList)
+    αStruct, βStruct = compute_proportional_damping(Ks, Ms, appendageParams["zeta"], solverOptions["nModes"])
+
+    solverOptions["alphaConst"] = αStruct
+    solverOptions["betaConst"] = βStruct
+
+    return solverOptions
+end
 
 function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, appendageParams, appendageOptions, solverOptions)
     """
@@ -969,9 +1033,9 @@ function compute_proportionalDampingConstants(FEMESH, x_αbVec, FOIL, elemType, 
     return αStruct, βStruct
 end
 
-function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, nMode::Int64)
+function compute_proportional_damping(K::AbstractMatrix, M::AbstractMatrix, ζ, nMode::Int64)
     """
-    TODO: MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
+    MAKE SURE THIS CONSTANT STAYS THE SAME THROUGHOUT OPTIMIZATION
     Compute the proportional (Rayleigh) damping matrix
 
     C = alpha [M] + beta [K]
@@ -1017,6 +1081,387 @@ function compute_proportional_damping(K::Matrix, M::Matrix, ζ::RealOrComplex, n
     return massPropConst, stiffPropConst
 end
 
+function setup_FEBeamFromCoords(
+    LECoords, nodeConn, TECoords, appendageParamsList, appendageOptions, solverOptions
+)
+    """
+    Full setup
+    """
 
+    appendageParams = appendageParamsList[1]
+
+    idxTip = get_tipnode(LECoords)
+    midchords, chordLengths, spanwiseVectors, sweepAng, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    fRange = solverOptions["fRange"]
+    uRange = solverOptions["uRange"]
+
+    rake, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut = unpack_appendageParams(appendageParams, appendageOptions)
+
+    statWingStructModel, statStrutStructModel = init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
+    WingStructModel = DynamicFoil(
+        statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
+        statWingStructModel.eb, statWingStructModel.ab, statWingStructModel.chord, statWingStructModel.nNodes, statWingStructModel.constitutive,
+        fRange, uRange
+    )
+
+    if isnothing(statStrutStructModel)
+        StrutStructModel = nothing
+    else
+        StrutStructModel = DynamicFoil(
+            statStrutStructModel.mₛ, statStrutStructModel.Iₛ, statStrutStructModel.EIₛ, statStrutStructModel.EIIPₛ, statStrutStructModel.GJₛ, statStrutStructModel.Kₛ, statStrutStructModel.Sₛ, statStrutStructModel.EAₛ, statStrutStructModel.eb, statStrutStructModel.ab, statStrutStructModel.chord, statStrutStructModel.nNodes, statStrutStructModel.constitutive, fRange, uRange
+        )
+    end
+
+    structMesh, elemConn = make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
+    FEMESH = StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
+
+    globalK, globalM, globalF = assemble(FEMESH, x_ab, WingStructModel, ELEMTYPE, WingStructModel.constitutive; config=appendageOptions["config"], STRUT=StrutStructModel, x_αb_strut=x_ab_strut, verbose=solverOptions["debug"])
+
+    # Initial guess on unknown deflections (excluding BC nodes)
+    DOFBlankingList = get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+
+    return globalK, globalM, globalF, DOFBlankingList, FEMESH, WingStructModel, StrutStructModel
+end
+
+# ************************************************
+#     Derivative routines
+# ************************************************
+function compute_residualsFromCoords(
+    allStructStates, xVec, nodeConn, fu, appendageParamsList;
+    appendageOptions=Dict(), solverOptions=Dict(), iComp=1
+)
+    """
+    Compute residual for every node that is not the clamped root node
+
+        r(u, x) = [K]{u} - {f(u)}
+
+        where f(u) is the force vector from the current solution
+
+        Inputs
+        ------
+        allStructuralStates : array
+            State vector with nodal DOFs and deformations including BCs
+        x : dict
+            Design variables
+    """
+
+    LECoords, TECoords = repack_coords(xVec, 3, length(xVec) ÷ 3)
+
+    Kmat, _, F, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, appendageParamsList, appendageOptions, solverOptions)
+
+    # --- Outputs ---
+    FOut = fu[1:end.∉[DOFBlankingList]]
+
+    # --- Stack them ---
+    Knew = Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    structStates = allStructStates[1:end.∉[DOFBlankingList]]
+    Felastic = Knew * structStates
+
+
+    resNodes = Felastic - FOut
+
+    resVec::AbstractArray{Number} = zeros(length(resNodes) + length(DOFBlankingList))
+    resVec[1:end.∉[DOFBlankingList]] = resNodes
+
+    return resVec
+end
+
+function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, appendageParams, solverOptions; mode="CS")
+    """
+    Derivative of structural stiffness matrix with respect to design variables times structural 
+    Matrix-vector product
+    """
+
+    function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+
+        LECoords, TECoords = repack_coords(xVec, 3, length(xVec) ÷ 3)
+
+        globalK, globalM, globalC, DOFBlankingList, FEMESH = setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
+
+        Kmat = globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+        f = Kmat * u
+
+        return f
+    end
+
+
+    ∂KssU∂x = zeros(DTYPE, length(structStates), length(ptVec))
+    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    idxTip = get_tipnode(LECoords)
+
+    if uppercase(mode) == "CS"
+        # CS is faster than fidi automated, but RAD will probably be best later...? 2.4sec
+        dh = 1e-100
+        ptVecWork = complex(ptVec)
+        for ii in eachindex(ptVec)
+            ptVecWork[ii] += 1im * dh
+            f_f = compute_KssU(structStates, ptVecWork, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+            ptVecWork[ii] -= 1im * dh
+            ∂KssU∂x[:, ii] = imag(f_f) / dh
+        end
+    elseif uppercase(mode) == "FIDI"
+        dh = 1e-5
+        f_i = compute_KssU(structStates, ptVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = compute_KssU(structStates, ptVec, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
+            ptVec[ii] -= dh
+            ∂KssU∂x[:, ii] = (f_f - f_i) / dh
+        end
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂KssU∂x, = AD.jacobian(
+            backend,
+            x -> compute_KssU(structStates, x, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions),
+            ptVec,
+        )
+    elseif uppercase(mode) == "RAD"
+        backend = AD.ReverseDiffBackend()
+        ∂KssU∂x, = AD.jacobian(
+            backend,
+            x -> compute_KssU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
+            ptVec,
+        )
+    end
+
+    return ∂KssU∂x
+end
+
+
+function compute_∂r∂x(
+    allStructStates, fu, appendageParamsList, LECoords, TECoords, nodeConn;
+    mode="FiDi", appendageOptions=nothing,
+    solverOptions=nothing, iComp=1,
+)
+    """
+    Partial derivatives of residuals with respect to design variables w/o reconverging the solution
+    """
+
+    # println("Computing ∂r∂x in $(mode) mode...")
+    DOFBlankingList = get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+    u = allStructStates[1:end.∉[DOFBlankingList]]
+
+    ptVec, mm, nn = unpack_coords(LECoords, TECoords)
+    appendageParams = appendageParamsList[iComp]
+
+    ∂r∂xPt = zeros(DTYPE, length(allStructStates), length(ptVec))
+    ∂r∂xParams = Dict()
+
+    if uppercase(mode) == "FIDI" # Finite difference
+
+        dh = 1e-4
+        # backend = AD.FiniteDifferencesBackend()
+        # ∂r∂xPt, = AD.jacobian(
+        #     backend,
+        #     x -> compute_residualsFromCoords(
+        #         allStructStates,
+        #         x,
+        #         nodeConn,
+        #         fu,
+        #         appendageParamsList,
+        #         appendageOptions=appendageOptions,
+        #         solverOptions=solverOptions,
+        #         iComp=iComp,
+        #     ),
+        #     ptVec, # compute deriv at this DV
+        # )
+        f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            ptVec[ii] -= dh
+            ∂r∂xPt[:, ii] = (f_f - f_i) / dh
+        end
+
+
+        # ************************************************
+        #     Params derivatives
+        # ************************************************
+        appendageParamsList[iComp]["theta_f"] += dh
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["theta_f"] -= dh
+        ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+
+        ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
+        for ii in eachindex(appendageParamsList[iComp]["toc"])
+            appendageParamsList[iComp]["toc"][ii] += dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            appendageParamsList[iComp]["toc"][ii] -= dh
+            ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+        end
+        appendageParamsList[iComp]["alfa0"] += dh
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["alfa0"] -= dh
+        ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
+
+    elseif uppercase(mode) == "CS" # works but slow (4 sec)
+        dh = 1e-100
+        println("step size: ", dh)
+
+        ∂r∂xPt = zeros(DTYPE, length(u), nn)
+
+        ∂r∂xPt = perturb_coordsForResid(∂r∂xPt, 1im * dh, u, LECoords, TECoords, nodeConn, appendageParamsList, appendageOptions, solverOptions, iComp)
+
+    elseif uppercase(mode) == "ANALYTIC"
+
+        # This seems good
+
+        ∂Kss∂x_u = compute_∂KssU∂x(u, ptVec, nodeConn, appendageOptions, appendageParamsList[1], solverOptions;
+            # mode="CS" # 4 sec but accurate
+            # mode="FAD" # 5 sec
+            mode="FiDi" # 2.8 sec
+            # mode="RAD" # broken
+        )
+
+        # ∂r∂x = u ∂K∂X 
+        ∂r∂xPt[1:end.∉[DOFBlankingList], :] .= ∂Kss∂x_u
+
+        # ************************************************
+        #     Params derivatives
+        # ************************************************
+        # dh = 1e-4
+        dh = 1e-100
+
+        f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+
+        # appendageParamsList[iComp]["theta_f"] += dh
+        appendageParamsList[iComp]["theta_f"] += 1im * dh
+
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["theta_f"] -= 1im * dh
+
+        # ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+        ∂r∂xParams["theta_f"] = imag(f_f) / dh
+
+        ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
+        appendageParamsListCS = copy(appendageParamsList)
+        appendageParamsListCS[iComp]["toc"] = complex.(appendageParamsList[iComp]["toc"])
+        for ii in eachindex(appendageParamsList[iComp]["toc"])
+            # appendageParamsList[iComp]["toc"][ii] += dh
+            appendageParamsListCS[iComp]["toc"][ii] += 1im * dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsListCS; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            # appendageParamsList[iComp]["toc"][ii] -= dh
+            appendageParamsListCS[iComp]["toc"][ii] -= 1im * dh
+            # ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+            ∂r∂xParams["toc"][:, ii] = imag(f_f) / dh
+        end
+
+        appendageParamsList[iComp]["alfa0"] += dh
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["alfa0"] -= dh
+        ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
+
+
+    elseif uppercase(mode) == "FAD" # this is fked
+        error("Not implemented")
+    elseif uppercase(mode) == "RAD" # WORKS
+        backend = AD.ZygoteBackend()
+        ∂r∂xPt, = AD.jacobian(
+            backend,
+            x -> compute_residualsFromCoords(
+                allStructStates,
+                x,
+                nodeConn,
+                fu,
+                appendageParamsList;
+                appendageOptions=appendageOptions,
+                solverOptions=solverOptions,
+                iComp=iComp,
+            ),
+            ptVec, # compute deriv at this DV
+        )
+
+        # ************************************************
+        #     Params derivatives
+        # ************************************************
+        dh = 1e-4
+        f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["theta_f"] += dh
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["theta_f"] -= dh
+        ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
+
+        ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
+        for ii in eachindex(appendageParamsList[iComp]["toc"])
+            appendageParamsList[iComp]["toc"][ii] += dh
+            f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+            appendageParamsList[iComp]["toc"][ii] -= dh
+            ∂r∂xParams["toc"][:, ii] = (f_f - f_i) / dh
+        end
+        appendageParamsList[iComp]["alfa0"] += dh
+        f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        appendageParamsList[iComp]["alfa0"] -= dh
+        ∂r∂xParams["alfa0"] = (f_f - f_i) / dh
+    else
+        error("Invalid mode")
+    end
+
+    # writedlm("drdxPt-$(mode).csv", ∂r∂xPt, ',')
+    return ∂r∂xPt, ∂r∂xParams
+end
+
+function compute_∂nodes∂x(ptVec, nodeConn, appendageParamsList, appendageOptions; mode="RAD")
+    """
+    Compute Jacobian of nodes wrt ptVec in the transposed fashion for the python layer
+    """
+
+    function compute_nodes(xPt)
+        appendageParams = appendageParamsList[1]
+
+        LECoords, TECoords = FEMMethods.repack_coords(xPt, 3, length(xPt) ÷ 3)
+        idxTip = get_tipnode(LECoords)
+        midchords, chordLengths, spanwiseVectors, sweepAng, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        structMesh, _ = make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
+
+        output = vec(transpose(structMesh)) # transpose so it's in the same shape as what python needs
+        return output
+    end
+
+
+    f_i = compute_nodes(ptVec)
+    ∂nodes∂xPt = zeros(DTYPE, length(f_i), length(ptVec))
+
+    if uppercase(mode) == "FIDI"
+        dh = 1e-4
+
+        for ii in eachindex(ptVec)
+            ptVec[ii] += dh
+            f_f = compute_nodes(ptVec)
+            ptVec[ii] -= dh
+            ∂nodes∂xPt[:, ii] = (f_f - f_i) / dh
+        end
+
+
+    elseif uppercase(mode) == "CS" # this mode is busted
+        dh = 1e-100
+
+        ptVecWork = complex(ptVec)
+        for ii in eachindex(ptVec)
+            ptVecWork[ii] += 1im * dh
+            f_f = compute_nodes(ptVecWork)
+            ptVecWork[ii] -= 1im * dh
+            ∂nodes∂xPt[:, ii] = imag(f_f) / dh
+        end
+
+    elseif uppercase(mode) == "RAD"
+        backend = AD.ZygoteBackend()
+        backend = AD.ReverseDiffBackend()
+        ∂nodes∂xPt, = AD.jacobian(
+            backend,
+            x -> compute_nodes(x),
+            ptVec, # compute deriv at this DV
+        )
+    elseif uppercase(mode) == "FAD"
+        backend = AD.ForwardDiffBackend()
+        ∂nodes∂xPt, = AD.jacobian(
+            backend,
+            x -> compute_nodes(x),
+            ptVec, # compute deriv at this DV
+        )
+    end
+
+    return ∂nodes∂xPt
+end
 
 end # end module

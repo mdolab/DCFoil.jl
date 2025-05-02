@@ -6,13 +6,9 @@
 @Author        :   Galen Ng
 @Desc          :   The original Glauert lifting line method used in Akcabay's papers
 """
-module GlauertLL
 
 # --- PACKAGES ---
 using Statistics
-# --- DCFoil modules ---
-using ..SolverRoutines
-using ..Interpolation
 
 function compute_glauert_circ(
     semispan, chordVec, α₀, U∞;
@@ -73,7 +69,7 @@ function compute_glauert_circ(
         # First parametrize the twist as a function of ytilde
         xnew = cos.(ỹ) # cosine spacing
         xlin = LinRange(0.0, 1.0, nNodes) # linear spacing
-        ftheta = Interpolation.do_linear_interp(xlin, twist, xnew)
+        ftheta = do_linear_interp(xlin, twist, xnew)
         α₀ = α₀ .+ ftheta
     else
         α₀ = ones(nNodes) * α₀
@@ -101,7 +97,7 @@ function compute_glauert_circ(
     end
 
     if useFS
-        # @ignore_derivatives() do
+        # ChainRulesCore.ignore_derivatives() do
         #     println("Using free surface")
         # end
         γ_FS = use_free_surface(γ, α₀, U∞, chordVec, h)
@@ -116,8 +112,8 @@ function compute_glauert_circ(
     # dl = semispan / (nNodes - 1)
     xq = LinRange(-semispan, 0.0, nNodes)
 
-    cℓ = Interpolation.do_linear_interp(y, cl, xq)
-    cl_α = Interpolation.do_linear_interp(y, clα, xq)
+    cℓ = do_linear_interp(y, cl, xq)
+    cl_α = do_linear_interp(y, clα, xq)
     # If this is fully ventilated, can divide the slope by 4
 
     # if solverOptions["config"] == "t-foil"
@@ -129,11 +125,11 @@ function compute_glauert_circ(
     #     Lift-induced drag computation
     # ************************************************
     downwashDistribution = -U∞ * (sin.(ỹn) * (n .* ã)) ./ sin.(ỹ)
-    wy = Interpolation.do_linear_interp(y, downwashDistribution, xq)
+    wy = do_linear_interp(y, downwashDistribution, xq)
 
     Fx_ind = 0.0
     dy = semispan / (nNodes)
-    spanwiseVorticity = Interpolation.do_linear_interp(y, γ, xq)
+    spanwiseVorticity = do_linear_interp(y, γ, xq)
 
     for ii in 1:nNodes
         Fx_ind += -rho * spanwiseVorticity[ii] * wy[ii] * dy
@@ -195,4 +191,3 @@ function use_free_surface(γ, α₀, U∞, chordVec, h)
 end
 
 
-end

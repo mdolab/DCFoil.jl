@@ -6,16 +6,13 @@
 because you'll need it for the costfunc and sensitivity calls
 """
 
-module DCFoilSolution
-
-using ..FEMMethods: StructMesh
-using ..SolutionConstants: DCFoilSolverParams
-using ..DesignConstants: Foil, DynamicFoil
+# using ..FEMMethods: StructMesh
+# using ..DesignConstants: Foil, DynamicFoil
 
 struct StaticSolution{TF}
     structStates::Vector{TF} # state variables (u)
     fHydro::Vector{TF} # hydrodynamic forces
-    FEMESH::StructMesh #struct type
+    FEMESH#::StructMesh #struct type
     SOLVERPARAMS::DCFoilSolverParams
     FOIL::DynamicFoil#{TF,TI,TA}
     STRUT::DynamicFoil#{TF,TI,TA}
@@ -47,6 +44,4 @@ struct FlutterSolution{TF,TI}
     nFlow::TI
     iblank::Matrix{TI}
     p_r::Matrix{TF} # nondim eigvals (for obj)(3*nModes, N_MAX_Q_ITER)
-end
-
 end

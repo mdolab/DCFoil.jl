@@ -9,31 +9,19 @@
              "nonlinear" lift slope into the nonlinear lifting line
 """
 
-module VPM
 
-# --- PACKAGES ---
-using LinearAlgebra
-using Plots
-using FLOWMath: atan_cs_safe
-using ChainRulesCore
-
-# --- DCFoil modules ---
-using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..Rotations: Rotations, compute_cartAnglesFromVector
-const DTYPE = AbstractFloat
-
-struct AirfoilMesh{TF,TI,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
+struct AirfoilMesh{TI, T<:Number, TM<:AbstractMatrix}
     """
     Struct to hold the airfoil geometry discretization
     """
     vortexXY::TM        # vortex points [x,y] for each panel, size [2, n] where n is the number of vertices
     controlXY::TM       # control points [x,y] for each panel, size [2, n-1] where n is the number of vertices
-    panelLengths::TA    # panel lengths [m]
+    panelLengths::AbstractVector    # panel lengths [m]
     n::TI               # number of panel vertices
-    sweep::TF           # sweep angle [rad]
+    sweep::T           # sweep angle [rad]
 end
 
-function setup(xx, yy, control_xy, sweep=0.0)
+function setup_VPM(xx, yy, control_xy, sweep=0.0)
     """
     Discretize the airfoil into panels and setup the VPM linear systems to solve
 
@@ -98,13 +86,16 @@ function setup(xx, yy, control_xy, sweep=0.0)
     return AIRFOIL, Amat
 end
 
-function solve(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
+function solve_VPM(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
     """
     Solve vortex strength and lift and moment
 
     Airfoil: AirfoilMesh struct
     Amat: Panel matrix of influences
     V: Freestream velocity vector [U, V, W]
+    Outputs:
+    cℓ: Sectional lift coefficient
+    cm: Moment coefficient about leading edge
     """
 
     if length(V) != 3
@@ -254,6 +245,4 @@ function compute_sweepCorr(angle, V)
     VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / SaSb
 
     return alphaCorr, VinfCorr
-end
-
 end

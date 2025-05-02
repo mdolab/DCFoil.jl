@@ -1,4 +1,3 @@
-module BeamProperties
 """
 @File    :   BeamProperties.jl
 @Time    :   2024/01/30
@@ -8,21 +7,17 @@ module BeamProperties
 
 using Zygote
 
-using ..DCFoil: RealOrComplex, DTYPE
 
-# --- Public functions ---
-export compute_section_property
-
-struct SectionProperty{TF,TC}
+struct SectionProperty{TF,TC,T}
     c::TC # chord length
-    t::TC # thickness (only needed if not using an airfoil section)
-    ab # dist from midchord to EA, +ve for EA aft
+    t::T # thickness (only needed if not using an airfoil section)
+    ab::TF # dist from midchord to EA, +ve for EA aft
     ρₛ::TF # density
     E₁::TF # Young's modulus in-plane fiber longitudinal direction (x)
     E₂::TF # Young's modulus in-plane fiber normal direction (y)
     G₁₂::TF # In-plane Shear modulus
     ν₁₂::TF # Poisson ratio
-    theta_f # global fiber frame orientation
+    theta_f::RealOrComplex # global fiber frame orientation (this gets complex-stepped)
     airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 
@@ -286,4 +281,3 @@ function compute_CLT_multilayer()
     # TODO: 
 end
 
-end # end of module

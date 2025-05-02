@@ -1,16 +1,14 @@
-module EigenvalueProblem
 
-# --- PACKAGES ---
-using LinearAlgebra
-
-function compute_eigsolve(K, M, nEig; issym=true)
+function compute_eigsolve(K::Matrix{<:RealOrComplex}, M::Matrix{<:RealOrComplex}, nEig::Int; issym=true)
 
     # TODO: ok this is most definitely NOT the way it should be in the production version because this
     # is super expensive but whatever
-    A = inv(M) * K # Applied mathematicians are probably rolling over in their graves right now
+    # A = similar(K) # uninitialized matrix
     # println("A: ", typeof(A))
-    eValsAll = eigvals(real(A))
-    eVecsAll = eigvecs(real(A))
+    A::typeof(K) = inv(M) * K # Applied mathematicians are probably rolling over in their graves right now
+
+    eValsAll = eigvals(A)
+    eVecsAll = eigvecs(A)
 
     if issym
         eVals = eValsAll[1:nEig]
@@ -22,12 +20,9 @@ function compute_eigsolve(K, M, nEig; issym=true)
         eVecs = eVecsAll[:, indices]
     end
 
-    return eVals[1:nEig], eVecs[:, 1:nEig]
+    λ = eVals[1:nEig]
+    RR = eVecs[:, 1:nEig]
+    # LL = eigvecs(K', M')[:, 1:nEig]
+
+    return λ, RR
 end
-
-# ==============================================================================
-#                         Take advantage of multiple dispatch
-# ==============================================================================
-
-
-end # end module

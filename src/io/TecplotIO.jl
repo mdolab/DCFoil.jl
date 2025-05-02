@@ -8,7 +8,7 @@ When in doubt, refer to the Tecplot Data Format Guide
 """
 
 
-module TecplotIO
+# module TecplotIO
 # --- PACKAGES ---
 using Printf
 using PythonCall
@@ -16,10 +16,10 @@ using PythonCall
 # BASECLASSES = pyimport("baseclasses") # This gives a weird 'shmem' error FYI
 
 # --- DCFoil modules ---
-using ..SolverRoutines: get_rotate3dMat
-using ..SolutionConstants: XDIM, YDIM, ZDIM
-using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
-using ..Utilities: Utilities
+# using ..SolverRoutines: get_rotate3dMat
+# using ..SolutionConstants: XDIM, YDIM, ZDIM
+# using ..EBBeam: UIND, VIND, WIND, ΦIND, ΘIND, ΨIND, NDOF
+# using ..Utilities: Utilities
 
 function write_structmesh(FEMESHLIST, solverOptions::AbstractDict, outputDir::String, fname="structmesh.dat")
     """
@@ -898,4 +898,4 @@ function write_oml(io, DVDict, FEMESH; config="wing", nNodeWing=10)
 
 end
 
-end # module
+# end # module

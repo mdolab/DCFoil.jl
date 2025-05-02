@@ -6,18 +6,12 @@
 """
 
 
-module Utilities
 
-using ..DesignConstants: SORTEDDVS
-# using ..DCFoil: RealOrComplex
 using FLOWMath: abs_cs_safe
 using LinearAlgebra
 using Zygote
+using ChainRulesCore
 
-const RealOrComplex = Union{Real, Complex}
-const DTYPE = AbstractFloat
-
-export compute_KS
 
 function unpack_dvdict(DVDict::AbstractDict)
 
@@ -111,6 +105,142 @@ function repack_coords(LineCoordsVec, m, n)
     return LECoords, TECoords
 end
 
+function unpack_appendageParams(appendageParams, appendageOptions)
+
+    if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
+        print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+
+        α₀ = appendageParams["alfa0"]
+        rake = appendageParams["rake"]
+        # span = appendageParams["s"] * 2
+        zeta = appendageParams["zeta"]
+        theta_f = appendageParams["theta_f"]
+        beta = appendageParams["beta"]
+        s_strut = appendageParams["s_strut"]
+        c_strut = appendageParams["c_strut"]
+        theta_f_strut = appendageParams["theta_f_strut"]
+
+        toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+    else
+        rake = appendageParams["rake"]
+        # span = appendageParams["s"] * 2
+        toc::Vector{RealOrComplex} = appendageParams["toc"]
+        ab::Vector{Real} = appendageParams["ab"]
+        x_ab::Vector{Real} = appendageParams["x_ab"]
+        zeta = appendageParams["zeta"]
+        theta_f = appendageParams["theta_f"]
+        beta = appendageParams["beta"]
+        s_strut = appendageParams["s_strut"]
+        c_strut = appendageParams["c_strut"]
+        toc_strut = appendageParams["toc_strut"]
+        ab_strut = appendageParams["ab_strut"]
+        x_ab_strut = appendageParams["x_ab_strut"]
+        theta_f_strut = appendageParams["theta_f_strut"]
+    end
+
+    return rake, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut
+end
+
+
+function set_defaultOptions!(solverOptions)
+    """
+    Set default options
+    """
+
+    function check_key!(solverOptions, key, default)
+        if !haskey(solverOptions, key)
+            println("Setting default option: $(key) to ", default)
+            solverOptions[key] = default
+        end
+    end
+    keys = [
+        # ************************************************
+        #     I/O
+        # ************************************************
+        "name",
+        "outputDir",
+        "debug",
+        "writeTecplotSolution",
+        "gridFile",
+        # ************************************************
+        #     Flow
+        # ************************************************
+        "Uinf",
+        "rhof",
+        "nu",
+        "use_freeSurface",
+        "use_cavitation",
+        "use_ventilation",
+        "use_dwCorrection",
+        "use_nlll",
+        # ************************************************
+        #     Hull properties
+        # ************************************************
+        "hull",
+        # ************************************************
+        #     Solver modes
+        # ************************************************
+        "run_static",
+        "res_jacobian",
+        "onlyStructDerivs",
+        "run_forced",
+        "run_modal",
+        "run_flutter",
+        "run_body",
+        "rhoKS",
+        "maxQIter",
+        "fRange",
+        "tipForceMag",
+        "nModes",
+        "uRange",
+    ]
+    defaults = [
+        # ************************************************
+        #     I/O
+        # ************************************************
+        "default",
+        "./OUTPUT/",
+        false,
+        false,
+        nothing,
+        # ************************************************
+        #     Flow
+        # ************************************************
+        1.0,
+        1000.0,
+        1.1892E-06, # kinematic viscosity of seawater at 15C
+        false,
+        false,
+        false,
+        false,
+        false, # use_nlll
+        # ************************************************
+        #     Hull properties
+        # ************************************************
+        nothing,
+        # ************************************************
+        #     Solver modes
+        # ************************************************
+        false,
+        "analytic", # residual jacobian
+        false,
+        false,
+        false,
+        false,
+        false, # run_body
+        80.0,
+        100, # maxQIter
+        [0.1, 10.0], # fRange
+        0.0, # tipForceMag
+        10, # nModes
+        [1.0, 2.0] # uRange
+    ]
+    for ii in eachindex(keys)
+        check_key!(solverOptions, keys[ii], defaults[ii])
+    end
+end
+
+
 function generate_naca4dig(toc)
     """
     Simple naca 
@@ -163,7 +293,6 @@ function normalize_3Dvector(r)
     return rhat
 end
 
-
 function cross3D(arr1, arr2)
     """
     Cross product of two 3D arrays
@@ -173,13 +302,14 @@ function cross3D(arr1, arr2)
     @assert size(arr2, 1) == 3
     M, N = size(arr1, 2), size(arr1, 3)
 
-    arr1crossarr2 = zeros(RealOrComplex, 3, M, N)
+    arr1crossarr2 = zeros(Real, 3, M, N)
     # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
     arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
 
     for jj in 1:M
         for kk in 1:N
-            arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+            # arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+            arr1crossarr2_z[:, jj, kk] = myCrossProd(arr1[:, jj, kk], arr2[:, jj, kk])
         end
     end
     arr1crossarr2 = copy(arr1crossarr2_z)
@@ -187,5 +317,70 @@ function cross3D(arr1, arr2)
     return arr1crossarr2
 
 end
+
+# I can't believe I have to write my own matrix-matrix multiply that's AD safe
+function my_matmul(A::AbstractMatrix, B::AbstractMatrix)
+    """
+    Matrix matrix multiplication
+    """
+
+    C = A * B
+    return C
+end
+
+function ChainRulesCore.rrule(::typeof(my_matmul), A::AbstractMatrix, B::AbstractMatrix)
+    """
+    MATRIX MULTIPLY RULE
+    """
+    function times_pullback(ΔΩ)
+        ∂A = @thunk(ΔΩ * B')
+        ∂B = @thunk(A' * ΔΩ)
+        return (NoTangent(), ∂A, ∂B)
+    end
+    return A * B, times_pullback
+end
+
+function ChainRulesCore.frule((_, ΔA, ΔB), ::typeof(my_matmul),
+    A::AbstractMatrix,
+    B::AbstractMatrix,
+)
+    Ω = A * B
+    ∂Ω = ΔA * B + A * ΔB
+    return (Ω, ∂Ω)
+end
+
+function myCrossProd(vec1, vec2)
+    v1crossv2 = vec([
+        vec1[1] * vec2[3] - vec1[3] * vec2[2],
+        vec1[3] * vec2[1] - vec1[1] * vec2[3],
+        vec1[1] * vec2[2] - vec1[2] * vec2[1]
+    ])
+    return v1crossv2
+end
+
+function find_signChange(x)
+    """
+    Find the location where a sign changes in an array
+    Inputs
+    ------
+        x - array which signchange is to be found. Size(n)
+    Outputs
+    -------
+        locs - array of size 2 containing the location of the sign change
+    """
+
+    # Get signs of each element in x
+    sgn = sign.(x)
+    n = length(sgn)
+
+    for ii in 1:n-1
+        @fastmath @inbounds begin
+            if sgn[ii+1] != sgn[ii]
+                return ii, ii + 1
+            else
+                continue
+            end
+        end
+    end
 
 end

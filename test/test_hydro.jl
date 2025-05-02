@@ -6,10 +6,25 @@ using LinearAlgebra
 using Printf
 
 
-include("../src/DCFoil.jl")
-using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO, ComputeFunctions
+# include("../src/DCFoil.jl")
+for headerName in [
+    # "../src/Constants",
+    # "../src/InitModel",
+    "../src/struct/FEMMethods",
+    # "../src/VPM",
+    "../src/hydro/LiftingLine",
+    # "../src/TecplotIO",
+    # "../src/ComputeFunctions",
+    "../src/hydro/HydroStrip",
+]
+    include(headerName * ".jl")
+end
+# end
+# using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO, ComputeFunctions
 using Plots, Printf
 using DelimitedFiles
+using .HydroStrip
+using .LiftingLine
 
 # ==============================================================================
 #                         Nodal hydrodynamic forces
@@ -504,14 +519,6 @@ function test_AICs()
     return AIC, fHydro
 end
 
-# function run_hydrofoil()
-#     chordVec = ones(10)
-#     alpha = 1.0
-#     Uinf = 5.0
-#     clalpha, cl, gamma = HydroStrip.compute_spanwise_vortex(semispan, chordVec, alpha, Uinf, nNodes, "elliptical")
-#     clalpha, cl, gamma = HydroStrip.compute_spanwise_vortex(semispan, chordVec, alpha, Uinf, nNodes, "chord")
-
-# end
 
 # AIC, fHydro = test_AICs()
 function test_biplanefs()
@@ -1082,7 +1089,7 @@ function test_45degwingLL()
     for alpha in deg2rad.(angles)
         println("alpha: $(rad2deg(alpha))")
         Uvec = [cos(alpha), 0.0, sin(alpha)] * Uinf
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, npt_wing);
             npt_wing=npt_wing, npt_airfoil=npt_airfoil,
             # airfoilCoordFile=airfoilCoordFile,
             airfoil_ctrl_xy=airfoilCtrlXY,
@@ -1092,14 +1099,14 @@ function test_45degwingLL()
         F = LLOutputs.F
         # println("Forces: $(F)")
         # println("Spanwise cl: $(LLOutputs.Fdist[3,:])")
-        println("CL:\n$(LLOutputs.CL)\nCDi\n$(LLOutputs.CDi)\nCside:\n$(LLOutputs.CS)")
+        println("CL\t\t\t\t|\tCDi\t\t\t|\tCside:\n$(LLOutputs.CL)\t\t|$(LLOutputs.CDi)\t\t|$(LLOutputs.CS)")
         push!(answers, LLOutputs.CL)
     end
 
-    # println("CL: ", answers)
+    println("CL:\n", real(answers))
+    println("Reference CL:\n", referenceCL)
     normError = norm(answers .- referenceCL)
     return normError
-    # return LLOutputs, FlowCond, LLSystem
 end
 # ==============================================================================
 #                         Run some tests

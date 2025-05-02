@@ -1,22 +1,11 @@
-module NewtonRaphson
 """
 Newton-Raphson solver
 """
 
-export do_newton_raphson
-
-# --- PACKAGES ---
-using LinearAlgebra, Statistics
-using FLOWMath: norm_cs_safe
-using Printf
-# using Debugger
-using ChainRulesCore: ChainRulesCore, @ignore_derivatives
-
-using ..Utilities
 
 function print_solver_history(iterNum::Int64, resNorm, stepNorm)
 
-    @ignore_derivatives() do
+    ChainRulesCore.ignore_derivatives() do
         if iterNum == 1
             println("+-------+------------------------+----------+")
             println("|  Iter |         resNorm        | stepNorm |")
@@ -69,19 +58,19 @@ function do_newton_raphson(
     if !isnothing(WorkingListOfParams)
 
         # if solverOptions["use_nlll"]
-            if length(WorkingListOfParams) == 4
-                appendageParamsList = WorkingListOfParams[3+iComp]
-            else
-                appendageParamsList = WorkingListOfParams[3+iComp:end]
-            end
+        if length(WorkingListOfParams) == 4
+            appendageParamsList = WorkingListOfParams[3+iComp]
+        else
+            appendageParamsList = WorkingListOfParams[3+iComp:end]
+        end
 
-            xLE, nodeConn, xTE = WorkingListOfParams[1:3]
-            xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
+        xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+        xVec, mm, nn = unpack_coords(xLE, xTE)
 
-            res = compute_residuals(u0, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        res = compute_residuals(u0, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
         # else
         #     DVDict = WorkingListOfParams[iComp]
-        #     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+        #     x0, DVLengths =  unpack_dvdict(DVDict)
         #     res = compute_residuals(
         #         u0, x0, DVLengths;
         #         appendageOptions=appendageOptions,
@@ -105,23 +94,23 @@ function do_newton_raphson(
         for ii in 1:maxIters
             if !isnothing(WorkingListOfParams)
                 # if solverOptions["use_nlll"]
-                    if length(WorkingListOfParams) == 4
-                        appendageParamsList = WorkingListOfParams[3+iComp]
-                    else
-                        appendageParamsList = WorkingListOfParams[3+iComp:end]
-                    end
+                if length(WorkingListOfParams) == 4
+                    appendageParamsList = WorkingListOfParams[3+iComp]
+                else
+                    appendageParamsList = WorkingListOfParams[3+iComp:end]
+                end
 
-                    xLE, nodeConn, xTE = WorkingListOfParams[1:3]
-                    xVec, mm, nn = Utilities.unpack_coords(xLE, xTE)
+                xLE, nodeConn, xTE = WorkingListOfParams[1:3]
+                xVec, mm, nn = unpack_coords(xLE, xTE)
 
-                    res = compute_residuals(u, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
-                    ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
-                        appendageParamsList=appendageParamsList,
-                        solverParams=solverParams,
-                        appendageOptions=appendageOptions, solverOptions=solverOptions)
+                res = compute_residuals(u, xVec, nodeConn, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions)
+                ∂r∂u = compute_∂r∂u(u, xLE, xTE, nodeConn, mode;
+                    appendageParamsList=appendageParamsList,
+                    solverParams=solverParams,
+                    appendageOptions=appendageOptions, solverOptions=solverOptions)
                 # else
 
-                #     x0, DVLengths = Utilities.unpack_dvdict(DVDict)
+                #     x0, DVLengths =  unpack_dvdict(DVDict)
                 #     res = compute_residuals(u, x0, DVLengths;
                 #         appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=WorkingListOfParams, iComp=iComp, CLMain=CLMain)
                 #     ∂r∂u = compute_∂r∂u(u, mode;
@@ -147,13 +136,13 @@ function do_newton_raphson(
             # show(stdout, "text/plain", jac)
             Δu = -jac \ res
 
-            # println("u before: ", u[end-9:end])
-            # println("Newton step Δu: ", Δu[end-9:end])
+            # println("u before: ", u)
+            # println("Newton step Δu: ", Δu)
 
             # --- Update ---
             u = u + Δu
             # println("u after: ", u[end-9:end])
-            # println("res: ", res[end-9:end])
+            # println("res:\n", res)
 
             resNorm = norm_cs_safe(res, 2)
 
@@ -170,14 +159,14 @@ function do_newton_raphson(
             converged_r = copy(res)
             iters = copy(ii)
             if isnan(resNorm)
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     println("+--------------------------------------------")
                     println("Failed to converge. res norm is NaN")
                 end
                 break
             end
             if real(resNorm) < tol
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     if is_verbose
                         println("+--------------------------------------------")
                         println("Converged in ", ii, " iterations")
@@ -185,7 +174,7 @@ function do_newton_raphson(
                 end
                 break
             elseif ii == maxIters
-                @ignore_derivatives() do
+                ChainRulesCore.ignore_derivatives() do
                     println("+--------------------------------------------")
                     println("Failed to converge. res norm is $(resNorm)")
                     println("DID THE FOIL STATICALLY DIVERGE? CHECK DEFLECTIONS IN POST PROC")
@@ -242,4 +231,3 @@ function do_newton_raphson(
     return converged_u, converged_r, iters
 end
 
-end

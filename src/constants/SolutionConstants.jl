@@ -4,12 +4,9 @@
 # @File    :   SolutionConstants.jl
 # @Time    :   2022/06/16
 # @Author  :   Galen Ng
-# @Desc    :   Module to store used in the solution
+# @Desc    :   File to store used in the solution
 
 
-module SolutionConstants
-
-# using SparseArrays: SparseMatrixCSC
 # ==============================================================================
 #                         CONSTANTS
 # ==============================================================================
@@ -34,10 +31,10 @@ struct DCFoilSolverParams{TF,TC}
     This is a catch all immutable struct to store expensive vars that we do not
     want in function calls like r(u) or f(u)
     """
-    Kmat::Matrix{TC} # structural stiffness matrix (no BC blanking)
-    Mmat::Matrix{TC} # structural mass matrix (no BC blanking)
-    Cmat::Matrix{TF} # structural damping matrix (no BC blanking)
-    AICmat::Matrix{TF} # Aero influence coeff matrix (no BC blanking)
+    Kmat::AbstractMatrix{TC} # structural stiffness matrix (no BC blanking)
+    Mmat::AbstractMatrix{TC} # structural mass matrix (no BC blanking)
+    Cmat::AbstractMatrix # structural damping matrix (no BC blanking)
+    AICmat::AbstractMatrix # Aero influence coeff matrix (no BC blanking)
     areaRef::TF # reference area for coefficients [m^2]
     downwashAngles::TF # downwash angles [rad]
 end
@@ -50,5 +47,3 @@ struct DCFoilDynamicConstants{TF,TC,TI,TS,TA<:AbstractVector{TF}}
     AICmat::Matrix{TC} # just the aero part of Dmat 
     extForceVec::TA # external force vector excluding BC nodes
 end
-
-end # end module

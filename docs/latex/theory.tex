@@ -1030,7 +1030,7 @@ The extra $\hat{\square}$ matrices account for sweep effects on the quasi-steady
 % \clearpage
 \section{Static solution}
 
-\emph{Old method:}\\
+\subsection{Old method}
 The static hydrostructural equation is
 \be
 \mbf{K}_{ss} \mbf{u}_s   = \mbf{f}_{\tn{hydro}} = \mbf{K}_f \mbf{u}_s
@@ -1049,7 +1049,7 @@ First, the \texttt{DCFoil.init\_model()} routine initializes the structural mesh
 If there are multiple lifting surfaces, there are multiple structural meshes.
 There is only one hydrodynamic mesh though because flow needs to be solved globally.
 
-\emph{New method:}\\
+\subsection{New method}
 DCFoil's static hydroelastic mode solves a structural and a flow problem.
 The nonlinear flow analysis solves the residual equations
 \beq
@@ -1072,9 +1072,18 @@ The combined solution requires solution of the multidisciplinary system
 =
 \mbf{0}
 \eeq
-which we do through the Gauss-Seidel iteration following the pseudocode of \citet{Kenway2014a}.
+which we do through the Gauss-Seidel iteration in OpenMDAO. % following the pseudocode of \citet{Kenway2014a}.
 
 \subsection{Load and displacement transfer}
+
+A load and displacement transfer scheme must be \emph{conservative} and \emph{consistent}~\cite{Martins2005c}.
+Conservation means the virtual work done by the forces (load vector $\mb{f}$) over the virtual displacements on the hydrodynamic and structural meshes are equal.
+Consistency means the sum of the nodal forces and moments from the load transfer are equal to the forces and moments from a continuous pressure and shear force distribution on the element.
+An infinite number of choices of nodal forces and moments can satisfy consistency because it is an integration over a region.
+As such, we also require that the scheme be conservative.
+
+Shugo wrote the load and displacement transfer to work for OAS and DCFoil.
+TODO: docs 
 
 The lifting line and beam discretization are different.
 Sometimes the lifting line needs cosine spacing for swept geometries.
@@ -1086,7 +1095,8 @@ The load transfer is the transpose operation
 \beq
 \mb{f} = \mb{T}^\top \mb{f}_{LL}
 \eeq
-TODO: read \citet{Kenway2014a} for these transfer matrices
+TODO: read \citet{Kenway2014a} for these transfer matrices.
+\citet{Martins2005c} also documents a load transfer scheme.
 
 \subsection{Derivative computation}
 % 
@@ -1127,96 +1137,96 @@ so to compute the total gradient, we can solve the \emph{adjoint system}
 so there are $n_f$ right-hand sides in this equation.
 The partial derivative matrices in Equation~\eqref{eqn:Adjoint} are computed through \ac{AD}.
 
-\subsubsection{Coupled adjoint}
+% \subsubsection{Coupled adjoint}
 
 
-The coupled implicit equations are
-\beq
-\dd{I}{\mcal{X}} =
-\pp{I}{\mcal{X}}
--
-\underbrace{
-\left[\pp{I}{\mbf{u}} \quad \pp{I}{\mbs{\gamma}} \right]
-\begin{bmatrix}
-	\pp{\mbf{r}_f}{\mb{\gamma}} & \pp{\mbf{r}_f}{\mb{u}}
-	\\
-	\pp{\mbf{r}_s}{\mb{\gamma}} & \pp{\mbf{r}_s}{\mb{u}}
-\end{bmatrix}
-^{-1}
-}_{\boldsymbol{\Psi^\top}}
-\pp{\mbf{r}}{\mcal{X}}
-\eeq
-The coupled adjoint equations are
-\beq
-\begin{bmatrix}
-	\pp{\mb{r}_f}{\mb{\gamma}} & \pp{\mb{r}_f}{\mb{u}}
-	\\
-	\pp{\mb{r}_s}{\mb{\gamma}} & \pp{\mb{r}_s}{\mb{u}}
-\end{bmatrix}^\top
-\begin{bmatrix}
-	\mb{\Psi}_f \\
-	\mb{\Psi}_s
-\end{bmatrix}
-=
-\begin{bmatrix}
-	\pp{I}{\mb{\gamma}} & \pp{I}{\mb{u}}
-\end{bmatrix}^\top
-\eeq
-where the number of right hand sides is how many $I$ there are.
+% The coupled implicit equations are
+% \beq
+% \dd{I}{\mcal{X}} =
+% \pp{I}{\mcal{X}}
+% -
+% \underbrace{
+% \left[\pp{I}{\mbf{u}} \quad \pp{I}{\mbs{\gamma}} \right]
+% \begin{bmatrix}
+% 	\pp{\mbf{r}_f}{\mb{\gamma}} & \pp{\mbf{r}_f}{\mb{u}}
+% 	\\
+% 	\pp{\mbf{r}_s}{\mb{\gamma}} & \pp{\mbf{r}_s}{\mb{u}}
+% \end{bmatrix}
+% ^{-1}
+% }_{\boldsymbol{\Psi^\top}}
+% \pp{\mbf{r}}{\mcal{X}}
+% \eeq
+% The coupled adjoint equations are
+% \beq
+% \begin{bmatrix}
+% 	\pp{\mb{r}_f}{\mb{\gamma}} & \pp{\mb{r}_f}{\mb{u}}
+% 	\\
+% 	\pp{\mb{r}_s}{\mb{\gamma}} & \pp{\mb{r}_s}{\mb{u}}
+% \end{bmatrix}^\top
+% \begin{bmatrix}
+% 	\mb{\Psi}_f \\
+% 	\mb{\Psi}_s
+% \end{bmatrix}
+% =
+% \begin{bmatrix}
+% 	\pp{I}{\mb{\gamma}} & \pp{I}{\mb{u}}
+% \end{bmatrix}^\top
+% \eeq
+% where the number of right hand sides is how many $I$ there are.
 
-Once solved, the total derivative is simply
-\beq
-\dd{I}{\mcal{X}} = \pp{I}{\mcal{X}} - \mb{\psi}_f^\top \pp{\mb{r}_f}{\mcal{X}} - \mb{\psi}_s^\top \pp{\mb{r}_s}{\mcal{X}}
-\eeq
-% This equation is written like this because it more accurately represents how it would be coded up for 2 disciplines
+% Once solved, the total derivative is simply
+% \beq
+% \dd{I}{\mcal{X}} = \pp{I}{\mcal{X}} - \mb{\psi}_f^\top \pp{\mb{r}_f}{\mcal{X}} - \mb{\psi}_s^\top \pp{\mb{r}_s}{\mcal{X}}
+% \eeq
+% % This equation is written like this because it more accurately represents how it would be coded up for 2 disciplines
 
-\subsubsection{Main diagonal residual partial derivatives}
+% \subsubsection{Main diagonal residual partial derivatives}
 
-The main diagonal partials are needed to solve the individual systems.
-The hydrodynamic one is $\pp{\mb{r}_f}{\mb{\gamma}}$ and is computed from finite differences.
+% The main diagonal partials are needed to solve the individual systems.
+% The hydrodynamic one is $\pp{\mb{r}_f}{\mb{\gamma}}$ and is computed from finite differences.
 
-The structural residual partial derivatives are not simply the stiffness matrix.
-The applied forces also depend on the structural states.
-\beq
-\pp{\mb{r}_s}{\mb{u}}^\top &= 
-\mb{K}_\tn{ss} - \pp{\mb{f}}{\mb{u}}^\top
-\\
-&=\mb{K}_\tn{ss} - \pp{\mb{f}}{\mb{f}_{LL}}\pp{\mb{f}_{LL}}{X_{LL}}^\top
-\pp{X_{LL}}{\mb{u}}
-\\
-&=\mb{K}_\tn{ss} - \mb{T}^\top\pp{\mb{f}_{LL}}{X_{LL}}^\top\mb{T}
-\eeq
+% The structural residual partial derivatives are not simply the stiffness matrix.
+% The applied forces also depend on the structural states.
+% \beq
+% \pp{\mb{r}_s}{\mb{u}}^\top &= 
+% \mb{K}_\tn{ss} - \pp{\mb{f}}{\mb{u}}^\top
+% \\
+% &=\mb{K}_\tn{ss} - \pp{\mb{f}}{\mb{f}_{LL}}\pp{\mb{f}_{LL}}{X_{LL}}^\top
+% \pp{X_{LL}}{\mb{u}}
+% \\
+% &=\mb{K}_\tn{ss} - \mb{T}^\top\pp{\mb{f}_{LL}}{X_{LL}}^\top\mb{T}
+% \eeq
 
-\subsubsection{Computing off-diagonal residual partial derivatives}
+% \subsubsection{Computing off-diagonal residual partial derivatives}
 
-To obtain the hydrodynamic partials $\pp{\mb{r}_f}{\mb{u}}$ is pretty simple as it describes how the hydrodynamic residual changes with structural displacements.
-The movement of a single structural degree of freedom corresponds to the movement of only a few hydrodynamic nodes.
-We use the complex step (fewer inputs than outputs).
-\beq
-\pp{\mb{r}_f}{\mb{u}}^\top =
-\pp{X_{LL}}{\mb{u}}^\top
-\pp{\mb{r}_f}{X_{LL}}^\top
-\eeq
+% To obtain the hydrodynamic partials $\pp{\mb{r}_f}{\mb{u}}$ is pretty simple as it describes how the hydrodynamic residual changes with structural displacements.
+% The movement of a single structural degree of freedom corresponds to the movement of only a few hydrodynamic nodes.
+% We use the complex step (fewer inputs than outputs).
+% \beq
+% \pp{\mb{r}_f}{\mb{u}}^\top =
+% \pp{X_{LL}}{\mb{u}}^\top
+% \pp{\mb{r}_f}{X_{LL}}^\top
+% \eeq
 
-The structural partials with respect to hydrodynamic states is
-\beq
-\pp{\mb{r}_s}{\mb{\gamma}}^\top & = -\pp{\mbf{f}}{\mb{\gamma}}^\top
-\\
-& = -\pp{\mbf{f}_{LL}}{\mb{\gamma}}^\top \pp{\mb{f}}{\mb{f}_{LL}}^\top 
-\\
-&=-\pp{\mbf{f}_{LL}}{\mb{\gamma}}^\top \mb{T}
-\eeq
+% The structural partials with respect to hydrodynamic states is
+% \beq
+% \pp{\mb{r}_s}{\mb{\gamma}}^\top & = -\pp{\mbf{f}}{\mb{\gamma}}^\top
+% \\
+% & = -\pp{\mbf{f}_{LL}}{\mb{\gamma}}^\top \pp{\mb{f}}{\mb{f}_{LL}}^\top 
+% \\
+% &=-\pp{\mbf{f}_{LL}}{\mb{\gamma}}^\top \mb{T}
+% \eeq
 
-\subsubsection{Cost function partial derivatives}
+% \subsubsection{Cost function partial derivatives}
 
-Hydrodynamic cost function partial derivatives are $\pp{I}{\mb{\gamma}}$ and
-\beq
-\pp{I}{\mb{u}} = \pp{I}{X_{LL}}\pp{X_{LL}}{\mb{u}} = \pp{I}{X_{LL}} \mb{T}
-\eeq
+% Hydrodynamic cost function partial derivatives are $\pp{I}{\mb{\gamma}}$ and
+% \beq
+% \pp{I}{\mb{u}} = \pp{I}{X_{LL}}\pp{X_{LL}}{\mb{u}} = \pp{I}{X_{LL}} \mb{T}
+% \eeq
 
-The structural cost function partial derivatives are $\pp{I}{\mb{\gamma}}=0$ and $\pp{I}{\mb{u}}$, which comes from <>.
+% The structural cost function partial derivatives are $\pp{I}{\mb{\gamma}}=0$ and $\pp{I}{\mb{u}}$, which comes from <>.
 
-The other partials $\pp{I}{\mcal{X}}$ in the total derivative equation come from reverse AD.
+% The other partials $\pp{I}{\mcal{X}}$ in the total derivative equation come from reverse AD.
 \subsection{Elliptical lift}
 
 It is helpful to compare lift distributions ($L = \int_{-b/2}^{b/2}L'(y) dy$) to the elliptical lift distribution.

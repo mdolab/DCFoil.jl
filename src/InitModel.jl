@@ -7,23 +7,18 @@
 # @Desc    :   Module to initialize the hydrofoil model and store data
 
 
-module InitModel
 
-# --- PACKAGES ---
-using Zygote
-using ChainRulesCore: ChainRulesCore, @ignore_derivatives
-# using Debugger
 
 # --- DCFoil modules ---
-using ..DCFoil: RealOrComplex
-using ..HydroStrip: HydroStrip
-using ..BeamProperties: BeamProperties
-using ..DesignConstants: DesignConstants, SORTEDDVS, CONFIGS
-using ..MaterialLibrary: MaterialLibrary
-using ..HullLibrary: HullLibrary
-using ..Preprocessing: Preprocessing
-using ..FEMMethods: FEMMethods
-using ..Utilities: Utilities
+# using ..DCFoil: RealOrComplex
+# using ..HydroStrip: HydroStrip
+# using ..BeamProperties: BeamProperties
+# using ..DesignConstants: DesignConstants, SORTEDDVS, CONFIGS
+# using ..MaterialLibrary: MaterialLibrary
+# using ..HullLibrary: HullLibrary
+# using ..Preprocessing: Preprocessing
+# using ..FEMMethods: FEMMethods
+# using ..Utilities: Utilities
 
 function init_static(
   α₀, sweepAng, rake, span, chordLengths, toc, ab, x_ab, zeta, theta_f,
@@ -31,7 +26,7 @@ function init_static(
   depth0,
   appendageOptions::AbstractDict, solverOptions::AbstractDict
 )
-  """
+"""
   Initialize a static hydrofoil model
 
   Inputs:
@@ -57,7 +52,7 @@ function init_static(
 
   if haskey(appendageOptions, "path_to_struct_props") && !isnothing(appendageOptions["path_to_struct_props"])
     println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
-    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = Preprocessing.get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = FEMMethods.get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
   else
     EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = BeamProperties.compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
   end
@@ -127,7 +122,7 @@ function init_staticHydro(LECoords, TECoords, nodeConn, appendageParams,
     appendageParams["depth0"] = 20.0
   end
 
-  ptVec, mm, nn = Utilities.unpack_coords(LECoords, TECoords)
+  ptVec, mm, nn = FEMMethods.unpack_coords(LECoords, TECoords)
   # println("ptVec: ", ptVec)
   # println("nodeConn", nodeConn)
   LLOutputs, LLSystem, FlowCond = HydroStrip.compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; return_all=true)
@@ -149,7 +144,7 @@ function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_
 
   statWingStructModel, statStrutStructModel = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
-  WingStructModel = DesignConstants.DynamicFoil(
+  WingStructModel = FEMMethods.DynamicFoil(
     statWingStructModel.mₛ, statWingStructModel.Iₛ, statWingStructModel.EIₛ, statWingStructModel.EIIPₛ, statWingStructModel.GJₛ, statWingStructModel.Kₛ, statWingStructModel.Sₛ, statWingStructModel.EAₛ,
     statWingStructModel.eb, statWingStructModel.ab, statWingStructModel.chord, statWingStructModel.nNodes, statWingStructModel.constitutive,
     fRange, uRange
@@ -158,7 +153,7 @@ function init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_
   if isnothing(statStrutStructModel)
     StrutStructModel = nothing
   else
-    StrutStructModel = DesignConstants.DynamicFoil(
+    StrutStructModel = FEMMethods.DynamicFoil(
       statStrutStructModel.mₛ, statStrutStructModel.Iₛ, statStrutStructModel.EIₛ, statStrutStructModel.EIIPₛ, statStrutStructModel.GJₛ, statStrutStructModel.Kₛ, statStrutStructModel.Sₛ, statStrutStructModel.EAₛ, statStrutStructModel.U∞, statStrutStructModel.ζ,
       statStrutStructModel.clα, statStrutStructModel.eb, statStrutStructModel.ab, statStrutStructModel.chord, statStrutStructModel.nNodes, statStrutStructModel.constitutive, fRange, uRange
     )
@@ -200,16 +195,16 @@ function init_modelFromDVDict(DVDict::AbstractDict, solverOptions::AbstractDict,
     theta_f_strut = DVDict["theta_f_strut"]
     depth0 = DVDict["depth0"]
 
-    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = FEMMethods.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
   else
     α₀ = DVDict["alfa0"]
     sweepAng = DVDict["sweep"]
     rake = DVDict["rake"]
     span = DVDict["s"] * 2
-    c::Vector{RealOrComplex} = DVDict["c"]
-    toc::Vector{RealOrComplex} = DVDict["toc"]
-    ab::Vector{RealOrComplex} = DVDict["ab"]
-    x_ab::Vector{RealOrComplex} = DVDict["x_ab"]
+    c = DVDict["c"]
+    toc = DVDict["toc"]
+    ab = DVDict["ab"]
+    x_ab = DVDict["x_ab"]
     # toc = DVDict["toc"]
     # ab = DVDict["ab"]
     # x_ab = DVDict["x_ab"]
@@ -252,8 +247,8 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
   fRange = solverOptions["fRange"]
   uRange = solverOptions["uRange"]
 
-  idxTip = Preprocessing.get_tipnode(LECoords)
-  midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+  idxTip = FEMMethods.get_tipnode(LECoords)
+  midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
 
   if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
@@ -270,13 +265,13 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     theta_f_strut = appendageParams["theta_f_strut"]
     depth0 = appendageParams["depth0"]
 
-    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = FEMMethods.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
   else
     rake = appendageParams["rake"]
     # span = appendageParams["s"] * 2
-    toc::Vector{RealOrComplex} = appendageParams["toc"]
-    ab::Vector{RealOrComplex} = appendageParams["ab"]
-    x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+    toc = appendageParams["toc"]
+    ab = appendageParams["ab"]
+    x_ab = appendageParams["x_ab"]
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     beta = appendageParams["beta"]
@@ -290,8 +285,8 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   WingModel, StrutModel, LLOutputs, LLSystem, FlowCond = init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 
-  idxTip = Preprocessing.get_tipnode(LECoords)
-  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, @ignore_derivatives(nodeConn), idxTip, appendageParams, appendageOptions)
+  idxTip = FEMMethods.get_tipnode(LECoords)
+  structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, ChainRulesCore.@ignore_derivatives(nodeConn), idxTip, appendageParams, appendageOptions)
   FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
 
 
@@ -303,5 +298,3 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
   return WingModel, StrutModel, HullModel, FEMESH, LLOutputs, LLSystem, FlowCond
 end
-
-end # end module

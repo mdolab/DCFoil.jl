@@ -6,24 +6,10 @@
 @Desc    :   Contains the unsteady hydrodynamics routines
 """
 
-module Unsteady
-
-# --- Public functions ---
-export compute_theodorsen, compute_sears, compute_node_stiff_faster, compute_node_damp_faster, compute_node_mass
-
 # --- PACKAGES ---
 using SpecialFunctions
-using LinearAlgebra
-using Statistics
-using Zygote, ChainRulesCore
-using Printf, DelimitedFiles
 
-# --- Globals ---
-using ..SolutionConstants: XDIM, YDIM, ZDIM, MEPSLARGE
-
-const DTYPE = AbstractFloat
-
-function compute_theodorsen(k::DTYPE)
+function compute_theodorsen(k::Number)
     """
     Theodorsen's transfer function for unsteady aero/hydrodynamics of a sinusoidally oscillating foil.
     w/ separate real and imaginary parts. 
@@ -219,7 +205,7 @@ function compute_node_stiff_dcla(
 end
 
 function compute_node_stiff_faster(
-    clα::DTYPE, b::DTYPE, eb::DTYPE, ab::DTYPE, U∞::DTYPE, clambda::DTYPE, slambda::DTYPE, rho_f::DTYPE, Ck_r::DTYPE, Ck_i::DTYPE
+    clα::Number, b::Number, eb::Number, ab::Number, U∞::Number, clambda::Number, slambda::Number, rho_f::Number, Ck_r::Number, Ck_i::Number
 )
     """
     Hydrodynamic stiffness force
@@ -338,5 +324,3 @@ end
 #     precompile(Unsteady.compute_node_mass, (Float64, Float64, Float64))
 #     precompile(Unsteady.compute_node_damp_faster, (Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64))
 # end
-
-end # module
