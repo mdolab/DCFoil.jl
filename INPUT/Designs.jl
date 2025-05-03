@@ -55,6 +55,18 @@ DVDict = Dict(
     "theta_f" => 0 * π / 180, # fiber angle global [rad]
 )
 
+# --- AMC NACA0009 experimental model ---
+DVDict = Dict(
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "material" => "al6061", # preselect from material library
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.06, # thickness-to-chord ratio
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
+)
+
 # --- Yingqian's Sweep & Anisotropy Paper (2018) ---
 DVDict = Dict(
     "alfa0" => 6.0, # initial angle of attack [deg]

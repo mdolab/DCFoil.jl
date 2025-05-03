@@ -57,7 +57,6 @@ appendageOptions = {
     "nNodes": nNodes,
     "nNodeStrut": nNodesStrut,
     "use_tipMass": False,
-    # "xMount": 3.355,
     "xMount": 0.0,
     "material": "al6061",
     "strut_material": "al6061",
@@ -113,11 +112,11 @@ solverOptions = {
     "rhoKS": 500.0,
 }
 
-appendageParams = {  # THIS IS BASED OFF OF THE MOTH RUDDER
+appendageParams = {
     "alfa0": 6.0,  # initial angle of attack [deg]
     "zeta": 0.04,  # modal damping ratio at first 2 modes
     "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
-    "toc": 0.075 * np.ones(nNodes),  # thickness-to-chord ratio
+    "toc": 0.06 * np.ones(nNodes),  # thickness-to-chord ratio
     "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
     "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
     # --- Strut vars ---
@@ -142,19 +141,19 @@ npt_wing = jl.LiftingLine.NPT_WING
 # ==============================================================================
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run_struct", action="store_true", default=False)
-    parser.add_argument("--run_flow", action="store_true", default=False)
-    parser.add_argument("--run_flutter", action="store_true", default=False)
-    parser.add_argument("--test_partials", action="store_true", default=False)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("--run_struct", action="store_true", default=False)
+    # parser.add_argument("--run_flow", action="store_true", default=False)
+    # parser.add_argument("--run_flutter", action="store_true", default=False)
+    # parser.add_argument("--test_partials", action="store_true", default=False)
+    # args = parser.parse_args()
 
-    # --- Echo the args ---
-    print(30 * "-")
-    print("Arguments are", flush=True)
-    for arg in vars(args):
-        print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
-    print(30 * "-", flush=True)
+    # # --- Echo the args ---
+    # print(30 * "-")
+    # print("Arguments are", flush=True)
+    # for arg in vars(args):
+    #     print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+    # print(30 * "-", flush=True)
 
     impcomp_struct_solver = JuliaImplicitComp(
         jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
@@ -174,8 +173,6 @@ if __name__ == "__main__":
     expcomp_displacement = JuliaExplicitComp(
         jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    expcomp_flutter = JuliaExplicitComp(jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions))
-    expcomp_forced = JuliaExplicitComp(jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions))
 
     model = om.Group()
 

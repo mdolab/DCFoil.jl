@@ -227,3 +227,5 @@ if __name__ == "__main__":
 
     f.close()
     fTecplot.close()
+
+    print("--- Wrote mesh to file ---")
