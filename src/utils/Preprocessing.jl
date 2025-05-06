@@ -80,8 +80,10 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # s_loc_q = LinRange(0.0, semispan, nNodes) # old way
 
     ds = semispan / (nNodes - 1)
-    s_loc_q = LinRange(ds, semispan - ds, nNodes - 2)
+    s_loc_q = LinRange(ds, semispan - ds, nNodes - 2) # if this line is bugging, you don't have enough beam nodes
     # println("s_loc_q: ", s_loc_q)
+    # println("semispan: ",semispan)
+    # println("ds: ", ds)
     # s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1))) # this line gave NaNs in the derivatives!
     # s_loc = compute_spanwiseLocations(midchords[XDIM, :], midchords[YDIM, :], midchords[ZDIM, :])
     # println("s_loc: ", s_loc)

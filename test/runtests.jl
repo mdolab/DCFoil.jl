@@ -162,6 +162,7 @@ solverOptions2 = Dict(
     # @test test_SolveForcedComp() <= 1e-12 # not ready yet
     @test test_modal(DVDict2, solverOptions2) <= 1e-2 # dry and wet modal analysis of cfrp
     # @test test_flutter() <= 1e-5 # flutter analysis of cfrp
+    @test test_forced() <= # forced vibration of the hydrofoils
 
 end
 
@@ -176,3 +177,11 @@ include("../validations/akcabay_src/akcabay_flutter.jl")
 #                         Common input for sensitivity tests
 # ==============================================================================
 include("test_sensitivities.jl")
+
+include("test_partials.jl")
+@testset "Test sensitivities" begin
+
+    # --- Structural tests ---
+    @test test_BeamCostFuncJacobians() <= 1e-10
+    @test test_BeamResidualJacobians() <= 1e-10
+end

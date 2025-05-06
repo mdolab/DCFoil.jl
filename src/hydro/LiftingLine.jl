@@ -392,19 +392,25 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # ---------------------------
     # --- Handle displacements of collocation nodes ---
     size(displacements) == (6, npt_wing) || error("Displacements must be 6 x $(npt_wing). Size is $(size(displacements))")
-    translatDisplCtrl = displacements[1:3, :]
-    translatDisplCtrl[ZDIM, :] .= 0.0 # Ignore any effect of dihedral on the wing GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+    translatDisplCtrl = cat(displacements[1:2, :], zeros(1, length(displacements[1, :])), dims=1) # Ignore any effect of dihedral on the wing
     rotationDisplacementsCtrl = displacements[4:end, :]
-    # For the displacements on the panel edges, we'll use the extrapolated edge values for the tips and the average for the inner vals
-    midVals = (translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end]) * 0.5
-    midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
-    portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
-    halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
-    portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
+    # For the displacements on the panel edges, we want to use the extrapolated edge values for the tips and the average for the inner vals
+    # However, this is not differentiable so we just use the edge values
+    averages = translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end] * 0.5
+    midVals = cat(averages[:, 1:npt_wing÷2-1], zeros(3, 1), averages[:, npt_wing÷2+1:end], dims=2)
+    # midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
+    # portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
+    # halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
+    # portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
+    portTip = translatDisplCtrl[:, 1]# + portSlope * halfDist
+
     # println("Port tip: $(portTip)")
-    stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
-    halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
-    stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
+
+    # stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
+    # halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
+    # stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
+    stbdTip = translatDisplCtrl[:, end] #+ stbdSlope * halfDist
+
     # println("Stbd tip: $(stbdTip)")
     translatDispl = cat(portTip, midVals, stbdTip, dims=2)
 
@@ -1129,7 +1135,6 @@ function compute_LLresiduals(G; solverParams=nothing)
     # else:
     # Actually solve VPM for each local velocity c
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
-    # println("Ui: $(Ui)\n") # OK
 
     hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
 
@@ -1343,7 +1348,7 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
 
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
     LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
-        npt_wing=npt_wing,
+        npt_wing=size(displCol, 2),
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
         # airfoilCoordFile=airfoilCoordFile,
@@ -1473,6 +1478,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
         solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
 
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
+
         return resVec
     end
 
@@ -1484,9 +1490,15 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
     if uppercase(mode) == "FIDI"
         ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
         ∂r∂Xdispl = zeros(DTYPE, length(Gconv), length(displCol))
-        dh = 1e-4
+        # dh = 1e-5
+        dh = 1e-4 # standard
+        # dh = 1e-3
+        # dh = 1e-2
 
         resVec_i = compute_resFromXpt(ptVec, displVec) # initialize the solver
+
+        # backend = AD.FiniteDifferencesBackend(central_fdm(3, 1))
+        # ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x, displVec), ptVec)
 
         # @inbounds begin # no speedup
         for ii in eachindex(ptVec)
@@ -1494,9 +1506,9 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
 
             resVec_f = compute_resFromXpt(ptVec, displVec)
 
-            ptVec[ii] -= dh
-
             ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+
+            ptVec[ii] -= dh
         end
 
         for ii in eachindex(displVec)
@@ -1517,7 +1529,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
 
         for ii in eachindex(ptVec)
             ptVecCS[ii] += 1im * dh
-            resVec_f = compute_resFromXpt(ptVecCS)
+            resVec_f = compute_resFromXpt(ptVecCS, displVec)
             ptVecCS[ii] -= 1im * dh
             ∂r∂Xpt[:, ii] = imag(resVec_f) / dh
         end
@@ -1528,6 +1540,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
         ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
 
     elseif uppercase(mode) == "FAD"
+
         backend = AD.ForwardDiffBackend()
         # ∂r∂Xpt, = AD.jacobian(backend, (xPt, xDisplCol) -> compute_resFromXpt(xPt, xDisplCol), ptVec, vec(displCol))
         ∂r∂Xpt = ForwardDiff.jacobian((xPt) -> compute_resFromXpt(xPt, displVec), ptVec)
@@ -1546,7 +1559,8 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
     NFORCES = 3
     NFORCECOEFFS = 3
     NQUANTS = 1
-    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS + NPT_WING)
+    npt_wing = size(displCol, 2)
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * npt_wing * NQUANTS + npt_wing)
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
 
@@ -1771,7 +1785,8 @@ end
 
 function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
-    ∂collocationPt∂displCol = zeros(DTYPE, NPT_WING * 3, length(displCol))
+    npt_wing = size(displCol, 2)
+    ∂collocationPt∂displCol = zeros(DTYPE, npt_wing * 3, length(displCol))
 
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
@@ -1833,7 +1848,7 @@ function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendag
         ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
 
     elseif uppercase(mode) == "ANALYTIC"
-        for ii in 1:NPT_WING*3
+        for ii in 1:npt_wing*3
             ∂collocationPt∂displCol[ii, ii] = 1.0
         end
     end

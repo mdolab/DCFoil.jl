@@ -112,25 +112,30 @@ function compute_section_property(section::SectionProperty, constitutive::String
         EAₛ = E₁ * c * t # EA for a rectangle
 
     elseif (constitutive == "isotropic")
+
         EIₛ = E₁ * c * t^3 / 12 # EI for a rectangle
         EIₛIP = E₁ * c^3 * t / 12 # EI for a rectangle
+
         EAₛ = E₁ * c * t # EA for a rectangle
-        GJₛ = G₁₂ * π * c^3 * t^3 / (c^2 + t^2) # GJ for an ellipse
+
+        # GJₛ = G₁₂ * π * c^3 * t^3 / (c^2 + t^2) # GJ for an ellipse
         GJₛ = G₁₂ * c^3 * t * 0.333  # GJ for a rectangle
+
     elseif ("hoang-case")
         # TODO: call CLT function
 
     end
-    Sₛ = EIₛ * ((0.5 * ab)^2 + (c^2 / 12.0))
+
+    Sₛ = EIₛ * ((0.5 * ab)^2 + (c^2 / 12.0)) # warping resistance for a rectangle
 
 
     # # Bullshit factor to remove spurious modes
     # EIₛIP *= 1e2
     # EAₛ *= 1e2
 
-    # --- Non-rectangular cross-section ---
-    # This portion of the code corrects (or replaces) the above computations to consider some of the geometric effects
-    # fA, fI , fJ = compute_airfoil_shape_corrections(airfoilCoords; method="xfoil", nChord=nChord)
+    # # --- Non-rectangular cross-section ---
+    # # This portion of the code corrects (or replaces) the above computations to consider some of the geometric effects
+    # fA, fI, fJ = compute_airfoil_shape_corrections(section.airfoilCoords; method="xfoil", nChord=20)
     # EIₛ *= fI
     # EAₛ *= fA
     # GJₛ *= fJ
@@ -220,7 +225,7 @@ function compute_airfoil_shape_corrections(airfoilCoords::Matrix; method="xfoil"
     airfoilUpper = airfoilCoords[1:Int(npts / 2), :]
     airfoilLower = airfoilCoords[Int(npts / 2)+1:end, :]
     tMax = maximum(airfoilUpper[:, 2] - airfoilLower[:, 2])
-    chord = maximum(abs(airfoilCoords[:, 1]))
+    chord = maximum(abs.(airfoilCoords[:, 1]))
     tau = tMax / chord
     eps = maximum(0.5 * (airfoilUpper[:, 2] + airfoilLower[:, 2])) / chord
     As = chord * tMax # area of the section

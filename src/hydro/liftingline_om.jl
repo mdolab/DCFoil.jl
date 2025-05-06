@@ -663,10 +663,10 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #     Derivatives wrt ptVec (2025-03-02 agree)
     #     for the half-wing, only finite differences work
     # ************************************************
-    # mode = "FiDi" # slow 
+    mode = "FiDi" # slow 
     # mode = "CS" # broken
     # mode = "RAD" # broken
-    mode = "FAD" # use this mode for full wing
+    # mode = "FAD" # use this mode for full wing
 
     START = 1
     STOP = LiftingLine.NPT_WING
@@ -731,6 +731,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #   Drag build up derivatives
     # --------------------------- 
     dragMode = "RAD"
+    dragMode = "FiDi"
     if appendageOptions["config"] == "wing"
         dragMode = "FiDi"
     end

@@ -196,7 +196,7 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, 
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
     displCol = reshape(displVec, 6, length(displVec) ÷ 6)
     LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
-        npt_wing=npt_wing,
+        npt_wing=size(displCol, 2),
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
         # airfoilCoordFile=airfoilCoordFile,

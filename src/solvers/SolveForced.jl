@@ -21,24 +21,23 @@ using FileIO
 # --- DCFoil modules ---
 for headerName in [
     "../struct/FEMMethods",
-    "../hydro/OceanWaves"
+    "../hydro/LiftingLine",
+    "../io/MeshIO",
+    "../io/TecplotIO",
+    "../constants/SolutionConstants",
+    "../hydro/HydroStrip",
+    "../solvers/SolverRoutines",
+    "../constants/DesignConstants",
+    "../solvers/DCFoilSolution",
+    "../InitModel",
+    "../hydro/OceanWaves",
 ]
     include("$(headerName).jl")
 end
 
 using .FEMMethods
-
-# using ..InitModel, ..HydroStrip, ..BeamProperties
-# using ..SolveStatic
-# using ..SolutionConstants: SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
-# using ..SolverRoutines
-# using ..Interpolation
-# using ..EBBeam: NDOF, UIND, VIND, WIND, ΦIND, ΨIND, ΘIND
-# using ..DCFoilSolution
-
-# using ..OceanWaves
-
-# using Debugger
+using .LiftingLine
+using .HydroStrip
 
 # ==============================================================================
 #                         COMMON VARIABLES
@@ -104,6 +103,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
 
     maxK = fSweep[end] * 2π / FlowCond.Uinf
     nK = 22
+
     globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(
         maxK, nK, FlowCond.Uinf, 1.0, dim, FEMESH, LLSystem.sweepAng, WING, LLSystem, LLOutputs, FlowCond.rhof, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -201,7 +201,7 @@ function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond
     # --- Wave loads ---
     ω_wave = 0.125 # Peak wave frequency
     Awsig = 0.5 # Wave amplitude [m]
-    ωe = OceanWaves.compute_encounterFreq(π, ω_wave, FlowCond.Uinf)
+    ωe = OceanWaves.compute_encounterFreq(π, ωRange, FlowCond.Uinf)
 
     stripVecs = HydroStrip.get_strip_vecs(AEROMESH, appendageOptions)
     spanLocs = AEROMESH.mesh[:, YDIM]
@@ -320,11 +320,11 @@ end
 #                         Cost func and sensitivity routines
 # ==============================================================================
 function compute_funcs(evalFunc)
-    
+
 end
 
 function evalFuncsSens(VIBSOL)
-    
+
 end
 
 end # end module
