@@ -452,30 +452,6 @@ function test_staticDeriv(DVDict, solverOptions, wingOptions)
     return numBelowTol
 end
 
-function test_staticdrdu(DVDict, solverOptions, wingOptions)
-    # ==============================================================================
-    #                         Also test dr du
-    # ==============================================================================
-    # this should actually be a separate test function but I'm lazy
-    # ************************************************
-    #     Complex step derivative
-    # ************************************************
-    DVDictList = [DVDict, DVDict]
-    _, _, solverParams = DCFoil.SolveStatic.setup_problem(DVDictList, wingOptions, solverOptions)
-
-    mode = "CS"
-    structStates = zeros(size(solverParams.Kmat, 1) - length(solverParams.dofBlank))
-    @time jacobianCS = DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=wingOptions, solverOptions=solverOptions)
-
-    mode = "RAD"
-    @time jacobianAD = real(DCFoil.SolveStatic.compute_∂r∂u(structStates, mode; DVDictList=DVDictList, solverParams=solverParams, appendageOptions=wingOptions, solverOptions=solverOptions))
-
-    # --- Compare ---
-    difference = jacobianCS .- jacobianAD
-
-    return maximum(abs.(difference))
-end
-
 function test_pkflutterderiv(DVDict, solverOptions)
     """
     Test AD derivative of the pk flutter analysis with 

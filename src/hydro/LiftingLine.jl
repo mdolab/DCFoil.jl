@@ -16,6 +16,7 @@
 
              KNOWN BUGS:
              If there are NaNs, check the TV influence functions
+             If there are NaNs in the derivatives, check the sweep angles
 """
 
 module LiftingLine
@@ -337,6 +338,11 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
 
     # wingSpan = span * cos(sweepAng) #no
 
+    if abs(sweepAng) < 1e-6 # there's a discontinuity wrt sweep at 0.0 so this is a hack to prevent NaNs
+        # println("Sweep angle is small, using 0.0")
+        sweepAng = 1e-6
+    end
+
     # Blending parameter for the LAC
     σ = 4 * cos(sweepAng)^2 / (blend^2 * aeroWingSpan^2)
 
@@ -356,24 +362,25 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     start = -aeroWingSpan * 0.5
     stop = aeroWingSpan * 0.5
 
-    # --- Even spacing ---
-    θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
-    wing_xyz_ycomp = reshape(θ_bound[1:2:end], 1, npt_wing + 1)
-    wing_ctrl_xyz_ycomp = reshape(θ_bound[2:2:end], 1, npt_wing)
+    # # --- Even spacing ---
+    # θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
+    # wing_xyz_ycomp = reshape(θ_bound[1:2:end], 1, npt_wing + 1)
+    # wing_ctrl_xyz_ycomp = reshape(θ_bound[2:2:end], 1, npt_wing)
+
+    # --- Cosine spacing ---
+    # if abs_cs_safe(sweepAng) > 0.0 # actually I think this introduces discontinuity wrt sweep angle derivative
+    # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
+    # println("θ_bound: $(θ_bound)")
+    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
+    wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
+    # end
 
     Zeros = zeros(1, npt_wing + 1)
     ZerosCtrl = zeros(1, npt_wing)
     wing_xyz = cat(Zeros, wing_xyz_ycomp, Zeros, dims=1)
     wing_ctrl_xyz = cat(ZerosCtrl, wing_ctrl_xyz_ycomp, ZerosCtrl, dims=1)
 
-    # --- Cosine spacing ---
-    if abs_cs_safe(sweepAng) > 0.0
-        # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
-        # println("θ_bound: $(θ_bound)")
-        θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-        wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
-        wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
-    end
 
     # ---------------------------
     #   X coords (chord dist)
@@ -563,9 +570,10 @@ function compute_LAC(AR, LLHydro, y, c, cr, Λ, span; model="kuechemann")
         Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * AR))^2)^(0.25) # aspect ratio effect
         K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
 
-        if Λ == 0
-            fs = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
-        else
+        # if Λ == 0
+        #     fs1 = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
+        #     fs = fs1
+        # else
             tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
             lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
                   tanl .* abs_cs_safe.(y) .-
@@ -573,9 +581,18 @@ function compute_LAC(AR, LLHydro, y, c, cr, Λ, span; model="kuechemann")
                   tanl .* (0.5 * span .- abs_cs_safe.(y))
 
             fs = 0.25 * cr .+
-                 tan(Λ) .* abs_cs_safe.(y) .-
-                 c .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
-        end
+                  tan(Λ) .* abs_cs_safe.(y) .-
+                  c .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
+
+            # as sweep goes to zero
+            # fs → 0.25 * cr .-  c .* (1.0 .- (1.0 ) / K) * 0.25
+        # end
+
+        # Λtr = 0.0 # when to switch between models
+        # λ = 1e-5 # offset to switch models (want close to zero)
+        # sig = compute_sigmoid(Λ, Λtr, λ, 20)
+        # fs = fs1 + (fs2 - fs1) * sig
+
     else
         println("Model not implemented yet")
     end
@@ -651,9 +668,10 @@ function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann
         Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * AR))^2)^(0.25) # aspect ratio effect
         K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
 
-        if Λ == 0
-            dx = -∂c∂y * (1.0 - 1.0 / K) * 0.25
-        else
+        # if Λ == 0
+        #     dx1 = -∂c∂y * (1.0 - 1.0 / K) * 0.25
+        #     dx = dx1
+        # else
             tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
             lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
                   tanl .* abs_cs_safe.(y) .-
@@ -666,9 +684,19 @@ function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann
                     tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
 
             dx = tan(Λ) * sign.(y) .+
-                 lamp * Λₖ .* c / (2π * K) .-
-                 ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
-        end
+                  lamp * Λₖ .* c / (2π * K) .-
+                  ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
+            
+            # as sweep approaches zero
+            # dx2 → ∂c∂y .* (1.0 .- (1.0) / K) * 0.25
+            # which is the same as the above
+        # end
+
+        # Λtr = 0.0 # when to switch between models
+        # λ = 1e-5 # offset to switch models (want close to zero)
+        # sig = compute_sigmoid(Λ, Λtr, λ, 20)
+        # dx = dx1 + (dx2 - dx1) * sig
+
     else
         println("Model not implemented yet")
     end
@@ -1365,60 +1393,6 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     return solverParams, FlowCond
 end
 
-# function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
-
-#     function compute_cdi(Gconv)
-#         # ---------------------------
-#         #   Calculate influence matrix
-#         # ---------------------------
-#         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
-
-#         ux, uy, uz = FlowCond.uvec
-#         ζi = LLMesh.sectionVectors
-#         dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-
-
-#         Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-#         Gjvji = TV_influence .* Gi
-#         Gjvjix = TV_influence[XDIM, :, :] * Gconv
-#         Gjvjiy = TV_influence[YDIM, :, :] * Gconv
-#         Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
-#         Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
-#         Gjvji = permutedims(Gjvji, [2, 1])
-#         u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
-
-#         ui = Gjvji .+ u∞ # Local velocities (nondimensional)
-
-#         # This is the Biot--Savart law but nondimensional
-#         # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
-#         uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-#         uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-#         coeff = 2.0 / LLMesh.SRef
-
-#         # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-#         IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
-
-
-#         # --- Final outputs ---
-#         CDi = IntegratedForces[XDIM] * ux +
-#               IntegratedForces[YDIM] * uy +
-#               IntegratedForces[ZDIM] * uz
-#         return CDi
-#     end
-
-#     backend = AD.ReverseDiffBackend()
-#     ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-#     ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
-
-#     # Compares well with finite difference 2024-12-07
-#     # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-#     # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-#     # println("∂cdi∂Γ: $(∂cdi∂Γ)")
-#     # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
-
-#     return ∂cdi∂Γ
-# end
-
 function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
 
     NFORCES = 3
@@ -1447,6 +1421,10 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
     elseif uppercase(mode) == "FIDI"
         # Compares well with finite difference 
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+    elseif uppercase(mode) == "RAD" # with the number of outputs, this is not really worth it. Untested
+        backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteDiffBackend()
         ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
     end
 
@@ -1848,7 +1826,11 @@ function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendag
         ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
 
     elseif uppercase(mode) == "ANALYTIC"
-        for ii in 1:npt_wing*3
+        # for ii in 1:npt_wing*3
+        #     ∂collocationPt∂displCol[ii, ii] = 1.0
+        # end
+        println("WARNING: ignoring dihedral effect in collocation point Jacobian (i.e., z deriv)")
+        for ii in 1:npt_wing*2
             ∂collocationPt∂displCol[ii, ii] = 1.0
         end
     end
