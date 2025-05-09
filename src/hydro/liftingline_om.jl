@@ -731,10 +731,26 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #   Drag build up derivatives
     # --------------------------- 
     dragMode = "RAD"
-    dragMode = "FiDi"
+    # dragMode = "FiDi"
     if appendageOptions["config"] == "wing"
         dragMode = "FiDi"
     end
+    # There is a very interesting bug here that complains about mutating arrays even though when running the code in julia, it works fine
+    # println("Pass these inputs to compute_∂EmpiricalDrag to check if there is a bug in the julia code!")
+    # println("ptVec:")
+    # println(ptVec)
+    # println("displCol:")
+    # println(displCol)
+    # println("Gconv:")
+    # println(Gconv)
+    # println("nodeConn:")
+    # println(nodeConn)
+    # println("appendageParams:")
+    # println(appendageParams)
+    # println("appendageOptions:")
+    # println(appendageOptions)
+    # println("solverOptions:")
+    # println(solverOptions)
     ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, Gconv, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode=dragMode)
     partials["CDw", "ptVec"][1, :] = ∂Drag∂Xpt[1, :]
     partials["CDpr", "ptVec"][1, :] = ∂Drag∂Xpt[2, :]
@@ -754,7 +770,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     # ---------------------------
     nodeMode = "FAD"
 
-    ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode=nodeMode)
+    ∂collocationPt∂Xpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode=nodeMode)
     ctr = 1
     for (ii, ∂cPti∂xPt) in enumerate(eachrow(∂collocationPt∂Xpt))
         if appendageOptions["config"] == "wing"

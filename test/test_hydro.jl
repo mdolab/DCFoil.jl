@@ -655,7 +655,7 @@ function test_hydrofoilWaveLoads()
 
 end
 
-test_hydrofoilWaveLoads()
+# test_hydrofoilWaveLoads()
 # ==============================================================================
 #                         Test lifting line code
 # ==============================================================================

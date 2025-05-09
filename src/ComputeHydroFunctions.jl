@@ -289,7 +289,8 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
 
         backend = AD.ForwardDiffBackend()
         # @time ∂Drag∂G, = ReverseDiff.jacobian((xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
-        ∂Drag∂G, ∂Drag∂xdispl = AD.jacobian(backend, (xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
+        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), gammas)
+        ∂Drag∂xdispl, = AD.jacobian(backend, (xDispl) -> compute_dragsFromX(ptVec, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), displVec)
         ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
     else
         error("Mode not recognized")
