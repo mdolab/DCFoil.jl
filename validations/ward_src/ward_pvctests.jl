@@ -33,7 +33,7 @@ tipMass = false
 run_static = true
 # run_forced = true
 run_modal = true
-run_flutter = true
+# run_flutter = true
 # debug = true
 # tipMass = true
 
@@ -48,7 +48,6 @@ nModes = 4 # number of modes to solve for;
 # nModes is really the starting number of structural modes you want to solve for
 df = 1
 fRange = [0.0, 1000.0] # forcing and search frequency sweep [Hz]
-# uRange = [5.0, 50.0] / 1.9438 # flow speed [m/s] sweep for flutter
 uRange = [20.0, 40.0] # flow speed [m/s] sweep for flutter
 tipForceMag = 0.5 * 0.5 * 1000 * 100 * 0.03 # tip harmonic forcing
 
@@ -60,10 +59,8 @@ DVDict = Dict(
     "alfa0" => 6.0, # initial angle of attack [deg]
     "sweep" => deg2rad(0.0), # sweep angle [rad]
     "zeta" => 0.04, # modal damping ratio at first 2 modes
-    "c" => 0.1 * ones(nNodes), # chord length [m]
-    "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
+    "toc" => 0.10 * ones(nNodes), # thickness-to-chord ratio
     "x_ab" => 0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(-15), # fiber angle global [rad]
     "rake" => 0.0,
@@ -79,11 +76,11 @@ DVDict = Dict(
 )
 paramsList = [DVDict]
 wingOptions = Dict(
-    "compName" => "akcabay",
+    "compName" => "ward2018",
     "config" => "wing",
     "nNodes" => nNodes,
     "nNodeStrut" => 10,
-    "material" => "cfrp", # preselect from material library
+    "material" => "pvc", # preselect from material library
     "use_tipMass" => tipMass,
     "xMount" => 0.0,
 )
@@ -92,10 +89,10 @@ solverOptions = Dict(
     # ---------------------------
     #   I/O
     # ---------------------------
-    "name" => "akcabay",
+    "name" => "ward2018",
     "debug" => debug,
     "writeTecplotSolution" => false,
-    "gridFile" => ["$(@__DIR__)/akcabay_stbd_mesh.dcf"],
+    "gridFile" => ["$(@__DIR__)/ward2018_stbd_mesh.dcf"],
     # ---------------------------
     #   General appendage options
     # ---------------------------
@@ -115,7 +112,7 @@ solverOptions = Dict(
     "use_freeSurface" => false,
     "use_cavitation" => false,
     "use_ventilation" => false,
-    "use_nlll" => false,
+    "use_nlll" => true,
     # --- Static solve ---
     "run_static" => run_static,
     # --- Forced solve ---
@@ -167,13 +164,12 @@ midchords, chordVec, _, sweepAng, _ = SolveFlutter.FEMMethods.compute_1DPropsFro
 LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
 claVec = LLOutputs.cla
 
-obj, SOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, claVec, paramsList[1]["theta_f"], paramsList[1]["toc"], paramsList[1]["alfa0"], paramsList[1], solverOptions; return_all=true)
-SolveFlutter.write_sol(SOL, solverOptions["outputDir"])
-
+SolveFlutter.solve_frequencies()
+SolveFlutter.write_tecplot_natural()
 
 using Test
 
-@testset "test static div" begin
+@testset "test ward2018" begin
 
     @test abs(obj - 0.361) < 1e-2
 end
