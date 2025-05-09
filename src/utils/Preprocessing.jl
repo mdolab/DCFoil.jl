@@ -61,6 +61,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     sweepAngles, qtrChords = compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, 0.25)
     # Λ = sweepAngles
     Λ = sum(sweepAngles) / length(sweepAngles)
+    Λ += 1e-6 # there's a discontinuity wrt sweep at 0.0 so this is a hack to prevent NaNs. Offsetting by 1e-6 doesn't really mess with the aerodynamics.
     # println("AC Sweep angle: $(rad2deg(Λ)) deg")
 
     # ---------------------------

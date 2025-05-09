@@ -338,11 +338,6 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
 
     # wingSpan = span * cos(sweepAng) #no
 
-    if abs(sweepAng) < 1e-6 # there's a discontinuity wrt sweep at 0.0 so this is a hack to prevent NaNs
-        # println("Sweep angle is small, using 0.0")
-        sweepAng = 1e-6
-    end
-
     # Blending parameter for the LAC
     σ = 4 * cos(sweepAng)^2 / (blend^2 * aeroWingSpan^2)
 
@@ -1632,84 +1627,16 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
     return ∂I∂Xpt, ∂I∂Xdispl
 end
 
-function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+function compute_∂collocationPt∂Xpt(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
-    ∂cdi∂Xpt = zeros(DTYPE, 1, length(ptVec))
-    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    idxTip = get_tipnode(LECoords)
-    function compute_cdifromxpt(xPt)
-
-        solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
-        TV_influence = solverParams.TV_influence
-        LLMesh = solverParams.LLSystem
-
-        ux, uy, uz = FlowCond.uvec
-        ζi = LLMesh.sectionVectors
-        dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-
-        Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-        Gjvji = TV_influence .* Gi
-        Gjvjix = TV_influence[XDIM, :, :] * Gconv
-        Gjvjiy = TV_influence[YDIM, :, :] * Gconv
-        Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
-        Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
-        Gjvji = permutedims(Gjvji, [2, 1])
-        u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
-
-        ui = Gjvji .+ u∞ # Local velocities (nondimensional)
-
-        # This is the Biot--Savart law but nondimensional
-        # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
-        uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-        uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-        coeff = 2.0 / LLMesh.SRef
-
-        # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-        IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
-
-        # --- Final outputs ---
-        CDi = IntegratedForces[XDIM] * ux +
-              IntegratedForces[YDIM] * uy +
-              IntegratedForces[ZDIM] * uz
-
-        return CDi
-    end
-    # ************************************************
-    #     Finite difference
-    # ************************************************
-    if uppercase(mode) == "FIDI"
-        dh = 1e-4
-        CDi_i = compute_cdifromxpt(ptVec)
-
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
-
-            CDi_f = compute_cdifromxpt(ptVec)
-
-            ptVec[ii] -= dh
-
-            ∂cdi∂Xpt[1, ii] = (CDi_f - CDi_i) / dh
-        end
-    elseif uppercase(mode) == "RAD"
-        backend = AD.ReverseDiffBackend()
-        ∂cdi∂Xpt, = AD.jacobian(backend, x -> compute_cdifromxpt(x), ptVec)
-    elseif uppercase(mode) == "FAD"
-        backend = AD.ForwardDiffBackend()
-        ∂cdi∂Xpt, = AD.jacobian(backend, x -> compute_cdifromxpt(x), ptVec)
-    end
-
-    return ∂cdi∂Xpt
-end
-
-function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
-
-    ∂collocationPt∂Xpt = zeros(DTYPE, NPT_WING * 3, length(ptVec))
+    npt_wing = size(displCol, 2)
+    ∂collocationPt∂Xpt = zeros(DTYPE, npt_wing * 3, length(ptVec))
 
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
 
     function compute_collocationFromXpt(xPt)
-        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, zeros(6, NPT_WING), appendageOptions, appendageParams, solverOptions)
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, appendageParams, solverOptions)
 
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
         outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
