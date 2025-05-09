@@ -343,7 +343,8 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
         β0 = appendageParams["beta"]
         rake = appendageParams["rake"]
         depth0 = appendageParams["depth0"]
-        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        airfoilXY, airfoilCtrlXY, _, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        npt_wing = size(displCol, 2) # overwrite
         LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,

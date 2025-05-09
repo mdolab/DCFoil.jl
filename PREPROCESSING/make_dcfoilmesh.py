@@ -78,11 +78,12 @@ if __name__ == "__main__":
     SPAN = args.semispan
     comp_name = "foil"
 
+    fname = f"{args.foil}_{comp_name}"
     # ==============================================================================
     #                         STBD WING
     # ==============================================================================
-    f = open(f"{args.foil}_{comp_name}_stbd_mesh.dcf", "w")
-    fTecplot = open(f"{args.foil}_{comp_name}_stbd_mesh.dat", "w")
+    f = open(f"{fname}_stbd_mesh.dcf", "w")
+    fTecplot = open(f"{fname}_stbd_mesh.dat", "w")
 
     fTecplot.write('TITLE = "dcfoil mesh"\n')
     fTecplot.write('VARIABLES = "x", "y", "z"\n')
@@ -142,8 +143,8 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         PORT WING
     # ==============================================================================
-    f = open(f"{args.foil}_{comp_name}_port_mesh.dcf", "w")
-    fTecplot = open(f"{args.foil}_{comp_name}_port_mesh.dat", "w")
+    f = open(f"{fname}_port_mesh.dcf", "w")
+    fTecplot = open(f"{fname}_port_mesh.dat", "w")
 
     fTecplot.write('TITLE = "dcfoil mesh"\n')
     fTecplot.write('VARIABLES = "x", "y", "z"\n')
@@ -186,8 +187,8 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         STRUT
     # ==============================================================================
-    f = open(f"{args.foil}_{comp_name}_strut_mesh.dcf", "w")
-    fTecplot = open(f"{args.foil}_{comp_name}_strut_mesh.dat", "w")
+    f = open(f"{fname}_strut_mesh.dcf", "w")
+    fTecplot = open(f"{fname}_strut_mesh.dat", "w")
 
     fTecplot.write('TITLE = "dcfoil mesh"\n')
     fTecplot.write('VARIABLES = "x", "y", "z"\n')
@@ -228,4 +229,4 @@ if __name__ == "__main__":
     f.close()
     fTecplot.close()
 
-    print("--- Wrote mesh to file ---")
+    print(f"--- Wrote mesh to files: {fname} ---")

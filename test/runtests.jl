@@ -265,16 +265,18 @@ include("test_partials.jl")
         "rhoKS" => 500.0,
     )
     displacementsCol = zeros(6, NPT_WING)
+
     # --- Lifting line tests ---
     @test test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-10
     @test test_LLresidualJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-10
 
     # --- Flutter derivative test ---
-    # TODO PICKUP HERER
+    @test test_FlutterJacobians(appendageParams, appendageOptions, solverOptions) <= 1e-4
 
     # --- Structural tests ---
     # Run these tests last because they introduce a complex data type bug
-    @test test_BeamCostFuncJacobians() <= 1e-10
+    appendageOptions["config"] = "full-wing"
+    @test test_BeamCostFuncJacobians(appendageParams, appendageOptions) <= 1e-10
     @test test_BeamResidualJacobians(appendageParams, appendageOptions, solverOptions) <= 1e-10
 
 end
