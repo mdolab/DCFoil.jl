@@ -91,7 +91,7 @@ solverOptions = Dict(
     # ---------------------------
     "name" => "ward2018",
     "debug" => debug,
-    "writeTecplotSolution" => false,
+    "writeTecplotSolution" => true,
     "gridFile" => ["$(@__DIR__)/ward2018_stbd_mesh.dcf"],
     # ---------------------------
     #   General appendage options
@@ -165,7 +165,7 @@ LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLPropertie
 claVec = LLOutputs.cla
 
 SolveFlutter.solve_frequencies()
-SolveFlutter.write_tecplot_natural()
+SolveFlutter.write_solution()
 
 using Test
 
