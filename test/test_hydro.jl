@@ -49,12 +49,17 @@ function test_stiffness()
     Λ = 45 * π / 180 # 45 deg
     clambda = cos(Λ)
     slambda = sin(Λ)
-    ω = 1e10 # infinite frequency limit
+    ω = 1e6 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
+    println("ω = ", ω)
+    println("k = ", k)
     CKVec = HydroStrip.compute_theodorsen(k)
     Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
     Matrix, SweepMatrix = HydroStrip.compute_node_stiff_faster(clα, b, eb, ab, U, clambda, slambda, ρ, Ck)
+
+    Sk, S0k = HydroStrip.compute_sears(k)
+    
 
     # show(stdout, "text/plain", real(Matrix))
     # show(stdout, "text/plain", imag(Matrix))
@@ -98,7 +103,7 @@ function test_damping()
     Λ = 45 * π / 180 # 45 deg
     clambda = cos(Λ)
     slambda = sin(Λ)
-    ω = 1e10 # infinite frequency limit
+    ω = 1e6 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
     CKVec = HydroStrip.compute_theodorsen(k)

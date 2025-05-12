@@ -394,6 +394,7 @@ function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions)
     TECoords[1, :] .= 0.5
     ptVec, m, n = FEMMethods.unpack_coords(LECoords, TECoords)
 
+    nNodes = appendageOptions["nNodes"]
     claVec = 2π * ones(nNodes)
     solverOptions = FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageOptions)
 

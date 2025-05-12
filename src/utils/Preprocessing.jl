@@ -8,6 +8,7 @@
 """
 
 using FLOWMath: atan_cs_safe
+# using DelimitedFiles
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions, appendageParams)
     """
@@ -354,9 +355,17 @@ function get_1DBeamPropertiesFromFile(fname)
     Returns:
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ (like compute_beam() function)
     """
+open(fname, "r") do io 
+        # Read the first line
+        line = readline(io)
+        println("line: ", line)
+
+    end
 
     return EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 end
+
+# get_1DBeamPropertiesFromFile("$(@__DIR__)/../../validations/ward_src/ward.dcf")
 
 function get_1DGeoPropertiesFromFile(fname)
     """

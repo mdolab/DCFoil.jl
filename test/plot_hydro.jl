@@ -27,7 +27,7 @@ function test_theofs()
     # ************************************************
     plt = pyimport("matplotlib.pyplot")
     niceplots = pyimport("niceplots")
-    kSweep = [0.01, 0.02, 0.1, 0.2, 1.0, 2.0]
+    kSweep = [1e-10, 0.02, 0.1, 0.2, 1.0, 2.0]
     b = 1.0f0
     clα = 2π
     eb = 0.0 * b
@@ -269,7 +269,7 @@ function test_sears()
     SkSweep = []
     CkSweep = []
     labels = []
-    kPlot = 0.01:0.5:10.5
+    kPlot = 1e-6:0.05:10.5
     for k in kPlot
         Sk, S0k = HydroStrip.compute_sears(k)
         ans = HydroStrip.compute_theodorsen(k)
@@ -285,11 +285,11 @@ function test_sears()
         annotate!(real(SkSweep[ii]), imag(SkSweep[ii]), text(labels[ii], 8, :left, :bottom, offset))
         annotate!(real(CkSweep[ii]), imag(CkSweep[ii]), text(labels[ii], 8, :left, :bottom, offset))
     end
-    kSweep = 0.01:0.01:10.
+    kSweep::Vector = 1e-6:0.01:20.0
     SkSweep = []
     CkSweep = []
     for k in kSweep
-        Sk,S0k = HydroStrip.compute_sears(k)
+        Sk, S0k = HydroStrip.compute_sears(k)
         ans = HydroStrip.compute_theodorsen(k)
         Ck = ans[1] + im * ans[2]
         push!(SkSweep, Sk)
@@ -331,6 +331,7 @@ function test_sears()
     plot(p1, p2, layout=(2, 1), tick_direction=:out)
     savefig("mag-phase.png")
 
+    save("circulation.jld2", "SkSweep_re", real.(SkSweep), "SkSweep_im", imag.(SkSweep), "CkSweep_re", real.(CkSweep), "CkSweep_im", imag.(CkSweep), "kSweep", vec(kSweep))
 end
 
 # ==============================================================================

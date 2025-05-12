@@ -503,7 +503,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
     if solverOptions["use_nlll"]
         error("NLLL not implemented yet for natural freq")
-    else 
+    else
         claVec = LLOutputs.cla
     end
     globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, claVec, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
@@ -529,10 +529,33 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # ************************************************
     if !(isempty(outputDir))
         write_modalsol(structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, outputDir)
+        if solverOptions["writeTecplotSolution"]
+            write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, FEMESH.mesh, chordVec, outputDir; solverOptions=solverOptions)
+        end
     end
 
     return structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol
 end # end solve_frequencies
+
+
+# ==============================================================================
+#                         Solution writer
+# ==============================================================================
+function write_solution(FLUTTERSOL, solverOptions, appendageParamsList; callNumber=0)
+    outputDir = solverOptions["outputDir"] * @sprintf("/call_%03d/", callNumber)
+
+    println("="^80)
+    println("Writing solution files...")
+    println("="^80)
+
+    write_sol(FLUTTERSOL, outputDir)
+
+    if solverOptions["writeTecplotSolution"] && solverOptions["run_static"]
+        STATSOL = STATSOLLIST[iComp]
+        FEMESH = STATSOL.FEMESH
+        write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    end
+end
 
 function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     """
@@ -606,6 +629,7 @@ function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatF
     write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir; solverOptions=solverOptions)
 
 end
+
 # ==============================================================================
 #                         Flutter routines
 # ==============================================================================

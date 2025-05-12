@@ -83,6 +83,7 @@ wingOptions = Dict(
     "material" => "pvc", # preselect from material library
     "use_tipMass" => tipMass,
     "xMount" => 0.0,
+    "path_to_struct_props" => "$(@__DIR__)/ward2018_foil_stbd_structprops.csv",
 )
 appendageOptions = [wingOptions]
 solverOptions = Dict(
@@ -92,7 +93,7 @@ solverOptions = Dict(
     "name" => "ward2018",
     "debug" => debug,
     "writeTecplotSolution" => true,
-    "gridFile" => ["$(@__DIR__)/ward2018_stbd_mesh.dcf"],
+    "gridFile" => ["$(@__DIR__)/ward2018_foil_stbd_mesh.dcf"],
     # ---------------------------
     #   General appendage options
     # ---------------------------
@@ -164,6 +165,19 @@ midchords, chordVec, _, sweepAng, _ = SolveFlutter.FEMMethods.compute_1DPropsFro
 LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
 claVec = LLOutputs.cla
 
+# --- Do tip loads ---
+LECoords, TECoords = SolveFlutter.FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+globalK, globalM, _, DOFBlankingList, FEMESH, _, _ = SolveFlutter.FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], wingOptions, solverOptions)
+
+traction_forces = zeros(size(globalK, 1))
+qSol = FEMMethods.solve_structure(
+    globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
+    traction_forces[1:end.∉[DOFBlankingList]],
+)
+uSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE; appendageOptions=appendageOptions)
+
+
+# --- Do modal analysis ---
 SolveFlutter.solve_frequencies()
 SolveFlutter.write_solution()
 
