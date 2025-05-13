@@ -68,7 +68,7 @@ DVDict = Dict(
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 0.4, # from Yingqian
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
-    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (max t/c if using airfoil correction)
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
@@ -83,7 +83,7 @@ wingOptions = Dict(
     "material" => "pvc", # preselect from material library
     "use_tipMass" => tipMass,
     "xMount" => 0.0,
-    "path_to_struct_props" => "$(@__DIR__)/ward2018_foil_stbd_structprops.csv",
+    "path_to_struct_props" => "$(@__DIR__)/ward2018_structprops.dcf",
 )
 appendageOptions = [wingOptions]
 solverOptions = Dict(
