@@ -260,14 +260,6 @@ if __name__ == "__main__":
     # prob.model.add_objective("CDi")
     # prob.model.add_objective("ksflutter")
 
-    # prob.model.nonlinear_solver = om.NewtonSolver(
-    #     solve_subsystems=True,
-    #     iprint=2,
-    # )
-    # prob.model.nonlinear_solver.linesearch = om.ArmijoGoldsteinLS() # this is needed to get the system to converge but it sucks
-    # prob.model.nonlinear_solver.linesearch.options["maxiter"] = 10
-    # prob.model.nonlinear_solver.linesearch.options["iprint"] = 2
-
     prob.setup(check=False)
 
     # om.n2(prob)
@@ -276,50 +268,24 @@ if __name__ == "__main__":
     prob.set_val("ptVec", ptVec)
 
     if args.run_struct:
-        # tractions = prob.get_val("beamstruct.traction_forces")
-        # tractions[-7] = 100.0
-        # prob.set_val("beamstruct.traction_forces", tractions)
-
         prob.set_val("theta_f", np.deg2rad(0))
         prob.set_val("toc", 0.075 * np.ones(nNodes))
-
-        # apply uniform Z force
+        # apply uniform Z force for testing
         tractions = np.zeros_like(prob.get_val("beamstruct.traction_forces"))
         tractions[2::9] = 100  # apply force in Z direction
         prob.set_val("beamstruct.traction_forces", tractions)
+
     elif args.run_flow:
         prob.set_val("liftingline.gammas", np.zeros(npt_wing))
         prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
-
-        # --- debugging: set symmetric displacements_col from 1st iteration of hydroelastic solver ---
-        disp_col = np.array([
-            [-2.59517621e-05, -1.16898946e-05, -7.82499519e-07, -7.82499519e-07, -1.16898946e-05, -2.59517621e-05],  # x (flow direction)
-            [ 3.38378035e-06,  3.04119675e-06,  1.29805963e-06, -1.29805963e-06, -3.04119675e-06, -3.38378035e-06],  # y (spanwise)
-            [ 1.71557384e-01,  7.69623401e-02,  7.60969408e-03,  7.60969408e-03, 7.69623401e-02,  1.71557384e-01],   # z (vertical)
-            [-3.22570724e-01, -2.53959646e-01, -9.33918993e-02,  9.33918993e-02, 2.53959646e-01,  3.22570724e-01],   # Rx (bending) (NOTE: this is not used)
-            [ 3.45306127e-01,  2.42679608e-01,  7.04053297e-02,  7.04053297e-02, 2.42679608e-01,  3.45306127e-01],   # Ry (twist)
-            [-4.88850989e-05, -4.39358317e-05, -1.87529233e-05,  1.87529233e-05, 4.39358317e-05,  4.88850989e-05]    # Rz (in-plane bending) (NOTE: this is not used)
-        ])
-        # TODO: check x and Rz sign, should be positive (bending backwords)
-        # NOTE: twist only gives symmetric
-        #       verical only -> small asymmetry
-        #       vertical & twist -> bad
-        #       others (x, y, Rx, Ry, Rz) are good, Z is bad
-        prob.set_val("displacements_col", disp_col)
 
     else:
         prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
         prob.set_val("gammas", np.zeros(npt_wing))
 
-        # tip load test
-        # loads = np.zeros(9 * n_node_fullspan)  # 9 forces per node
-        # loads[4 * 9 + 1] = 1000
-        # loads[4 * 9 + 2] = 1000   # tip vertical force (z direction)
-        # tractions = prob.set_val("traction_forces", loads)
-
-        # set fiber angle
+        # set fiber angle and thickness-to-chord ratio
         fiber_angle = np.deg2rad(-15)
         prob.set_val('theta_f', fiber_angle)
         prob.set_val('toc', 0.075 * np.ones(nNodes))
@@ -343,7 +309,7 @@ if __name__ == "__main__":
     # print("model run complete\n" + "-" * 50)
     # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
-    # --- compute total derivatives ---
+    # --- compute total derivatives for debugging ---
     # if not args.run_struct:
     #     wrt = ['ptVec']
     #     of = ['CDw', 'CDpr', 'CDj', 'CDs']
