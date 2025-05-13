@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 
 
 def _debug_print(name, var, mode):
+    """ debug printer to check symmetry of the variables """
+    
     # print full-span variables at collocation point or FEM points
     if mode == 'flow':
         left = var[:int(len(var) / 2)][::-1]   # center to tip

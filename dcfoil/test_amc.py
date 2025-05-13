@@ -33,9 +33,9 @@ jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 jl.include("../src/solvers/solveflutter_om.jl")  # discipline 4 flutter solver
 jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
-from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
+# import top-level OpenMDAO group that contains all components
+from coupled_analysis import CoupledAnalysis
 
-from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 outputDir = "output"
 files = {
@@ -190,120 +190,42 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     #     print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
     # print(30 * "-", flush=True)
 
-    impcomp_struct_solver = JuliaImplicitComp(
-        jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_struct_func = JuliaExplicitComp(
-        jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    impcomp_LL_solver = JuliaImplicitComp(
-        jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_LL_func = JuliaExplicitComp(
-        jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    # expcomp_load = JuliaExplicitComp(
-    #     jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
-    # )
-    # expcomp_displacement = JuliaExplicitComp(
-    #     jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
-    # )
-
-    model = om.Group()
-
-    # ************************************************
-    #     Setup components
-    # ************************************************
-    # --- geometry component ---
-    # now ptVec is just an input, so use IVC as an placeholder. Later replace IVC with pygeo
-    indep = model.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
-    indep.add_output("ptVec", val=ptVec)
-
-    # --- Combined hydroelastic ---
-    couple = model.add_subsystem("hydroelastic", om.Group(), promotes=["*"])
-
-    # structure
-    couple.add_subsystem(
-        "beamstruct",
-        impcomp_struct_solver,
-        promotes_inputs=["ptVec", "traction_forces"],
-        promotes_outputs=["deflections"],
-    )
-    couple.add_subsystem(
-        "beamstruct_funcs",
-        expcomp_struct_func,
-        promotes_inputs=["ptVec", "deflections"],
-        promotes_outputs=["*"],  # everything!
-    )
-
-    # displacement transfer
-    couple.add_subsystem(
-        "disp_transfer",
-        DisplacementTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
-        promotes_inputs=["nodes", "deflections", "collocationPts"],
-        promotes_outputs=[("disp_colloc", "displacements_col")],
-    )
-
-    # hydrodynamics
-    couple.add_subsystem(
-        "liftingline",
-        impcomp_LL_solver,
-        promotes_inputs=["ptVec", "alfa0", "displacements_col"],
-        promotes_outputs=["gammas", "gammas_d"],
-    )
-    couple.add_subsystem(
-        "liftingline_funcs",
-        expcomp_LL_func,
-        promotes_inputs=[
-            "gammas",
-            "gammas_d",
-            "ptVec",
-            "alfa0",
-            "displacements_col",
-        ],  # promotion auto connects these variables
-        promotes_outputs=["*"],  # everything!
-    )
-
-    # load transfer
-    couple.add_subsystem(
-        "load_transfer",
-        LoadTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
-        promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
-        promotes_outputs=[("loads_str", "traction_forces")],
-    )
-
-    # hydroelastic coupled solver
-    couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=200, iprint=2, atol=1e-6, rtol=0)
-    ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
-    couple.linear_solver = om.DirectSolver()   # for adjoint
-
-    # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
-    model.add_subsystem(
-        "CLa_interp",
-        CLaInterpolation(n_node=n_node_fullspan, n_strips=npt_wing),
-        promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla")],
-        promotes_outputs=[("CL_alpha_node", "cla_node")],
-    )
-
     # ************************************************
     #     Setup problem
     # ************************************************
+    model = CoupledAnalysis(
+        analysis_mode="coupled",
+        ptVec_init=np.array(ptVec),
+        npt_wing=npt_wing,
+        n_node_fullspan=n_node_fullspan,
+        appendageOptions=appendageOptions,
+        appendageParams=appendageParams,
+        nodeConn=nodeConn,
+        solverOptions=solverOptions,
+    )
 
     prob = om.Problem(model)
 
+    # prob.driver = om.ScipyOptimizeDriver()
+    # prob.driver.options["optimizer"] = "SLSQP"
     prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
+    prob.driver.options['print_results'] = True
+    prob.driver.opt_settings["Major iterations limit"] = 100
+    prob.driver.opt_settings["Major feasibility tolerance"] = 1e-4
+    prob.driver.opt_settings["Major optimality tolerance"] = 1e-4
+    prob.driver.opt_settings["Difference interval"] = 1e-4,
+    prob.driver.opt_settings["Verify level"] = -1
+    prob.driver.opt_settings["Function precision"] = 1e-8
+    prob.driver.opt_settings["Hessian full memory"] = None
+    prob.driver.opt_settings["Hessian frequency"] = 100
     outputDir = "output"
-    optOptions = {
-        "Major feasibility tolerance": 1e-4,
-        "Major optimality tolerance": 1e-4,
-        "Difference interval": 1e-4,
-        "Hessian full memory": None,
-        "Function precision": 1e-8,
-        "Print file": os.path.join(outputDir, "SNOPT_print.out"),
-        "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
-        "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
-    }
+    prob.driver.opt_settings["Print file"] = os.path.join(outputDir, "SNOPT_print.out")
+    prob.driver.opt_settings["Summary file"] = os.path.join(outputDir, "SNOPT_summary.out")
+    # prob.driver.opt_settings["Linesearch tolerance"] = 0.99
+    # prob.driver.opt_settings["Nonderivative linesearch"] = None
+    # prob.driver.opt_settings["Major step limit"] = 5e-3
 
+    # --- setup optimization problem ---
     prob.model.add_design_var("ptVec")
 
     prob.setup()
@@ -482,15 +404,17 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
 
 if __name__ == "__main__":
     # debug
-    # fiber_angle = 30
-    # alfa0 = 6
-    # dz_tip, theta_tip_rad = main(fiber_angle, alfa0, True)
-    # print('\n\n-----------------------------------')
-    # print("fiber angle", fiber_angle, "deg")
-    # print("tip deflections [m]", dz_tip)
-    # print("tip deflections / 2c", dz_tip * 2 / 0.09))   # same normalization as Liao 2019
-    # print("tip twist [deg]", np.rad2deg(theta_tip_rad))
-    # print('-----------------------------------')
+    fiber_angle = 30
+    alfa0 = 6
+    dz_tip, theta_tip_rad, Cl = main(fiber_angle, alfa0, True)
+    print('\n\n-----------------------------------')
+    print("fiber angle", fiber_angle, "deg")
+    print("tip deflections [m]", dz_tip)
+    print("tip deflections / 2c", dz_tip * 2 / 0.09)   # same normalization as Liao 2019
+    print("tip twist [deg]", np.rad2deg(theta_tip_rad))
+    print("CL", Cl)
+    print('-----------------------------------')
+    quit()
 
     # ---------------------
 
