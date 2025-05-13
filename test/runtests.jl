@@ -21,62 +21,6 @@ include("test_solvers.jl")
 nNodes = 40
 nNodesStrut = 2
 
-# DVDict1 = Dict(
-#     "alfa0" => 6.0, # initial angle of attack [deg]
-#     "sweep" => 0.0 * π / 180, # sweep angle [rad]
-#     "zeta" => 0.04, # modal damping ratio at first 2 modes
-#     "c" => 0.1 * ones(nNodes), # chord length [m]
-#     "s" => 0.3, # semispan [m]
-#     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
-#     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
-#     "x_ab" => 0 * ones(nNodes), # static imbalance [m]
-#     "theta_f" => deg2rad(15), # fiber angle global [rad]
-#     # --- Strut vars ---
-#     "rake" => 0.0, # rake angle wrt flow [deg]
-#     "depth0" => 0.1,
-#     "beta" => 0.0, # yaw angle wrt flow [deg]
-#     "s_strut" => 0.4, # from Yingqian
-#     "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
-#     "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
-#     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
-#     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
-#     "theta_f_strut" => deg2rad(15), # fiber angle global [rad]
-# )
-# wingOptions1 = Dict(
-#     "compName" => "test-comp",
-#     "material" => "cfrp", # preselect from material library
-#     "config" => "wing",
-#     "nNodes" => nNodes, # number of nodes on foil half wing
-#     "nNodeStrut" => nNodesStrut, # nodes on strut
-#     "use_tipMass" => false,
-#     "xMount" => 0.0,
-# )
-# solverOptions1 = Dict(
-#     "rhof" => 1000.0, # fluid density [kg/m³]
-#     "Uinf" => 6.0, # free stream velocity [m/s]
-#     # --- I/O ---
-#     "name" => "akcabay",
-#     "debug" => false,
-#     "outputDir" => "test_out/",
-#     "appendageList" => [wingOptions1],
-#     # --------------------------------
-#     #   Flow
-#     # --------------------------------
-#     "use_cavitation" => false,
-#     "use_freeSurface" => false,
-#     # --- Static solve ---
-#     "run_static" => true,
-#     # --- Forced solve ---
-#     "run_forced" => false,
-#     "fRange" => [0, 10],
-#     "tipForceMag" => 0.0,
-#     # --- Eigen solve ---
-#     "run_modal" => false,
-#     "run_flutter" => false,
-#     "nModes" => 5,
-#     "uRange" => [0.1, 1.0],
-# )
-
 # ************************************************
 #     Structural tests
 # ************************************************
