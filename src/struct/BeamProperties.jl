@@ -21,7 +21,7 @@ struct SectionProperty{TF,TC,T}
     airfoilCoords::Matrix{TF} # airfoil coordinates
 end
 
-function compute_section_property(section::SectionProperty, constitutive::String)
+function compute_section_property(section::SectionProperty, constitutive::String; solverOptions)
     """
     Orthotropic material uses classic laminate theory (CLT) for 
     composite cross section property computation.
@@ -133,18 +133,20 @@ function compute_section_property(section::SectionProperty, constitutive::String
     # EIₛIP *= 1e2
     # EAₛ *= 1e2
 
-    # # --- Non-rectangular cross-section ---
-    # # This portion of the code corrects (or replaces) the above computations to consider some of the geometric effects
-    # fA, fI, fJ = compute_airfoil_shape_corrections(section.airfoilCoords; method="xfoil", nChord=20)
-    # EIₛ *= fI
-    # EAₛ *= fA
-    # GJₛ *= fJ
+    # --- Non-rectangular cross-section ---
+    if haskey(solverOptions, "correct_xsect") && solverOptions["correct_xsect"]
+        # This portion of the code corrects (or replaces) the above computations to consider some of the geometric effects
+        fA, fI, fJ = compute_airfoil_shape_corrections(section.airfoilCoords, section.t, section.c, section.t / section.c, 0.0; method="xfoil", nChord=20)
+        EIₛ *= fI
+        EAₛ *= fA
+        GJₛ *= fJ
+        # println("bend stiff: ", EIₛ)
+        # println("BTC: ", Kₛ)
+        # println("torsion stiff: ", GJₛ)
+        # println("warp res: ", Sₛ)
+        # println("ext. stiff: ", EAₛ)
+    end
 
-    # println("bend stiff: ", EIₛ)
-    # println("BTC: ", Kₛ)
-    # println("torsion stiff: ", GJₛ)
-    # println("warp res: ", Sₛ)
-    # println("ext. stiff: ", EAₛ)
 
     return EIₛ, EIₛIP, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 
@@ -182,7 +184,7 @@ function compute_beam(nNodes::Int64,
         section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, zeros(20, 2))
 
         # TODO: should probably redo this to be element-based, not node-based
-        EI, EIIP, K, GJ, S, EA, I, m = compute_section_property(section, constitutive)
+        EI, EIIP, K, GJ, S, EA, I, m = compute_section_property(section, constitutive; solverOptions=solverOptions)
         EI_z[ii] = EI
         EIIP_z[ii] = EIIP
         K_z[ii] = K
@@ -205,29 +207,22 @@ function compute_beam(nNodes::Int64,
     return EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 end
 
-function compute_airfoil_shape_corrections(airfoilCoords::Matrix; method="xfoil", nChord=20)
+function compute_airfoil_shape_corrections(airfoilCoords::Matrix, tMax, chord, τ, ε; method="xfoil", nChord=20)
     """
     In the case where one has an idea of the airfoil shape but not the 
     FE model, we can correct based on some airfoil structural theory (or see XFOIL BEND command)
+
     airfoilCoords: 
     	2D array of airfoil coordinates arranged CCW from TE like
     	[npts, 2]
     	with LE at origin
+    τ:
+    	thickness-to-chord ratio of the airfoil based on max thickness
+    ε:
+        camber ratio h/c where h = max {[Zu(x)+ Zℓ(x)]/2}
     Optional arguments:
     nChord - number of chordwise elements if method is "geometric"
     """
-    # --- Determine airfoil properties ---
-    # tau - thickness-to-chord ratio of the airfoil
-    # c - chord
-    # eps - camber ratio h/c where h = max {[Zu(x)+ Zℓ(x)]/2}
-    # Get max thickness and camber
-    npts = size(airfoilCoords, 1)
-    airfoilUpper = airfoilCoords[1:Int(npts / 2), :]
-    airfoilLower = airfoilCoords[Int(npts / 2)+1:end, :]
-    tMax = maximum(airfoilUpper[:, 2] - airfoilLower[:, 2])
-    chord = maximum(abs.(airfoilCoords[:, 1]))
-    tau = tMax / chord
-    eps = maximum(0.5 * (airfoilUpper[:, 2] + airfoilLower[:, 2])) / chord
     As = chord * tMax # area of the section
     Is = 1 / 12 * chord * tMax^3 # 2nd area mom for rect
     Js = (chord * tMax^3) / 16 * (16 / 3 - 3.36 * tMax / chord * (1 - (tMax^4) / (12 * chord^4))) # torsion const for rect 4 % err (Roark's Formulas)
@@ -236,12 +231,24 @@ function compute_airfoil_shape_corrections(airfoilCoords::Matrix; method="xfoil"
     fI = 1.0
     fJ = 1.0
     if method == "xfoil"
-        A, I = compute_simple_airfoil(chord, tau, eps)
+        A, I = compute_simple_airfoil(chord, τ, ε)
         J = pi * (chord * tMax)^3 / (16 * (chord^2 + tMax^2)) # torsion constant approximated as an ellipse Roark
         fA = A / As
         fI = I / Is
         fJ = J / Js
     elseif method == "geometric"
+        # --- Determine airfoil properties ---
+        # tau - thickness-to-chord ratio of the airfoil
+        # c - chord
+        # eps - camber ratio h/c where h = max {[Zu(x)+ Zℓ(x)]/2}
+        # Get max thickness and camber
+        npts = size(airfoilCoords, 1)
+        airfoilUpper = airfoilCoords[1:Int(npts / 2), :]
+        airfoilLower = airfoilCoords[Int(npts / 2)+1:end, :]
+        tMax = maximum(airfoilUpper[:, 2] - airfoilLower[:, 2])
+        chord = maximum(abs.(airfoilCoords[:, 1]))
+        tau = tMax / chord
+        eps = maximum(0.5 * (airfoilUpper[:, 2] + airfoilLower[:, 2])) / chord
         # Look at Eirikur's pygeo code
         # Spline upper and lower surfaces and order from LE to TE
         airfoilUpperS =
@@ -271,7 +278,10 @@ function compute_airfoil_shape_corrections(airfoilCoords::Matrix; method="xfoil"
 end
 
 function compute_simple_airfoil(chord, tau, eps)
-    # From the PDF
+    """
+    Compute the area and second moment of inertia of a simple airfoil
+    From the PDF https://ocw.mit.edu/courses/16-01-unified-engineering-i-ii-iii-iv-fall-2005-spring-2006/pages/systems-labs-06/
+    """
     KA = 0.60
     KI = 0.036
 

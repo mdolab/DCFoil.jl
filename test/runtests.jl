@@ -144,7 +144,7 @@ include("test_partials.jl")
         "alfa0" => 6.0, # initial angle of attack [deg] (angle of flow vector)
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.06 * ones(nNodes), # thickness-to-chord ratio (mean) #FLAGSTAFF
+        "toc" => 0.06 * ones(nNodes), # thickness-to-chord ratio (max t/c if using airfoil correction) #FLAGSTAFF
         "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
         "theta_f" => deg2rad(0), # fiber angle global [rad]
         # --- Strut vars ---
@@ -153,7 +153,7 @@ include("test_partials.jl")
         "beta" => 0.0, # yaw angle wrt flow [deg]
         "s_strut" => 1.0, # [m]
         "c_strut" => 0.14 * collect(LinRange(1.0, 1.0, nNodesStrut)), # chord length [m]
-        "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+        "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (max t/c if using airfoil correction)
         "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
         "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
         "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
@@ -235,7 +235,7 @@ include("test_partials.jl")
         "alfa0" => 6.0, # initial angle of attack [deg] (angle of flow vector)
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
-        "toc" => 0.06 * ones(nNodes), # thickness-to-chord ratio (mean) #FLAGSTAFF
+        "toc" => 0.06 * ones(nNodes), # thickness-to-chord ratio (max t/c if using airfoil correction) #FLAGSTAFF
         "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
         "theta_f" => deg2rad(0), # fiber angle global [rad]
         # --- Strut vars ---
@@ -244,7 +244,7 @@ include("test_partials.jl")
         "beta" => 0.0, # yaw angle wrt flow [deg]
         "s_strut" => 1.0, # [m]
         "c_strut" => 0.14 * collect(LinRange(1.0, 1.0, nNodesStrut)), # chord length [m]
-        "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+        "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (max t/c if using airfoil correction)
         "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
         "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
         "theta_f_strut" => deg2rad(0), # fiber angle global [rad]

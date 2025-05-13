@@ -380,7 +380,7 @@ end
 #     "beta" => 0.0, # yaw angle wrt flow [deg]
 #     "s_strut" => 0.4, # from Yingqian
 #     "c_strut" => 0.14 * ones(nNodes), # chord length [m]
-#     "toc_strut" => 0.095, # thickness-to-chord ratio (mean)
+#     "toc_strut" => 0.095, # thickness-to-chord ratio (max t/c if using airfoil correction)
 #     "ab_strut" => 0 * ones(nNodes), # dist from midchord to EA [m]
 #     "x_ab_strut" => 0 * ones(nNodes), # static imbalance [m]
 #     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
