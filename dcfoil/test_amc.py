@@ -35,11 +35,13 @@ jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 
+from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
+
 outputDir = "output"
 files = {
     "gridFile": [
         "../INPUT/amc_foil_stbd_mesh.dcf",
-        # "../INPUT/amc_foil_port_mesh.dcf", # only add this if config is full wing
+        "../INPUT/amc_foil_port_mesh.dcf", # only add this if config is full wing
     ]
 }
 Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
@@ -48,18 +50,20 @@ LECoords = np.array(Grid.LEMesh).T
 TECoords = np.array(Grid.TEMesh).T
 nodeConn = np.array(Grid.nodeConn)
 ptVec, m, n = jl.FEMMethods.unpack_coords(Grid.LEMesh, Grid.TEMesh)
-nNodes = 5
+nNodes = 10
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
-    # "config": "full-wing",
-    "config": "wing",
+    "config": "full-wing",
+    # "config": "wing",
     "nNodes": nNodes,
     "nNodeStrut": nNodesStrut,
     "use_tipMass": False,
     "xMount": 0.0,
-    "material": "al6061",
-    "strut_material": "al6061",
+    # "material": "al6061",
+    # "strut_material": "al6061",
+    "material": "cfrp",
+    "strut_material": "cfrp",
     "path_to_geom_props": "./INPUT/1DPROPS/",
     "path_to_struct_props": None,
     "path_to_geom_props": None,
@@ -82,8 +86,8 @@ solverOptions = {
     # ---------------------------
     #   Flow
     # ---------------------------
-    "Uinf": 18.0,  # free stream velocity [m/s]
-    "rhof": 1025.0,  # fluid density [kg/m³]
+    "Uinf": 11.4,  # free stream velocity [m/s]
+    "rhof": 998.0,  # fluid density [kg/m³]
     "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
     "use_nlll": True,
     "use_freeSurface": False,
@@ -116,7 +120,7 @@ appendageParams = {
     "alfa0": 6.0,  # initial angle of attack [deg]
     "zeta": 0.04,  # modal damping ratio at first 2 modes
     "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
-    "toc": 0.06 * np.ones(nNodes),  # thickness-to-chord ratio
+    "toc": 0.06 * np.ones(nNodes),  # thickness-to-chord ratio   # TODO: check with Galen, why 0.06? NACA0009
     "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
     "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
     # --- Strut vars ---
@@ -134,12 +138,43 @@ appendageParams = {
 # Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
 solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
 
+# number of strips and FEM nodes
+if appendageOptions["config"] == "full-wing":
+    npt_wing = jl.LiftingLine.NPT_WING
+    n_node_fullspan = nNodes * 2 - 1
+else:
+    npt_wing = jl.LiftingLine.NPT_WING / 2
+    # check if npt_wing is integer
+    if npt_wing % 1 != 0:
+        raise ValueError("NPT_WING must be an even number for symmetric analysis")
+    npt_wing = int(npt_wing)
+    n_node_fullspan = nNodes
 
-npt_wing = jl.LiftingLine.NPT_WING
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
-if __name__ == "__main__":
+def main(theta_fiber, alfa0, initialize=True, plot=False):
+    """
+    Run static hydroelastic analysis and compute deflections
+
+    Parameters
+    ----------
+    theta_fiber : float
+        Fiber angle [deg]
+    alfa0 : float
+        Angle of attack [deg]
+        NOTE: This will override the alfa0 in appendageParams
+    initialize : bool
+        If True, initialize displacement and gamma to zeros
+
+    Returns
+    -------
+    dz_tip : float
+        Tip out-of-plane bending deflection [m]
+    tz_twist : float
+        Tip twist deflection [deg]
+    """
 
     # parser = argparse.ArgumentParser()
     # parser.add_argument("--run_struct", action="store_true", default=False)
@@ -167,38 +202,56 @@ if __name__ == "__main__":
     expcomp_LL_func = JuliaExplicitComp(
         jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
     )
-    expcomp_load = JuliaExplicitComp(
-        jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_displacement = JuliaExplicitComp(
-        jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
+    # expcomp_load = JuliaExplicitComp(
+    #     jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
+    # )
+    # expcomp_displacement = JuliaExplicitComp(
+    #     jlcomp=jl.OMLoadTransfer(nodeConn, appendageParams, appendageOptions, solverOptions)
+    # )
 
     model = om.Group()
 
     # ************************************************
     #     Setup components
     # ************************************************
+    # --- geometry component ---
+    # now ptVec is just an input, so use IVC as an placeholder. Later replace IVC with pygeo
+    indep = model.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
+    indep.add_output("ptVec", val=ptVec)
+
     # --- Combined hydroelastic ---
-    model.add_subsystem(
+    couple = model.add_subsystem("hydroelastic", om.Group(), promotes=["*"])
+
+    # structure
+    couple.add_subsystem(
         "beamstruct",
         impcomp_struct_solver,
-        promotes_inputs=["ptVec"],
+        promotes_inputs=["ptVec", "traction_forces"],
         promotes_outputs=["deflections"],
     )
-    model.add_subsystem(
+    couple.add_subsystem(
         "beamstruct_funcs",
         expcomp_struct_func,
         promotes_inputs=["ptVec", "deflections"],
         promotes_outputs=["*"],  # everything!
     )
-    model.add_subsystem(
+
+    # displacement transfer
+    couple.add_subsystem(
+        "disp_transfer",
+        DisplacementTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
+        promotes_inputs=["nodes", "deflections", "collocationPts"],
+        promotes_outputs=[("disp_colloc", "displacements_col")],
+    )
+
+    # hydrodynamics
+    couple.add_subsystem(
         "liftingline",
         impcomp_LL_solver,
         promotes_inputs=["ptVec", "alfa0", "displacements_col"],
         promotes_outputs=["gammas", "gammas_d"],
     )
-    model.add_subsystem(
+    couple.add_subsystem(
         "liftingline_funcs",
         expcomp_LL_func,
         promotes_inputs=[
@@ -210,9 +263,27 @@ if __name__ == "__main__":
         ],  # promotion auto connects these variables
         promotes_outputs=["*"],  # everything!
     )
-    # # --- Now add load transfer capabilities ---
-    # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-    # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
+
+    # load transfer
+    couple.add_subsystem(
+        "load_transfer",
+        LoadTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
+        promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
+        promotes_outputs=[("loads_str", "traction_forces")],
+    )
+
+    # hydroelastic coupled solver
+    couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=200, iprint=2, atol=1e-6, rtol=0)
+    ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
+    couple.linear_solver = om.DirectSolver()   # for adjoint
+
+    # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
+    model.add_subsystem(
+        "CLa_interp",
+        CLaInterpolation(n_node=n_node_fullspan, n_strips=npt_wing),
+        promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla")],
+        promotes_outputs=[("CL_alpha_node", "cla_node")],
+    )
 
     # ************************************************
     #     Setup problem
@@ -239,20 +310,23 @@ if __name__ == "__main__":
 
     prob.set_val("ptVec", ptVec)
 
-
     # ************************************************
     #     Set starting values
     # ************************************************
-    displacementsCol = np.zeros((6, npt_wing))
+    # set sweep parameters
+    prob.set_val("beamstruct.theta_f", np.deg2rad(theta_fiber))   # this is defined in [rad] in the julia wrapper layer
+    prob.set_val("beamstruct_funcs.theta_f", np.deg2rad(theta_fiber))
+    prob.set_val("alfa0", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
-    prob.set_val("beamstruct.theta_f", np.deg2rad(15))
-    prob.set_val("liftingline.displacements_col", displacementsCol)
-    prob.set_val("alfa0", appendageParams["alfa0"])
-    tractions = prob.get_val("beamstruct.traction_forces")
-    tractions[-7] = 100.0
-    prob.set_val("beamstruct.traction_forces", tractions)
-    prob.set_val("liftingline.gammas", np.zeros(npt_wing))
+    # set thickness-to-chord (NACA0009)
+    prob.set_val('beamstruct.toc', 0.09 * np.ones(nNodes))
+    prob.set_val('beamstruct_funcs.toc', 0.09 * np.ones(nNodes))
 
+    # initialization for solvers
+    if initialize:
+        displacementsCol = np.zeros((6, npt_wing))
+        prob.set_val("displacements_col", displacementsCol)
+        prob.set_val("gammas", np.zeros(npt_wing))
 
     # ************************************************
     #     Evaluate model
@@ -266,9 +340,204 @@ if __name__ == "__main__":
     print("model run complete\n" + "-" * 50)
     print(f"Time taken to run model: {endtime-midtime:.2f} s")
 
-
     # print("force distribution", prob.get_val("forces_dist"))
-    print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
-    print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+    bending = prob.get_val("deflections")[2::9]
+    twist = prob.get_val("deflections")[4::9]
+    CL = prob.get_val("CL")
+    print('----------------------------------')
+    print("alfa0", prob.get_val("alfa0"), "deg")
+    print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
+    print("bending deflections", bending)
+    print("twisting deflections", twist)
     print("induced drag force", prob.get_val("F_x"))
     print("lift force", prob.get_val("F_z"))
+    print("lift coefficient", CL)
+    print('----------------------------------')
+
+    # --- plot ---
+    if plot:
+        om.n2(prob)
+
+        ny = 39 if appendageOptions["config"] == "full-wing" else 20
+        ptVec3D = np.array(ptVec).reshape(2, ny, 3)
+        nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
+        collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
+        force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
+        force_FEM = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')   # shape (9, n_nodes)
+
+        import matplotlib.pyplot as plt
+
+        # --- 3D plot ---
+        z_scaler = 10   # exaggerate vertical deflections
+        fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
+        ax.plot(ptVec3D[:, :, 0], ptVec3D[:, :, 1], ptVec3D[:, :, 2], 'o', color='k', ms=3)
+        ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], 'o', color='darkgray', ms=5)
+        ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :] * z_scaler, 'o-', color='C0', ms=3)
+        ax.set_aspect('equal')
+
+        # --- top view of planform ---
+        fig, ax = plt.subplots()
+        ax.plot(ptVec3D[:, :, 1], ptVec3D[:, :, 0], 'o', color='k', ms=3)
+        ax.plot(nodes[1, :], nodes[0, :], 'o', color='darkgray', ms=5)
+        ax.plot(collocationPts[1, :], collocationPts[0, :] - appendageOptions['xMount'], 'o-', color='C0', ms=3)
+        ax.set_aspect('equal')
+
+        # --- plot displacements ---
+        disp_nodes = prob.get_val('deflections').reshape(nNodes * 2 - 1, 9)
+        disp_colloc = prob.get_val('displacements_col')
+        node_y = nodes[1, :]
+        colloc_y = collocationPts[1, :]
+
+        fig, axs = plt.subplots(3, 2, figsize=(8, 8))
+        fig.suptitle('Displacements')
+        axs[0, 0].plot(node_y, disp_nodes[:, 0], 'o', color='darkgray', ms=5, label='FEM nodes')
+        axs[0, 0].plot(colloc_y, disp_colloc[0, :], 'o-', color='C0', ms=3, label='Collocation points')
+        axs[0, 0].set_ylabel('disp X')
+        axs[0, 0].set_xticklabels([])
+        axs[0, 0].legend()
+
+        axs[1, 0].plot(node_y, disp_nodes[:, 1], 'o', color='darkgray', ms=5)
+        axs[1, 0].plot(colloc_y, disp_colloc[1, :], 'o-', color='C0', ms=3)
+        axs[1, 0].set_ylabel('disp Y')
+        axs[1, 0].set_xticklabels([])
+
+        axs[2, 0].plot(node_y, disp_nodes[:, 2], 'o', color='darkgray', ms=5)
+        axs[2, 0].plot(colloc_y, disp_colloc[2, :], 'o-', color='C0', ms=3)
+        axs[2, 0].set_ylabel('disp Z')
+        axs[2, 0].set_xlabel('spanwise location')
+        
+        axs[0, 1].plot(node_y, disp_nodes[:, 3], 'o', color='darkgray', ms=5)
+        axs[0, 1].plot(colloc_y, disp_colloc[3, :], 'o-', color='C0', ms=3)
+        axs[0, 1].set_ylabel('disp Rx')
+        axs[0, 1].set_xticklabels([])
+
+        axs[1, 1].plot(node_y, disp_nodes[:, 4], 'o', color='darkgray', ms=5)
+        axs[1, 1].plot(colloc_y, disp_colloc[4, :], 'o-', color='C0', ms=3)
+        axs[1, 1].set_ylabel('disp Ry')
+        axs[1, 1].set_xticklabels([])
+
+        axs[2, 1].plot(node_y, disp_nodes[:, 5], 'o', color='darkgray', ms=5)
+        axs[2, 1].plot(colloc_y, disp_colloc[5, :], 'o-', color='C0', ms=3)
+        axs[2, 1].set_ylabel('disp Rz')
+        axs[2, 1].set_xlabel('spanwise location')
+
+        fig.tight_layout()
+        fig.savefig('displacements.pdf', bbox_inches='tight')
+
+        # --- plot forces ---
+        fig, axs = plt.subplots(3, 2, figsize=(8, 8))
+        fig.suptitle('Forces')
+
+        axs[0, 0].plot(node_y, force_FEM[0, :], 'o', color='darkgray', ms=5)
+        axs[0, 0].plot(colloc_y, force_colloc[0, :], 'o-', color='C0', ms=3)
+        axs[0, 0].set_ylabel('force X')
+        axs[0, 0].set_xticklabels([])
+
+        axs[1, 0].plot(node_y, force_FEM[1, :], 'o', color='darkgray', ms=5)
+        axs[1, 0].plot(colloc_y, force_colloc[1, :], 'o-', color='C0', ms=3)
+        axs[1, 0].set_ylabel('force Y')
+        axs[1, 0].set_xticklabels([])
+
+        axs[2, 0].plot(node_y, force_FEM[2, :], 'o', color='darkgray', ms=5)
+        axs[2, 0].plot(colloc_y, force_colloc[2, :], 'o-', color='C0', ms=3)
+        axs[2, 0].set_ylabel('force Z')
+        axs[2, 0].set_xlabel('spanwise location')
+
+        axs[0, 1].plot(node_y, force_FEM[3, :], 'o', color='darkgray', ms=5)
+        axs[0, 1].set_ylabel('moment X')
+        axs[0, 1].set_xticklabels([])
+
+        axs[1, 1].plot(node_y, force_FEM[4, :], 'o', color='darkgray', ms=5)
+        axs[1, 1].set_ylabel('moment Y')
+        axs[1, 1].set_xticklabels([])
+
+        axs[2, 1].plot(node_y, force_FEM[5, :], 'o', color='darkgray', ms=5)
+        axs[2, 1].set_ylabel('moment Z')
+        axs[2, 1].set_xlabel('spanwise location')
+        
+        fig.tight_layout()
+        fig.savefig('forces.pdf', bbox_inches='tight')
+
+        # --- plot CL_alpha ---
+        cla_flow = prob.get_val("cla")
+        cla_node = prob.get_val("cla_node")
+        fig, ax = plt.subplots()
+        ax.plot(colloc_y, cla_flow, 'o-', color='C0', ms=3, label='flow collocation points')
+        ax.plot(node_y, cla_node, 'o', color='darkgray', ms=5, label='FEM nodes')
+        ax.set_xlabel('spanwise location [m]')
+        ax.set_ylabel("CL_alpha")
+        ax.legend()
+        fig.savefig('CLa.pdf', bbox_inches='tight')
+
+        # total lift force
+        loads = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')
+        lift = np.sum(loads[2, :])  # sum of all lift forces
+        print("Total lift force:", float(lift))
+
+        plt.show()
+
+    # return tip bending and twist deflections
+    return bending[-1], twist[-1], CL
+
+
+if __name__ == "__main__":
+    # debug
+    # fiber_angle = 30
+    # alfa0 = 6
+    # dz_tip, theta_tip_rad = main(fiber_angle, alfa0, True)
+    # print('\n\n-----------------------------------')
+    # print("fiber angle", fiber_angle, "deg")
+    # print("tip deflections [m]", dz_tip)
+    # print("tip deflections / 2c", dz_tip * 2 / 0.09))   # same normalization as Liao 2019
+    # print("tip twist [deg]", np.rad2deg(theta_tip_rad))
+    # print('-----------------------------------')
+
+    # ---------------------
+
+    fiber_angle = 30
+    alfa_list = [0, 2, 4, 6, 8, 10, 11, 12]
+    initialize = True
+
+    dz_tip_list = []
+    theta_tip_list = []
+    CL_list = []
+    
+    for alfa0 in alfa_list:
+        dz_tip, theta_tip, CL = main(fiber_angle, alfa0, initialize)
+        ### initialize = False   # restart from previous solution. NOTE: This doesn't work!!
+        dz_tip_list.append(dz_tip)
+        theta_tip_list.append(theta_tip)
+        CL_list.append(CL)
+
+    # theta to degree
+    theta_tip_list = np.rad2deg(np.array(theta_tip_list))
+
+    # normalize dz
+    dz_tip_normalized = np.array(dz_tip_list) * 2 / 0.09   # same normalization as Liao 2019
+
+    print('\n\n-----------------------------------')
+    print("fiber angle", fiber_angle, "deg")
+    print("alpha", alfa_list)
+    print("tip deflections (normalized)", dz_tip_normalized)
+    print("tip twist [deg]", list(theta_tip_list))
+    print('-----------------------------------')
+
+    import matplotlib.pyplot as plt
+
+    fig, axs = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
+    axs[0].plot(alfa_list, dz_tip_normalized, "o-")
+    axs[0].set_ylabel("tip delta z * 2 / c ")
+    axs[0].grid()
+
+    axs[1].plot(alfa_list, theta_tip_list, "o-")
+    axs[1].set_xlabel("angle of attack [deg]")
+    axs[1].set_ylabel("tip twist [deg]")
+    axs[1].grid()
+
+    axs[2].plot(alfa_list, CL_list, "o-")
+    axs[2].set_ylabel("CL")
+    axs[2].grid()
+
+    plt.tight_layout()
+    plt.savefig("tip_deflections.pdf", bbox_inches="tight")
+    plt.show()

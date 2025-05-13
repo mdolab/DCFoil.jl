@@ -90,7 +90,7 @@ solverOptions = {
     # ---------------------------
     #   Flow
     # ---------------------------
-    "Uinf": 18.0,  # free stream velocity [m/s]
+    "Uinf": 10.0,  # free stream velocity [m/s]
     "rhof": 1025.0,  # fluid density [kg/m³]
     "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
     "use_nlll": True,
@@ -348,7 +348,7 @@ if __name__ == "__main__":
         )
 
         # hydroelastic coupled solver
-        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=2, iprint=2, atol=1e-10, rtol=0)
+        couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=200, iprint=2, atol=1e-6, rtol=0)
         ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
         couple.linear_solver = om.DirectSolver()   # for adjoint
 
@@ -421,7 +421,7 @@ if __name__ == "__main__":
         prob.set_val("displacements_col", np.zeros((6, npt_wing)))
         prob.set_val("alfa0", appendageParams["alfa0"])
 
-        # set symmetric displacements_col for debugging
+        # --- debugging: set symmetric displacements_col from 1st iteration of hydroelastic solver ---
         disp_col = np.array([
             [-2.59517621e-05, -1.16898946e-05, -7.82499519e-07, -7.82499519e-07, -1.16898946e-05, -2.59517621e-05],  # x (flow direction)
             [ 3.38378035e-06,  3.04119675e-06,  1.29805963e-06, -1.29805963e-06, -3.04119675e-06, -3.38378035e-06],  # y (spanwise)
@@ -435,12 +435,6 @@ if __name__ == "__main__":
         #       verical only -> small asymmetry
         #       vertical & twist -> bad
         #       others (x, y, Rx, Ry, Rz) are good, Z is bad
-        # disp_col[0, :] = 0
-        # disp_col[1, :] = 0
-        # disp_col[2, :] = 0
-        # disp_col[3, :] = 0
-        # disp_col[4, :] = 0
-        # disp_col[5, :] = 0
         prob.set_val("displacements_col", disp_col)
 
     else:
