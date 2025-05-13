@@ -53,6 +53,13 @@ function return_constitutive(materialName::String)
         ν₁₂ = 0.33
         G₁₂ = E₁ / (2 * (1 + ν₁₂))
         constitutive = "isotropic"
+    elseif (materialName == "pvc") # polyvinyl chloride described in Ward et al. 2018
+        ρₛ = 1300.0
+        E₁ = 3.36e9
+        E₂ = E₁
+        ν₁₂ = 0.16
+        G₁₂ = 1.45e9 # shear modulus reported in Ward et al. 2018 which agrees with the isotropic relation
+        constitutive = "isotropic"
     elseif (materialName == "rigid") # unrealistic rigid material
         ρₛ = 7900.0
         E₁ = 193e12

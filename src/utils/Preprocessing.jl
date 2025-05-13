@@ -8,6 +8,7 @@
 """
 
 using FLOWMath: atan_cs_safe
+# using DelimitedFiles
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions, appendageParams)
     """
@@ -61,6 +62,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     sweepAngles, qtrChords = compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, 0.25)
     # Λ = sweepAngles
     Λ = sum(sweepAngles) / length(sweepAngles)
+    Λ += 1e-6 # there's a discontinuity wrt sweep at 0.0 so this is a hack to prevent NaNs. Offsetting by 1e-6 doesn't really mess with the aerodynamics.
     # println("AC Sweep angle: $(rad2deg(Λ)) deg")
 
     # ---------------------------
@@ -80,8 +82,10 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # s_loc_q = LinRange(0.0, semispan, nNodes) # old way
 
     ds = semispan / (nNodes - 1)
-    s_loc_q = LinRange(ds, semispan - ds, nNodes - 2)
+    s_loc_q = LinRange(ds, semispan - ds, nNodes - 2) # if this line is bugging, you don't have enough beam nodes
     # println("s_loc_q: ", s_loc_q)
+    # println("semispan: ",semispan)
+    # println("ds: ", ds)
     # s_loc = vec(sqrt.(sum(midchords[:, 1:idxTip] .^ 2, dims=1))) # this line gave NaNs in the derivatives!
     # s_loc = compute_spanwiseLocations(midchords[XDIM, :], midchords[YDIM, :], midchords[ZDIM, :])
     # println("s_loc: ", s_loc)
@@ -351,9 +355,17 @@ function get_1DBeamPropertiesFromFile(fname)
     Returns:
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ (like compute_beam() function)
     """
+open(fname, "r") do io 
+        # Read the first line
+        line = readline(io)
+        println("line: ", line)
+
+    end
 
     return EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 end
+
+# get_1DBeamPropertiesFromFile("$(@__DIR__)/../../validations/ward_src/ward.dcf")
 
 function get_1DGeoPropertiesFromFile(fname)
     """

@@ -384,3 +384,23 @@ function find_signChange(x)
     end
 
 end
+
+function compute_sigmoid(x, xtr, λ, k=20)
+    """
+    Compute the sigmoid function
+    Inputs
+    ------
+        xtr - value at which to transition the sigmoid function
+        λ - shift parameter
+        x - value to evaluate the sigmoid function at
+        k - steepness of the sigmoid function
+    Outputs
+    -------
+        sig - sigmoid function value
+    """
+
+    sig = 1 / (1 + exp(2 * k * (xtr - x + λ)))
+
+    return sig
+
+end

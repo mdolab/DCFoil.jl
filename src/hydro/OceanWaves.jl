@@ -7,22 +7,30 @@
 """
 
 
+# include("../../src/constants/SolutionConstants.jl")
 
 
-
-function compute_PMwave_spectrum(Vwind, w)
+function compute_PMWaveSpectrum(Hsig, w)
     """
+    One parameter  Pierson--Moskowitz wave energy spectrum
+    for fully developed seas in the North Atlantic
     Parameters
     ----------
     Vwind : 
         wind speed at height 19.4 m
+    Hsig :
+        significant wave height [m]
     w :
         list of angular frequencies, for example: w=0.01:0.01:4.
     """
+
+    Vwind = (Hsig * GRAV / 0.2092)^0.5 # wind speed [m/s]
+    # H_sig = 0.2092 * Vwind^2 / GRAV # significant wave height
+
     A = 8.1e-3 * GRAV^2
     β = 0.74 * (GRAV / Vwind)^4
 
-    S = A * w .^ (-5) .* exp(-β ./ (w .^ 4)) # PM wave spectrum [m^2 / s]
+    S = A * w .^ (-5) .* exp.(-β ./ (w .^ 4)) # PM wave spectrum [m^2 - s]
 
     w_m = (4 * β / 5)^0.25 # modal frequency
 
@@ -30,12 +38,37 @@ function compute_PMwave_spectrum(Vwind, w)
 
     var = 2.74e-3 * Vwind^4 / GRAV^2 # variance of the wave elevation
 
-    H_sig = 0.21 * Vwind^2 / GRAV # significant wave height
-
-    return S, w_m, l_m, var, H_sig
+    return S, w_m, l_m, var, Vwind
 end
 
-function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, stripWidths, claVec)
+function compute_BSWaveSpectrum(Hsig, ω_z, w)
+    """
+    Two parameter Bretschneider spectrum for decaying to developing seas
+    A.k.a. the modified Pierson-Moskowitz spectrum or ISSC spectrum
+    Alternative forms use the significant zero-crossing frequency
+
+    Parameters
+    ----------
+    Hsig : 
+        significant wave height [m]
+    ω_m :
+        modal frequency [rad/s]
+
+    ω_z :
+        significant zero-crossing frequency [rad/s] is related to the average of the one-third largest zero-crossing periods
+
+    w :
+        list of angular frequencies, for example: w=0.01:0.01:4.
+    """
+
+    # S = 0.3125 * ω_m^4 * w .^ (-5) * Hsig^2 .* exp.(-1.25 * (ω_m ./ w) .^ 4) # Bretschneider wave spectrum [m^2 - s]
+
+    S = 0.11 * Hsig^2 * ω_z^4 * w .^ (-5) * exp.(-0.44 * (ω_z ./ w) .^ 4) # alternative form using the significant crossing frequency
+
+    return S
+end
+
+function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears")
     """
     Compute wave loads on a submerged hydrofoil
 
@@ -43,8 +76,6 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
     freqspan - frequency sweep [rad/s]
     cbar - mean chord [m]
-    Py - power spectrum
-    FT - frequency spectrum
     w_e - encounter frequency
     waveamp - Aw [m] that you get from WMO sea state (is this significant wave height/amplitude?)
     h - depth
@@ -54,7 +85,8 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
     ωpk = w_e # the peak frequency is the encounter frequency
     ampDist = compute_AWave(freqspan, ωpk, waveamp)
-    ampDist .= 1.0 # for now, force wave to be 1.0 m
+    ampDist .= 1.0 # for now, force wave to be 1.0 m. This would then give the RAO.
+    # In other words, the transfer function of 1m input wave to load output
 
     nStrip = length(chordLengths)
     fAey = zeros(ComplexF64, length(freqspan), nStrip)
@@ -62,18 +94,13 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
     bi = 0.5 * chordLengths
 
-    S0k = zeros(ComplexF64, nStrip)
 
     for (ii, ω) in enumerate(freqspan)
 
         kw = ω^2 / GRAV # [1/m] wave number
 
-        kf = (ω * bi / Uinf) # reduced freq using wave encounter
+        kf = (w_e[ii] * bi / Uinf) # reduced freq using wave encounter frequency
 
-        for (ii, kk) in enumerate(kf)
-            Skvec = compute_sears(kk)
-            S0k[ii] = Skvec[2]
-        end
 
         Aω = ampDist[ii]
 
@@ -83,11 +110,15 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
         # ---------------------------
         #   Sectional lift loads
         # ---------------------------
-        # Circulatory
-        Lc = 0.5 * ϱ * Uinf * coeff .* chordLengths .* claVec .* S0k
-
-        # Noncirculatory (added mass type)
-        Lnc = 1im * ϱ * π * bi .^ 2 * w_e * coeff
+        if uppercase(method) == "SEARS" # most accurate
+            Lc, Lnc = compute_gustLoadSears(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+        elseif uppercase(method) == "THEODORSEN"
+            Lc, Lnc = compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+        elseif uppercase(method) == "QUASISTEADY"
+            Lc, Lnc = compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+        else
+            error("Unknown method: $(method)")
+        end
 
         fAey[ii, :] = (Lnc .+ Lc) .* stripWidths# [N]
 
@@ -129,7 +160,7 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
     plot(p1, p2)
     savefig("WaveLoads.png")
-    println("Saved wave loads plot to WaveLoads.png")
+    # println("Saved wave loads plot to WaveLoads.png")
     # figure()
     # tt = tiledlayout(1,2); nexttile;
     # plot(freqv, fAey); xlim([0 1])
@@ -148,7 +179,7 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
 end
 
-function compute_encounterFreq(β, ω_wave, Ufwd)
+function compute_encounterFreq(β, ω_wave::AbstractVector, Ufwd)
     """
     Compute the encounter frequency
 
@@ -167,7 +198,7 @@ function compute_encounterFreq(β, ω_wave, Ufwd)
         encounter frequency [rad/s]
     """
 
-    ωₑ = (1 - Ufwd * ω_wave * cos(β) / GRAV) * ω_wave
+    ωₑ = (1 .- Ufwd * ω_wave * cos(β) / GRAV) .* ω_wave
 
     return ωₑ
 end
@@ -185,7 +216,74 @@ function compute_AWave(ωRange, ωe, waveamp)
 
     ampDist = waveamp * pζ # [m] distribution
 
-    println("Rayleigh distributed amplitude spectrum \nω_pk : $(ωe)\nwaveamp : $(waveamp)")
+    # println("Rayleigh distributed amplitude spectrum \nω_pk : $(ωe)\nwaveamp : $(waveamp)")
 
     return ampDist
+end
+
+function compute_gustLoadSears(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
+    """
+    Compute gust loads on a submerged hydrofoil
+    """
+
+    bi = 0.5 * chordLengths
+    S0k = zeros(ComplexF64, size(claVec)...)
+
+    for (ii, kk) in enumerate(kf)
+        Skvec = compute_sears(kk)
+        S0k[ii] = Skvec[2]
+    end
+
+    # Circulatory
+    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* S0k
+
+    # Noncirculatory (added mass type)
+    Lnc = 1im * ϱ * π * bi .^ 2 * w_e * waveCoeff
+
+    return Lc, Lnc
+end
+
+function compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
+    """
+    Compute gust loads on a submerged hydrofoil
+    """
+
+    bi = 0.5 * chordLengths
+    Ck = zeros(ComplexF64, size(claVec)...)
+
+    for (ii, kk) in enumerate(kf)
+        Ckvec = compute_theodorsen(kk)
+        Ck[ii] = Ckvec[1] + 1im * Ckvec[2]
+    end
+
+    # Circulatory
+    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* Ck
+
+    # Noncirculatory (added mass type)
+    Lnc = 1im * ϱ * π * bi .^ 2 * w_e * waveCoeff
+
+    return Lc, Lnc
+end
+
+function compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
+    """
+    Compute gust loads on a submerged hydrofoil
+    """
+
+    # Circulatory
+    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec
+
+    # Noncirculatory (added mass type)
+    Lnc = 0.0
+
+    return Lc, Lnc
+end
+
+function compute_responseSpectralDensityFunc(Hω::Vector{<:Real}, waveEnergySpectrum::Vector{<:Real})
+    """
+    """
+
+    S_R⁺ = Hω .^ 2 .* waveEnergySpectrum
+
+    return S_R⁺
 end
