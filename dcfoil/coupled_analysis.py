@@ -97,23 +97,28 @@ class CoupledAnalysis(om.Group):
         # ************************************************
         #     Assemble components into an OM group
         # ************************************************
-        # --- geometry component ---
+        # --- input variables ---
         # now ptVec is just an input, so use IVC as an placeholder. Later replace IVC with a geometry component
         indep = self.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
         indep.add_output("ptVec", val=self.options["ptVec_init"])   # TODO: set units
+        # other constant setup. If we want to connect these values from upstream component, we need to commend these lines out
+        # TODO: double check unit consistency to Julia layer
+        indep.add_output("alfa0", val=appendageParams["alfa0"], units="deg")
+        indep.add_output("theta_f", val=appendageParams["theta_f"], units="rad")
+        indep.add_output("toc", val=appendageParams["toc"])
 
         if self.options["analysis_mode"] == "struct":
             # --- Structural analysis only ---
             self.add_subsystem(
                 "beamstruct",
                 impcomp_struct_solver,
-                promotes_inputs=["ptVec", "traction_forces"],
+                promotes_inputs=["ptVec", "traction_forces", "theta_f", "toc"],
                 promotes_outputs=["deflections"],
             )
             self.add_subsystem(
                 "beamstruct_funcs",
                 expcomp_struct_func,
-                promotes_inputs=["ptVec", "deflections"],
+                promotes_inputs=["ptVec", "deflections", "theta_f", "toc"],
                 promotes_outputs=["*"],  # everything!
             )
 
@@ -146,13 +151,13 @@ class CoupledAnalysis(om.Group):
             couple.add_subsystem(
                 "beamstruct",
                 impcomp_struct_solver,
-                promotes_inputs=["ptVec", "traction_forces"],
+                promotes_inputs=["ptVec", "traction_forces", "theta_f", "toc"],
                 promotes_outputs=["deflections"],
             )
             couple.add_subsystem(
                 "beamstruct_funcs",
                 expcomp_struct_func,
-                promotes_inputs=["ptVec", "deflections"],
+                promotes_inputs=["ptVec", "deflections", "theta_f", "toc"],
                 promotes_outputs=["*"],  # everything!
             )
 
@@ -201,13 +206,12 @@ class CoupledAnalysis(om.Group):
             self.add_subsystem(
                 "CLa_interp",
                 CLaInterpolation(n_node=n_node_fullspan, n_strips=npt_wing),
-                promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla")],
-                promotes_outputs=[("CL_alpha_node", "cla_node")],
+                promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla_col")],
+                promotes_outputs=[("CL_alpha_node", "cla")],
             )
 
             # --- Dynamic solvers ---
-            # TODO: need to fix the shape of cla here
-            # self.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
+            self.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
             # model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
 
         else:

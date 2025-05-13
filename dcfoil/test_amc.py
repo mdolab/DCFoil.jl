@@ -236,13 +236,11 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     #     Set starting values
     # ************************************************
     # set sweep parameters
-    prob.set_val("beamstruct.theta_f", np.deg2rad(theta_fiber))   # this is defined in [rad] in the julia wrapper layer
-    prob.set_val("beamstruct_funcs.theta_f", np.deg2rad(theta_fiber))
+    prob.set_val("theta_f", np.deg2rad(theta_fiber))   # this is defined in [rad] in the julia wrapper layer
     prob.set_val("alfa0", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
-    prob.set_val('beamstruct.toc', 0.09 * np.ones(nNodes))
-    prob.set_val('beamstruct_funcs.toc', 0.09 * np.ones(nNodes))
+    prob.set_val('toc', 0.09 * np.ones(nNodes))
 
     # initialization for solvers
     if initialize:
@@ -268,7 +266,7 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     CL = prob.get_val("CL")
     print('----------------------------------')
     print("alfa0", prob.get_val("alfa0"), "deg")
-    print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
+    print("fiber angle", prob.get_val("theta_f"), "rad")
     print("bending deflections", bending)
     print("twisting deflections", twist)
     print("induced drag force", prob.get_val("F_x"))

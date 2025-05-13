@@ -280,9 +280,8 @@ if __name__ == "__main__":
         # tractions[-7] = 100.0
         # prob.set_val("beamstruct.traction_forces", tractions)
 
-        for comp in ['beamstruct', 'beamstruct_funcs']:
-            prob.set_val(f"{comp}.theta_f", np.deg2rad(0))
-            prob.set_val(f"{comp}.toc", 0.075 * np.ones(nNodes))
+        prob.set_val("theta_f", np.deg2rad(0))
+        prob.set_val("toc", 0.075 * np.ones(nNodes))
 
         # apply uniform Z force
         tractions = np.zeros_like(prob.get_val("beamstruct.traction_forces"))
@@ -322,10 +321,8 @@ if __name__ == "__main__":
 
         # set fiber angle
         fiber_angle = np.deg2rad(-15)
-        prob.set_val('beamstruct.theta_f', fiber_angle)
-        prob.set_val('beamstruct_funcs.theta_f', fiber_angle)
-        prob.set_val('beamstruct.toc', 0.075 * np.ones(nNodes))
-        prob.set_val('beamstruct_funcs.toc', 0.075 * np.ones(nNodes))
+        prob.set_val('theta_f', fiber_angle)
+        prob.set_val('toc', 0.075 * np.ones(nNodes))
 
     # ************************************************
     #     Evaluate model
@@ -363,7 +360,7 @@ if __name__ == "__main__":
         print("all deflections", prob.get_val("beamstruct.deflections"))
 
         # Change fiber angle and rerun
-        prob.set_val("beamstruct.theta_f", np.deg2rad(-15.0))
+        prob.set_val("theta_f", np.deg2rad(-15.0))
         prob.run_model()
         print("print again with theta_f = -15.0")
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
@@ -389,7 +386,7 @@ if __name__ == "__main__":
         print(prob.get_val("collocationPts")[1, :])
         print(prob.get_val("collocationPts")[2, :])
 
-        print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
+        print("fiber angle", prob.get_val("theta_f"), "rad")
         # print("force distribution", prob.get_val("forces_dist"))
         print("bending deflections", prob.get_val("deflections")[2::9])
         print("twisting deflections", prob.get_val("deflections")[4::9])
@@ -515,8 +512,8 @@ if __name__ == "__main__":
     fig.savefig('forces.pdf', bbox_inches='tight')
 
     # --- plot CL_alpha ---
-    cla_flow = prob.get_val("cla")
-    cla_node = prob.get_val("cla_node")
+    cla_flow = prob.get_val("cla_col")
+    cla_node = prob.get_val("cla")
     fig, ax = plt.subplots()
     ax.plot(colloc_y, cla_flow, 'o-', color='C0', ms=3, label='flow collocation points')
     ax.plot(node_y, cla_node, 'o', color='darkgray', ms=5, label='FEM nodes')
