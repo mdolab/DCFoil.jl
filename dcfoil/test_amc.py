@@ -196,6 +196,7 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     # ************************************************
     model = CoupledAnalysis(
         analysis_mode="coupled",
+        include_flutter=False,
         ptVec_init=np.array(ptVec),
         npt_wing=npt_wing,
         n_node_fullspan=n_node_fullspan,
@@ -402,45 +403,31 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
 
 
 if __name__ == "__main__":
-    # debug
+    # --- set fiber angle ---
+    # NOTE: flow speed should be set in the solverOptions
     fiber_angle = 30
-    alfa0 = 6
-    dz_tip, theta_tip_rad, Cl = main(fiber_angle, alfa0, True)
-    print('\n\n-----------------------------------')
-    print("fiber angle", fiber_angle, "deg")
-    print("tip deflections [m]", dz_tip)
-    print("tip deflections / 2c", dz_tip * 2 / 0.09)   # same normalization as Liao 2019
-    print("tip twist [deg]", np.rad2deg(theta_tip_rad))
-    print("CL", Cl)
-    print('-----------------------------------')
-    quit()
-
-    # ---------------------
-
-    fiber_angle = 30
-    alfa_list = [0, 2, 4, 6, 8, 10, 11, 12]
-    initialize = True
 
     dz_tip_list = []
     theta_tip_list = []
     CL_list = []
     
+    alfa_list = [0, 2, 4, 6, 8, 10, 11, 12]
     for alfa0 in alfa_list:
-        dz_tip, theta_tip, CL = main(fiber_angle, alfa0, initialize)
+        dz_tip, theta_tip, CL = main(fiber_angle, alfa0, initialize=True)
         ### initialize = False   # restart from previous solution. NOTE: This doesn't work!!
         dz_tip_list.append(dz_tip)
         theta_tip_list.append(theta_tip)
         CL_list.append(CL)
 
-    # theta to degree
+    # convert theta to degree
     theta_tip_list = np.rad2deg(np.array(theta_tip_list))
 
     # normalize dz
-    dz_tip_normalized = np.array(dz_tip_list) * 2 / 0.09   # same normalization as Liao 2019
+    dz_tip_normalized = np.array(dz_tip_list) * 2 / 0.09   # same normalization as Liao 2019. 0.09 = mean chord
 
     print('\n\n-----------------------------------')
-    print("fiber angle", fiber_angle, "deg")
-    print("alpha", alfa_list)
+    print("fiber angle [deg]", fiber_angle)
+    print("alpha [deg]", alfa_list,)
     print("tip deflections (normalized)", dz_tip_normalized)
     print("tip twist [deg]", list(theta_tip_list))
     print('-----------------------------------')
@@ -462,5 +449,6 @@ if __name__ == "__main__":
     axs[2].grid()
 
     plt.tight_layout()
-    plt.savefig("tip_deflections.pdf", bbox_inches="tight")
+    figname = f"tip_deflections_fiber{fiber_angle}deg_flow{solverOptions['Uinf']}ms.pdf"
+    plt.savefig(figname, bbox_inches="tight")
     plt.show()
