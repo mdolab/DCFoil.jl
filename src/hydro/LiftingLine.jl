@@ -56,7 +56,8 @@ for headerName in [
 end
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
-const NPT_WING = 6
+# const NPT_WING = 40 # this is known to be accurate
+const NPT_WING = 20
 
 export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
     compute_KS, GRAV
