@@ -21,6 +21,7 @@ function return_constitutive(materialName::String)
     E₂ = 0.0
     G₁₂ = 0.0
     ν₁₂ = 0.0
+
     if (materialName == "cfrp") # carbon-fiber reinforced plastic UD
         ρₛ = 1590.0
         E₁ = 117.8e9
@@ -28,6 +29,7 @@ function return_constitutive(materialName::String)
         G₁₂ = 3.9e9
         ν₁₂ = 0.25
         constitutive = "orthotropic"
+
     elseif (materialName == "test-comp")
         # TODO: will need to retrain these tests
         ρₛ = 1590.0
@@ -36,12 +38,27 @@ function return_constitutive(materialName::String)
         G₁₂ = 10.0
         ν₁₂ = 0.25
         constitutive = "orthotropic"
+
     elseif (materialName == "ss") # stainless-steel
         ρₛ = 7900.0
         E₁ = 193e9
         E₂ = 193e9
         G₁₂ = 77.2e9
         ν₁₂ = 0.3
+        constitutive = "isotropic"
+    elseif (materialName == "al6061") # aluminum 6061
+        ρₛ = 2700.0
+        E₁ = 71e9
+        E₂ = E₁
+        ν₁₂ = 0.33
+        G₁₂ = E₁ / (2 * (1 + ν₁₂))
+        constitutive = "isotropic"
+    elseif (materialName == "pvc") # polyvinyl chloride described in Ward et al. 2018
+        ρₛ = 1300.0
+        E₁ = 3.36e9
+        E₂ = E₁
+        ν₁₂ = 0.16
+        G₁₂ = 1.45e9 # shear modulus reported in Ward et al. 2018 which agrees with the isotropic relation
         constitutive = "isotropic"
     elseif (materialName == "rigid") # unrealistic rigid material
         ρₛ = 7900.0

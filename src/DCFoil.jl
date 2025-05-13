@@ -374,16 +374,16 @@ function write_solution(SOLDICT, solverOptions, appendageParamsList; callNumber=
         SolveForced.write_sol(VIBSOL, outputDir)
     end
 
-    if solverOptions["run_flutter"]
-        FLUTTERSOL = SOLDICT["FLUTTER"]
-        SolveFlutter.write_sol(FLUTTERSOL, outputDir)
+    # if solverOptions["run_flutter"]
+    #     FLUTTERSOL = SOLDICT["FLUTTER"]
+    #     SolveFlutter.write_sol(FLUTTERSOL, outputDir)
 
-        if solverOptions["writeTecplotSolution"] && solverOptions["run_static"]
-            STATSOL = STATSOLLIST[iComp]
-            FEMESH = STATSOL.FEMESH
-            SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
-        end
-    end
+    #     if solverOptions["writeTecplotSolution"] && solverOptions["run_static"]
+    #         STATSOL = STATSOLLIST[iComp]
+    #         FEMESH = STATSOL.FEMESH
+    #         SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    #     end
+    # end
 end
 # ==============================================================================
 #                         Cost func and sensitivity routines

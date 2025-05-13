@@ -1250,21 +1250,7 @@ function compute_∂r∂x(
     if uppercase(mode) == "FIDI" # Finite difference
 
         dh = 1e-4
-        # backend = AD.FiniteDifferencesBackend()
-        # ∂r∂xPt, = AD.jacobian(
-        #     backend,
-        #     x -> compute_residualsFromCoords(
-        #         allStructStates,
-        #         x,
-        #         nodeConn,
-        #         fu,
-        #         appendageParamsList,
-        #         appendageOptions=appendageOptions,
-        #         solverOptions=solverOptions,
-        #         iComp=iComp,
-        #     ),
-        #     ptVec, # compute deriv at this DV
-        # )
+
         f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         for ii in eachindex(ptVec)
             ptVec[ii] += dh
@@ -1277,11 +1263,13 @@ function compute_∂r∂x(
         # ************************************************
         #     Params derivatives
         # ************************************************
+        dh = 1e-6 # make tests work
         appendageParamsList[iComp]["theta_f"] += dh
         f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
         ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
 
+        dh = 1e-4
         ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
         for ii in eachindex(appendageParamsList[iComp]["toc"])
             appendageParamsList[iComp]["toc"][ii] += dh

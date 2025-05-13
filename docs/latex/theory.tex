@@ -13,6 +13,7 @@
 \usepackage[compact]{titlesec}
 \usepackage{pdflscape}
 \usepackage[]{acronym} % provides \acronym 
+\usepackage{enumitem}
 
 \graphicspath{{../figures/}}
 
@@ -1083,7 +1084,7 @@ An infinite number of choices of nodal forces and moments can satisfy consistenc
 As such, we also require that the scheme be conservative.
 
 Shugo wrote the load and displacement transfer to work for OAS and DCFoil.
-TODO: docs 
+TODO: docs
 
 The lifting line and beam discretization are different.
 Sometimes the lifting line needs cosine spacing for swept geometries.
@@ -1875,13 +1876,13 @@ The overall data flow in the program is in \Cref{fig:DataFlow}.
 \end{figure}
 Appendage setup is through dictionaries.
 \begin{landscape}
-	
+
 	\begin{figure}[htb!]
 		\centering
 		% reference: trim={<left> <lower> <right> <upper>}
 		\includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dcfoil.pdf}
 		\caption{\label{fig:XDSM}
-		DCFoil's solver hierarchy
+			DCFoil's solver hierarchy
 		}
 	\end{figure}
 \end{landscape}
@@ -1938,7 +1939,11 @@ where $\bar{y}$ is called the \emph{cotangent} vector and $a$ is some known inpu
 The analog in forward mode are the tangent vector $\dot{y}$ and pushforward function.
 The downside of reverse AD is that if the composite function has $n$ steps, the reverse mode requires $\BigO(n)$ allocations in memory (or $\BigO(n^2)$ computations to recalculate).
 
-The \texttt{pullback} functionality in AD packages typically returns two things: the evaluated point $f(x)$ (also called primal) and the pullback function $\mcal{B}(\bar{y})$
+The \texttt{pullback} functionality in AD packages typically returns two things:
+\begin{enumerate}
+	\item the evaluated point $f(x)$ (also called primal)
+	\item the pullback function $\mcal{B}(\bar{y})$
+\end{enumerate}
 There are situations in which one has a manual implementation they want the {AD} package to bypass, for example, matrix operations.
 
 We write manual rules through \texttt{ChainRulesCore.jl}.
@@ -1958,6 +1963,7 @@ An example is Algorithm~\ref{alg:ConceptualRAD}.
 
 The \texttt{NoTangent()} tells us that if one perturbs the matching primal, the primal will error.
 For example, perturbing the number of increments $N$ of a \texttt{LinRange()} errors the code because you cannot have a non-integer input (like $N+0.1$).
+
 In contrast, the \texttt{ZeroTangent()} means that changing the matching primal results in no change in the behavior of the primal;
 it is preferred to directly returning 0 or \texttt{zeros(n)} for efficiency.
 
@@ -1972,6 +1978,8 @@ Now that you understand the conceptual level, this is a more applied example for
 	\quad $\lambda_n, \phi_n = \tn{eigvals}(A)$ \\
 	return
 \end{algorithm}
+
+\subsubsection{Lagrange polynomial example}
 
 The Lagrange interpolating polynomial at some point $x$ for a scalar function is
 \beq
@@ -2013,6 +2021,45 @@ y_j \sum_{\substack{i=0 \\ i \neq j}}^{k} \left[
 \dd{L(x)}{y_j} &=  \ell_j(x)
 \eeq
 The derivative with respect to $x_j$ has not been debugged, but based on looking at Eirikur's Tapenade routines, the $x_j$ derivative is not needed!
+
+\subsubsection{Chord length example}
+
+The computation of chord lengths based on leading edge and trailing edge coordinates is
+\beq
+f(x_{LE},y_{LE},z_{LE}, x_{TE},y_{TE},z_{TE}) =
+\sqrt{
+	\left(x_{LE} - x_{TE}\right)^2
+	+
+	\left(y_{LE} - y_{TE}\right)^2
+	+
+	\left(z_{LE} - z_{TE}\right)^2
+}
+\eeq
+The input variables and outputs are vectors of length $n_{pt}$ (i.e., $x_{LE} = [x_{LE,1},\dots,x_{LE,n_{pt}}]$).
+To do the reverse AD, we need the $n_{pt}\times n_{pt}$ Jacobians
+\ben
+\dd{f}{x_{LE}},
+\quad
+\dd{f}{x_{TE}},
+\quad
+\dd{f}{y_{LE}},
+\quad
+\dd{f}{y_{TE}},
+\quad
+\dd{f}{z_{LE}},
+\quad
+\dd{f}{z_{TE}}
+\een
+which are
+\beq
+\dd{f}{x_{LE}} = \begin{bmatrix}
+	\frac{ x_{LE,1}-x_{TE,1} }{ \sqrt{ \left( x_{LE,1}-x_{TE,1} \right)^2 + \left( y_{LE,1} - y_{TE,1} \right)^2 + \left( z_{LE,1}-z_{TE,1} \right)^2 }} & 0                                                                                                                                                    & \cdots & 0 \\
+	0                                                                                                                                                    & \frac{ x_{LE,2}-x_{TE,2} }{ \sqrt{ \left( x_{LE,2}-x_{TE,2} \right)^2 + \left( y_{LE,2} - y_{TE,2} \right)^2 + \left( z_{LE,2}-z_{TE,2} \right)^2 }} & 0          \\
+	\vdots                                                                                                                                               & 0                                                                                                                                                    & \ddots     \\
+\end{bmatrix}
+\eeq
+The trailing edge derivatives are the negative equivalent
+
 
 \subsection{Backends}
 

@@ -55,7 +55,7 @@ function test_struct()
     for i in 1:N
         θₗ = θₐ[i]
         section = FEMMethods.SectionProperty(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ, zeros(20, 2))
-        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = FEMMethods.compute_section_property(section, "orthotropic")
+        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = FEMMethods.compute_section_property(section, "orthotropic"; solverOptions=Dict())
 
         EIₛₐ[i] = EIₛ
         EIIPₛₐ[i] = EIIP

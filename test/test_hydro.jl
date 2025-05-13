@@ -2,25 +2,20 @@
 Run tests on hydro module file
 """
 
-using LinearAlgebra
-using Printf
 
 
-# include("../src/DCFoil.jl")
 for headerName in [
-    # "../src/Constants",
-    # "../src/InitModel",
     "../src/struct/FEMMethods",
-    # "../src/VPM",
     "../src/hydro/LiftingLine",
-    # "../src/TecplotIO",
-    # "../src/ComputeFunctions",
     "../src/hydro/HydroStrip",
+    "../src/hydro/Unsteady",
+    "../src/hydro/OceanWaves",
 ]
     include(headerName * ".jl")
 end
-# end
-# using .DCFoil: SolveStatic, SolutionConstants, InitModel, FEMMethods, HydroStrip, VPM, LiftingLine, TecplotIO, ComputeFunctions
+
+using LinearAlgebra
+using JLD2
 using Plots, Printf
 using DelimitedFiles
 using .HydroStrip
@@ -54,12 +49,17 @@ function test_stiffness()
     Λ = 45 * π / 180 # 45 deg
     clambda = cos(Λ)
     slambda = sin(Λ)
-    ω = 1e10 # infinite frequency limit
+    ω = 1e6 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
+    println("ω = ", ω)
+    println("k = ", k)
     CKVec = HydroStrip.compute_theodorsen(k)
     Ck::ComplexF64 = CKVec[1] + 1im * CKVec[2]
     Matrix, SweepMatrix = HydroStrip.compute_node_stiff_faster(clα, b, eb, ab, U, clambda, slambda, ρ, Ck)
+
+    Sk, S0k = HydroStrip.compute_sears(k)
+    
 
     # show(stdout, "text/plain", real(Matrix))
     # show(stdout, "text/plain", imag(Matrix))
@@ -103,7 +103,7 @@ function test_damping()
     Λ = 45 * π / 180 # 45 deg
     clambda = cos(Λ)
     slambda = sin(Λ)
-    ω = 1e10 # infinite frequency limit
+    ω = 1e6 # infinite frequency limit
     ρ = 1000.0
     k = ω * b / (U * cos(Λ))
     CKVec = HydroStrip.compute_theodorsen(k)
@@ -564,13 +564,103 @@ function test_wavedrag()
 
         solverOptions["Uinf"] = Fnc * sqrt(9.81 * chord)
 
-        Cdw, _ = ComputeFunctions.compute_wavedrag(CL, chord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
+        Cdw, _ = compute_wavedrag(CL, chord, qdyn, areaRef, aeroSpan, appendageParams, solverOptions)
         CDi = Cdw + 1 / (π * AR)
         push!(vals, CDi / CL^2)
     end
     return vals, FncRange
 end
 
+function test_hydrofoilWaveLoads()
+    # should be higher k
+    chord = 0.1 # m
+    chord = 0.3 # m
+    depth = 0.5 # m
+    # depth = 1 # m
+    Uinf = 10.0 # m/s
+    rho = 1000.0 # kg/m^3
+    Hsig = 1.0 # m
+    T_m = 6.1 # s , modal period
+    T_m = 5.0 # s , modal period Sea state 3
+    ω_m = 2 * π / T_m # rad/s
+    # --- Great Lakes typical seas ---
+    T_z = 3.0 # s, significant period
+    ω_z = 2 * π / T_z # rad/s significant frequency
+    omegaSweep::Vector = (0.05:0.05:3.0*2π) # rad/s
+    β = deg2rad(180)
+    we = compute_encounterFreq(β, omegaSweep, Uinf)
+
+    kRedSweep = we * chord * 0.5 / Uinf
+
+    hcRatio = depth / chord
+    corrFactor = (1.0 + 16.0 * hcRatio^2) / (2.0 + 16.0 * hcRatio^2)
+    claVec = corrFactor * (2π) * ones(2) # lift curve slope [1/rad]
+
+    Swave_pm, wm, lm, var, Vwind = compute_PMWaveSpectrum(Hsig, omegaSweep)
+    println("Hsig = ", Hsig)
+    println("T_m = ", T_m)
+    println("ω_m PM = ", wm)
+    println("ω_m = ", ω_m)
+    println("Vwind = ", Vwind)
+    Swave_bs = compute_BSWaveSpectrum(Hsig, ω_z, omegaSweep)
+
+    chordVec = chord * ones(2)
+    stripWidths = ones(2)
+    fAeySk, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Sears")
+    fAeyCk, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Theodorsen")
+    fAeyQS, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Quasisteady")
+
+    HwSk = abs.(fAeySk[:, 1])
+    HwCk = abs.(fAeyCk[:, 1])
+    HwQS = abs.(fAeyQS[:, 1])
+    SliftSk = compute_responseSpectralDensityFunc(HwSk, Swave_bs)
+    SliftCk = compute_responseSpectralDensityFunc(HwCk, Swave_bs)
+    SliftQS = compute_responseSpectralDensityFunc(HwQS, Swave_bs)
+
+    percDiff = abs.(SliftCk - SliftSk) ./ (abs.(SliftSk) .+ 1)
+    println("="^100)
+    println(percDiff[1:30])
+    println("="^100)
+    # println(kRedSweep)
+    # println("="^100)
+    println("Max perc diff Sears vs Theodorsen = ", maximum(percDiff), "%")
+    percDiff = abs.(SliftQS - SliftSk) ./ (abs.(SliftSk) .+ 1)
+    println("Max perc diff Sears vs Quasisteady = ", maximum(percDiff), "%")
+
+    # println("Swave_bs")
+    # println(Swave_bs)
+    # println("Swave_pm")
+    # println(Swave_pm)
+    p1 = plot(omegaSweep, Swave_bs, xlabel="ω [rad/s]", label="P-M")
+    p1 = plot!(omegaSweep, Swave_pm, xlabel="ω [rad/s]", ylabel="S(ω)", title="Wave Spectrum", label="Bretschneider")
+    p2 = plot(omegaSweep, HwSk, label="(Sears)")
+    p2 = plot!(omegaSweep, HwCk, label="(Theodorsen)")
+    p2 = plot!(omegaSweep, HwQS, xlabel="ω [rad/s]", ylabel="H(ω) = Lift / ζ_wave", title="Wave-induced load transfer function", label="(Quasisteady)")
+
+    p1 = plot(kRedSweep, Swave_bs, label="Bretschneider")
+    p1 = plot!(kRedSweep, Swave_pm, xlabel="Reduced frequency", ylabel="S(ω)", title="Wave Spectrum", label="P-M", xlims=(0, 0.3))
+    p2 = plot(kRedSweep, HwSk, label="Sears")
+    p2 = plot!(kRedSweep, HwCk, label="Theodorsen")
+    p2 = plot!(kRedSweep, HwQS, xlabel="Reduced frequency", ylabel="H(ω) = Lift / ζ_wave", title="Wave-induced load transfer function", label="Quasisteady", xlims=(0, 1))
+    savefig("test_waveSpectrum.pdf")
+
+    p3 = plot(omegaSweep, SliftSk, xlabel="ω [rad/s]", ylabel="S_lift(ω)", title="Lift response spectral density", label="(Sears)")
+    p3 = plot!(omegaSweep, SliftCk, xlabel="ω [rad/s]", ylabel="S_lift(ω)", title="Lift response spectral density", label="(Theodorsen)")
+    p3 = plot!(omegaSweep, SliftQS, xlabel="ω [rad/s]", ylabel="S_lift(ω) [N^2-s]", title="Lift response spectral density", label="(Quasisteady)", xlims=(0, 1))
+
+    p3 = plot(kRedSweep, SliftSk, title="Lift response spectral density", label="(Sears)")
+    p3 = plot!(kRedSweep, SliftCk, title="Lift response spectral density", label="(Theodorsen)")
+    p3 = plot!(kRedSweep, SliftQS, xlabel="Reduced frequency", ylabel="S_lift(ω) [N^2-s]", title="Lift response spectral density", label="(Quasisteady)", xlims=(0, 0.3))
+    plot(p1, p3, layout=(2, 1), size=(600, 900))
+    savefig("test_liftResponseSpectrum.pdf")
+
+
+    # --- Save data to JLD for python pretty plotting ---
+    save("test_waveSpectrum.jld2", "omegaSweep", omegaSweep, "encounter", we, "k", kRedSweep, "HwSk", HwSk, "HwCk", HwCk, "HwQS", HwQS, "Swave_bs", Swave_bs, "Swave_pm", Swave_pm, "SliftSk", SliftSk, "SliftCk", SliftCk, "SliftQS", SliftQS)
+
+end
+
+# test_hydrofoilWaveLoads()
 # ==============================================================================
 #                         Test lifting line code
 # ==============================================================================

@@ -31,21 +31,25 @@ function compute_theodorsen(k::Number)
         return ans
     end
 
-    # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
-    H₀²ᵣ = besselj0(k)
-    H₀²ᵢ = -bessely0(k)
-    H₁²ᵣ = besselj1(k)
-    H₁²ᵢ = -bessely1(k)
+    # # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
+    # H₀²ᵣ = besselj0(k)
+    # H₀²ᵢ = -bessely0(k)
+    # H₁²ᵣ = besselj1(k)
+    # H₁²ᵢ = -bessely1(k)
 
-    divDenom = 1 / ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
+    # divDenom = 1 / ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
 
-    # --- These are the analytic solutions to Theodorsen's function ---
-    C_r_analytic = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
-    C_i_analytic = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
+    # # --- These are the analytic solutions to Theodorsen's function ---
+    # C_r_analytic = (H₁²ᵣ * H₁²ᵣ - H₁²ᵣ * H₀²ᵢ + H₁²ᵢ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
+    # C_i_analytic = -(-H₁²ᵢ * (H₁²ᵣ - H₀²ᵢ) + H₁²ᵣ * (H₀²ᵣ + H₁²ᵢ)) * divDenom
 
-    # C_r = Cᵣ_lim * logistic + C_r_analytic
-    # C_i = Cᵢ_lim * logistic + C_i_analytic
-    ans = [C_r_analytic, C_i_analytic]
+    # ans = [C_r_analytic, C_i_analytic]
+
+    # Modified Bessel functions of the second kind
+    K₁ = besselk(1, 1im * k)
+    K₀ = besselk(0, 1im * k)
+    Ck = K₁ / (K₁ + K₀)
+    ans = [real(Ck), imag(Ck)]
 
     return ans
 end
@@ -56,20 +60,26 @@ function compute_sears(k)
     This is potential flow theory.
     """
 
-    # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
-    H₀²ᵣ = besselj0(k)
-    H₀²ᵢ = -bessely0(k)
-    H₁²ᵣ = besselj1(k)
-    H₁²ᵢ = -bessely1(k)
+    # # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
+    # H₀²ᵣ = besselj0(k)
+    # H₀²ᵢ = -bessely0(k)
+    # H₁²ᵣ = besselj1(k)
+    # H₁²ᵢ = -bessely1(k)
 
     # TODO: do in real data type only
     # divDenom = 1 / ((H₁²ᵣ - H₀²ᵢ) * (H₁²ᵣ - H₀²ᵢ) + (H₀²ᵣ + H₁²ᵢ) * (H₀²ᵣ + H₁²ᵢ))
 
     # S_r = divDenom
 
-    H02 = H₀²ᵣ + 1im * H₀²ᵢ
-    H12 = H₁²ᵣ + 1im * H₁²ᵢ
-    Sk = 2 * 1im / (π * k) / (H12 + 1im * H02)
+    # H02 = H₀²ᵣ + 1im * H₀²ᵢ
+    # H12 = H₁²ᵣ + 1im * H₁²ᵢ
+    # Sk = 2 * 1im / (π * k) / (H12 + 1im * H02)
+
+    # Modified Bessel functions of the second kind
+    K₁ = besselk(1, 1im * k)
+    K₀ = besselk(0, 1im * k)
+
+    Sk = 1 / (1im * k) / (K₁ + K₀)
 
     # Leading edge Sears function
     S0k = exp(-1im * k) * Sk
