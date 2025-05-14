@@ -1083,21 +1083,116 @@ Consistency means the sum of the nodal forces and moments from the load transfer
 An infinite number of choices of nodal forces and moments can satisfy consistency because it is an integration over a region.
 As such, we also require that the scheme be conservative.
 
-Shugo wrote the load and displacement transfer to work for OAS and DCFoil.
-TODO: docs
+The load and displacement transfer schemes used in this study is based on OpenAeroStruct~\cite{Jasa2018a}, but we generalize their scheme to be applicable to non-aligning flow and structural discretization.
 
-The lifting line and beam discretization are different.
-Sometimes the lifting line needs cosine spacing for swept geometries.
-Denoting $\mb{T}$ as the generalized transfer matrix, the displacements of structural states to the lifting line frame is
-\beq
-\mb{u}_{LL} = \mb{T} \mb{u} = \pp{\mb{u}_{LL}}{\mb{u}}
-\eeq
-The load transfer is the transpose operation
-\beq
-\mb{f} = \mb{T}^\top \mb{f}_{LL}
-\eeq
-TODO: read \citet{Kenway2014a} for these transfer matrices.
-\citet{Martins2005c} also documents a load transfer scheme.
+\subsubsection{Load transfer}
+
+Traction force acting on a flow strip is distributed to adjacent two FEM nodes.
+Here, we denote the traction vector at $i$-th strip as $\mb{T}_i$; the traction vector consists of $x$, $y$, and $z$ component.
+We distribute $\mb{T}_i$ to adjacent two FEM nodes, node 1 and node 2, in a consistent manner.
+Note that indices 1 and 2 are local to flow strip $i$, not the global indices.
+Assuming that the traction is uniform over the strip, the FEM nodal forces and moments contributed by $i$-th flow strip are:
+\begin{align}
+\begin{aligned}
+	\mb{F}_{1,i} &= w_{1,i} \int \mb{T}_i dS = w_1 \mb{T}_i S_i\\
+	\mb{F}_{2,i} &= w_{2,i} \int\mb{T}_i dS = w_2 \mb{T}_i S_i\\
+	\mb{M}_{1,i} &= w_{1,i} \int \left( \mb{r}_{1, i} \times \mb{T}_i \right) dS = w_1 \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
+	\mb{M}_{2,i} &= w_{2,i} \int \left( \mb{r}_{2, i} \times \mb{T}_i \right) dS = w_2 \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
+\end{aligned}
+\end{align}
+where $F$ is the FEM nodal force, $M$ is the nodal moment, $w_1$ and $w_2$ are the weighting factor, and $r_{j, i}$ points from $j$-th FEM node to $i$-th flow collocation point (aerodynamic center of the strip), and $S_i$ is the area of the $i$-th strip.
+In implementation, the lifting line module provides the integrated traction, i.e., $\mb{T}_i S_i$ at each flow collocation point.
+
+For the load transfer to be consistent, we need
+\begin{equation}
+	w_{1,i} + w_{2,i} = 1 \quad \forall i
+\end{equation}
+% TODO: check consistency of moment?
+
+We choose the weighting factors based on the spanwise distances between flow point $i$ and adjacant FEM nodes:
+\begin{equation}
+	w_{1,i} = \frac{|y_{2, i}|}{|y_{1, i}| + |y_{2, i}|}, \quad w_{2,i} = \frac{|y_{1, i}|}{|y_{1, i}| + |y_{2, i}|}
+\end{equation}
+
+To compute the total nodal load and moment, we take summation over all flow strips.
+Considering an FEM element with multiple flow collocation points in between the two FEM nodes, the nodal loads are
+\begin{align}
+\begin{aligned}
+	\mb{F}_1 &= \sum_i w_{1,i} \mb{T}_i S_i \\
+	\mb{F}_2 &= \sum_i w_{2,i} \mb{T}_i S_i \\
+	\mb{M}_1 &= \sum_i w_{1,i} \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right) \\
+	\mb{M}_2 &= \sum_i w_{2,i} \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
+\end{aligned}
+\end{align}
+
+
+In a special case where the FEM and flow discretizations align and the flow collocation points are at the center of FEM elements in the spanwise direction, we get $w_1=w_2 = 1/2$ for all $i$.
+This results in the same load transfer scheme as OpenAeroStruct~\cite{Jasa2018a}.
+
+If a flow collocation point and an FEM node aligns in spanwise direction, the flow force is transfered directly to the corresponding FEM node.
+We can generalize this case by setting $|y_{1, j}| = 0$ and $|y_{2, j}| \neq 0$, which gives $w_1 = 1$ and $w_2 = 0$.
+
+\subsubsection{Displacement transfer}
+The displacement transfer interpolates the FEM nodal displacements to flow collocation points.
+
+Given the translational nodal displacement $d_1$ and $d_2$ and rotational nodal displacement $\theta_1$ and $\theta_2$ at FEM nodes 1 and 2, respectively, we construct the interploation as:
+\begin{align}
+\begin{aligned}
+	d_i      &= w_{1,i} \left( d_1 + \theta_1 \times r_{1, i} \right) + w_{2,i} \left( d_2 + \theta_2 \times r_{2, i} \right)  \\
+	\theta_i &= w_{1,i} \theta_1 + w_{2,i} \theta_2
+\end{aligned}	
+\end{align}
+where $d_i$ and $\theta_i$ are translational and rotational displacements at flow point $i$.
+Like the load transfer, in a special case where we have $w_1=w_2 = 1/2$, this displacement transfer scheme is equivalent to what is written in the OpenAeroStruct paper~\citep{Jasa2018a}.
+(NOTE: what OpenAeroStruct actually implements is slightly different from what is written in their journal paper, and OpenAeroStruct implementation is not work-conservative.)
+
+\subsubsection{Conservativeness}
+Consider one FEM element where we have multiple flow collocation points in between the two FEM nodes.
+The virtual work on the structure side is
+\begin{equation}
+	\delta W_\text{str} = \mb{F}_1 \cdot \delta d_1 + \mb{F}_2 \cdot \delta d_2 + \mb{M}_1 \cdot \delta \theta_1 + \mb{M}_2 \cdot \delta \theta_2 
+\end{equation}
+The virtual work on the flow side is
+\begin{align}
+\begin{aligned}
+	\delta W_\text{flow}
+	&= \sum_i \mb{T}_i S_i \cdot \delta d_i \\
+	&= \sum_i \mb{T}_i S_i \cdot \left( w_{1,i} \left( \delta d_1 + \delta \theta_1 \times r_{1, i} \right) + w_{2,i} \left( \delta d_2 + \delta \theta_2 \times r_{2, i} \right) \right) \\
+	&= \sum_i \left[ (w_{1,i} \mb{T}_i S_i) \cdot \delta d_1 + (w_{2,i} \mb{T}_i S_i) \cdot \delta d_2  + (w_{1,i} \mb{T}_i S_i) \cdot (\delta \theta_1 \times r_{1, i}) + (w_{2,i} \mb{T}_i S_i) \cdot (\delta \theta_1 \times r_{2, i})  \right]
+\end{aligned}	
+\end{align}
+Now, applying $\mb{a} \cdot (\mb{b} \times \mb{c}) = (\mb{c} \times \mb{a}) \cdot \mb{b}$ to the third and fourth terms,
+\begin{align}
+\begin{aligned}
+	\delta W_\text{flow}
+	&= \sum_i \left[ (w_{1,i} \mb{T}_i S_i) \cdot \delta d_1 + (w_{2,i} \mb{T}_i S_i) \cdot \delta d_2  + w_{1,i} (r_{1, i} \times \mb{T}_i S_i) \cdot \delta \theta_1 + w_{2,i} (r_{2, i} \times \mb{T}_i S_i) \cdot \delta \theta_2 \right] \\
+	&= \left( \sum_i w_{1,i} \mb{T}_i S_i \right) \cdot \delta d_1 + \left( \sum_i w_{2,i} \mb{T}_i S_i \right) \cdot \delta d_2  + \left( \sum_i w_{1,i} (r_{1, i} \times \mb{T}_i S_i) \right) \cdot \delta \theta_1 + \left( \sum_i w_{2,i} (r_{2, i} \times \mb{T}_i S_i) \right) \cdot \delta \theta_2 \\
+	&= \mb{F}_1 \cdot \delta d_1 + \mb{F}_2 \cdot \delta d_2 + \mb{M}_1 \cdot \delta \theta_1 + \mb{M}_2 \cdot \delta \theta_2 \\
+	&= \delta W_\text{str}
+\end{aligned}	
+\end{align}
+This shows that the combination of our load and transfer schemes are conservative.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.7\columnwidth]{load_transfer_draft.png}
+    \caption{Load transfer}
+    \label{fig:load_transfer}
+\end{figure}
+
+
+%The lifting line and beam discretization are different.
+%Sometimes the lifting line needs cosine spacing for swept geometries.
+%Denoting $\mb{T}$ as the generalized transfer matrix, the displacements of structural states to the lifting line frame is
+%\beq
+%\mb{u}_{LL} = \mb{T} \mb{u} = \pp{\mb{u}_{LL}}{\mb{u}}
+%\eeq
+%The load transfer is the transpose operation
+%\beq
+%\mb{f} = \mb{T}^\top \mb{f}_{LL}
+%\eeq
+%TODO: read \citet{Kenway2014a} for these transfer matrices.
+%\citet{Martins2005c} also documents a load transfer scheme.
 
 \subsection{Derivative computation}
 % 
