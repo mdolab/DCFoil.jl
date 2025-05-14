@@ -66,6 +66,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
         self.options.declare('use_jit', default=False)
         self.options.declare('config', default='full-wing', desc='`full-wing` for the entire wing or `wing` for half wing')
+        self.options.declare('hack_rot_X', default=True, desc='HACK: flip sign of X rotation here because the beam model seems to flip it internally')
 
     def setup(self):
         n_node = self.options['n_node']
@@ -107,11 +108,13 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # HACK: flip sign of X rotation here because the beam model seems to flip it internally
         # TODO: undo this change once the beam model is fixed
+        # NOTE: This hack fails work conservation unit test, so when computing virtual work, hack_rot_X should be turned off
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        if isinstance(disp_rot, jnp.ndarray):
-            disp_rot = disp_rot.at[:, 0].multiply(-1)
-        else:
-            disp_rot[:, 0] *= -1
+        if self.options['hack_rot_X']:
+            if isinstance(disp_rot, jnp.ndarray):
+                disp_rot = disp_rot.at[:, 0].multiply(-1)
+            else:
+                disp_rot[:, 0] *= -1
 
         # displacement at each collocation point
         disp_colloc = jnp.zeros((6, n_strips))
