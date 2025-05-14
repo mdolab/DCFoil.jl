@@ -61,8 +61,8 @@ class DisplacementTransfer(om.JaxExplicitComponent):
     """
 
     def initialize(self):
-        self.options.declare('n_node', types=int, desc='Number of FEM nodes')
-        self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
+        self.options.declare('n_node', types=int, desc='Number of FEM nodes for half or full wing')
+        self.options.declare('n_strips', types=int, desc='Number of lifting line strips for half or full wing')
         self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
         self.options.declare('use_jit', default=False)
         self.options.declare('config', default='full-wing', desc='`full-wing` for the entire wing or `wing` for half wing')
@@ -77,7 +77,9 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         self.add_input('nodes', shape=(n_node, 3))
         self.add_input('deflections', shape=(9 * n_node))
 
-        self.add_output('disp_colloc', shape=(6, n_strips))
+        # disp_colloc is always for the full span, even if the config is 'wing'
+        n_strips_full = n_strips if self.options['config'] == 'full-wing' else n_strips * 2
+        self.add_output('disp_colloc', shape=(6, n_strips_full))
 
         self.declare_partials('*', '*')
 
@@ -174,6 +176,10 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         # _debug_print('ry', disp_colloc[4, :], 'flow')
         # _debug_print('rz', disp_colloc[5, :], 'flow')
 
+        if self.options['config'] == 'wing':
+            # for symmetry case, we still need to return disp_colloc for the full span
+            disp_colloc = jnp.concatenate((disp_colloc[:, ::-1], disp_colloc), axis=1)
+
         return (disp_colloc,)
 
 
@@ -201,10 +207,11 @@ class LoadTransfer(om.JaxExplicitComponent):
     """
 
     def initialize(self):
-        self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
-        self.options.declare('n_node', types=int, desc='Number of FEM nodes')
+        self.options.declare('n_node', types=int, desc='Number of FEM nodes for half or full wing')
+        self.options.declare('n_strips', types=int, desc='Number of lifting line strips for half or full wing')
         self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
         self.options.declare('use_jit', default=False)
+        self.options.declare('config', default='full-wing', desc='`full-wing` for the entire wing or `wing` for half wing')
 
     def setup(self):
         n_strips = self.options['n_strips']
@@ -265,10 +272,7 @@ class LoadTransfer(om.JaxExplicitComponent):
                 d2 = jnp.abs(colloc_pts[1, i] - nodes[right_node_index, 1])
                 w1 = d2 / (d1 + d2)
                 w2 = d1 / (d1 + d2)
-                # check consistency
-                # if not jnp.allclose(w1 + w2, 1.0, 1e-8):
-                #     raise ValueError("Weight factors do not sum to 1.")
-
+                
                 loads = loads.at[:3, left_node_index].add(forces_hydro[:, i] * w1)
                 loads = loads.at[:3, right_node_index].add(forces_hydro[:, i] * w2)
                 moment1 = jnp.cross(colloc_pts[:, i] - nodes[left_node_index, :], forces_hydro[:, i] * w1)
@@ -277,7 +281,16 @@ class LoadTransfer(om.JaxExplicitComponent):
                 loads = loads.at[3:6, left_node_index].add(moment1)
                 loads = loads.at[3:6, right_node_index].add(moment2)
 
-                # breakpoint()
+                # for symmetry case, we need to add loads from the other side to the beam root node
+                if not left_node_index == right_node_index and self.options['config'] == 'wing':
+                    if left_node_index == 0:
+                        loads = loads.at[:3, left_node_index].add(forces_hydro[:, i] * w1)
+                        moment_sym = moment1 * jnp.array([-1, 1, -1])   # x and z moments have opposite sign so they cancel out
+                        loads = loads.at[3:6, left_node_index].add(moment_sym)
+                    if right_node_index == 0:
+                        loads = loads.at[:3, right_node_index].add(forces_hydro[:, i] * w2)
+                        moment_sym = moment2 * jnp.array([-1, 1, -1])   # x and z moments have opposite sign so they cancel out
+                        loads = loads.at[3:6, right_node_index].add(moment_sym)
 
         # print('\n\n --- FEM nodal force (in disp transfer) ---')
         # _debug_print('x', loads[0, :], 'FEM')

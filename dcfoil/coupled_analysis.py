@@ -38,8 +38,8 @@ class CoupledAnalysis(om.Group):
         self.options.declare("analysis_mode", values=["struct", "flow", "coupled"], desc="Analysis mode")
         self.options.declare("include_flutter", default=True, desc="Include flutter analysis")
         self.options.declare("ptVec_init", types=np.ndarray, desc="Initial value of the point vector")
-        self.options.declare("npt_wing", default=0, desc="Number of flow collocation points")
-        self.options.declare("n_node_fullspan", default=0, desc="Number of points on the full span")
+        self.options.declare("npt_wing", default=0, desc="Number of flow collocation points for full or half wing")
+        self.options.declare("n_node", default=0, desc="Number of FEM nodes for full or half wing")
 
         self.options.declare("appendageOptions", types=dict, desc="Appendage options")
         self.options.declare("appendageParams", types=dict, desc="Appendage parameters")
@@ -48,7 +48,7 @@ class CoupledAnalysis(om.Group):
 
     def setup(self):
         npt_wing = self.options["npt_wing"]
-        n_node_fullspan = self.options["n_node_fullspan"]
+        n_node = self.options["n_node"]
 
         appendageOptions = self.options["appendageOptions"]
         appendageParams = self.options["appendageParams"]
@@ -165,7 +165,7 @@ class CoupledAnalysis(om.Group):
             # displacement transfer
             couple.add_subsystem(
                 "disp_transfer",
-                DisplacementTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
+                DisplacementTransfer(n_node=n_node, n_strips=npt_wing, xMount=appendageOptions["xMount"], config=appendageOptions["config"]),
                 promotes_inputs=["nodes", "deflections", "collocationPts"],
                 promotes_outputs=[("disp_colloc", "displacements_col")],
             )
@@ -193,7 +193,7 @@ class CoupledAnalysis(om.Group):
             # load transfer
             couple.add_subsystem(
                 "load_transfer",
-                LoadTransfer(n_node=n_node_fullspan, n_strips=npt_wing, xMount=appendageOptions["xMount"]),
+                LoadTransfer(n_node=n_node, n_strips=npt_wing, xMount=appendageOptions["xMount"], config=appendageOptions["config"]),
                 promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
                 promotes_outputs=[("loads_str", "traction_forces")],
             )
@@ -206,7 +206,7 @@ class CoupledAnalysis(om.Group):
             # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
             self.add_subsystem(
                 "CLa_interp",
-                CLaInterpolation(n_node=n_node_fullspan, n_strips=npt_wing),
+                CLaInterpolation(n_node=n_node, n_strips=npt_wing),
                 promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla_col")],
                 promotes_outputs=[("CL_alpha_node", "cla")],
             )

@@ -142,14 +142,16 @@ solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams
 # number of strips and FEM nodes
 if appendageOptions["config"] == "full-wing":
     npt_wing = jl.LiftingLine.NPT_WING
-    n_node_fullspan = nNodes * 2 - 1
+    npt_wing_full = jl.LiftingLine.NPT_WING
+    n_node = nNodes * 2 - 1   # for full span
 else:
-    npt_wing = jl.LiftingLine.NPT_WING / 2
+    npt_wing = jl.LiftingLine.NPT_WING / 2   # for half wing
+    npt_wing_full = jl.LiftingLine.NPT_WING   # full span
     # check if npt_wing is integer
     if npt_wing % 1 != 0:
         raise ValueError("NPT_WING must be an even number for symmetric analysis")
     npt_wing = int(npt_wing)
-    n_node_fullspan = nNodes
+    n_node = nNodes
 
 
 # ==============================================================================
@@ -199,7 +201,7 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
         include_flutter=False,
         ptVec_init=np.array(ptVec),
         npt_wing=npt_wing,
-        n_node_fullspan=n_node_fullspan,
+        n_node=n_node,
         appendageOptions=appendageOptions,
         appendageParams=appendageParams,
         nodeConn=nodeConn,
@@ -246,9 +248,9 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
 
     # initialization for solvers
     if initialize:
-        displacementsCol = np.zeros((6, npt_wing))
+        displacementsCol = np.zeros((6, npt_wing_full))
         prob.set_val("displacements_col", displacementsCol)
-        prob.set_val("gammas", np.zeros(npt_wing))
+        prob.set_val("gammas", np.zeros(npt_wing_full))
 
     # ************************************************
     #     Evaluate model
@@ -285,7 +287,7 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
         nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
         collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
         force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
-        force_FEM = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')   # shape (9, n_nodes)
+        force_FEM = prob.get_val('traction_forces').reshape(9, n_node, order='F')   # shape (9, n_nodes)
 
         import matplotlib.pyplot as plt
 
@@ -305,8 +307,11 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
         ax.set_aspect('equal')
 
         # --- plot displacements ---
-        disp_nodes = prob.get_val('deflections').reshape(nNodes * 2 - 1, 9)
+        disp_nodes = prob.get_val('deflections').reshape(n_node, 9)
         disp_colloc = prob.get_val('displacements_col')
+        if appendageOptions["config"] == "wing":
+            # just use right wing
+            disp_colloc = disp_colloc[:, npt_wing:]
         node_y = nodes[1, :]
         colloc_y = collocationPts[1, :]
 
@@ -392,9 +397,9 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
         fig.savefig('CLa.pdf', bbox_inches='tight')
 
         # total lift force
-        loads = prob.get_val('traction_forces').reshape(9, n_node_fullspan, order='F')
+        loads = prob.get_val('traction_forces').reshape(9, n_node, order='F')
         lift = np.sum(loads[2, :])  # sum of all lift forces
-        print("Total lift force:", float(lift))
+        print("Total lift force:", float(lift), "(not really total if config = wing)")
 
         plt.show()
 
