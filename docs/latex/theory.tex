@@ -1097,7 +1097,7 @@ Assuming that the traction is uniform over the strip, the FEM nodal forces and m
 	\mb{F}_{1,i} &= w_{1,i} \int \mb{T}_i dS = w_1 \mb{T}_i S_i\\
 	\mb{F}_{2,i} &= w_{2,i} \int\mb{T}_i dS = w_2 \mb{T}_i S_i\\
 	\mb{M}_{1,i} &= w_{1,i} \int \left( \mb{r}_{1, i} \times \mb{T}_i \right) dS = w_1 \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
-	\mb{M}_{2,i} &= w_{2,i} \int \left( \mb{r}_{2, i} \times \mb{T}_i \right) dS = w_2 \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
+	\mb{M}_{2,i} &= w_{2,i} \int \left( \mb{r}_{2, i} \times \mb{T}_i \right) dS = w_2 \left( \mb{r}_{2, i} \times \mb{T}_i S_i \right)  \\
 \end{aligned}
 \end{align}
 where $F$ is the FEM nodal force, $M$ is the nodal moment, $w_1$ and $w_2$ are the weighting factor, and $r_{j, i}$ points from $j$-th FEM node to $i$-th flow collocation point (aerodynamic center of the strip), and $S_i$ is the area of the $i$-th strip.
@@ -1106,6 +1106,14 @@ In implementation, the lifting line module provides the integrated traction, i.e
 For the load transfer to be consistent, we need
 \begin{equation}
 	w_{1,i} + w_{2,i} = 1 \quad \forall i
+\end{equation}
+which gives the force consistency:
+\begin{equation}
+	\mb{F}_{1,i} + \mb{F}_{2,i} = \mb{T}_i S_i
+\end{equation}
+and the moment consistency with respect to the flow collocation point (where the moment on the flow side is zero by definition):   % NOTE: I think technically this is only valid if collocation point = center of pressure, which is not always the case
+\begin{equation}
+	\mb{M}_{1,i} + \mb{M}_{2,i} + (-\mb{r}_{1, i} \times \mb{F}_{1,i}) + (-\mb{r}_{2, i} \times \mb{F}_{2,i}) = 0
 \end{equation}
 % TODO: check consistency of moment?
 
@@ -1121,10 +1129,9 @@ Considering an FEM element with multiple flow collocation points in between the 
 	\mb{F}_1 &= \sum_i w_{1,i} \mb{T}_i S_i \\
 	\mb{F}_2 &= \sum_i w_{2,i} \mb{T}_i S_i \\
 	\mb{M}_1 &= \sum_i w_{1,i} \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right) \\
-	\mb{M}_2 &= \sum_i w_{2,i} \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
+	\mb{M}_2 &= \sum_i w_{2,i} \left( \mb{r}_{2, i} \times \mb{T}_i S_i \right)  \\
 \end{aligned}
 \end{align}
-
 
 In a special case where the FEM and flow discretizations align and the flow collocation points are at the center of FEM elements in the spanwise direction, we get $w_1=w_2 = 1/2$ for all $i$.
 This results in the same load transfer scheme as OpenAeroStruct~\cite{Jasa2018a}.
