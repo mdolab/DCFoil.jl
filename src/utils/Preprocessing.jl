@@ -9,6 +9,7 @@
 
 using FLOWMath: atan_cs_safe
 # using DelimitedFiles
+using JSON
 
 function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions, appendageParams)
     """
@@ -348,24 +349,124 @@ end
 function get_1DBeamPropertiesFromFile(fname)
     """
     Get beam structural properties from file
-    The file needs to be in the same format as ASWING:
-    <varname>
-    <values>
 
     Returns:
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ (like compute_beam() function)
     """
-open(fname, "r") do io 
-        # Read the first line
-        line = readline(io)
-        println("line: ", line)
 
+    # --- Check file extension ---
+    if endswith(fname, ".json")
+        dataDict = get_1DBeamPropertiesFromJSON(fname)
+        EI = dataDict["EI"]
+        println("Properties for $(length(EI)) sections detected!")
+        EIIP = dataDict["EInn"]
+        K = dataDict["Kc"]
+        GJ = dataDict["GJ"]
+        S = dataDict["Swarp"] # this is coupled to the ab location. Do not just give zeros
+        EA = dataDict["EA"]
+        I = dataDict["Im"]
+        m = dataDict["msect"]
+    elseif endswith(fname, ".asw")
+        return get_1DBeamPropertiesFromASWFile(fname)
+    else
+        error("File extension not recognized. Please use .json or .asw")
     end
 
-    return EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
+    return EI, EIIP, K, GJ, S, EA, I, m
 end
 
-# get_1DBeamPropertiesFromFile("$(@__DIR__)/../../validations/ward_src/ward.dcf")
+function get_1DBeamPropertiesFromJSON(fname)
+    """
+    From JSON file
+    """
+
+    # --- Read in the file ---
+    open(fname, "r") do io
+        # println("Reading in file: ", fname)
+        # println("File contents: ", read(io, String))
+        return JSON.parse(io)
+    end
+end
+
+function get_1DBeamPropertiesFromASWFile(fname)
+    """
+
+    THIS IS WIP
+
+    Get beam structural properties from file
+    The file needs to be in the same format as ASWING:
+
+    Returns:
+        EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ (like compute_beam() function)
+    """
+
+    outputParams = Dict()
+
+    keywords = [
+        "Name",
+        "Unit",
+        "Constant",
+        "Reference",
+        "Weight",
+        "Sensor",
+        "Engine",]
+
+    overalllineno = 0
+    open(fname, "r") do io
+
+        lineno = 1
+        groupno = 1
+        while !eof(io)
+
+            line = readline(io)
+            overalllineno += 1
+
+            if overalllineno == 1 # Skip the first line
+
+                continue
+
+            else
+
+
+                if isempty(strip(line)) || line[begin:begin+2] == "#==" # Skip empty lines, lines with whitespace, and comment lines
+                    continue
+
+                else # Read in data
+                    if uppercase(line) == "END" # End of group
+
+                        println("="^50)
+                        println("End reached at group: ", groupno)
+                        println("="^50)
+                        groupno += 1
+                        lineno = 1 # reset line counter
+                        continue
+
+                    else
+
+                        if lineno == 1
+                            title = line
+                            println("="^50)
+                            println("Title: ", title)
+                            println("="^50)
+                        else
+                            println("Content: ", line)
+                        end
+                        # @bp
+                        # println("line: ", line)
+                        lineno += 1
+                    end
+
+
+                end
+
+                # EIₛ = line
+            end
+
+        end
+    end
+
+    return outputParams
+end
 
 function get_1DGeoPropertiesFromFile(fname)
     """
@@ -376,6 +477,46 @@ function get_1DGeoPropertiesFromFile(fname)
 
     Returns
     """
+
+    # --- Get properties and make vector if one value ---
+    function return_data(key, data, nSect)
+        val = data[key]
+        if length(val) != nSect # need to make it a vector
+            val = ones(nSect) .* val
+
+            return val
+        else
+            return val
+        end
+    end
+
+
+    # --- Check file extension ---
+    if endswith(fname, ".json")
+        dataDict = get_1DBeamPropertiesFromJSON(fname)
+        shearCenterDict = dataDict["shear center location"]
+        cgDict = dataDict["cg location"]
+        nSect = length(shearCenterDict["x"])
+        println("Properties for $(nSect) sections detected!")
+
+        chord = return_data("chord", dataDict, nSect)
+
+        # Origin is at midchord
+        ab = shearCenterDict["x"]
+        x_cg = cgDict["x"]
+        x_ab = x_cg .- ab
+
+        # x_ab .= 0.0
+        # ab .= 0.0 # nonzerovalue bugs
+        # ab .= -0.03
+
+    elseif endswith(fname, ".asw")
+        return get_1DBeamPropertiesFromASWFile(fname)
+    else
+        error("File extension not recognized. Please use .json or .asw")
+    end
+
+    return ab, x_ab
 end
 
 function get_tipnode(LECoords)

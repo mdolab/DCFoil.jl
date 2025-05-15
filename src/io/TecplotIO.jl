@@ -113,7 +113,7 @@ function write_airfoils(io, appendageParams::AbstractDict, chords, mesh, u, v, w
         )
     end
 
-    foilCoords = Utilities.generate_naca4dig(appendageParams["toc"][1])
+    foilCoords = generate_naca4dig(appendageParams["toc"][1])
     baserake = deg2rad(appendageParams["alfa0"])
     rake = deg2rad(appendageParams["rake"])
     if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
@@ -590,7 +590,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
     theta = zeros(nNode)
     psi = zeros(nNode)
     basename = "drymode"
-    @printf("Writing natural mode shape files for %i modes to %s_<>.dat\n", nModes, basename)
+    @printf("Writing natural mode shape files for %i modes to %s/%s_<>.dat\n", nModes, outputDir, basename)
     for mm in 1:nModes
         outfile = @sprintf("%s%s_m%03i.dat", outputDir, basename, mm)
         io = open(outfile, "w")

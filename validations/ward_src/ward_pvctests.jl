@@ -40,7 +40,7 @@ run_modal = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 20 # spatial nodes
+nNodes = 10 # spatial nodes
 nNodesStrut = 10 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
@@ -83,7 +83,8 @@ wingOptions = Dict(
     "material" => "pvc", # preselect from material library
     "use_tipMass" => tipMass,
     "xMount" => 0.0,
-    "path_to_struct_props" => "$(@__DIR__)/ward2018_structprops.dcf",
+    "path_to_struct_props" => "$(@__DIR__)/ward2018_structprops.json",
+    "path_to_geom_props" => "$(@__DIR__)/ward2018_structprops.json",
 )
 appendageOptions = [wingOptions]
 solverOptions = Dict(
@@ -166,25 +167,75 @@ LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLPropertie
 claVec = LLOutputs.cla
 
 # --- Do tip loads ---
-LECoords, TECoords = SolveFlutter.FEMMethods.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-globalK, globalM, _, DOFBlankingList, FEMESH, _, _ = SolveFlutter.FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], wingOptions, solverOptions)
+globalK, globalM, _, DOFBlankingList, FEMESH, _, _ = SolveFlutter.FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, paramsList, wingOptions, solverOptions)
 
-traction_forces = zeros(size(globalK, 1))
-qSol = FEMMethods.solve_structure(
-    globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
-    traction_forces[1:end.∉[DOFBlankingList]],
-)
-uSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE; appendageOptions=appendageOptions)
+angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
+axisDefault = "z"
+T = FEMMethods.get_rotate3dMat(angleDefault, axisDefault)
+# T = I(3)
+transMatL2G = [
+    T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3) zeros(3, 3)
+    zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3) zeros(3, 3)
+    zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T zeros(3, 3)
+    zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) zeros(3, 3) T
+]
 
+tipForces = collect(-600.0:50.0:600)
+outdata = zeros(length(tipForces))
+for (ii, tipForce) in enumerate(tipForces)
+    traction_forces = zeros(size(globalK, 1))
+    FEMMethods.apply_tip_load!(traction_forces, "COMP2", transMatL2G, "force")
+    idxForce = argmax(traction_forces)
+    traction_forces[idxForce] *= tipForce
+
+    qSol = FEMMethods.solve_structure(
+        globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
+        traction_forces[1:end.∉[DOFBlankingList]],
+    )
+    uSol, _ = FEMMethods.put_BC_back(qSol, FEMMethods.ELEMTYPE; appendageOptions=wingOptions)
+
+    tipBend = uSol[end-FEMMethods.NDOF+FEMMethods.WIND]
+    tipTwist = uSol[end-FEMMethods.NDOF+FEMMethods.ΘIND]
+    println("tip force: ", tipForce)
+    println("tip deflection: ", tipBend, " [m]")
+    println("tip twist: ", tipTwist, " [rad] $(rad2deg(tipTwist)) [deg]")
+
+    outdata[ii] = tipBend
+end
+
+tipTorques = collect(-200.0:20.0:200) # N-m
+outTwist = zeros(length(tipTorques))
+for (ii, tipTorque) in enumerate(tipTorques)
+    traction_forces = zeros(size(globalK, 1))
+    FEMMethods.apply_tip_load!(traction_forces, "COMP2", transMatL2G, "torque")
+    traction_forces *= tipTorque
+    qSol = FEMMethods.solve_structure(
+        globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]],
+        traction_forces[1:end.∉[DOFBlankingList]],
+    )
+    uSol, _ = FEMMethods.put_BC_back(qSol, FEMMethods.ELEMTYPE; appendageOptions=wingOptions)
+
+    tipBend = uSol[end-FEMMethods.NDOF+FEMMethods.WIND]
+    tipTwist = uSol[end-FEMMethods.NDOF+FEMMethods.ΘIND]
+    println("tip torque: ", tipTorque)
+    println("tip deflection: ", tipBend, " [m]")
+    println("tip twist: ", tipTwist, " [rad] $(rad2deg(tipTwist)) [deg]")
+    outTwist[ii] = tipTwist
+end
+
+using JLD2
+save("./ward2018_tiploads.jld2", "tipForces", tipForces, "tipTorques", tipTorques, "tipBend", outdata, "tipTwist", outTwist)
 
 # --- Do modal analysis ---
-SolveFlutter.solve_frequencies()
-SolveFlutter.write_solution()
+SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, wingOptions)
 
 using Test
 
+ref_val = 0.0
 @testset "test ward2018" begin
 
-    @test abs(obj - 0.361) < 1e-2
+    @test abs(obj - ref_val) < 1e-2
 end
 

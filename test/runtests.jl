@@ -29,6 +29,8 @@ nNodesStrut = 2
     @test test_struct() <= 1e-5 # constitutive relations
 
     # --- FiniteElement tests ---
+    @test test_COMP2_stiff() <= 5e-5 # stiffness matrix
+    @test test_COMP2_mass() <= 5e-5 # mass matrix
     @test test_FECOMP2() <= 1e-1
 end
 

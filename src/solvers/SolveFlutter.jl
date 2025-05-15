@@ -28,6 +28,7 @@ using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely
 
 # --- DCFoil modules ---
 for headerName in [
+    "../utils/Utilities",
     "../struct/FEMMethods",
     "../hydro/LiftingLine",
     "../io/MeshIO",
@@ -426,7 +427,39 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     debug = solverOptions["debug"]
     # --- Initialize the model ---
     # global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(appendageParams, solverOptions, appendageOptions)
-    global FOIL, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    # global FOIL, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    # --- Init model structure ---
+    if length(solverOptions["appendageList"]) == 1
+        appendageOptions = solverOptions["appendageList"][1]
+        tipMass = appendageOptions["use_tipMass"]
+
+        idxTip = LiftingLine.get_tipnode(LECoords)
+        midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+        # ---------------------------
+        #   Hydrodynamics
+        # ---------------------------
+        α0 = appendageParams["alfa0"]
+        β0 = appendageParams["beta"]
+        rake = appendageParams["rake"]
+        depth0 = appendageParams["depth0"]
+        airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
+        displCol = zeros(6, npt_wing)
+        npt_wing = size(displCol, 2) # overwrite
+        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
+            npt_wing=npt_wing,
+            npt_airfoil=npt_airfoil,
+            rhof=solverOptions["rhof"],
+            # airfoilCoordFile=airfoilCoordFile,
+            airfoil_ctrl_xy=airfoilCtrlXY,
+            airfoil_xy=airfoilXY,
+            options=options,
+        )
+
+    else
+        error("Only one appendage is supported at the moment")
+    end
+    globalKs, globalMs, globalF, _, FEMESH, WingStructModel, StrutStructModel = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -441,20 +474,17 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # ---------------------------
     #   Assemble structure
     # ---------------------------
-    abVec = appendageParams["ab"]
-    x_αbVec = appendageParams["x_ab"]
-    chordVec = FOIL.chord
-    ebVec = 0.25 * chordVec .+ abVec
+    # chordVec = FOIL.chord
     # Λ = DVDict["sweep"]
     # Preprocessing.
-    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; config=appendageOptions["config"])
+    # globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; config=appendageOptions["config"])
     # There some weird data type bug here so we need to copy the matrices and make them Float64
-    globalKs = zeros(Float64, size(globalKs_work))
-    globalMs = zeros(Float64, size(globalMs_work))
-    globalF = zeros(Float64, size(globalF_work))
-    globalKs .= globalKs_work
-    globalMs .= globalMs_work
-    globalF .= globalF_work
+    # globalKs = zeros(Float64, size(globalKs_work))
+    # globalMs = zeros(Float64, size(globalMs_work))
+    # globalF = zeros(Float64, size(globalF_work))
+    # globalKs .= globalKs_work
+    # globalMs .= globalMs_work
+    # globalF .= globalF_work
 
     if tipMass
         bulbMass = 2200 #[kg]
@@ -476,12 +506,12 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # ---------------------------
     #   Initialize stuff
     # ---------------------------
-    u = zeros(length(globalF))
+    # u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    alphaCorrection = 0.0
-    global CONSTANTS = DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), zeros(2, 2), 0.0, alphaCorrection)
+    # alphaCorrection = 0.0
+    # global CONSTANTS = DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), zeros(2, 2), 0.0, alphaCorrection)
 
     # ---------------------------
     #   Test eigensolver
@@ -499,14 +529,10 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     end
     println("+-------------------------------------+")
     # --- Wetted solve ---
-    # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    if solverOptions["use_nlll"]
-        error("NLLL not implemented yet for natural freq")
-    else
-        claVec = LLOutputs.cla
-    end
-    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, claVec, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
+    claVec = 2π * ones(length(globalF) ÷ FEMMethods.NDOF) # this does not matter
+    # end
+    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, WingStructModel, LLSystem, claVec, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE;
+        appendageOptions=appendageOptions, solverOptions=solverOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
     wetOmegaSquared, wetModeShapes = FEMMethods.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = .√(wetOmegaSquared) / (2π)
