@@ -1,7 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
 import openmdao.api as om
-import matplotlib.pyplot as plt
 
 
 def _debug_print(name, var, mode):
@@ -394,6 +393,7 @@ def test_displacement_transfer():
     prob.check_partials(compact_print=True, method='fd', step=1e-6)
 
     # plot results
+    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(3, 2, figsize=(12, 8))
     # FEM nodal discplacements
     nodes_FEM = prob.get_val('nodes')
@@ -468,6 +468,7 @@ def test_load_transfer():
     col_pts = prob.get_val('collocationPts')
     f_hydro = prob.get_val('forces_hydro')
     loads = prob.get_val('loads_str').reshape(9, n_node * 2 - 1, order='F')
+    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(3, 2, figsize=(10, 10))
     # plot original hydro forces
     ax[0, 0].plot(col_pts[1, :], f_hydro[0, :], 'o-', label='hydro')
@@ -539,6 +540,7 @@ def test_CLalpha_transfer():
     # om.n2(prob)
 
     # plot intepolated CL_alpha at FEM nodes
+    import matplotlib.pyplot as plt
     plt.figure()
     plt.plot(collocationPts[1, :], CL_alpha, 'o-', ms=5, lw=1)
     CL_alpha_node = prob.get_val('CL_alpha_node') * 1.
