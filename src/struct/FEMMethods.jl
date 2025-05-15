@@ -946,7 +946,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     nNodes = appendageOptions["nNodes"]
 
     if haskey(appendageOptions, "path_to_struct_props") && !isnothing(appendageOptions["path_to_struct_props"])
-        println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
+        println("Reading structural properties from file:\n", appendageOptions["path_to_struct_props"])
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
     else
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
