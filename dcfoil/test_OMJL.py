@@ -36,7 +36,9 @@ jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 jl.include("../src/solvers/solveflutter_om.jl")  # discipline 4 flutter solver
 jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
-from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
+# import top-level OpenMDAO group that contains all components
+from coupled_analysis import CoupledAnalysis
+
 
 outputDir = "output"
 files = {
@@ -86,7 +88,7 @@ solverOptions = {
     # ---------------------------
     #   Flow
     # ---------------------------
-    "Uinf": 18.0,  # free stream velocity [m/s]
+    "Uinf": 10.0,  # free stream velocity [m/s]
     "rhof": 1025.0,  # fluid density [kg/m³]
     "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
     "use_nlll": True,
@@ -179,7 +181,21 @@ def plot_cla():
     plt.close()
 
 
-npt_wing = jl.LiftingLine.NPT_WING
+# number of strips and FEM nodes
+if appendageOptions["config"] == "full-wing":
+    npt_wing = jl.LiftingLine.NPT_WING
+    npt_wing_full = jl.LiftingLine.NPT_WING
+    n_node = nNodes * 2 - 1   # for full span
+else:
+    npt_wing = jl.LiftingLine.NPT_WING / 2   # for half wing
+    npt_wing_full = jl.LiftingLine.NPT_WING   # full span
+    # check if npt_wing is integer
+    if npt_wing % 1 != 0:
+        raise ValueError("NPT_WING must be an even number for symmetric analysis")
+    npt_wing = int(npt_wing)
+    n_node = nNodes
+
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -198,185 +214,83 @@ if __name__ == "__main__":
         print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
     print(30 * "-", flush=True)
 
-    impcomp_struct_solver = JuliaImplicitComp(
-        jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_struct_func = JuliaExplicitComp(
-        jlcomp=jl.OMFEBeamFuncs(
-            nodeConn, appendageParams, appendageOptions, solverOptions
-        )
-    )
-    impcomp_LL_solver = JuliaImplicitComp(
-        jlcomp=jl.OMLiftingLine(
-            nodeConn, appendageParams, appendageOptions, solverOptions
-        )
-    )
-    expcomp_LL_func = JuliaExplicitComp(
-        jlcomp=jl.OMLiftingLineFuncs(
-            nodeConn, appendageParams, appendageOptions, solverOptions
-        )
-    )
-    expcomp_load = JuliaExplicitComp(
-        jlcomp=jl.OMLoadTransfer(
-            nodeConn, appendageParams, appendageOptions, solverOptions
-        )
-    )
-    expcomp_displacement = JuliaExplicitComp(
-        jlcomp=jl.OMLoadTransfer(
-            nodeConn, appendageParams, appendageOptions, solverOptions
-        )
-    )
-    expcomp_flutter = JuliaExplicitComp(
-        jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-    expcomp_forced = JuliaExplicitComp(
-        jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions)
-    )
-
-    model = om.Group()
-
-    # ************************************************
-    #     Setup components
-    # ************************************************
-    if args.run_struct:
-        model.add_subsystem(
-            "beamstruct",
-            impcomp_struct_solver,
-            promotes_inputs=["ptVec", "traction_forces"],
-            promotes_outputs=["deflections"],
-        )
-        model.add_subsystem(
-            "beamstruct_funcs",
-            expcomp_struct_func,
-            promotes_inputs=["ptVec", "deflections"],
-            promotes_outputs=["*"],  # everything!
-        )
-    elif args.run_flow:
-
-        # --- Do nonlinear liftingline ---
-        model.add_subsystem(
-            "liftingline",
-            impcomp_LL_solver,
-            promotes_inputs=["ptVec", "alfa0", "displacements_col"],
-            promotes_outputs=["gammas", "gammas_d"],
-        )
-        model.add_subsystem(
-            "liftingline_funcs",
-            expcomp_LL_func,
-            promotes_inputs=[
-                "gammas",
-                "gammas_d",
-                "ptVec",
-                "alfa0",
-                "displacements_col",
-            ],  # promotion auto connects these variables
-            promotes_outputs=["*"],  # everything!
-        )
-    else:
-        # --- Combined hydroelastic ---
-        model.add_subsystem(
-            "beamstruct",
-            impcomp_struct_solver,
-            promotes_inputs=["ptVec"],
-            promotes_outputs=["deflections"],
-        )
-        model.add_subsystem(
-            "beamstruct_funcs",
-            expcomp_struct_func,
-            promotes_inputs=["ptVec", "deflections"],
-            promotes_outputs=["*"],  # everything!
-        )
-        model.add_subsystem(
-            "liftingline",
-            impcomp_LL_solver,
-            promotes_inputs=["ptVec", "alfa0", "displacements_col"],
-            promotes_outputs=["gammas", "gammas_d"],
-        )
-        model.add_subsystem(
-            "liftingline_funcs",
-            expcomp_LL_func,
-            promotes_inputs=[
-                "gammas",
-                "gammas_d",
-                "ptVec",
-                "alfa0",
-                "displacements_col",
-            ],  # promotion auto connects these variables
-            promotes_outputs=["*"],  # everything!
-        )
-        # # --- Now add load transfer capabilities ---
-        # model.add_subsystem("loadtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-        # model.add_subsystem("displtransfer", expcomp_load, promotes_inputs=["*"], promotes_outputs=["*"])
-        # --- Dynamic solvers ---
-        model.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
-        # model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
-
     # ************************************************
     #     Setup problem
     # ************************************************
+
+    if args.run_struct:
+        analysis_mode = "struct"
+    elif args.run_flow:
+        analysis_mode = "flow"
+    else:
+        analysis_mode = "coupled"
+
+    model = CoupledAnalysis(
+        analysis_mode=analysis_mode,
+        ptVec_init=np.array(ptVec),
+        npt_wing=npt_wing,
+        n_node=n_node,
+        appendageOptions=appendageOptions,
+        appendageParams=appendageParams,
+        nodeConn=nodeConn,
+        solverOptions=solverOptions,
+    )
 
     prob = om.Problem(model)
 
     # prob.driver = om.ScipyOptimizeDriver()
     # prob.driver.options["optimizer"] = "SLSQP"
     prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
+    prob.driver.options['print_results'] = True
+    prob.driver.opt_settings["Major iterations limit"] = 100
+    prob.driver.opt_settings["Major feasibility tolerance"] = 1e-4
+    prob.driver.opt_settings["Major optimality tolerance"] = 1e-4
+    prob.driver.opt_settings["Difference interval"] = 1e-4,
+    prob.driver.opt_settings["Verify level"] = -1
+    prob.driver.opt_settings["Function precision"] = 1e-8
+    prob.driver.opt_settings["Hessian full memory"] = None
+    prob.driver.opt_settings["Hessian frequency"] = 100
     outputDir = "output"
-    optOptions = {
-        "Major feasibility tolerance": 1e-4,
-        "Major optimality tolerance": 1e-4,
-        "Difference interval": 1e-4,
-        "Hessian full memory": None,
-        "Function precision": 1e-8,
-        "Print file": os.path.join(outputDir, "SNOPT_print.out"),
-        "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
-        "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
-        # "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
-        # "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (nonlinear problem)
-        # "Major Step Limit": 5e-3,
-        # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
-    }
+    prob.driver.opt_settings["Print file"] = os.path.join(outputDir, "SNOPT_print.out")
+    prob.driver.opt_settings["Summary file"] = os.path.join(outputDir, "SNOPT_summary.out")
+    # prob.driver.opt_settings["Linesearch tolerance"] = 0.99
+    # prob.driver.opt_settings["Nonderivative linesearch"] = None
+    # prob.driver.opt_settings["Major step limit"] = 5e-3
 
+    # --- setup optimization problem ---
     prob.model.add_design_var("ptVec")
     # prob.model.add_objective("CDi")
-    prob.model.add_objective("ksflutter")
+    # prob.model.add_objective("ksflutter")
 
-    # prob.model.nonlinear_solver = om.NewtonSolver(
-    #     solve_subsystems=True,
-    #     iprint=2,
-    # )
-    # prob.model.nonlinear_solver.linesearch = om.ArmijoGoldsteinLS() # this is needed to get the system to converge but it sucks
-    # prob.model.nonlinear_solver.linesearch.options["maxiter"] = 10
-    # prob.model.nonlinear_solver.linesearch.options["iprint"] = 2
+    prob.setup(check=False)
 
-    prob.setup()
+    # om.n2(prob)
 
+    # --- set initial values ---
     prob.set_val("ptVec", ptVec)
 
     if args.run_struct:
-        tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-7] = 100.0
+        prob.set_val("theta_f", np.deg2rad(0))
+        prob.set_val("toc", 0.075 * np.ones(nNodes))
+        # apply uniform Z force for testing
+        tractions = np.zeros_like(prob.get_val("beamstruct.traction_forces"))
+        tractions[2::9] = 100  # apply force in Z direction
         prob.set_val("beamstruct.traction_forces", tractions)
+
     elif args.run_flow:
-        prob.set_val("liftingline.gammas", np.zeros(npt_wing))
-        prob.set_val("liftingline.displacements_col", np.zeros((6, npt_wing)))
+        prob.set_val("liftingline.gammas", np.zeros(npt_wing_full))
+        prob.set_val("displacements_col", np.zeros((6, npt_wing_full)))
         prob.set_val("alfa0", appendageParams["alfa0"])
+
     else:
-        displacementsCol = np.zeros((6, npt_wing))
-        
-        # print("moving one of the coll points up")
-        # displacementsCol[2, -1] = 0.1
-
-        prob.set_val("beamstruct.theta_f", np.deg2rad(15))
-        prob.set_val("liftingline.displacements_col", displacementsCol)
+        prob.set_val("displacements_col", np.zeros((6, npt_wing_full)))
         prob.set_val("alfa0", appendageParams["alfa0"])
-        tractions = prob.get_val("beamstruct.traction_forces")
-        tractions[-7] = 100.0
-        prob.set_val("beamstruct.traction_forces", tractions)
-        prob.set_val("liftingline.gammas", np.zeros(npt_wing))
+        prob.set_val("gammas", np.zeros(npt_wing_full))
 
-
-        prob.set_val("flutter_funcs.cla", 2*np.pi*np.ones_like(appendageParams["toc"]))
-        prob.set_val("flutter_funcs.toc", appendageParams["toc"])
+        # set fiber angle and thickness-to-chord ratio
+        fiber_angle = np.deg2rad(-15)
+        prob.set_val('theta_f', fiber_angle)
+        prob.set_val('toc', 0.075 * np.ones(nNodes))
 
     # ************************************************
     #     Evaluate model
@@ -390,20 +304,31 @@ if __name__ == "__main__":
     print("model run complete\n" + "-" * 50)
     print(f"Time taken to run model: {endtime-midtime:.2f} s")
 
-    print("running model again...\n" + "-" * 50)
-    starttime = time.time()
-    prob.run_model()
-    endtime = time.time()
-    print("model run complete\n" + "-" * 50)
-    print(f"Time taken to run model: {endtime-starttime:.2f} s")
+    # print("running model again...\n" + "-" * 50)
+    # starttime = time.time()
+    # prob.run_model()
+    # endtime = time.time()
+    # print("model run complete\n" + "-" * 50)
+    # print(f"Time taken to run model: {endtime-starttime:.2f} s")
 
+    # --- compute total derivatives for debugging ---
+    # if not args.run_struct:
+    #     wrt = ['ptVec']
+    #     of = ['CDw', 'CDpr', 'CDj', 'CDs']
+    #     print('\ncomputing totals...')
+    #     prob.compute_totals(of, wrt)
+    #     print('done!\n')
+    #     # NOTE: when using hydroelastic (with or without solver, with or without jax), compute_totals fails saying RAD for empirical drag partials is getting complex variables (it works if I set FIDI for empirical drag partials in liftingline_om.jl)
+    #     #       it still fails even when I used transfer_FD.py (no Jax)
+    #     #       compute_totals works fine if I do --run_flow 
+    
     if args.run_struct:
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
         print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
         print("all deflections", prob.get_val("beamstruct.deflections"))
 
         # Change fiber angle and rerun
-        prob.set_val("beamstruct.theta_f", np.deg2rad(-15.0))
+        prob.set_val("theta_f", np.deg2rad(-15.0))
         prob.run_model()
         print("print again with theta_f = -15.0")
         print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
@@ -414,11 +339,13 @@ if __name__ == "__main__":
         print("nondimensional gammas", prob.get_val("gammas"))
         print("CL", prob.get_val("CL"))  # should be around CL = 0.507 something
         print("CLa", prob.get_val("cla_col"))  #
-        # print("force distribution", prob.get_val("forces_dist"))
+        print("\nforce x", prob.get_val("forces_dist")[0, :])
+        print("force y", prob.get_val("forces_dist")[1, :])
+        print("force z", prob.get_val("forces_dist")[2, :])
 
     else:
-        print("nondimensional gammas", prob.get_val("liftingline.gammas"))
-        print("nondimensional gammas_d", prob.get_val("liftingline.gammas_d"))
+        print("nondimensional gammas", prob.get_val("gammas"))
+        print("nondimensional gammas_d", prob.get_val("gammas_d"))
         print("CL", prob.get_val("CL"))
         print("CLa", prob.get_val("cla_col"))
         print("mesh", prob.get_val("nodes"))
@@ -427,10 +354,11 @@ if __name__ == "__main__":
         print(prob.get_val("collocationPts")[1, :])
         print(prob.get_val("collocationPts")[2, :])
 
-        print("fiber angle", prob.get_val("beamstruct.theta_f"), "rad")
+        print("fiber angle", prob.get_val("theta_f"), "rad")
         # print("force distribution", prob.get_val("forces_dist"))
-        print("bending deflections", prob.get_val("beamstruct.deflections")[2::9])
-        print("twisting deflections", prob.get_val("beamstruct.deflections")[4::9])
+        print("bending deflections", prob.get_val("deflections")[2::9])
+        print("twisting deflections", prob.get_val("deflections")[4::9])
+        print("Rx deflections", prob.get_val("deflections")[3::9])
         # print(prob["liftingline.f_xy"])  # Should print `[-15.]`
         print("induced drag force", prob.get_val("F_x"))
         print("lift force", prob.get_val("F_z"))
@@ -445,9 +373,132 @@ if __name__ == "__main__":
             f"\tprofile drag coeff: {prob.get_val('CDpr')}\t wavedrag coeff: {prob.get_val('CDw')}\t junctiondrag coeff: {prob.get_val('CDj')}",
         )
 
-    # plot_cla()
-    # print("computing total derivatives...\n" + "-" * 50)
-    # prob.compute_totals()
+    om.n2(prob, show_browser=False)
+
+    # ************************************************
+    #    Plot
+    # ************************************************
+    # NOTE: ny hardcoded, should get shape from ptVec
+    ny = 39 if appendageOptions["config"] == "full-wing" else 20
+    ptVec = prob.get_val('ptVec').reshape(2, ny, 3)
+    nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
+    collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
+    force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
+    force_FEM = prob.get_val('traction_forces').reshape(9, n_node, order='F')   # shape (9, n_nodes)
+
+    import matplotlib.pyplot as plt
+
+    # --- 3D plot ---
+    z_scaler = 10   # exaggerate vertical deflections
+    fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
+    ax.plot(ptVec[:, :, 0], ptVec[:, :, 1], ptVec[:, :, 2], 'o', color='k', ms=3)
+    ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], 'o', color='darkgray', ms=5)
+    ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :] * z_scaler, 'o-', color='C0', ms=3)
+    ax.set_aspect('equal')
+
+    # --- top view of planform ---
+    fig, ax = plt.subplots()
+    ax.plot(ptVec[:, :, 1], ptVec[:, :, 0], 'o', color='k', ms=3)
+    ax.plot(nodes[1, :], nodes[0, :], 'o', color='darkgray', ms=5)
+    ax.plot(collocationPts[1, :], collocationPts[0, :] - appendageOptions['xMount'], 'o-', color='C0', ms=3)
+    ax.set_aspect('equal')
+
+    # --- plot displacements ---
+    disp_nodes = prob.get_val('deflections').reshape(n_node, 9)
+    disp_colloc = prob.get_val('displacements_col')
+    if appendageOptions["config"] == "wing":
+        # just use right wing
+        disp_colloc = disp_colloc[:, npt_wing:]
+    node_y = nodes[1, :]
+    colloc_y = collocationPts[1, :]
+
+    fig, axs = plt.subplots(3, 2, figsize=(8, 8))
+    fig.suptitle('Displacements')
+    axs[0, 0].plot(node_y, disp_nodes[:, 0], 'o', color='darkgray', ms=5, label='FEM nodes')
+    axs[0, 0].plot(colloc_y, disp_colloc[0, :], 'o-', color='C0', ms=3, label='Collocation points')
+    axs[0, 0].set_ylabel('disp X')
+    axs[0, 0].set_xticklabels([])
+    axs[0, 0].legend()
+
+    axs[1, 0].plot(node_y, disp_nodes[:, 1], 'o', color='darkgray', ms=5)
+    axs[1, 0].plot(colloc_y, disp_colloc[1, :], 'o-', color='C0', ms=3)
+    axs[1, 0].set_ylabel('disp Y')
+    axs[1, 0].set_xticklabels([])
+
+    axs[2, 0].plot(node_y, disp_nodes[:, 2], 'o', color='darkgray', ms=5)
+    axs[2, 0].plot(colloc_y, disp_colloc[2, :], 'o-', color='C0', ms=3)
+    axs[2, 0].set_ylabel('disp Z')
+    axs[2, 0].set_xlabel('spanwise location')
+    
+    axs[0, 1].plot(node_y, disp_nodes[:, 3], 'o', color='darkgray', ms=5)
+    axs[0, 1].plot(colloc_y, disp_colloc[3, :], 'o-', color='C0', ms=3)
+    axs[0, 1].set_ylabel('disp Rx')
+    axs[0, 1].set_xticklabels([])
+
+    axs[1, 1].plot(node_y, disp_nodes[:, 4], 'o', color='darkgray', ms=5)
+    axs[1, 1].plot(colloc_y, disp_colloc[4, :], 'o-', color='C0', ms=3)
+    axs[1, 1].set_ylabel('disp Ry')
+    axs[1, 1].set_xticklabels([])
+
+    axs[2, 1].plot(node_y, disp_nodes[:, 5], 'o', color='darkgray', ms=5)
+    axs[2, 1].plot(colloc_y, disp_colloc[5, :], 'o-', color='C0', ms=3)
+    axs[2, 1].set_ylabel('disp Rz')
+    axs[2, 1].set_xlabel('spanwise location')
+
+    fig.tight_layout()
+    fig.savefig('displacements.pdf', bbox_inches='tight')
+
+    # --- plot forces ---
+    fig, axs = plt.subplots(3, 2, figsize=(8, 8))
+    fig.suptitle('Forces')
+
+    axs[0, 0].plot(node_y, force_FEM[0, :], 'o', color='darkgray', ms=5)
+    axs[0, 0].plot(colloc_y, force_colloc[0, :], 'o-', color='C0', ms=3)
+    axs[0, 0].set_ylabel('force X')
+    axs[0, 0].set_xticklabels([])
+
+    axs[1, 0].plot(node_y, force_FEM[1, :], 'o', color='darkgray', ms=5)
+    axs[1, 0].plot(colloc_y, force_colloc[1, :], 'o-', color='C0', ms=3)
+    axs[1, 0].set_ylabel('force Y')
+    axs[1, 0].set_xticklabels([])
+
+    axs[2, 0].plot(node_y, force_FEM[2, :], 'o', color='darkgray', ms=5)
+    axs[2, 0].plot(colloc_y, force_colloc[2, :], 'o-', color='C0', ms=3)
+    axs[2, 0].set_ylabel('force Z')
+    axs[2, 0].set_xlabel('spanwise location')
+
+    axs[0, 1].plot(node_y, force_FEM[3, :], 'o', color='darkgray', ms=5)
+    axs[0, 1].set_ylabel('moment X')
+    axs[0, 1].set_xticklabels([])
+
+    axs[1, 1].plot(node_y, force_FEM[4, :], 'o', color='darkgray', ms=5)
+    axs[1, 1].set_ylabel('moment Y')
+    axs[1, 1].set_xticklabels([])
+
+    axs[2, 1].plot(node_y, force_FEM[5, :], 'o', color='darkgray', ms=5)
+    axs[2, 1].set_ylabel('moment Z')
+    axs[2, 1].set_xlabel('spanwise location')
+    
+    fig.tight_layout()
+    fig.savefig('forces.pdf', bbox_inches='tight')
+
+    # --- plot CL_alpha ---
+    cla_flow = prob.get_val("cla_col")
+    cla_node = prob.get_val("cla")
+    fig, ax = plt.subplots()
+    ax.plot(colloc_y, cla_flow, 'o-', color='C0', ms=3, label='flow collocation points')
+    ax.plot(node_y, cla_node, 'o', color='darkgray', ms=5, label='FEM nodes')
+    ax.set_xlabel('spanwise location [m]')
+    ax.set_ylabel("CL_alpha")
+    ax.legend()
+    fig.savefig('CLa.pdf', bbox_inches='tight')
+
+    # total lift force
+    loads = prob.get_val('traction_forces').reshape(9, n_node, order='F')
+    lift = np.sum(loads[2, :])  # sum of all lift forces
+    print("Total lift force:", float(lift), "(not really total if config = wing)")
+
+    plt.show()
 
     # --- Check partials after you've solve the system!! ---
     starttime = time.time()

@@ -28,6 +28,7 @@ using FLOWMath: norm_cs_safe, abs_cs_safe
 # using Debugger
 # using Cthulhu
 using ..LiftingLine # by the time this code is compiled, the module is already loaded
+using ..FEMMethods
 
 # --- DCFoil modules ---
 for headerName in [
@@ -811,9 +812,14 @@ function compute_stripValues(nVec, clαVec, yⁿ, FOIL, chordVec, abVec, ebVec, 
     dR3 = nVec[ZDIM]
     nElemWing = length(chordVec) - 1
 
+    nNodeTot, _, _, _ = FEMMethods.get_numnodes(appendageOptions["config"], appendageOptions["nNodes"], appendageOptions["nNodeStrut"])
+
     if use_nlll
         # xeval = LLSystem.collocationPts[YDIM, :]
-        sDomFoil = aeroMesh[1:FOIL.nNodes, YDIM]
+        sDomFoil = aeroMesh[1:nNodeTot, YDIM]
+        idx = sortperm(sDomFoil)
+        sDomFoil = sDomFoil[idx]
+        clαVec = clαVec[idx]
         # println("sDomFoil: ", sDomFoil)
         # println("yⁿ: ", yⁿ)
         # println("clαVec length: ", length(clαVec))
