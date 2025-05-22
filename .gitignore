@@ -4,6 +4,8 @@
 
 # OpenMDAO stuff
 .CondaPkg/
+*.html
+*openmdao*
 
 # Results
 OUTPUT/
