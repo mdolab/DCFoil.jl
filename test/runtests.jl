@@ -225,7 +225,7 @@ include("test_partials.jl")
     @test test_LLresidualJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-10
 
     # --- Flutter derivative test ---
-    @test test_FlutterJacobians(appendageParams, appendageOptions, solverOptions) <= 1e-4
+    @test test_FlutterJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-4
 
     # --- Structural tests ---
     # Run these tests last because they introduce a complex data type bug

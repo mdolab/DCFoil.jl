@@ -168,6 +168,7 @@ function compute_pFactor(chordLocal, hLocal)
     """
 
     ARi = (hLocal) / chordLocal
+    # println("ARi = ", ARi)
 
     # if hLocal > 0.5 * h
     #     println("The local depth is greater than half the total depth and the correction factor should depend on the foil configuration...")
@@ -195,7 +196,8 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     # ---------------------------
     #   Hydrodynamics
     # ---------------------------
-    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths, Λ; appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
+    displacementsCol = zeros(6, LiftingLine.NPT_WING)
+    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths, Λ, displacementsCol; appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
 
     if return_all
         return LLOutputs, LLSystem, FlowCond
@@ -444,7 +446,7 @@ end
 #     return dDidXpt
 # end
 
-function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams, solverOptions, appendageOptions)
+function compute_hydroLLProperties(midchords, chordVec, sweepAng, displacementsCol; appendageParams, solverOptions, appendageOptions)
     """
     Wrapper function to the hydrodynamic lifting line properties
     In this case, α is the angle by which the flow velocity vector is rotated, not the geometry
@@ -475,7 +477,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParam
 
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
 
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords;
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],
@@ -630,7 +632,7 @@ end
 #                         Static drag
 # ==============================================================================
 function compute_AICs(
-    AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
+    AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, FlowCond, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
     solverOptions=Dict(),
 )
@@ -660,12 +662,12 @@ function compute_AICs(
     AIC is the A matrix in potential flow
     """
 
-    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
+    globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, FlowCond, elemType; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
     return globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i
 end
 
-function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, elemType="BT2";
+function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω, FlowCond, elemType="BT2";
     appendageOptions=Dict{String,Any}("config" => "wing"), STRUT=nothing,
     solverOptions=Dict())
     """
@@ -718,7 +720,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         Δy = lᵉ
 
         # If we have end point nodes, we need to divide the strip width by 2
-        if appendageOptions["config"] == "wing"
+        if appendageOptions["config"] in ["wing", "strut"]
             if inode == 1 || inode == FOIL.nNodes
                 Δy = 0.5 * lᵉ
             end
@@ -751,17 +753,32 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         Ck = CKVec[1] + 1im * CKVec[2]
 
         # --- Compute Compute local AIC matrix for this element ---
-        K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
-        C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
-        M_f0 = compute_node_mass(b, ab, ϱ)
         p_i = 1.0
         if solverOptions["use_freeSurface"]
             if appendageOptions["config"] == "full-wing"
                 localspan = 0.5 * LLSystem.span - abs_cs_safe(yⁿ)
+            elseif appendageOptions["config"] == "strut"
+                drySpan = 0.5 * LLSystem.span - FlowCond.depth
+                wetSpan = 0.5 * LLSystem.span - drySpan
+                localspanwork = abs_cs_safe(yⁿ) - drySpan
+                if localspanwork < 0.0
+                    ϱ *= 0.0
+                    localspan = 0.0
+                else
+                    ϱ = FlowCond.rhof
+                    # localspan = wetSpan - localspanwork # to get zero at the tip
+                    localspan = localspanwork
+                end
+                # println("semispan: ", LLSystem.span * 0.5)
+                # println("depth: ", FlowCond.depth)
             end
             p_i = compute_pFactor(localchord, localspan)
             # println("local span:\t $(localspan)\nyn:\t$(yⁿ)\np factor:\t$(p_i)")
+            # println("fluid density:\t $(ϱ)")
         end
+        K_f, K̂_f = compute_node_stiff_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
+        C_f, Ĉ_f = compute_node_damp_faster(clα, b, eb, ab, U∞, clambda, slambda, ϱ, Ck)
+        M_f0 = compute_node_mass(b, ab, ϱ)
         M_f = M_f0 * p_i
         KLocal, CLocal, MLocal = compute_localAIC(K_f, K̂_f, C_f, Ĉ_f, M_f, elemType)
 
@@ -1167,7 +1184,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
         FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
         # Λ = sweepAng
 
-        _, _, _, AIC_i, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
+        _, _, _, AIC_i, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, FlowCond, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
         Kff_i = vec(-AIC_i)
 
         for ii in eachindex(ptVec)
@@ -1215,7 +1232,7 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
             FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
-            _, _, _, AIC_f, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
+            _, _, _, AIC_f, _ = compute_AICs(AEROMESH, FOIL, LLSystem, LLOutputs, FlowCond.rhof, dim, Λ, FlowCond.Uinf, 0.0, FlowCond, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
             Kff_f = vec(-AIC_f)
 
             dKffdXpt[:, ii] = (Kff_f - Kff_i) / dh
@@ -1283,7 +1300,7 @@ function get_strip_vecs(
     return copy(stripVecs_z)
 end
 
-function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, rhof, elemType; appendageOptions, solverOptions)
+function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, rhof, FlowCond, elemType; appendageOptions, solverOptions)
     """
     Computes the hydrodynamic coefficients for a sweep of reduced frequencies
 
@@ -1309,7 +1326,7 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
         ω = k * U∞ * (cos(Λ)) / b_ref
 
         # Compute AIC
-        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = compute_AICs(AEROMESH, FOIL, LLSystem, claVec, rhof, dim, Λ, U∞, ω, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
+        globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = compute_AICs(AEROMESH, FOIL, LLSystem, claVec, rhof, dim, Λ, U∞, ω, FlowCond, elemType; appendageOptions=appendageOptions, solverOptions=solverOptions)
 
         # Accumulate in frequency sweep matrix
         # @inbounds begin

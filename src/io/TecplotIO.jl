@@ -116,7 +116,7 @@ function write_airfoils(io, appendageParams::AbstractDict, chords, mesh, u, v, w
     foilCoords = generate_naca4dig(appendageParams["toc"][1])
     baserake = deg2rad(appendageParams["alfa0"])
     rake = deg2rad(appendageParams["rake"])
-    if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
+    if appendageOptions["config"] in CONFIGS
         for ii in 1:appendageOptions["nNodes"] # iterate over span
             nodeLoc = mesh[ii, :]
             localChord = chords[ii]

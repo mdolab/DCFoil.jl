@@ -26,6 +26,7 @@ function test_LLresidualJacobians(appendageParams, appendageOptions, solverOptio
     # ************************************************
     #     Setups
     # ************************************************
+    NPT_WING = size(displacementsCol, 2)
     gammas = ones(NPT_WING) * 0.1 # vortex strengths
 
     LECoords = zeros(3, 10)
@@ -111,6 +112,7 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
     TECoords[1, :] .= 0.5
     ptVec, m, n = FEMMethods.unpack_coords(LECoords, TECoords)
 
+    NPT_WING = size(displacementsCol, 2)
     gammas = ones(NPT_WING) * 0.1 # vortex strengths
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
@@ -380,7 +382,7 @@ end
 # ==============================================================================
 #                         Flutter partials
 # ==============================================================================
-function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions)
+function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol)
 
     # ************************************************
     #     Setups
@@ -393,6 +395,7 @@ function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions)
     TECoords = copy(LECoords)
     TECoords[1, :] .= 0.5
     ptVec, m, n = FEMMethods.unpack_coords(LECoords, TECoords)
+    GridStruct = FEMMethods.Grid(LECoords, nodeConn, TECoords)
 
     nNodes = appendageOptions["nNodes"]
     claVec = 2π * ones(nNodes)

@@ -160,7 +160,7 @@ solverOptions = SolveFlutter.FEMMethods.set_structDamping(ptVec, nodeConn, param
 displacements_col = zeros(6, SolveFlutter.LiftingLine.NPT_WING)
 idxTip = SolveFlutter.FEMMethods.get_tipnode(LECoords)
 midchords, chordVec, _, sweepAng, _ = SolveFlutter.FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip, appendageOptions=appendageOptions[1], appendageParams=paramsList[1])
-LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
+LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng, displacements_col; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
 claVec = LLOutputs.cla
 
 obj, SOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, claVec, paramsList[1]["theta_f"], paramsList[1]["toc"], paramsList[1]["alfa0"], paramsList[1], solverOptions; return_all=true)

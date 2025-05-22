@@ -40,7 +40,7 @@ run_modal = true
 # ************************************************
 #     DV Dictionaries (see INPUT directory)
 # ************************************************
-nNodes = 10 # spatial nodes
+nNodes = 40 # spatial nodes
 nNodesStrut = 10 # spatial nodes
 nModes = 4 # number of modes to solve for;
 # NOTE: this is the number of starting modes you will solve for, but you will pick up more as you sweep velocity
@@ -72,12 +72,14 @@ DVDict = Dict(
     "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
-    "depth0" => 10.0, # depth of the strut [m]
+    "depth0" => 0.2794*0.5, # depth of the strut [m] #AR_h = 1.5
+    # "depth0" => 0.2794, # depth of the strut [m] #AR_h = 1.0
+    # "depth0" => 0.2794*1.5, # depth of the strut [m] #AR_h = 1.5
 )
 paramsList = [DVDict]
 wingOptions = Dict(
     "compName" => "ward2018",
-    "config" => "wing",
+    "config" => "strut",
     "nNodes" => nNodes,
     "nNodeStrut" => 10,
     "material" => "pvc", # preselect from material library
@@ -99,7 +101,6 @@ solverOptions = Dict(
     #   General appendage options
     # ---------------------------
     "appendageList" => appendageOptions,
-    "config" => "wing",
     "nNodes" => nNodes,
     "nNodeStrut" => 10,
     "rotation" => 0.0, # deg
@@ -111,7 +112,8 @@ solverOptions = Dict(
     "Uinf" => 5.0, # free stream velocity [m/s]
     "rhof" => 1000.0, # fluid density [kg/m³]
     "material" => "cfrp", # preselect from material library
-    "use_freeSurface" => false,
+    # "use_freeSurface" => false,
+    "use_freeSurface" => true,
     "use_cavitation" => false,
     "use_ventilation" => false,
     "use_nlll" => true,
@@ -157,16 +159,18 @@ solverOptions["outputDir"] = outputDir
 GridStruct = SolveFlutter.add_meshfiles(solverOptions["gridFile"], Dict("junction-first" => true))
 LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
 ptVec, m, n = SolveFlutter.FEMMethods.unpack_coords(LECoords, TECoords)
-solverOptions = SolveFlutter.FEMMethods.set_structDamping(ptVec, nodeConn, paramsList[1], solverOptions, appendageOptions[1])
+solverOptions = SolveFlutter.FEMMethods.set_structDamping(ptVec, nodeConn, paramsList[1], solverOptions, appendageOptions[1]) 
 
 # --- Pre-computes to get lift slopes ---
 displacements_col = zeros(6, SolveFlutter.LiftingLine.NPT_WING)
 idxTip = SolveFlutter.FEMMethods.get_tipnode(LECoords)
 midchords, chordVec, _, sweepAng, _ = SolveFlutter.FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip, appendageOptions=appendageOptions[1], appendageParams=paramsList[1])
-LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
+LLOutputs, LLSystem, FlowCond = SolveFlutter.HydroStrip.compute_hydroLLProperties(midchords, chordVec, sweepAng, displacements_col; appendageParams=paramsList[1], solverOptions=solverOptions, appendageOptions=appendageOptions[1])
 claVec = LLOutputs.cla
 
-# --- Do tip loads ---
+# ************************************************
+#     Do tip load cases
+# ************************************************
 globalK, globalM, _, DOFBlankingList, FEMESH, _, _ = SolveFlutter.FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, paramsList, wingOptions, solverOptions)
 
 angleDefault = deg2rad(-90) # default angle of rotation of the axes to match beam
@@ -228,7 +232,9 @@ end
 using JLD2
 save("./ward2018_tiploads.jld2", "tipForces", tipForces, "tipTorques", tipTorques, "tipBend", outdata, "tipTwist", outTwist)
 
-# --- Do modal analysis ---
+# ************************************************
+#     Dry and Wet Modal analysis
+# ************************************************
 SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, paramsList[1], solverOptions, wingOptions)
 
 using Test
