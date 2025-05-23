@@ -2,7 +2,7 @@
 """
 @File          :   setup_juliapkg.py
 @Date created  :   2025/02/05
-@Last modified :   2025/02/05
+@Last modified :   2025/05/22
 @Author        :   Galen Ng
 @Desc          :   Simple file to parse the Project.toml file and update the PythonCall Julia package manager file
 """
@@ -23,7 +23,7 @@ import juliapkg
 fname = "Project.toml"
 targetFile = "./juliapkg.json"
 targetFile = None  # Set to None to use default location...I can't seem to get the isolated install to work so this is a workaround
-# This will not work in the future if multiple julia environments are needed
+# This will not work if multiple julia environments are needed
 
 # ==============================================================================
 #                         MAIN DRIVER

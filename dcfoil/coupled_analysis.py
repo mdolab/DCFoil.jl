@@ -32,7 +32,6 @@ from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 
 class CoupledAnalysis(om.Group):
-
     def initialize(self):
         # define all options and defaults
         self.options.declare("analysis_mode", values=["struct", "flow", "coupled"], desc="Analysis mode")
@@ -64,19 +63,13 @@ class CoupledAnalysis(om.Group):
             jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
         expcomp_struct_func = JuliaExplicitComp(
-            jlcomp=jl.OMFEBeamFuncs(
-                nodeConn, appendageParams, appendageOptions, solverOptions
-            )
+            jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
         impcomp_LL_solver = JuliaImplicitComp(
-            jlcomp=jl.OMLiftingLine(
-                nodeConn, appendageParams, appendageOptions, solverOptions
-            )
+            jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
         expcomp_LL_func = JuliaExplicitComp(
-            jlcomp=jl.OMLiftingLineFuncs(
-                nodeConn, appendageParams, appendageOptions, solverOptions
-            )
+            jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
         # expcomp_load = JuliaExplicitComp(
         #     jlcomp=jl.OMLoadTransfer(
@@ -101,7 +94,7 @@ class CoupledAnalysis(om.Group):
         # --- input variables ---
         # now ptVec is just an input, so use IVC as an placeholder. Later replace IVC with a geometry component
         indep = self.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
-        indep.add_output("ptVec", val=self.options["ptVec_init"])   # TODO: set units
+        indep.add_output("ptVec", val=self.options["ptVec_init"])  # TODO: set units
         # other constant setup. If we want to connect these values from upstream component, we need to commend these lines out
         # TODO: double check unit consistency to Julia layer
         indep.add_output("alfa0", val=appendageParams["alfa0"], units="deg")
@@ -165,7 +158,12 @@ class CoupledAnalysis(om.Group):
             # displacement transfer
             couple.add_subsystem(
                 "disp_transfer",
-                DisplacementTransfer(n_node=n_node, n_strips=npt_wing, xMount=appendageOptions["xMount"], config=appendageOptions["config"]),
+                DisplacementTransfer(
+                    n_node=n_node,
+                    n_strips=npt_wing,
+                    xMount=appendageOptions["xMount"],
+                    config=appendageOptions["config"],
+                ),
                 promotes_inputs=["nodes", "deflections", "collocationPts"],
                 promotes_outputs=[("disp_colloc", "displacements_col")],
             )
@@ -193,7 +191,12 @@ class CoupledAnalysis(om.Group):
             # load transfer
             couple.add_subsystem(
                 "load_transfer",
-                LoadTransfer(n_node=n_node, n_strips=npt_wing, xMount=appendageOptions["xMount"], config=appendageOptions["config"]),
+                LoadTransfer(
+                    n_node=n_node,
+                    n_strips=npt_wing,
+                    xMount=appendageOptions["xMount"],
+                    config=appendageOptions["config"],
+                ),
                 promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
                 promotes_outputs=[("loads_str", "traction_forces")],
             )
@@ -201,7 +204,7 @@ class CoupledAnalysis(om.Group):
             # hydroelastic coupled solver
             couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=200, iprint=2, atol=1e-6, rtol=0)
             ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
-            couple.linear_solver = om.DirectSolver()   # for adjoint
+            couple.linear_solver = om.DirectSolver()  # for adjoint
 
             # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
             self.add_subsystem(
@@ -218,6 +221,3 @@ class CoupledAnalysis(om.Group):
 
         else:
             raise ValueError("Invalid analysis mode. Choose 'struct', 'flow', or 'coupled'.")
-
-
-            

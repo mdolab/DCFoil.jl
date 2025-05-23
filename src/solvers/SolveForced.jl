@@ -105,7 +105,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     nK = 22
 
     globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(
-        maxK, nK, FlowCond.Uinf, 1.0, dim, FEMESH, LLSystem.sweepAng, WING, LLSystem, LLOutputs, FlowCond.rhof, ELEMTYPE;
+        maxK, nK, FlowCond.Uinf, 1.0, dim, FEMESH, LLSystem.sweepAng, WING, LLSystem, LLOutputs, FlowCond.rhof, FlowCond, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     # ************************************************
@@ -127,7 +127,6 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             k = ω / FlowCond.Uinf
             globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
             globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
-            # globalMf, globalCf_r, globalCf_i, globalKf_r, globalKf_i = HydroStrip.compute_AICs(FEMESH, WING, LLSystem, LLOutputs, FlowCond.rhof, dim, sweepAng, FlowCond.Uinf, ω, ELEMTYPE; appendageOptions=appendageOptions, STRUT=STRUT, solverOptions=solverOptions)
 
             Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
             Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)

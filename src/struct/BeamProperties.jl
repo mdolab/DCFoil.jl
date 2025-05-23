@@ -140,6 +140,7 @@ function compute_section_property(section::SectionProperty, constitutive::String
         EIₛ *= fI
         EAₛ *= fA
         GJₛ *= fJ
+        # println("Airfoil correction factors: $(fA), $(fI), $(fJ)")
         # println("bend stiff: ", EIₛ)
         # println("BTC: ", Kₛ)
         # println("torsion stiff: ", GJₛ)
