@@ -154,11 +154,12 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     # --- Nonlinear solve for circulation distribution ---
     Gconv0, _, _ = LiftingLine.do_newton_raphson(
         LiftingLine.compute_LLresiduals, LiftingLine.compute_LLresJacobian, g0, nothing;
-        # is_verbose=true,
+        is_verbose=false,
         maxIters=50, tol=1e-6, mode="FiDi", solverParams=LLNLParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     Gconv_d, _, _ = LiftingLine.do_newton_raphson(
         LiftingLine.compute_LLresiduals, LiftingLine.compute_LLresJacobian, Gconv0, nothing;
+        is_verbose=false,
         maxIters=50, tol=1e-6, mode="FiDi", solverParams=∂LLNLParams, appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     # --- Set all values ---
