@@ -264,7 +264,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
 end
 
-function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix;
+function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix, preTwist;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -275,6 +275,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     displacements : array
         The displacements of the wing collocation nodes [m] size 6 x npt_wing.
         This modifies the collocation nodes
+    preTwist : array
+        The pre-twist angles [rad] same size as midchords array.
     wingSpan : scalar
         The span of the wing [m] (after sweep is applied, so this is not the structural span!)
     sweepAng : scalar
@@ -376,6 +378,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     wing_xyz = cat(Zeros, wing_xyz_ycomp, Zeros, dims=1)
     wing_ctrl_xyz = cat(ZerosCtrl, wing_ctrl_xyz_ycomp, ZerosCtrl, dims=1)
 
+    # Interpolate the pre-twist angles to the collocation points
+    idxSort = sortperm(midchords[YDIM, :])
+    preTwistCtrl = do_linear_interp(midchords[YDIM, idxSort], preTwist[idxSort], wing_ctrl_xyz_ycomp)
 
     # ---------------------------
     #   X coords (chord dist)
@@ -482,7 +487,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     AirfoilInfluences_z = Zygote.Buffer(AirfoilInfluences)
     for (ii, sweep) in enumerate(localSweepsCtrl)
 
-        twistAngle = rotationDisplacementsCtrl[YDIM, ii]
+        twistAngle = rotationDisplacementsCtrl[YDIM, ii] + preTwistCtrl[ii]
 
         # The airfoils are rotated by the negative twist angle to be consistent with the wing
         ryMat = get_rotate3dMat(-twistAngle, "z")[1:2, 1:2]
@@ -569,18 +574,18 @@ function compute_LAC(AR, LLHydro, y, c, cr, Λ, span; model="kuechemann")
         #     fs1 = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
         #     fs = fs1
         # else
-            tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
-            lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
-                  tanl .* abs_cs_safe.(y) .-
-                  .√(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
-                  tanl .* (0.5 * span .- abs_cs_safe.(y))
+        tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
+        lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
+              tanl .* abs_cs_safe.(y) .-
+              .√(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
+              tanl .* (0.5 * span .- abs_cs_safe.(y))
 
-            fs = 0.25 * cr .+
-                  tan(Λ) .* abs_cs_safe.(y) .-
-                  c .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
+        fs = 0.25 * cr .+
+             tan(Λ) .* abs_cs_safe.(y) .-
+             c .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
 
-            # as sweep goes to zero
-            # fs → 0.25 * cr .-  c .* (1.0 .- (1.0 ) / K) * 0.25
+        # as sweep goes to zero
+        # fs → 0.25 * cr .-  c .* (1.0 .- (1.0 ) / K) * 0.25
         # end
 
         # Λtr = 0.0 # when to switch between models
@@ -667,24 +672,24 @@ function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann
         #     dx1 = -∂c∂y * (1.0 - 1.0 / K) * 0.25
         #     dx = dx1
         # else
-            tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
-            lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
-                  tanl .* abs_cs_safe.(y) .-
-                  .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
-                  tanl .* (span / 2.0 .- abs_cs_safe.(y))
+        tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
+        lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
+              tanl .* abs_cs_safe.(y) .-
+              .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
+              tanl .* (span / 2.0 .- abs_cs_safe.(y))
 
-            lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ .√(1.0 .+ (tanl .* y) .^ 2) -
-                    tanl .* (sign.(y) .* c .- abs_cs_safe.(y) .* ∂c∂y) ./ c +
-                    ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
-                    tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
+        lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ .√(1.0 .+ (tanl .* y) .^ 2) -
+                tanl .* (sign.(y) .* c .- abs_cs_safe.(y) .* ∂c∂y) ./ c +
+                ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
+                tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
 
-            dx = tan(Λ) * sign.(y) .+
-                  lamp * Λₖ .* c / (2π * K) .-
-                  ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
-            
-            # as sweep approaches zero
-            # dx2 → ∂c∂y .* (1.0 .- (1.0) / K) * 0.25
-            # which is the same as the above
+        dx = tan(Λ) * sign.(y) .+
+             lamp * Λₖ .* c / (2π * K) .-
+             ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
+
+        # as sweep approaches zero
+        # dx2 → ∂c∂y .* (1.0 .- (1.0) / K) * 0.25
+        # which is the same as the above
         # end
 
         # Λtr = 0.0 # when to switch between models
@@ -1362,7 +1367,7 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     """
 
     LECoords, TECoords = repack_coords(xPt, 3, length(xPt) ÷ 3)
-    midchords, chordVec, spanwiseVectors, sweepAng = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
@@ -1370,7 +1375,7 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     depth0 = appendageParams["depth0"]
 
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
+    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol, pretwistDist;
         npt_wing=size(displCol, 2),
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],

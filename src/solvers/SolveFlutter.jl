@@ -346,7 +346,7 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
         depth0 = appendageParams["depth0"]
         airfoilXY, airfoilCtrlXY, _, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
         npt_wing = size(displCol, 2) # overwrite
-        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
+        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol, pretwistDist;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],
@@ -446,7 +446,7 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
         displCol = zeros(6, npt_wing)
         npt_wing = size(displCol, 2) # overwrite
-        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
+        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol, pretwistDist;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],

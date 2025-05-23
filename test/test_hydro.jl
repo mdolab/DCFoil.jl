@@ -1179,7 +1179,7 @@ function test_45degwingLL()
     for alpha in deg2rad.(angles)
         println("alpha: $(rad2deg(alpha))")
         Uvec = [cos(alpha), 0.0, sin(alpha)] * Uinf
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, npt_wing);
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, npt_wing), zeros(size(midchords));
             npt_wing=npt_wing, npt_airfoil=npt_airfoil,
             # airfoilCoordFile=airfoilCoordFile,
             airfoil_ctrl_xy=airfoilCtrlXY,

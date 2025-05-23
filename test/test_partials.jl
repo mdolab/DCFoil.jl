@@ -9,6 +9,7 @@ for headerName in [
     "../src/struct/FEMMethods",
     "../src/solvers/SolveFlutter",
     "../src/solvers/SolveForced",
+    "../src/io/MeshIO"
 ]
     include("$(headerName).jl")
 end
@@ -46,7 +47,7 @@ function test_LLresidualJacobians(appendageParams, appendageOptions, solverOptio
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol, pretwistDist;
         npt_wing=NPT_WING, # OVERWRITE
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -124,7 +125,8 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
     rake = appendageParams["rake"]
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol;
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(
+        Uvec, sweepAng, rootChord, TR, midchords, displacementsCol, pretwistDist;
         npt_wing=NPT_WING, # OVERWRITE
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
@@ -395,7 +397,7 @@ function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions,
     TECoords = copy(LECoords)
     TECoords[1, :] .= 0.5
     ptVec, m, n = FEMMethods.unpack_coords(LECoords, TECoords)
-    GridStruct = FEMMethods.Grid(LECoords, nodeConn, TECoords)
+    GridStruct = Grid(LECoords, nodeConn, TECoords)
 
     nNodes = appendageOptions["nNodes"]
     claVec = 2π * ones(nNodes)
@@ -424,7 +426,7 @@ function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions,
     err2 = maximum(abs.(dIdcla_fd .- dIdcla))
     err3 = maximum(abs.(dIdtheta_f_fd .- dIdtheta_f))
     err4 = maximum(abs.(dIdtoc_fd .- dIdtoc))
-    println("Maximum absolute errors", err1, err2, err3, err4)
+    println("Maximum absolute errors:\n$(err1), $(err2), $(err3), $(err4)")
 
 
     return maximum([err1, err2, err3, err4])

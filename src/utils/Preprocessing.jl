@@ -55,7 +55,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # ---------------------------
     #   Twist distribution
     # ---------------------------
-    twistVec = compute_twist(LECoords, TECoords)
+    twistDistribution = compute_twist(LECoords, TECoords)
 
     # ---------------------------
     #   Sweep distribution
@@ -101,7 +101,6 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     chordLengthsWork = vcat(chordLengths[1], chordLengthsWork_interp, chordLengths[idxTip])
 
     # qtrChordWork = Interpolation.do_linear_interp(s_loc, qtrChords, s_loc_q)
-    twistDistribution = do_linear_interp(s_loc, twistVec[1:idxTip], s_loc_q)
     # println("chords: ", chordLengthsWork)
 
     return midchords, chordLengthsWork, spanwiseVectors, Λ, twistDistribution
@@ -331,17 +330,15 @@ function compute_structSpan(midchords, idxTip)
 end
 
 function compute_twist(LECoords, TECoords)
+    """
+    Compute the twist distribution in radians
+    """
     chordVectors = LECoords .- TECoords
 
     # Compute the twist distribution based off of angle about midchord
-    dxVec = chordVectors[XDIM, :]
+    dxVec = -chordVectors[XDIM, :] # orient properly b/c of axes
     dzVec = chordVectors[ZDIM, :]
     twistVec = atan_cs_safe.(dzVec, dxVec)
-
-    if abs(π - abs(twistVec[1])) < MEPSLARGE
-        twistVec = twistVec .- π
-    end
-    # println("Twist vec: ", twistVec)
 
     return twistVec
 end

@@ -446,7 +446,7 @@ end
 #     return dDidXpt
 # end
 
-function compute_hydroLLProperties(midchords, chordVec, sweepAng, displacementsCol; appendageParams, solverOptions, appendageOptions)
+function compute_hydroLLProperties(midchords, chordVec, sweepAng, displacementsCol, preTwist; appendageParams, solverOptions, appendageOptions)
     """
     Wrapper function to the hydrodynamic lifting line properties
     In this case, α is the angle by which the flow velocity vector is rotated, not the geometry
@@ -477,7 +477,7 @@ function compute_hydroLLProperties(midchords, chordVec, sweepAng, displacementsC
 
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
 
-        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol;
+        LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol, preTwist;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],
