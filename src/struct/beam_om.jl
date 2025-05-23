@@ -73,7 +73,6 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     """
     Solve the FEM model
     """
-    println("Solving nonlinear beam")
 
     ptVec = inputs["ptVec"]
     theta_f = inputs["theta_f"][1]

@@ -79,7 +79,6 @@ end
 # If the discipline can solve itself, use this
 function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
 
-    println("solving nonlinear lifting line")
 
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
@@ -337,7 +336,6 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     for (ii, gamma) in enumerate(g0)
         outputs["gammas"][ii] = gamma
     end
-    println("Guessing nonlinear")
 
     return nothing
 end
