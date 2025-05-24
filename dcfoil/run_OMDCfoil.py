@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import juliacall
 
-# from tabulate import tabulate
+from tabulate import tabulate
 
 # ==============================================================================
 # Extension modules
@@ -162,12 +162,12 @@ dvDictInfo = {  # dictionary of design variable parameters
         "scale": 1,
         "value": 0.0,
     },
-    "dihedral": {
-        "lower": -5.0,
-        "upper": 5.0,
-        "scale": 1,
-        "value": 0.0,
-    },
+    # "dihedral": {
+    #     "lower": -5.0,
+    #     "upper": 5.0,
+    #     "scale": 1,
+    #     "value": 0.0,
+    # },
     "taper": {
         "lower": [-0.1, -0.1],
         "upper": [0.1, 0.1],
@@ -189,15 +189,15 @@ otherDVs = {
         "value": appendageParams["alfa0"],
     },
     "toc": {
-        "lower": 0.0,
-        "upper": 0.5,
+        "lower": 0.05,
+        "upper": 0.15,
         "scale": 1.0,
         "value": appendageParams["toc"],
     },
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
-        "scale": 1.0/(np.deg2rad(60)),
+        "scale": 1.0 / (np.deg2rad(60)),
         "value": 0.0,
     },
 }
@@ -225,6 +225,9 @@ class Top(Multipoint):
 
     def setup(self):
 
+        # ************************************************
+        #     Add subsystems
+        # ************************************************
         self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
         self.add_subsystem("mesh", om.IndepVarComp())
 
@@ -234,7 +237,7 @@ class Top(Multipoint):
             promotes=["twist", "sweep", "dihedral", "taper", "span"],
         )
 
-        #  Add the core physics engine too
+        # --- Add core physics engine ---
         model = CoupledAnalysis(
             analysis_mode="coupled",
             include_flutter=False,
@@ -249,20 +252,31 @@ class Top(Multipoint):
         self.add_subsystem("dcfoil", model)
         self.mesh.add_output("x_ptVec0", val=ptVec, distributed=True)
 
-        self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in") # connect the mesh to the geometry parametrization
-        self.connect("geometry.x_ptVec0", "dcfoil.ptVec") # connect the geometry to the core physics engine
+        adder = om.AddSubtractComp()
+        adder.add_equation("CD", input_names=["CDi", "CDpr", "CDw"])
+        self.add_subsystem("objAdder", adder, promotes_outputs=["*"])
+
+        # ************************************************
+        #     Do connections
+        # ************************************************
+        self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")  # connect the mesh to the geometry parametrization
+        self.connect("geometry.x_ptVec0", "dcfoil.ptVec")  # connect the geometry to the core physics engine
         # Connect nongeometry design variables to the core physics engine
         for dvName, value in otherDVs.items():
             self.connect(dvName, f"dcfoil.{dvName}")
+
+        self.connect("dcfoil.CDpr", "objAdder.CDpr")
+        self.connect("dcfoil.CDi", "objAdder.CDi")
+        self.connect("dcfoil.CDw", "objAdder.CDw")
 
     def configure(self):
         """
         This method configures the Multipoint problem
         """
 
-        self.geometry.nom_add_discipline_coords("ptVec", np.array(ptVec)) # add the ptset
+        self.geometry.nom_add_discipline_coords("ptVec", np.array(ptVec))  # add the ptset
 
-        self = setup_OMdvgeo.setup(args, self, None, files) # modify the model to have geometric design variables
+        self = setup_OMdvgeo.setup(args, self, None, files)  # modify the model to have geometric design variables
 
         for dvName, value in dvDictInfo.items():
             self.dvs.add_output(dvName, val=value["value"])
@@ -274,8 +288,8 @@ class Top(Multipoint):
 
         # --- Setup objectives and constraints ---
         self.add_objective("dcfoil.CDi")
-        # self.add_constraint("dcfoil.CL", upper=0.0) # lift constraint
-        # self.add_constraint("dcfoil.wtip", upper=0.0) # tip deflection constraint
+        self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
+        self.add_constraint("dcfoil.wtip", upper=0.1)  # tip deflection constraint
         # self.add_constraint("dcfoil.clmax", upper=0.0) # ventilation constraint
         # self.add_constraint("dcfoil.ksflutter", upper=0.0) # flutter constraint
         # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
@@ -345,7 +359,11 @@ if __name__ == "__main__":
     prob.set_val("dcfoil.displacements_col", displacementsCol)
     prob.set_val("dcfoil.gammas", np.zeros(npt_wing_full))
 
+    # ************************************************
+    #     Other stuff
+    # ************************************************
     om.n2(prob, outfile="n2.html", show_browser=False)
+    # prob.set_val("sweep", 15.0) # there's a lot of lift here...maybe too much?
 
     # ==============================================================================
     #                         TASKS
@@ -354,23 +372,48 @@ if __name__ == "__main__":
     #     OPTIMIZATION
     # ************************************************
     if args.task == "opt":
-        print("="*60)
+        print("=" * 60)
         print("Running optimization...", flush=True)
-        print("="*60)
+        print("=" * 60)
         prob.run_driver()
 
     if args.task in ["run", "opt"]:
-        print("="*60)
+        print("=" * 60)
         print("Running analysis...", flush=True)
-        print("="*60)
+        print("=" * 60)
         prob.run_model()
-        # prob.check_partials(compact_print=True)
-        # prob.check_totals(compact_print=True)
+
+        print("=" * 20)
+        print("Design variables:")
+        print("=" * 20)
+        dvs = prob.driver.get_design_var_values()
+        for dvName, value in dvs.items():
+            print(f"{dvName}: {value}")
+
+        print("=" * 20)
+        print("Objectives:")
+        print("=" * 20)
+        obj = prob.driver.get_objective_values()
+        for objName, value in obj.items():
+            print(f"{objName}: {value}")
+
+        print("=" * 20)
+        print("Constraints:")
+        print("=" * 20)
+        con = prob.driver.get_constraint_values()
+        for conName, value in con.items():
+            print(f"{conName}: {value}")
 
     if args.task == "deriv":
-        fileName = "partials-geo.out"
+        prob.run_model()
+        fileName = "derivative-check-full.out"
         f = open(fileName, "w")
-        print("Checking partials...")
-        prob.check_partials(out_stream=f, method="fd")
+        # print("Checking partials...")
+        # f.write("PARTIALS\n")
+        # prob.check_partials(out_stream=f, method="fd", includes=,compact_print=True)
+        # prob.check_partials(out_stream=f, method="fd")
+
         print("Checking totals...")
-        prob.check_totals(out_stream=f, method="fd")
+        f.write("TOTALS\n")
+        prob.check_totals(out_stream=f, method="fd", compact_print=True)
+        prob.check_totals(out_stream=f, method="fd", step=1e-4)

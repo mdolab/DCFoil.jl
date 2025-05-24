@@ -459,9 +459,9 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("CL", val=0.0),
         OpenMDAOCore.VarData("CDi", val=0.0),
         OpenMDAOCore.VarData("CS", val=0.0),
-        OpenMDAOCore.VarData("F_x", val=0.0),
-        OpenMDAOCore.VarData("F_y", val=0.0),
-        OpenMDAOCore.VarData("F_z", val=0.0),
+        OpenMDAOCore.VarData("Fdrag", val=0.0),
+        OpenMDAOCore.VarData("Fside", val=0.0),
+        OpenMDAOCore.VarData("Flift", val=0.0),
         OpenMDAOCore.VarData("forces_dist", val=zeros(3, NPT_WING)),
         OpenMDAOCore.VarData("M_x", val=0.0),
         OpenMDAOCore.VarData("M_y", val=0.0),
@@ -490,9 +490,9 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CS", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("clmax", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("cl", "ptVec", method="exact"), # good
-        OpenMDAOCore.PartialsData("F_x", "ptVec", method="exact"),
-        OpenMDAOCore.PartialsData("F_y", "ptVec", method="exact"),
-        OpenMDAOCore.PartialsData("F_z", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Fdrag", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Fside", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("Flift", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("forces_dist", "ptVec", method="exact"),
         # OpenMDAOCore.PartialsData("moments_dist", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("M_x", "ptVec", method="exact"),
@@ -517,9 +517,9 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CS", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("clmax", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("cl", "gammas", method="exact"), # good
-        OpenMDAOCore.PartialsData("F_x", "gammas", method="exact"),
-        OpenMDAOCore.PartialsData("F_y", "gammas", method="exact"),
-        OpenMDAOCore.PartialsData("F_z", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("Fdrag", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("Fside", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("Flift", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("forces_dist", "gammas", method="exact"),
         # OpenMDAOCore.PartialsData("moments_dist", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("M_x", "gammas", method="exact"),
@@ -536,9 +536,9 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CS", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("clmax", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("cl", "displacements_col", method="exact"), # good
-        OpenMDAOCore.PartialsData("F_x", "displacements_col", method="exact"),
-        OpenMDAOCore.PartialsData("F_y", "displacements_col", method="exact"),
-        OpenMDAOCore.PartialsData("F_z", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("Fdrag", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("Fside", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("Flift", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("forces_dist", "displacements_col", method="exact"),
         # OpenMDAOCore.PartialsData("moments_dist", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("M_x", "displacements_col", method="exact"),
@@ -599,9 +599,9 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
         START = LiftingLine.NPT_WING ÷ 2 + 1
     end
 
-    outputs["F_x"][1] = IntegratedForces[XDIM]
-    outputs["F_y"][1] = IntegratedForces[YDIM]
-    outputs["F_z"][1] = IntegratedForces[ZDIM]
+    outputs["Fdrag"][1] = IntegratedForces[XDIM]
+    outputs["Fside"][1] = IntegratedForces[YDIM]
+    outputs["Flift"][1] = IntegratedForces[ZDIM]
     outputs["CL"][1] = CL
     outputs["CDi"][1] = CDi
     outputs["CS"][1] = CS
@@ -678,7 +678,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         mode = "FiDi"
     end
 
-    costFuncsInOrder = ["F_x", "F_y", "F_z", "CL", "CDi", "CS", "clmax", "forces_dist", "cl"]
+    costFuncsInOrder = ["Fdrag", "Fside", "Flift", "CL", "CDi", "CS", "clmax", "forces_dist", "cl"]
     FXIND = 1
     CLMAXIND = 7
 

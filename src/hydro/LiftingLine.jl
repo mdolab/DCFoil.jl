@@ -129,7 +129,8 @@ struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     Γdist::TA # Converged circulation distribution (Γᵢ) [m^2/s]
     cla::TA # Spanwise lift slopes [1/rad]
     cl::TA # Spanwise lift coefficients
-    F::TA # Total integrated loads vector [Fx, Fy, Fz] 
+    # F::TA # Total integrated loads vector [Fx, Fy, Fz] [N]
+    F::TA # Total integrated loads vector perpendicular to flow directions [Fdrag, Fside, Flift] [N]
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
     CDi::TF # Induced drag coefficient (aligned w/ freestream)
     CS::TF # Side force coefficient
@@ -1029,7 +1030,7 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     NondimForces = coeff * (uicrossζi .* Gi) .* dAi
 
     # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-    IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+    IntegratedNondimForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
     # These integrated forces are about the origin
 
     Γdist = Gconv * FlowCond.Uinf # dimensionalize the circulation distribution
@@ -1053,28 +1054,34 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     Uicrossdli = hcat(Uicrossdli...) # now it's a (3, npt) matrix
     DimForces = FlowCond.rhof * (Uicrossdli .* Γi) .* dAi
 
+
     # --- Vortex core viscous correction ---
     if LLMesh.rc != 0
         println("Vortex core viscous correction not implemented yet")
     end
 
     # --- Final outputs ---
-    CL = -IntegratedForces[XDIM] * uz +
-         IntegratedForces[ZDIM] * ux / (ux^2 + uz^2)
+    # NOTE: the X force is the "drive force" in the chordwise direction
+    CL = -IntegratedNondimForces[XDIM] * uz +
+         IntegratedNondimForces[ZDIM] * ux / (ux^2 + uz^2)
 
-    CDi = IntegratedForces[XDIM] * ux +
-          IntegratedForces[YDIM] * uy +
-          IntegratedForces[ZDIM] * uz
+    CDi = IntegratedNondimForces[XDIM] * ux +
+          IntegratedNondimForces[YDIM] * uy +
+          IntegratedNondimForces[ZDIM] * uz
     CS = (
-        -IntegratedForces[XDIM] * ux * uy -
-        IntegratedForces[ZDIM] * uz * uy +
-        IntegratedForces[YDIM] * (uz^2 + ux^2)
+        -IntegratedNondimForces[XDIM] * ux * uy -
+        IntegratedNondimForces[ZDIM] * uz * uy +
+        IntegratedNondimForces[YDIM] * (uz^2 + ux^2)
     ) / √(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
 
-    # --- Compute the lift curve slope ---
+    # --- Compute the spanwise lift coefficients ---
     clvec = 2 * Gconv ./ LLMesh.localChordsCtrl
 
-    return DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS
+    # This would be the integrated forces in the x, y, z, directions, but we need drag
+    IntegratedDimForcesXYZ = vec(sum(DimForces, dims=2))
+    IntegratedDimForces = LLMesh.SRef * 0.5 * FlowCond.rhof * FlowCond.Uinf^2 * [CDi, CS, CL]   # [induced drag, sideforce, lift]
+
+    return DimForces, Γdist, clvec, cmvec, IntegratedDimForces, CL, CDi, CS
 end
 
 function compute_TVinfluences(FlowCond, LLMesh)

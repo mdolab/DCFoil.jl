@@ -197,7 +197,7 @@ function compute_cla_API(ptVec, nodeConn, appendageParams, appendageOptions, sol
     #   Hydrodynamics
     # ---------------------------
     displacementsCol = zeros(6, LiftingLine.NPT_WING)
-    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths, Λ, displacementsCol; appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
+    LLOutputs, LLSystem, FlowCond = compute_hydroLLProperties(midchords, chordLengths, Λ, displacementsCol, zeros(size(midchords)); appendageParams=appendageParams, solverOptions=solverOptions, appendageOptions=appendageOptions)
 
     if return_all
         return LLOutputs, LLSystem, FlowCond
