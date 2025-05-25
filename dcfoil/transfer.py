@@ -4,38 +4,42 @@ import openmdao.api as om
 
 
 def _debug_print(name, var, mode):
-    """ debug printer to check symmetry of the variables """
-    
+    """debug printer to check symmetry of the variables"""
+
     # print full-span variables at collocation point or FEM points
-    if mode == 'flow':
-        left = var[:int(len(var) / 2)][::-1]   # center to tip
-        right = var[int(len(var) / 2):]
-        
+    if mode == "flow":
+        left = var[: int(len(var) / 2)][::-1]  # center to tip
+        right = var[int(len(var) / 2) :]
+
         # Format arrays with consistent scientific notation
-        left_str = np.array2string(left, precision=6, suppress_small=True, 
-                                   formatter={'float_kind': lambda x: f"{x:+10.6e}"})
-        right_str = np.array2string(right, precision=6, suppress_small=True, 
-                                    formatter={'float_kind': lambda x: f"{x:+10.6e}"})
-        
-        print(f'{name} left :', left_str)
-        print(f'{name} right:', right_str)
-    elif mode == 'FEM':
+        left_str = np.array2string(
+            left, precision=6, suppress_small=True, formatter={"float_kind": lambda x: f"{x:+10.6e}"}
+        )
+        right_str = np.array2string(
+            right, precision=6, suppress_small=True, formatter={"float_kind": lambda x: f"{x:+10.6e}"}
+        )
+
+        print(f"{name} left :", left_str)
+        print(f"{name} right:", right_str)
+    elif mode == "FEM":
         center = var[0]
-        left = var[1:int(len(var) / 2) + 1]
-        right = var[int(len(var) / 2) + 1:]
-        
+        left = var[1 : int(len(var) / 2) + 1]
+        right = var[int(len(var) / 2) + 1 :]
+
         # Format arrays with consistent scientific notation
         center_str = f"{center:+10.6e}"
-        left_str = np.array2string(left, precision=6, suppress_small=True, 
-                                   formatter={'float_kind': lambda x: f"{x:+10.6e}"})
-        right_str = np.array2string(right, precision=6, suppress_small=True, 
-                                    formatter={'float_kind': lambda x: f"{x:+10.6e}"})
-        
-        print(f'{name} center:', center_str)
-        print(f'{name} left  :', left_str)
-        print(f'{name} right :', right_str)
+        left_str = np.array2string(
+            left, precision=6, suppress_small=True, formatter={"float_kind": lambda x: f"{x:+10.6e}"}
+        )
+        right_str = np.array2string(
+            right, precision=6, suppress_small=True, formatter={"float_kind": lambda x: f"{x:+10.6e}"}
+        )
 
-    print('\n')
+        print(f"{name} center:", center_str)
+        print(f"{name} left  :", left_str)
+        print(f"{name} right :", right_str)
+
+    print("\n")
 
 
 class DisplacementTransfer(om.JaxExplicitComponent):
@@ -60,38 +64,44 @@ class DisplacementTransfer(om.JaxExplicitComponent):
     """
 
     def initialize(self):
-        self.options.declare('n_node', types=int, desc='Number of FEM nodes for half or full wing')
-        self.options.declare('n_strips', types=int, desc='Number of lifting line strips for half or full wing')
-        self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
-        self.options.declare('use_jit', default=False)
-        self.options.declare('config', default='full-wing', desc='`full-wing` for the entire wing or `wing` for half wing')
-        self.options.declare('hack_rot_X', default=True, desc='HACK: flip sign of X rotation here because the beam model seems to flip it internally')
+        self.options.declare("n_node", types=int, desc="Number of FEM nodes for half or full wing")
+        self.options.declare("n_strips", types=int, desc="Number of lifting line strips for half or full wing")
+        self.options.declare("xMount", types=float, desc="subtract xMount from collocationPts x coordinates")
+        self.options.declare("use_jit", default=False)
+        self.options.declare(
+            "config", default="full-wing", desc="`full-wing` for the entire wing or `wing` for half wing"
+        )
+        self.options.declare(
+            "hack_rot_X",
+            default=True,
+            desc="HACK: flip sign of X rotation here because the beam model seems to flip it internally",
+        )
 
     def setup(self):
-        n_node = self.options['n_node']
-        n_strips = self.options['n_strips']
+        n_node = self.options["n_node"]
+        n_strips = self.options["n_strips"]
 
         # NOTE: ordering of declared inputs and outputs must match the compute_primal's signature
-        self.add_input('collocationPts', shape=(3, n_strips))
-        self.add_input('nodes', shape=(n_node, 3))
-        self.add_input('deflections', shape=(9 * n_node))
+        self.add_input("collocationPts", shape=(3, n_strips))
+        self.add_input("nodes", shape=(n_node, 3))
+        self.add_input("deflections", shape=(9 * n_node))
 
         # disp_colloc is always for the full span, even if the config is 'wing'
-        n_strips_full = n_strips if self.options['config'] == 'full-wing' else n_strips * 2
-        self.add_output('disp_colloc', shape=(6, n_strips_full))
+        n_strips_full = n_strips if self.options["config"] == "full-wing" else n_strips * 2
+        self.add_output("disp_colloc", shape=(6, n_strips_full))
 
-        self.declare_partials('*', '*')
+        self.declare_partials("*", "*")
 
     def compute_primal(self, collocationPts, nodes, deflections):
-        n_node = self.options['n_node']
-        n_strips = self.options['n_strips']
+        n_node = self.options["n_node"]
+        n_strips = self.options["n_strips"]
 
         # shift collocation pts x axis to be consistent with FEM frame
-        colloc_pts = collocationPts * 1.
+        colloc_pts = collocationPts * 1.0
         if isinstance(colloc_pts, jnp.ndarray):
-            colloc_pts = colloc_pts.at[0, :].add(-self.options['xMount'])
+            colloc_pts = colloc_pts.at[0, :].add(-self.options["xMount"])
         else:  # regular numpy array
-            colloc_pts[0, :] -= self.options['xMount']
+            colloc_pts[0, :] -= self.options["xMount"]
 
         # reshape deflections to 2D array of shape (n_node, 9)
         disp = deflections.reshape(n_node, 9)
@@ -111,7 +121,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         # TODO: undo this change once the beam model is fixed
         # NOTE: This hack fails work conservation unit test, so when computing virtual work, hack_rot_X should be turned off
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        if self.options['hack_rot_X']:
+        if self.options["hack_rot_X"]:
             if isinstance(disp_rot, jnp.ndarray):
                 disp_rot = disp_rot.at[:, 0].multiply(-1)
             else:
@@ -129,7 +139,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
             mask = y_dist <= 0
             masked_y_dist = jnp.where(mask, y_dist, -jnp.inf)
             left_node_index = jnp.argmax(masked_y_dist)
-            
+
             # right node: min y_dist but y_dist > 0
             mask = y_dist >= 0
             masked_y_dist = jnp.where(mask, y_dist, jnp.inf)
@@ -175,7 +185,7 @@ class DisplacementTransfer(om.JaxExplicitComponent):
         # _debug_print('ry', disp_colloc[4, :], 'flow')
         # _debug_print('rz', disp_colloc[5, :], 'flow')
 
-        if self.options['config'] == 'wing':
+        if self.options["config"] == "wing":
             # for symmetry case, we still need to return disp_colloc for the full span
             disp_colloc = jnp.concatenate((disp_colloc[:, ::-1], disp_colloc), axis=1)
 
@@ -206,40 +216,42 @@ class LoadTransfer(om.JaxExplicitComponent):
     """
 
     def initialize(self):
-        self.options.declare('n_node', types=int, desc='Number of FEM nodes for half or full wing')
-        self.options.declare('n_strips', types=int, desc='Number of lifting line strips for half or full wing')
-        self.options.declare('xMount', types=float, desc='subtract xMount from collocationPts x coordinates')
-        self.options.declare('use_jit', default=False)
-        self.options.declare('config', default='full-wing', desc='`full-wing` for the entire wing or `wing` for half wing')
+        self.options.declare("n_node", types=int, desc="Number of FEM nodes for half or full wing")
+        self.options.declare("n_strips", types=int, desc="Number of lifting line strips for half or full wing")
+        self.options.declare("xMount", types=float, desc="subtract xMount from collocationPts x coordinates")
+        self.options.declare("use_jit", default=False)
+        self.options.declare(
+            "config", default="full-wing", desc="`full-wing` for the entire wing or `wing` for half wing"
+        )
 
     def setup(self):
-        n_strips = self.options['n_strips']
-        n_node = self.options['n_node']
+        n_strips = self.options["n_strips"]
+        n_node = self.options["n_node"]
 
         # NOTE: ordering of declared inputs and outputs must match the compute_primal's signature
-        self.add_input('collocationPts', shape=(3, n_strips))
-        self.add_input('forces_hydro', shape=(3, n_strips))
-        self.add_input('nodes', shape=(n_node, 3))
+        self.add_input("collocationPts", shape=(3, n_strips))
+        self.add_input("forces_hydro", shape=(3, n_strips))
+        self.add_input("nodes", shape=(n_node, 3))
 
-        self.add_output('loads_str', shape=(9 * n_node,))
+        self.add_output("loads_str", shape=(9 * n_node,))
 
-        self.declare_partials('loads_str', '*')
+        self.declare_partials("loads_str", "*")
 
     def compute_primal(self, collocationPts, forces_hydro, nodes):
         # print('\n\n --- Hydro force (in load transfer) ---')
         # _debug_print('x', forces_hydro[0, :], 'flow')
         # _debug_print('y', forces_hydro[1, :], 'flow')
         # _debug_print('z', forces_hydro[2, :], 'flow')
-        
-        n_node = self.options['n_node']
-        n_strips = self.options['n_strips']
+
+        n_node = self.options["n_node"]
+        n_strips = self.options["n_strips"]
 
         # shift collocation pts x axis to be consistent with FEM frame
-        colloc_pts = collocationPts * 1.
+        colloc_pts = collocationPts * 1.0
         if isinstance(colloc_pts, jnp.ndarray):
-            colloc_pts = colloc_pts.at[0, :].add(-self.options['xMount'])
+            colloc_pts = colloc_pts.at[0, :].add(-self.options["xMount"])
         else:  # regular numpy array
-            colloc_pts[0, :] -= self.options['xMount']
+            colloc_pts[0, :] -= self.options["xMount"]
 
         # nodal load array
         loads = jnp.zeros((9, n_node))  # [9, n_node]
@@ -253,7 +265,7 @@ class LoadTransfer(om.JaxExplicitComponent):
             mask = y_dist <= 0
             masked_y_dist = jnp.where(mask, y_dist, -jnp.inf)
             left_node_index = jnp.argmax(masked_y_dist)
-            
+
             # right node: min y_dist but y_dist > 0
             mask = y_dist >= 0
             masked_y_dist = jnp.where(mask, y_dist, jnp.inf)
@@ -271,7 +283,7 @@ class LoadTransfer(om.JaxExplicitComponent):
                 d2 = jnp.abs(colloc_pts[1, i] - nodes[right_node_index, 1])
                 w1 = d2 / (d1 + d2)
                 w2 = d1 / (d1 + d2)
-                
+
                 loads = loads.at[:3, left_node_index].add(forces_hydro[:, i] * w1)
                 loads = loads.at[:3, right_node_index].add(forces_hydro[:, i] * w2)
                 moment1 = jnp.cross(colloc_pts[:, i] - nodes[left_node_index, :], forces_hydro[:, i] * w1)
@@ -281,14 +293,18 @@ class LoadTransfer(om.JaxExplicitComponent):
                 loads = loads.at[3:6, right_node_index].add(moment2)
 
                 # for symmetry case, we need to add loads from the other side to the beam root node
-                if not left_node_index == right_node_index and self.options['config'] == 'wing':
+                if not left_node_index == right_node_index and self.options["config"] == "wing":
                     if left_node_index == 0:
                         loads = loads.at[:3, left_node_index].add(forces_hydro[:, i] * w1)
-                        moment_sym = moment1 * jnp.array([-1, 1, -1])   # x and z moments have opposite sign so they cancel out
+                        moment_sym = moment1 * jnp.array(
+                            [-1, 1, -1]
+                        )  # x and z moments have opposite sign so they cancel out
                         loads = loads.at[3:6, left_node_index].add(moment_sym)
                     if right_node_index == 0:
                         loads = loads.at[:3, right_node_index].add(forces_hydro[:, i] * w2)
-                        moment_sym = moment2 * jnp.array([-1, 1, -1])   # x and z moments have opposite sign so they cancel out
+                        moment_sym = moment2 * jnp.array(
+                            [-1, 1, -1]
+                        )  # x and z moments have opposite sign so they cancel out
                         loads = loads.at[3:6, right_node_index].add(moment_sym)
 
         # print('\n\n --- FEM nodal force (in disp transfer) ---')
@@ -303,7 +319,7 @@ class LoadTransfer(om.JaxExplicitComponent):
         # _debug_print('zrate', loads[8, :], 'FEM')
 
         # flatten loads to 1D array
-        loads_str = loads.flatten(order='F')
+        loads_str = loads.flatten(order="F")
         return (loads_str,)
 
 
@@ -329,21 +345,21 @@ class CLaInterpolation(om.JaxExplicitComponent):
     """
 
     def initialize(self):
-        self.options.declare('n_strips', types=int, desc='Number of lifting line strips')
-        self.options.declare('n_node', types=int, desc='Number of FEM nodes')
+        self.options.declare("n_strips", types=int, desc="Number of lifting line strips")
+        self.options.declare("n_node", types=int, desc="Number of FEM nodes")
 
     def setup(self):
-        n_strips = self.options['n_strips']
-        n_node = self.options['n_node']
+        n_strips = self.options["n_strips"]
+        n_node = self.options["n_node"]
 
         # NOTE: ordering of declared inputs and outputs must match the compute_primal's signature
-        self.add_input('CL_alpha', shape=(n_strips,))
-        self.add_input('collocationPts', shape=(3, n_strips))
-        self.add_input('nodes', shape=(n_node, 3))
+        self.add_input("CL_alpha", shape=(n_strips,))
+        self.add_input("collocationPts", shape=(3, n_strips))
+        self.add_input("nodes", shape=(n_node, 3))
 
-        self.add_output('CL_alpha_node', shape=(n_node,))
+        self.add_output("CL_alpha_node", shape=(n_node,))
 
-        self.declare_partials('CL_alpha_node', '*')
+        self.declare_partials("CL_alpha_node", "*")
 
     def compute_primal(self, CL_alpha, collocationPts, nodes):
         # spanwise linear interpolation of CL_alpha
@@ -353,7 +369,7 @@ class CLaInterpolation(om.JaxExplicitComponent):
 
 def test_displacement_transfer():
     n_strips = 6
-    n_node = 3   # per one side of beam. Total number of nodes = 2 * n_node - 1
+    n_node = 3  # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
     collocationPts[1, :] = np.linspace(-0.9, 0.9, n_strips)
@@ -369,61 +385,68 @@ def test_displacement_transfer():
 
     # nodal displacements
     n_node_full = n_node * 2 - 1
-    disp_x = np.concatenate((np.linspace(0., 0.01, n_node), np.linspace(0, 0.01, n_node)[1:]))  # np.sin(np.linspace(-np.pi, np.pi, n_node))
+    disp_x = np.concatenate(
+        (np.linspace(0.0, 0.01, n_node), np.linspace(0, 0.01, n_node)[1:])
+    )  # np.sin(np.linspace(-np.pi, np.pi, n_node))
     disp_y = np.linspace(-1, 1, n_node_full) * 0  # np.cos(np.linspace(-np.pi, np.pi, n_node))
-    disp_z = np.concatenate((np.linspace(0., 0.1, n_node), np.linspace(0, 0.1, n_node)[1:]))
-    disp_rx = np.concatenate((np.linspace(0., 0.1, n_node), np.linspace(0, 0.1, n_node)[1:])) * 0
-    disp_ry = np.concatenate((np.linspace(0., 0.1, n_node), np.linspace(0, 0.1, n_node)[1:])) * 1
-    disp_rz = np.concatenate((np.linspace(0., 0.01, n_node), np.linspace(0, 0.01, n_node)[1:])) * 0
+    disp_z = np.concatenate((np.linspace(0.0, 0.1, n_node), np.linspace(0, 0.1, n_node)[1:]))
+    disp_rx = np.concatenate((np.linspace(0.0, 0.1, n_node), np.linspace(0, 0.1, n_node)[1:])) * 0
+    disp_ry = np.concatenate((np.linspace(0.0, 0.1, n_node), np.linspace(0, 0.1, n_node)[1:])) * 1
+    disp_rz = np.concatenate((np.linspace(0.0, 0.01, n_node), np.linspace(0, 0.01, n_node)[1:])) * 0
     disp_rxrate = np.zeros(n_node_full)
     disp_ryrate = np.zeros(n_node_full)
     disp_rzrate = np.zeros(n_node_full)
-    disp = np.vstack((disp_x, disp_y, disp_z, disp_rx, disp_ry, disp_rz, disp_rxrate, disp_ryrate, disp_rzrate)).T.flatten()
+    disp = np.vstack(
+        (disp_x, disp_y, disp_z, disp_rx, disp_ry, disp_rz, disp_rxrate, disp_ryrate, disp_rzrate)
+    ).T.flatten()
 
     prob = om.Problem()
-    prob.model.add_subsystem('disp_transfer', DisplacementTransfer(n_node=n_node_full, n_strips=n_strips, xMount=3.355), promotes=['*'])
+    prob.model.add_subsystem(
+        "disp_transfer", DisplacementTransfer(n_node=n_node_full, n_strips=n_strips, xMount=3.355), promotes=["*"]
+    )
     prob.setup()
-    prob.set_val('nodes', nodes)
-    prob.set_val('deflections', disp)
-    prob.set_val('collocationPts', collocationPts)  # collocation points are sorted in spanwise direction
+    prob.set_val("nodes", nodes)
+    prob.set_val("deflections", disp)
+    prob.set_val("collocationPts", collocationPts)  # collocation points are sorted in spanwise direction
 
     prob.run_model()
     # om.n2(prob)
 
-    prob.check_partials(compact_print=True, method='fd', step=1e-6)
+    prob.check_partials(compact_print=True, method="fd", step=1e-6)
 
     # plot results
     import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(3, 2, figsize=(12, 8))
     # FEM nodal discplacements
-    nodes_FEM = prob.get_val('nodes')
+    nodes_FEM = prob.get_val("nodes")
     nodes_y = nodes_FEM[:, 1]
-    disp_FEM = prob.get_val('deflections').reshape(n_node_full, 9)
-    color = 'C0'
-    ax[0, 0].plot(nodes_y, disp_FEM[:, 0], 'o', color=color)
-    ax[1, 0].plot(nodes_y, disp_FEM[:, 1], 'o', color=color)
-    ax[2, 0].plot(nodes_y, disp_FEM[:, 2], 'o', color=color)
-    ax[0, 1].plot(nodes_y, disp_FEM[:, 3], 'o', color=color)
-    ax[1, 1].plot(nodes_y, disp_FEM[:, 4], 'o', color=color)
-    ax[2, 1].plot(nodes_y, disp_FEM[:, 5], 'o', color=color)
+    disp_FEM = prob.get_val("deflections").reshape(n_node_full, 9)
+    color = "C0"
+    ax[0, 0].plot(nodes_y, disp_FEM[:, 0], "o", color=color)
+    ax[1, 0].plot(nodes_y, disp_FEM[:, 1], "o", color=color)
+    ax[2, 0].plot(nodes_y, disp_FEM[:, 2], "o", color=color)
+    ax[0, 1].plot(nodes_y, disp_FEM[:, 3], "o", color=color)
+    ax[1, 1].plot(nodes_y, disp_FEM[:, 4], "o", color=color)
+    ax[2, 1].plot(nodes_y, disp_FEM[:, 5], "o", color=color)
 
     # collocation points displacements
-    colloc_y = prob.get_val('collocationPts')[1, :]
-    disp_colloc = prob.get_val('disp_colloc')
-    color = 'C1'
-    ax[0, 0].plot(colloc_y, disp_colloc[0, :], 's', ms=4, color=color)
-    ax[1, 0].plot(colloc_y, disp_colloc[1, :], 's', ms=4, color=color)
-    ax[2, 0].plot(colloc_y, disp_colloc[2, :], 's', ms=4, color=color)
-    ax[0, 1].plot(colloc_y, disp_colloc[3, :], 's', ms=4, color=color)
-    ax[1, 1].plot(colloc_y, disp_colloc[4, :], 's', ms=4, color=color)
-    ax[2, 1].plot(colloc_y, disp_colloc[5, :], 's', ms=4, color=color)
+    colloc_y = prob.get_val("collocationPts")[1, :]
+    disp_colloc = prob.get_val("disp_colloc")
+    color = "C1"
+    ax[0, 0].plot(colloc_y, disp_colloc[0, :], "s", ms=4, color=color)
+    ax[1, 0].plot(colloc_y, disp_colloc[1, :], "s", ms=4, color=color)
+    ax[2, 0].plot(colloc_y, disp_colloc[2, :], "s", ms=4, color=color)
+    ax[0, 1].plot(colloc_y, disp_colloc[3, :], "s", ms=4, color=color)
+    ax[1, 1].plot(colloc_y, disp_colloc[4, :], "s", ms=4, color=color)
+    ax[2, 1].plot(colloc_y, disp_colloc[5, :], "s", ms=4, color=color)
 
-    ax[0, 0].set_ylabel('x')
-    ax[1, 0].set_ylabel('y')
-    ax[2, 0].set_ylabel('z')
-    ax[0, 1].set_ylabel('rx')
-    ax[1, 1].set_ylabel('ry')
-    ax[2, 1].set_ylabel('rz')
+    ax[0, 0].set_ylabel("x")
+    ax[1, 0].set_ylabel("y")
+    ax[2, 0].set_ylabel("z")
+    ax[0, 1].set_ylabel("rx")
+    ax[1, 1].set_ylabel("ry")
+    ax[2, 1].set_ylabel("rz")
 
     plt.tight_layout()
     plt.show()
@@ -431,7 +454,7 @@ def test_displacement_transfer():
 
 def test_load_transfer():
     n_strips = 6  # note: set even number of strips for FD test (to not have a strip at the center which messes up if left_node_index == right_node_index logic when FDing)
-    n_node = 3   # per one side of beam. Total number of nodes = 2 * n_node - 1
+    n_node = 3  # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
     collocationPts[1, :] = np.linspace(-0.9, 0.9, n_strips)
@@ -449,67 +472,70 @@ def test_load_transfer():
     # elem_conn = np.array(elem_conn) + 1  # index starts at 1 in Julia!!
     # elem_conn[n_node - 1, 0] = 1
     # print(elem_conn)
-    
+
     forces_hydro = np.zeros((3, n_strips))
     forces_hydro[2, :] = np.sin(np.linspace(-np.pi, np.pi, n_strips)) + 0.3  # out of plane force
     forces_hydro[0, :] = np.linspace(-0.1, -0.1, n_strips)  # in plane force
 
     prob = om.Problem()
-    prob.model.add_subsystem('load_transfer', LoadTransfer(n_strips=n_strips, n_node=n_node * 2 - 1, xMount=3.355), promotes=['*'])
+    prob.model.add_subsystem(
+        "load_transfer", LoadTransfer(n_strips=n_strips, n_node=n_node * 2 - 1, xMount=3.355), promotes=["*"]
+    )
     prob.setup()
-    prob.set_val('collocationPts', collocationPts)
-    prob.set_val('nodes', nodes)
-    prob.set_val('forces_hydro', forces_hydro)
+    prob.set_val("collocationPts", collocationPts)
+    prob.set_val("nodes", nodes)
+    prob.set_val("forces_hydro", forces_hydro)
     prob.run_model()
 
     # prob.check_partials(compact_print=True, method='fd', step=1e-6)
 
     # plot forces and moments
-    col_pts = prob.get_val('collocationPts')
-    f_hydro = prob.get_val('forces_hydro')
-    loads = prob.get_val('loads_str').reshape(9, n_node * 2 - 1, order='F')
+    col_pts = prob.get_val("collocationPts")
+    f_hydro = prob.get_val("forces_hydro")
+    loads = prob.get_val("loads_str").reshape(9, n_node * 2 - 1, order="F")
     import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(3, 2, figsize=(10, 10))
     # plot original hydro forces
-    ax[0, 0].plot(col_pts[1, :], f_hydro[0, :], 'o-', label='hydro')
-    ax[1, 0].plot(col_pts[1, :], f_hydro[1, :], 'o-')
-    ax[2, 0].plot(col_pts[1, :], f_hydro[2, :], 'o-')
+    ax[0, 0].plot(col_pts[1, :], f_hydro[0, :], "o-", label="hydro")
+    ax[1, 0].plot(col_pts[1, :], f_hydro[1, :], "o-")
+    ax[2, 0].plot(col_pts[1, :], f_hydro[2, :], "o-")
     # plot FEM loads
-    ax[0, 0].plot(nodes[:, 1], loads[0, :], 'o', color='C3', label='FEM')
-    ax[1, 0].plot(nodes[:, 1], loads[1, :], 'o', color='C3')
-    ax[2, 0].plot(nodes[:, 1], loads[2, :], 'o', color='C3')
-    ax[0, 1].plot(nodes[:, 1], loads[3, :], 'o', color='C3')
-    ax[1, 1].plot(nodes[:, 1], loads[4, :], 'o', color='C3')
-    ax[2, 1].plot(nodes[:, 1], loads[5, :], 'o', color='C3')
+    ax[0, 0].plot(nodes[:, 1], loads[0, :], "o", color="C3", label="FEM")
+    ax[1, 0].plot(nodes[:, 1], loads[1, :], "o", color="C3")
+    ax[2, 0].plot(nodes[:, 1], loads[2, :], "o", color="C3")
+    ax[0, 1].plot(nodes[:, 1], loads[3, :], "o", color="C3")
+    ax[1, 1].plot(nodes[:, 1], loads[4, :], "o", color="C3")
+    ax[2, 1].plot(nodes[:, 1], loads[5, :], "o", color="C3")
     # horizontal line at zero
     for axeach in ax.flatten():
-        axeach.axhline(0, color='darkgray', lw=0.5)
+        axeach.axhline(0, color="darkgray", lw=0.5)
 
-    ax[0, 0].set_ylabel('Fx')
-    ax[1, 0].set_ylabel('Fy')
-    ax[2, 0].set_ylabel('Fz')
-    ax[0, 1].set_ylabel('Mx')
-    ax[1, 1].set_ylabel('My')
-    ax[2, 1].set_ylabel('Mz')
+    ax[0, 0].set_ylabel("Fx")
+    ax[1, 0].set_ylabel("Fy")
+    ax[2, 0].set_ylabel("Fz")
+    ax[0, 1].set_ylabel("Mx")
+    ax[1, 1].set_ylabel("My")
+    ax[2, 1].set_ylabel("Mz")
 
     ax[0, 0].legend()
 
     # check force consistency
     fx_sum_hydro = np.sum(f_hydro[2, :])
     fx_sum_str = np.sum(loads[2, :])
-    print('Sum of hydro forces (Fx):', fx_sum_hydro)
-    print('Sum of FEM nodal forces (Fx):', fx_sum_str)
-    print('Diff:', fx_sum_hydro - fx_sum_str, ' (should be 0)')
+    print("Sum of hydro forces (Fx):", fx_sum_hydro)
+    print("Sum of FEM nodal forces (Fx):", fx_sum_str)
+    print("Diff:", fx_sum_hydro - fx_sum_str, " (should be 0)")
 
     mx_sum_str = np.sum(loads[3, :])
-    print('Sum of FEM moments (Mx):', mx_sum_str, ' (should be 0)')
+    print("Sum of FEM moments (Mx):", mx_sum_str, " (should be 0)")
 
     plt.show()
 
 
 def test_CLalpha_transfer():
     n_strips = 20
-    n_node = 6   # per one side of beam. Total number of nodes = 2 * n_node - 1
+    n_node = 6  # per one side of beam. Total number of nodes = 2 * n_node - 1
 
     collocationPts = np.zeros((3, n_strips))
     collocationPts[1, :] = np.linspace(-0.9, 0.9, n_strips)
@@ -527,28 +553,31 @@ def test_CLalpha_transfer():
     CL_alpha = np.random.random(n_strips)
 
     prob = om.Problem()
-    prob.model.add_subsystem('CL_alpha_transfer', CLaInterpolation(n_strips=n_strips, n_node=n_node * 2 - 1), promotes=['*'])
+    prob.model.add_subsystem(
+        "CL_alpha_transfer", CLaInterpolation(n_strips=n_strips, n_node=n_node * 2 - 1), promotes=["*"]
+    )
     prob.setup()
-    prob.set_val('CL_alpha', CL_alpha)
-    prob.set_val('collocationPts', collocationPts)
-    prob.set_val('nodes', nodes)
+    prob.set_val("CL_alpha", CL_alpha)
+    prob.set_val("collocationPts", collocationPts)
+    prob.set_val("nodes", nodes)
 
     prob.run_model()
 
-    prob.check_partials(compact_print=True, method='fd', step=1e-6)
+    prob.check_partials(compact_print=True, method="fd", step=1e-6)
 
     # om.n2(prob)
 
     # plot intepolated CL_alpha at FEM nodes
     import matplotlib.pyplot as plt
+
     plt.figure()
-    plt.plot(collocationPts[1, :], CL_alpha, 'o-', ms=5, lw=1)
-    CL_alpha_node = prob.get_val('CL_alpha_node') * 1.
-    plt.plot(nodes[:, 1], CL_alpha_node, 's', ms=5, color='C1')
+    plt.plot(collocationPts[1, :], CL_alpha, "o-", ms=5, lw=1)
+    CL_alpha_node = prob.get_val("CL_alpha_node") * 1.0
+    plt.plot(nodes[:, 1], CL_alpha_node, "s", ms=5, color="C1")
     plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # test_displacement_transfer()
     test_load_transfer()
     # test_CLalpha_transfer()

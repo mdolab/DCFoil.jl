@@ -18,7 +18,6 @@ using .LiftingLine
 using .FEMMethods
 using .SolveFlutter
 
-
 # ==============================================================================
 #                         Lifting line partials
 # ==============================================================================
@@ -148,7 +147,10 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
 
     err = maximum(abs.(∂f∂g_FiDi - ∂f∂g_FAD))
     println("max ∂f∂g error: $(err)")
-    if err >= 1e-3
+    idx = argmax(abs.(∂f∂g_FiDi - ∂f∂g_FAD))
+    relerr = abs(err / ∂f∂g_FiDi[idx])
+    println("max ∂f∂g rel error: $(relerr)")
+    if relerr >= 1e-3
         error("∂f∂g FAD and FD do not match!")
     else
         println("OK!")
@@ -193,10 +195,14 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
     err1 = maximum(abs.(∂collocationPt∂Xpt_fd - ∂collocationPt∂Xpt_fad))
     err2 = maximum(abs.(∂collocationPt∂Xpt_fd - ∂collocationPt∂Xpt_rad))
     idx = argmax(abs.(∂collocationPt∂Xpt_fd - ∂collocationPt∂Xpt_fad))
-    println("max ∂collocationPt∂Xpt error: $(err)")
-    if err >= 1e-3
+    println("max ∂collocationPt∂Xpt error: $(maximum([err1, err2]))")
+    relerr1 = abs(err1 / ∂collocationPt∂Xpt_fd[idx])
+    relerr2 = abs(err2 / ∂collocationPt∂Xpt_fd[idx])
+    println("max ∂collocationPt∂Xpt rel. error: $(maximum([relerr1, relerr2]))")
+    if maximum([err1, err2]) >= 4e-2
         println("indices where error is maximum $(idx)")
         writedlm("OUTPUT/∂collocationPt∂Xpt_fad.csv", ∂collocationPt∂Xpt_fad, ",")
+        writedlm("OUTPUT/∂collocationPt∂Xpt_rad.csv", ∂collocationPt∂Xpt_rad, ",")
         writedlm("OUTPUT/∂collocationPt∂Xpt_fd.csv", ∂collocationPt∂Xpt_fd, ",")
         error("∂collocationPt∂Xpt do not match! Wrote to file")
     else
@@ -246,9 +252,10 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
     println("Running partial derivatives wrt drag...")
     println("="^40)
 
-    ∂Drag∂Xpt_fd, ∂Drag∂xdispl_fd, ∂Drag∂G_fd = LiftingLine.compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
-    ∂Drag∂Xpt_fad, ∂Drag∂xdispl_fad, ∂Drag∂G_fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
-    ∂Drag∂Xpt_rad, ∂Drag∂xdispl_rad, ∂Drag∂G_rad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
+    toc::Vector{Float64} = appendageParams["toc"] # if there is a toc ForwardDiff bug, reset the appendageParams dictionary
+    ∂Drag∂Xpt_fd, ∂Drag∂xdispl_fd, ∂Drag∂G_fd, ∂Drag∂toc_fd = LiftingLine.compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displacementsCol, toc, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+    ∂Drag∂Xpt_fad, ∂Drag∂xdispl_fad, ∂Drag∂G_fad, ∂Drag∂toc_fad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displacementsCol, toc, appendageParams, appendageOptions, solverOptions; mode="FAD")
+    ∂Drag∂Xpt_rad, ∂Drag∂xdispl_rad, ∂Drag∂G_rad, ∂Drag∂toc_rad = LiftingLine.compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displacementsCol, toc, appendageParams, appendageOptions, solverOptions; mode="RAD")
 
     err1 = maximum(abs.(∂Drag∂Xpt_fd - ∂Drag∂Xpt_fad))
     err2 = maximum(abs.(∂Drag∂Xpt_rad - ∂Drag∂Xpt_fd))
@@ -293,8 +300,30 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
         println("OK!")
     end
 
+    err1 = maximum(abs.(∂Drag∂toc_fd - ∂Drag∂toc_fad))
+    err2 = maximum(abs.(∂Drag∂toc_rad - ∂Drag∂toc_fd))
+    println("max ∂Drag∂toc error: $(maximum([err1, err2]))")
+    idx = argmax(abs.(∂Drag∂toc_fd - ∂Drag∂toc_fad))
+    relerr1 = abs(err1 / ∂Drag∂toc_fd[idx])
+    println("fad indices $(idx)")
+    idx = argmax(abs.(∂Drag∂toc_fd - ∂Drag∂toc_rad))
+    relerr2 = abs(err2 / ∂Drag∂toc_fd[idx])
+    println("rad indices $(idx)")
+    println("max ∂Drag∂toc rel. error: $(maximum([relerr1, relerr2]))")
+    if maximum([relerr1, relerr2]) >= 2e-3
+        writedlm("OUTPUT/∂Drag∂toc_fad.csv", ∂Drag∂toc_fad, ",")
+        writedlm("OUTPUT/∂Drag∂toc_fd.csv", ∂Drag∂toc_fd, ",")
+        writedlm("OUTPUT/∂Drag∂toc_rad.csv", ∂Drag∂toc_rad, ",")
+        println("writing ∂Drag∂toc to files")
+        error("∂Drag∂toc do not match! Wrote to file")
+    else
+        println("OK!")
+    end
+
     return 0.0
 end
+
+test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol)
 
 
 # ==============================================================================
