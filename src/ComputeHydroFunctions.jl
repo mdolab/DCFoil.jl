@@ -320,6 +320,37 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, toc, append
     return ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G, ∂Drag∂toc
 end
 
+function compute_cl_ventilation(Fnh, solverOptions, pcav)
+    """
+    Compute critical c_l for ventilation inception
+    
+    I'm still not able to recreate the subatmospheric curve, but the atmospheric one uses pvap as the p_cav
+
+    Parameters
+    ----------
+    Fnh : float
+        Depth-based Froude number
+
+    Returns
+    -------
+    clvent : float
+
+    """
+
+    patm = 101.3e3 # Pa, atmospheric pressure
+    rhof = solverOptions["rhof"] # kg/m^3, water density
+    Uinf = solverOptions["Uinf"] # m/s, free stream velocity
+    σv = (patm - pcav) / (0.5 * rhof * Uinf^2) # atmospheric free surface vaporous cavitation number
+    clvent = (1 - exp(-σv * Fnh)) / √(Fnh)
+
+    # pred = torr / 760 * patm # Swales et al. 1974 conducted experiments at 35 torr ambient
+    # σv = (pred - pvap) / (0.5 * rhof * Uinf^2) # Swales et al. 1974 conducted experiments at 35 torr ambient
+
+    # println(σv)
+
+    return clvent
+end
+
 # ************************************************
 #     Center of force calculations
 # ************************************************

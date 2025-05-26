@@ -10,6 +10,7 @@ for headerName in [
     "../src/hydro/HydroStrip",
     "../src/hydro/Unsteady",
     "../src/hydro/OceanWaves",
+    "../src/ComputeHydroFunctions",
 ]
     include(headerName * ".jl")
 end
@@ -59,7 +60,7 @@ function test_stiffness()
     Matrix, SweepMatrix = HydroStrip.compute_node_stiff_faster(clα, b, eb, ab, U, clambda, slambda, ρ, Ck)
 
     Sk, S0k = HydroStrip.compute_sears(k)
-    
+
 
     # show(stdout, "text/plain", real(Matrix))
     # show(stdout, "text/plain", imag(Matrix))
@@ -1197,6 +1198,39 @@ function test_45degwingLL()
     println("Reference CL:\n", referenceCL)
     normError = norm(answers .- referenceCL)
     return normError
+end
+
+function test_clvent()
+
+    FnhSweep = 0.9:0.1:30.0
+    grav = 9.81
+    h = 0.5 # water depth
+
+    solverOptions = Dict(
+        "rhof" => 1025.0, # water density
+        "Uinf" => 1.0
+    )
+    clventSweep = []
+    clventSweep2 = []
+    for Fnh in FnhSweep
+        # println("Fnh: $(Fnh)")
+
+        Uinf = Fnh * √(grav * h)
+        solverOptions["Uinf"] = Uinf
+        # println("Uinf: $(Uinf)")
+        pvap = 2.34e3 # Pa, water vapor pressure at 20 deg C
+
+        clvent = compute_cl_ventilation(Fnh, solverOptions, pvap)
+        push!(clventSweep, clvent)
+        clvent2 = compute_cl_ventilation(Fnh, solverOptions, 700/760*101.3e3)
+        push!(clventSweep2, clvent2)
+    end
+
+    plot(FnhSweep, clventSweep, xlabel="Fnh", ylabel="CLventilation",
+        title="CL ventilation vs Fnh", legend=:topright, label="CLventilation")
+    plot!(FnhSweep, clventSweep2, label="CLventilation (atmospheric)", linestyle=:dash,xaxis=:log)
+    ylims!(-0.2, 1.5)
+    
 end
 # ==============================================================================
 #                         Run some tests

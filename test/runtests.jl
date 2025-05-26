@@ -214,7 +214,7 @@ include("test_partials.jl")
         "run_modal" => true,
         "run_flutter" => true,
         "nModes" => 4,
-        "uRange" => [35.0, 36.0],
+        "uRange" => [145.0, 146.0],
         "maxQIter" => 100, # that didn't fix the slow run time...
         "rhoKS" => 500.0,
     )
