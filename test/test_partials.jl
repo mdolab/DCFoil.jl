@@ -323,8 +323,6 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
     return 0.0
 end
 
-test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol)
-
 
 # ==============================================================================
 #                         Beam partials
