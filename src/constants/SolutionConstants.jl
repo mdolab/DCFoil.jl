@@ -16,6 +16,7 @@ const P_IM_TOL = 1.11e-10 # previously 1.11e-11 but wasn't doing too well on sta
 # Bigger values catch the real roots and too small cause them to disappear
 # You just don't want them too big that they pick up wrong roots
 
+const PVAP = 2.34e3 # vapor pressure of freshwater at 20C [Pa]
 const GRAV = 9.80665 # gravity [m/s^2]
 const XDIM = 1
 const YDIM = 2

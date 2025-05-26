@@ -472,7 +472,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.VarData("M_z", val=0.0),
         OpenMDAOCore.VarData("moments_dist", val=zeros(3, NPT_WING)), # not really going to use this since we have forces at collocation pts
         OpenMDAOCore.VarData("collocationPts", val=zeros(3, NPT_WING)), # collocation points 
-        OpenMDAOCore.VarData("clmax", val=0.0), # KS aggregated clmax
+        OpenMDAOCore.VarData("ksvent", val=0.0), # KS aggregated max( cl - clvent)
         OpenMDAOCore.VarData("cl", val=zeros(NPT_WING)), # all cl along the wing
         # Empirical drag build up
         OpenMDAOCore.VarData("CDw", val=0.0),
@@ -494,7 +494,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CL", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("CS", "ptVec", method="exact"),
-        OpenMDAOCore.PartialsData("clmax", "ptVec", method="exact"),
+        OpenMDAOCore.PartialsData("ksvent", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("cl", "ptVec", method="exact"), # good
         OpenMDAOCore.PartialsData("Fdrag", "ptVec", method="exact"),
         OpenMDAOCore.PartialsData("Fside", "ptVec", method="exact"),
@@ -521,7 +521,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CL", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("CS", "gammas", method="exact"),
-        OpenMDAOCore.PartialsData("clmax", "gammas", method="exact"),
+        OpenMDAOCore.PartialsData("ksvent", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("cl", "gammas", method="exact"), # good
         OpenMDAOCore.PartialsData("Fdrag", "gammas", method="exact"),
         OpenMDAOCore.PartialsData("Fside", "gammas", method="exact"),
@@ -542,7 +542,7 @@ function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
         OpenMDAOCore.PartialsData("CL", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("CDi", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("CS", "displacements_col", method="exact"),
-        OpenMDAOCore.PartialsData("clmax", "displacements_col", method="exact"),
+        OpenMDAOCore.PartialsData("ksvent", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("cl", "displacements_col", method="exact"), # good
         OpenMDAOCore.PartialsData("Fdrag", "displacements_col", method="exact"),
         OpenMDAOCore.PartialsData("Fside", "displacements_col", method="exact"),
@@ -608,7 +608,12 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
 
     DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, LLNLParams.TV_influence, FlowCond, LLNLParams.LLSystem, LLNLParams)
 
-    ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+    Fnh = FlowCond.Uinf / √(GRAV * FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+    clvent_incep = LiftingLine.compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, LiftingLine.PVAP)
+
+    ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
+
+    ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
     # ---------------------------
     #   Drag build up
@@ -628,7 +633,7 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["CL"][1] = CL
     outputs["CDi"][1] = CDi
     outputs["CS"][1] = CS
-    outputs["clmax"][1] = ksclmax
+    outputs["ksvent"][1] = ksvent
     outputs["cl"][:] = clvec[START:STOP]
 
     for (ii, fi) in enumerate(eachrow(DimForces[:, START:STOP]))
@@ -703,7 +708,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
         mode = "FiDi"
     end
 
-    costFuncsInOrder = ["Fdrag", "Fside", "Flift", "CL", "CDi", "CS", "clmax", "forces_dist", "cl"]
+    costFuncsInOrder = ["Fdrag", "Fside", "Flift", "CL", "CDi", "CS", "ksvent", "forces_dist", "cl"]
     FXIND = 1
     CLMAXIND = 7
 

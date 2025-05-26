@@ -320,7 +320,7 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, toc, append
     return ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G, ∂Drag∂toc
 end
 
-function compute_cl_ventilation(Fnh, solverOptions, pcav)
+function compute_cl_ventilation(Fnh, rhof, Uinf, pcav)
     """
     Compute critical c_l for ventilation inception
     
@@ -338,8 +338,8 @@ function compute_cl_ventilation(Fnh, solverOptions, pcav)
     """
 
     patm = 101.3e3 # Pa, atmospheric pressure
-    rhof = solverOptions["rhof"] # kg/m^3, water density
-    Uinf = solverOptions["Uinf"] # m/s, free stream velocity
+    # rhof = solverOptions["rhof"] # kg/m^3, water density
+    # Uinf = solverOptions["Uinf"] # m/s, free stream velocity
     σv = (patm - pcav) / (0.5 * rhof * Uinf^2) # atmospheric free surface vaporous cavitation number
     clvent = (1 - exp(-σv * Fnh)) / √(Fnh)
 

@@ -1017,7 +1017,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     is_failed::Bool = false
     nK::Int64 = 22 # number of k values to sweep
     maxK = 3.5 # max reduced frequency k to search
-    maxK = 60.0 # max reduced frequency k to search
+    maxK = 10.0 # max reduced frequency k to search
+    # maxK = 60.0 # max reduced frequency k to search
 
 
     # --- Zygote buffers ---
@@ -1056,7 +1057,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         # kSweep = ωSweep * div_tmp
         # --- Compute generalized hydrodynamic loads ---
         Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
-        # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Cr, Qr, structMesh, DOFBlankingList; debug=solverOptions["debug"], qiter=nFlow)
         # ---------------------------
         #   Mode correlations

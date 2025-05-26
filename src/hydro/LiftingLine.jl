@@ -56,8 +56,8 @@ for headerName in [
 end
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
-# const NPT_WING = 40 # this is known to be accurate
-const NPT_WING = 20
+const NPT_WING = 40 # this is known to be accurate
+# const NPT_WING = 20
 
 export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
     compute_KS, GRAV
@@ -1412,10 +1412,15 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
 
-        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+        Fnh = FlowCond.Uinf / √(GRAV* FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+        clvent_incep = compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, PVAP)
+
+        ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
+        
+        ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
+        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksvent, vec(transpose(DimForces)), clvec)
 
         return outputvector
     end
@@ -1560,11 +1565,16 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
 
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, solverParams)
 
-        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+        Fnh = FlowCond.Uinf / √(GRAV* FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+        clvent_incep = compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, PVAP)
+
+        ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
+        
+        ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
         # THIS ORDER MATTER. Check CostFuncsInOrder variable
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
+        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksvent, vec(transpose(DimForces)), clvec)
 
         return outputVector
     end
