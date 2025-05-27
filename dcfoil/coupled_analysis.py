@@ -71,16 +71,6 @@ class CoupledAnalysis(om.Group):
         expcomp_LL_func = JuliaExplicitComp(
             jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
-        # expcomp_load = JuliaExplicitComp(
-        #     jlcomp=jl.OMLoadTransfer(
-        #         nodeConn, appendageParams, appendageOptions, solverOptions
-        #     )
-        # )
-        # expcomp_displacement = JuliaExplicitComp(
-        #     jlcomp=jl.OMLoadTransfer(
-        #         nodeConn, appendageParams, appendageOptions, solverOptions
-        #     )
-        # )
         expcomp_flutter = JuliaExplicitComp(
             jlcomp=jl.OMFlutter(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
@@ -93,13 +83,13 @@ class CoupledAnalysis(om.Group):
         # ************************************************
         # --- input variables ---
         # now ptVec is just an input, so use IVC as an placeholder. Later replace IVC with a geometry component
-        indep = self.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
-        indep.add_output("ptVec", val=self.options["ptVec_init"])  # TODO: set units
-        # other constant setup. If we want to connect these values from upstream component, we need to commend these lines out
-        # TODO: double check unit consistency to Julia layer
-        indep.add_output("alfa0", val=appendageParams["alfa0"], units="deg")
-        indep.add_output("theta_f", val=appendageParams["theta_f"], units="rad")
-        indep.add_output("toc", val=appendageParams["toc"])
+        # indep = self.add_subsystem("input", om.IndepVarComp(), promotes=["*"])
+        # indep.add_output("ptVec", val=self.options["ptVec_init"])  # TODO: set units
+        # # other constant setup. If we want to connect these values from upstream component, we need to commend these lines out
+        # # TODO: double check unit consistency to Julia layer
+        # indep.add_output("alfa0", val=appendageParams["alfa0"], units="deg")
+        # indep.add_output("theta_f", val=appendageParams["theta_f"], units="rad")
+        # indep.add_output("toc", val=appendageParams["toc"])
 
         if self.options["analysis_mode"] == "struct":
             # --- Structural analysis only ---
@@ -133,6 +123,7 @@ class CoupledAnalysis(om.Group):
                     "ptVec",
                     "alfa0",
                     "displacements_col",
+                    "toc",
                 ],  # promotion auto connects these variables
                 promotes_outputs=["*"],  # everything!
             )
