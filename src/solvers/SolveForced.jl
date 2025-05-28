@@ -31,7 +31,7 @@ for headerName in [
     "../solvers/DCFoilSolution",
     "../InitModel",
     "../hydro/OceanWaves",
-    "../solvers/SetupSolver",
+    "../solvers/SolverSetup",
 ]
     include("$(headerName).jl")
 end
