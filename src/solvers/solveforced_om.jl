@@ -40,12 +40,12 @@ function OpenMDAOCore.setup(self::OMForced)
 
     inputs = [
         # --- Mesh type ---
-        OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
+        # OpenMDAOCore.VarData("collocationPts", val=zeros(3, LiftingLine.NPT_WING)), # collocation points 
         OpenMDAOCore.VarData("nodes", val=zeros(nNodeTot, 3)),
         OpenMDAOCore.VarData("elemConn", val=zeros(nElemTot, 2)),
         # --- linearized quantities ---
         OpenMDAOCore.VarData("cla", val=zeros(nNodeTot)),
-        OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
+        # OpenMDAOCore.VarData("deflections", val=zeros(nNodeTot * FEMMethods.NDOF)),
     ]
 
     outputs = [
@@ -68,6 +68,8 @@ function OpenMDAOCore.compute!(self::OMForced, inputs, outputs)
     appendageParams = self.appendageParams
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
+
+    vibarea = SolveForced.compute_funcsFromDVsOM()
 
     return nothing
 end

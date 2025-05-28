@@ -252,7 +252,7 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
 
 
   if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
-    print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+    println("Reading geometry properties from file:\n", appendageOptions["path_to_geom_props"])
 
     α₀ = appendageParams["alfa0"]
     rake = appendageParams["rake"]

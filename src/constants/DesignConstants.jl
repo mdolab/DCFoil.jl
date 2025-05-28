@@ -115,4 +115,5 @@ const CONFIGS::Vector{String} =
         "wing",
         "full-wing",
         "t-foil",
+        "strut",
     ]

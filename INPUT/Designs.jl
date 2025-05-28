@@ -55,6 +55,18 @@ DVDict = Dict(
     "theta_f" => 0 * π / 180, # fiber angle global [rad]
 )
 
+# --- AMC NACA0009 experimental model ---
+DVDict = Dict(
+    "alfa0" => 6.0, # initial angle of attack [deg]
+    "material" => "al6061", # preselect from material library
+    "zeta" => 0.04, # modal damping ratio at first 2 modes
+    "s" => 0.3, # semispan [m]
+    "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "toc" => 0.06, # thickness-to-chord ratio
+    "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "theta_f" => deg2rad(15), # fiber angle global [rad]
+)
+
 # --- Yingqian's Sweep & Anisotropy Paper (2018) ---
 DVDict = Dict(
     "alfa0" => 6.0, # initial angle of attack [deg]
@@ -217,7 +229,7 @@ DVDictRudder = Dict(
     "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
     "s" => 0.333, # semispan [m]
     "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
-    "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (mean)
+    "toc" => 0.075 * ones(nNodes), # thickness-to-chord ratio (max t/c if using airfoil correction)
     "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
@@ -226,7 +238,7 @@ DVDictRudder = Dict(
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 1.0, # [m]
     "c_strut" => 0.14 * ones(nNodesStrut), # chord length [m]
-    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (mean)
+    "toc_strut" => 0.095 * ones(nNodesStrut), # thickness-to-chord ratio (max t/c if using airfoil correction)
     "ab_strut" => 0.0 * ones(nNodesStrut), # dist from midchord to EA [m]
     "x_ab_strut" => 0.0 * ones(nNodesStrut), # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]
@@ -269,7 +281,7 @@ DVDict = Dict(
     "c" => ".dat", # chord length [m]
     "s" => 1.0, # semispan [m]
     "ab" => ".dat", # dist from midchord to EA [m]
-    "toc" => ".dat", # thickness-to-chord ratio (mean)
+    "toc" => ".dat", # thickness-to-chord ratio (max t/c if using airfoil correction)
     "x_ab" => ".dat", # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
@@ -278,7 +290,7 @@ DVDict = Dict(
     "beta" => 0.0, # yaw angle wrt flow [deg]
     "s_strut" => 2.8, # strut span [m]
     "c_strut" => ".dat", # chord length [m]
-    "toc_strut" => ".dat", # thickness-to-chord ratio (mean)
+    "toc_strut" => ".dat", # thickness-to-chord ratio (max t/c if using airfoil correction)
     "ab_strut" => ".dat", # dist from midchord to EA [m]
     "x_ab_strut" => ".dat", # static imbalance [m]
     "theta_f_strut" => deg2rad(0), # fiber angle global [rad]

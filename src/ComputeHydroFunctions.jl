@@ -178,7 +178,7 @@ function compute_besselInt(Uinf, span, Fnh)
     return I
 end
 
-function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions)
 
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -195,8 +195,8 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, 
     depth0 = appendageParams["depth0"]
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
     displCol = reshape(displVec, 6, length(displVec) ÷ 6)
-    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
-        npt_wing=npt_wing,
+    LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol, pretwistDist;
+        npt_wing=size(displCol, 2),
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
         # airfoilCoordFile=airfoilCoordFile,
@@ -216,14 +216,18 @@ function compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, 
     areaRef = LiftingLine.compute_areas(LECoords, TECoords, nodeConn)
     dynP = 0.5 * FlowCond.rhof * FlowCond.Uinf^2
     aeroSpan = LiftingLine.compute_aeroSpan(midchords, idxTip)
+
+    appendageParams["toc"] = toc
     CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds =
         compute_calmwaterdragbuildup(appendageParams, appendageOptions, solverOptions,
             dynP, areaRef, aeroSpan, CL, meanChord, rootChord, chordVec)
 
-    return vec([CDw, CDpr, CDj, CDs, Dw, Dpr, Dj, Ds])
+    # NOTE: chordVec type is Vector{Union{Real, Complex}} and that makes CDpr, CDj, Dpr, Dj complex (but 0 for imag part) under compute_totals in hydroelastic derivatives
+    #       Zygote doesn't accept complex data type so we convert to real here
+    return vec([CDw, real(CDpr), real(CDj), CDs, Dw, real(Dpr), real(Dj), Ds])
 end
 
-function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, toc, appendageParams, appendageOptions, solverOptions; mode="FAD")
     """
     This appears to have issues wrt the ptVec inputs
     """
@@ -233,14 +237,17 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
 
     # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
     displVec = vec(displCol)
+    appendageParams["toc"] = toc
 
     if uppercase(mode) == "RAD" # RAD everything except the ptVec ones because this gave NaNs
-        # TODO: BUG here, fix this
+        # TODO: BUG here, fix why the ptVec and displacementsCol give NaNs in their reverse AD derivatives
+
         # displacements of the collocation nodes also give NaNs
-        ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian(
-            (xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions),
+        ∂Drag∂G, ∂Drag∂xdispl, ∂Drag∂toc = Zygote.jacobian(
+            (xGamma, xDispl, xTOC) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, xTOC, appendageParams, appendageOptions, solverOptions),
             gammas,
-            displVec
+            displVec,
+            toc
         )
         # ∂Drag∂Xpt, ∂Drag∂G, ∂Drag∂xdispl = Zygote.jacobian((xPt, xGamma, xDispl) -> compute_dragsFromX(xPt, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, gammas, displVec)
 
@@ -249,21 +256,22 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
         # Need to FAD displacements too
         # Weird bug, but you can't do the jacobian using multiple inputs at once I guess
         # ∂Drag∂Xpt, ∂Drag∂xdispl = AD.jacobian(backend, (xPt, xDispl) -> compute_dragsFromX(xPt, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), ptVec, displVec) # this is bad
-        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
-        ∂Drag∂xdispl, = AD.jacobian(backend, (xDispl) -> compute_dragsFromX(ptVec, gammas, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), displVec)
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂xdispl, = AD.jacobian(backend, (xDispl) -> compute_dragsFromX(ptVec, gammas, nodeConn, xDispl, toc, appendageParams, appendageOptions, solverOptions), displVec)
 
     elseif uppercase(mode) == "FIDI"
         outputVector = ["cdw", "cdpr", "cdj", "cds", "dw", "dpr", "dj", "ds"]
         ∂Drag∂Xpt = zeros(DTYPE, length(outputVector), length(ptVec))
         ∂Drag∂xdispl = zeros(DTYPE, length(outputVector), length(displCol))
+        ∂Drag∂toc = zeros(DTYPE, length(outputVector), length(appendageParams["toc"]))
         dh = 1e-4
 
-        f_i = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+        f_i = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions)
         for ii in eachindex(ptVec)
 
             ptVec[ii] += dh
 
-            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions)
 
             ptVec[ii] -= dh
 
@@ -273,7 +281,7 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
 
             displVec[ii] += dh
 
-            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions)
+            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, appendageParams["toc"], appendageParams, appendageOptions, solverOptions)
 
             displVec[ii] -= dh
 
@@ -281,16 +289,25 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
 
         end
 
+        for ii in eachindex(toc)
+            toc[ii] += dh
+            f_f = compute_dragsFromX(ptVec, gammas, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions)
+            toc[ii] -= dh
+            ∂Drag∂toc[:, ii] = (f_f - f_i) / dh
+        end
+
         backend = AD.ZygoteBackend()
-        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displCol, appendageParams, appendageOptions, solverOptions), gammas)
+        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displCol, toc, appendageParams, appendageOptions, solverOptions), gammas)
 
     elseif uppercase(mode) == "FAD"
 
 
         backend = AD.ForwardDiffBackend()
         # @time ∂Drag∂G, = ReverseDiff.jacobian((xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, appendageParams, appendageOptions, solverOptions), gammas)
-        ∂Drag∂G, ∂Drag∂xdispl = AD.jacobian(backend, (xGamma, xDispl) -> compute_dragsFromX(ptVec, xGamma, nodeConn, xDispl, appendageParams, appendageOptions, solverOptions), gammas, displVec)
-        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂G, = AD.jacobian(backend, (xGamma) -> compute_dragsFromX(ptVec, xGamma, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions), gammas)
+        ∂Drag∂xdispl, = AD.jacobian(backend, (xDispl) -> compute_dragsFromX(ptVec, gammas, nodeConn, xDispl, toc, appendageParams, appendageOptions, solverOptions), displVec)
+        ∂Drag∂Xpt, = AD.jacobian(backend, (xPt) -> compute_dragsFromX(xPt, gammas, nodeConn, displVec, toc, appendageParams, appendageOptions, solverOptions), ptVec)
+        ∂Drag∂toc, = AD.jacobian(backend, (xTOC) -> compute_dragsFromX(ptVec, gammas, nodeConn, displVec, xTOC, appendageParams, appendageOptions, solverOptions), toc)
     else
         error("Mode not recognized")
     end
@@ -300,7 +317,38 @@ function compute_∂EmpiricalDrag(ptVec, gammas, nodeConn, displCol, appendagePa
     # writedlm("ddragdX-$(mode).csv", ∂Drag∂Xpt, ',')
     # writedlm("ddragdG-$(mode).csv", ∂Drag∂G, ',')
 
-    return ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G
+    return ∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G, ∂Drag∂toc
+end
+
+function compute_cl_ventilation(Fnh, rhof, Uinf, pcav)
+    """
+    Compute critical c_l for ventilation inception
+    
+    I'm still not able to recreate the subatmospheric curve, but the atmospheric one uses pvap as the p_cav
+
+    Parameters
+    ----------
+    Fnh : float
+        Depth-based Froude number
+
+    Returns
+    -------
+    clvent : float
+
+    """
+
+    patm = 101.3e3 # Pa, atmospheric pressure
+    # rhof = solverOptions["rhof"] # kg/m^3, water density
+    # Uinf = solverOptions["Uinf"] # m/s, free stream velocity
+    σv = (patm - pcav) / (0.5 * rhof * Uinf^2) # atmospheric free surface vaporous cavitation number
+    clvent = (1 - exp(-σv * Fnh)) / √(Fnh)
+
+    # pred = torr / 760 * patm # Swales et al. 1974 conducted experiments at 35 torr ambient
+    # σv = (pred - pvap) / (0.5 * rhof * Uinf^2) # Swales et al. 1974 conducted experiments at 35 torr ambient
+
+    # println(σv)
+
+    return clvent
 end
 
 # ************************************************

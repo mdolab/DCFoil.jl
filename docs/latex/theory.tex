@@ -13,6 +13,7 @@
 \usepackage[compact]{titlesec}
 \usepackage{pdflscape}
 \usepackage[]{acronym} % provides \acronym 
+\usepackage{enumitem}
 
 \graphicspath{{../figures/}}
 
@@ -1082,21 +1083,123 @@ Consistency means the sum of the nodal forces and moments from the load transfer
 An infinite number of choices of nodal forces and moments can satisfy consistency because it is an integration over a region.
 As such, we also require that the scheme be conservative.
 
-Shugo wrote the load and displacement transfer to work for OAS and DCFoil.
-TODO: docs 
+The load and displacement transfer schemes used in this study is based on OpenAeroStruct~\cite{Jasa2018a}, but we generalize their scheme to be applicable to non-aligning flow and structural discretization.
 
-The lifting line and beam discretization are different.
-Sometimes the lifting line needs cosine spacing for swept geometries.
-Denoting $\mb{T}$ as the generalized transfer matrix, the displacements of structural states to the lifting line frame is
-\beq
-\mb{u}_{LL} = \mb{T} \mb{u} = \pp{\mb{u}_{LL}}{\mb{u}}
-\eeq
-The load transfer is the transpose operation
-\beq
-\mb{f} = \mb{T}^\top \mb{f}_{LL}
-\eeq
-TODO: read \citet{Kenway2014a} for these transfer matrices.
-\citet{Martins2005c} also documents a load transfer scheme.
+\subsubsection{Load transfer}
+
+Traction force acting on a flow strip is distributed to adjacent two FEM nodes.
+Here, we denote the traction vector at $i$-th strip as $\mb{T}_i$; the traction vector consists of $x$, $y$, and $z$ component.
+We distribute $\mb{T}_i$ to adjacent two FEM nodes, node 1 and node 2, in a consistent manner.
+Note that indices 1 and 2 are local to flow strip $i$, not the global indices.
+Assuming that the traction is uniform over the strip, the FEM nodal forces and moments contributed by $i$-th flow strip are:
+\begin{align}
+\begin{aligned}
+	\mb{F}_{1,i} &= w_{1,i} \int \mb{T}_i dS = w_1 \mb{T}_i S_i\\
+	\mb{F}_{2,i} &= w_{2,i} \int\mb{T}_i dS = w_2 \mb{T}_i S_i\\
+	\mb{M}_{1,i} &= w_{1,i} \int \left( \mb{r}_{1, i} \times \mb{T}_i \right) dS = w_1 \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right)  \\
+	\mb{M}_{2,i} &= w_{2,i} \int \left( \mb{r}_{2, i} \times \mb{T}_i \right) dS = w_2 \left( \mb{r}_{2, i} \times \mb{T}_i S_i \right)  \\
+\end{aligned}
+\end{align}
+where $F$ is the FEM nodal force, $M$ is the nodal moment, $w_1$ and $w_2$ are the weighting factor, and $r_{j, i}$ points from $j$-th FEM node to $i$-th flow collocation point (aerodynamic center of the strip), and $S_i$ is the area of the $i$-th strip.
+In implementation, the lifting line module provides the integrated traction, i.e., $\mb{T}_i S_i$ at each flow collocation point.
+
+For the load transfer to be consistent, we need
+\begin{equation}
+	w_{1,i} + w_{2,i} = 1 \quad \forall i
+\end{equation}
+which gives the force consistency:
+\begin{equation}
+	\mb{F}_{1,i} + \mb{F}_{2,i} = \mb{T}_i S_i
+\end{equation}
+and the moment consistency with respect to the flow collocation point (where the moment on the flow side is zero by definition):   % NOTE: I think technically this is only valid if collocation point = center of pressure, which is not always the case
+\begin{equation}
+	\mb{M}_{1,i} + \mb{M}_{2,i} + (-\mb{r}_{1, i} \times \mb{F}_{1,i}) + (-\mb{r}_{2, i} \times \mb{F}_{2,i}) = 0
+\end{equation}
+% TODO: check consistency of moment?
+
+We choose the weighting factors based on the spanwise distances between flow point $i$ and adjacant FEM nodes:
+\begin{equation}
+	w_{1,i} = \frac{|y_{2, i}|}{|y_{1, i}| + |y_{2, i}|}, \quad w_{2,i} = \frac{|y_{1, i}|}{|y_{1, i}| + |y_{2, i}|}
+\end{equation}
+
+To compute the total nodal load and moment, we take summation over all flow strips.
+Considering an FEM element with multiple flow collocation points in between the two FEM nodes, the nodal loads are
+\begin{align}
+\begin{aligned}
+	\mb{F}_1 &= \sum_i w_{1,i} \mb{T}_i S_i \\
+	\mb{F}_2 &= \sum_i w_{2,i} \mb{T}_i S_i \\
+	\mb{M}_1 &= \sum_i w_{1,i} \left( \mb{r}_{1, i} \times \mb{T}_i S_i \right) \\
+	\mb{M}_2 &= \sum_i w_{2,i} \left( \mb{r}_{2, i} \times \mb{T}_i S_i \right)  \\
+\end{aligned}
+\end{align}
+
+In a special case where the FEM and flow discretizations align and the flow collocation points are at the center of FEM elements in the spanwise direction, we get $w_1=w_2 = 1/2$ for all $i$.
+This results in the same load transfer scheme as OpenAeroStruct~\cite{Jasa2018a}.
+
+If a flow collocation point and an FEM node aligns in spanwise direction, the flow force is transfered directly to the corresponding FEM node.
+We can generalize this case by setting $|y_{1, j}| = 0$ and $|y_{2, j}| \neq 0$, which gives $w_1 = 1$ and $w_2 = 0$.
+
+\subsubsection{Displacement transfer}
+The displacement transfer interpolates the FEM nodal displacements to flow collocation points.
+
+Given the translational nodal displacement $d_1$ and $d_2$ and rotational nodal displacement $\theta_1$ and $\theta_2$ at FEM nodes 1 and 2, respectively, we construct the interploation as:
+\begin{align}
+\begin{aligned}
+	d_i      &= w_{1,i} \left( d_1 + \theta_1 \times r_{1, i} \right) + w_{2,i} \left( d_2 + \theta_2 \times r_{2, i} \right)  \\
+	\theta_i &= w_{1,i} \theta_1 + w_{2,i} \theta_2
+\end{aligned}	
+\end{align}
+where $d_i$ and $\theta_i$ are translational and rotational displacements at flow point $i$.
+Like the load transfer, in a special case where we have $w_1=w_2 = 1/2$, this displacement transfer scheme is equivalent to what is written in the OpenAeroStruct paper~\citep{Jasa2018a}.
+(NOTE: what OpenAeroStruct actually implements is slightly different from what is written in their journal paper, and OpenAeroStruct implementation is not work-conservative.)
+
+\subsubsection{Conservativeness}
+Consider one FEM element where we have multiple flow collocation points in between the two FEM nodes.
+The virtual work on the structure side is
+\begin{equation}
+	\delta W_\text{str} = \mb{F}_1 \cdot \delta d_1 + \mb{F}_2 \cdot \delta d_2 + \mb{M}_1 \cdot \delta \theta_1 + \mb{M}_2 \cdot \delta \theta_2 
+\end{equation}
+The virtual work on the flow side is
+\begin{align}
+\begin{aligned}
+	\delta W_\text{flow}
+	&= \sum_i \mb{T}_i S_i \cdot \delta d_i \\
+	&= \sum_i \mb{T}_i S_i \cdot \left( w_{1,i} \left( \delta d_1 + \delta \theta_1 \times r_{1, i} \right) + w_{2,i} \left( \delta d_2 + \delta \theta_2 \times r_{2, i} \right) \right) \\
+	&= \sum_i \left[ (w_{1,i} \mb{T}_i S_i) \cdot \delta d_1 + (w_{2,i} \mb{T}_i S_i) \cdot \delta d_2  + (w_{1,i} \mb{T}_i S_i) \cdot (\delta \theta_1 \times r_{1, i}) + (w_{2,i} \mb{T}_i S_i) \cdot (\delta \theta_1 \times r_{2, i})  \right]
+\end{aligned}	
+\end{align}
+Now, applying $\mb{a} \cdot (\mb{b} \times \mb{c}) = (\mb{c} \times \mb{a}) \cdot \mb{b}$ to the third and fourth terms,
+\begin{align}
+\begin{aligned}
+	\delta W_\text{flow}
+	&= \sum_i \left[ (w_{1,i} \mb{T}_i S_i) \cdot \delta d_1 + (w_{2,i} \mb{T}_i S_i) \cdot \delta d_2  + w_{1,i} (r_{1, i} \times \mb{T}_i S_i) \cdot \delta \theta_1 + w_{2,i} (r_{2, i} \times \mb{T}_i S_i) \cdot \delta \theta_2 \right] \\
+	&= \left( \sum_i w_{1,i} \mb{T}_i S_i \right) \cdot \delta d_1 + \left( \sum_i w_{2,i} \mb{T}_i S_i \right) \cdot \delta d_2  + \left( \sum_i w_{1,i} (r_{1, i} \times \mb{T}_i S_i) \right) \cdot \delta \theta_1 + \left( \sum_i w_{2,i} (r_{2, i} \times \mb{T}_i S_i) \right) \cdot \delta \theta_2 \\
+	&= \mb{F}_1 \cdot \delta d_1 + \mb{F}_2 \cdot \delta d_2 + \mb{M}_1 \cdot \delta \theta_1 + \mb{M}_2 \cdot \delta \theta_2 \\
+	&= \delta W_\text{str}
+\end{aligned}	
+\end{align}
+This shows that the combination of our load and transfer schemes are conservative.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.7\columnwidth]{load_transfer_draft.png}
+    \caption{Load transfer}
+    \label{fig:load_transfer}
+\end{figure}
+
+
+%The lifting line and beam discretization are different.
+%Sometimes the lifting line needs cosine spacing for swept geometries.
+%Denoting $\mb{T}$ as the generalized transfer matrix, the displacements of structural states to the lifting line frame is
+%\beq
+%\mb{u}_{LL} = \mb{T} \mb{u} = \pp{\mb{u}_{LL}}{\mb{u}}
+%\eeq
+%The load transfer is the transpose operation
+%\beq
+%\mb{f} = \mb{T}^\top \mb{f}_{LL}
+%\eeq
+%TODO: read \citet{Kenway2014a} for these transfer matrices.
+%\citet{Martins2005c} also documents a load transfer scheme.
 
 \subsection{Derivative computation}
 % 
@@ -1359,7 +1462,7 @@ The generalized governing discrete equation takes the form
 \end{multline}
 where $\mbf{f_{hydro,quasi}}$ are the quasi-steady hydrodynamic forces.
 For a non-trivial solution of $\mbf{\tilde{u}}$, the flutter determinant $\det(\Delta)$ is zero, where the bracketed matrix in Equation~\eqref{eqn:pkEqn} is $\Delta$.
-We need to find the $p$'s that satisfies the quadratic eigenproblem so that $\det(\Delta) = 0$.
+We need to find the $p$'s that satisfies the quadratic eigenvalue problem so that $\det(\Delta) = 0$.
 The corresponding $\mbf{\tilde{u}}$ is then the complex eigenvector describing the flutter mode shape.
 Simulations sweep flow speed ($\Uinf$).
 We can compute in-vacuum natural frequencies by setting all fluid matrices and total damping to zero, giving a linear eigenvalue problem with symmetric matrices;
@@ -1875,13 +1978,13 @@ The overall data flow in the program is in \Cref{fig:DataFlow}.
 \end{figure}
 Appendage setup is through dictionaries.
 \begin{landscape}
-	
+
 	\begin{figure}[htb!]
 		\centering
 		% reference: trim={<left> <lower> <right> <upper>}
 		\includegraphics[width=\linewidth,clip,trim={0cm 0cm 0cm 0cm}]{dcfoil.pdf}
 		\caption{\label{fig:XDSM}
-		DCFoil's solver hierarchy
+			DCFoil's solver hierarchy
 		}
 	\end{figure}
 \end{landscape}
@@ -1938,7 +2041,11 @@ where $\bar{y}$ is called the \emph{cotangent} vector and $a$ is some known inpu
 The analog in forward mode are the tangent vector $\dot{y}$ and pushforward function.
 The downside of reverse AD is that if the composite function has $n$ steps, the reverse mode requires $\BigO(n)$ allocations in memory (or $\BigO(n^2)$ computations to recalculate).
 
-The \texttt{pullback} functionality in AD packages typically returns two things: the evaluated point $f(x)$ (also called primal) and the pullback function $\mcal{B}(\bar{y})$
+The \texttt{pullback} functionality in AD packages typically returns two things:
+\begin{enumerate}
+	\item the evaluated point $f(x)$ (also called primal)
+	\item the pullback function $\mcal{B}(\bar{y})$
+\end{enumerate}
 There are situations in which one has a manual implementation they want the {AD} package to bypass, for example, matrix operations.
 
 We write manual rules through \texttt{ChainRulesCore.jl}.
@@ -1958,6 +2065,7 @@ An example is Algorithm~\ref{alg:ConceptualRAD}.
 
 The \texttt{NoTangent()} tells us that if one perturbs the matching primal, the primal will error.
 For example, perturbing the number of increments $N$ of a \texttt{LinRange()} errors the code because you cannot have a non-integer input (like $N+0.1$).
+
 In contrast, the \texttt{ZeroTangent()} means that changing the matching primal results in no change in the behavior of the primal;
 it is preferred to directly returning 0 or \texttt{zeros(n)} for efficiency.
 
@@ -1972,6 +2080,8 @@ Now that you understand the conceptual level, this is a more applied example for
 	\quad $\lambda_n, \phi_n = \tn{eigvals}(A)$ \\
 	return
 \end{algorithm}
+
+\subsubsection{Lagrange polynomial example}
 
 The Lagrange interpolating polynomial at some point $x$ for a scalar function is
 \beq
@@ -2013,6 +2123,45 @@ y_j \sum_{\substack{i=0 \\ i \neq j}}^{k} \left[
 \dd{L(x)}{y_j} &=  \ell_j(x)
 \eeq
 The derivative with respect to $x_j$ has not been debugged, but based on looking at Eirikur's Tapenade routines, the $x_j$ derivative is not needed!
+
+\subsubsection{Chord length example}
+
+The computation of chord lengths based on leading edge and trailing edge coordinates is
+\beq
+f(x_{LE},y_{LE},z_{LE}, x_{TE},y_{TE},z_{TE}) =
+\sqrt{
+	\left(x_{LE} - x_{TE}\right)^2
+	+
+	\left(y_{LE} - y_{TE}\right)^2
+	+
+	\left(z_{LE} - z_{TE}\right)^2
+}
+\eeq
+The input variables and outputs are vectors of length $n_{pt}$ (i.e., $x_{LE} = [x_{LE,1},\dots,x_{LE,n_{pt}}]$).
+To do the reverse AD, we need the $n_{pt}\times n_{pt}$ Jacobians
+\ben
+\dd{f}{x_{LE}},
+\quad
+\dd{f}{x_{TE}},
+\quad
+\dd{f}{y_{LE}},
+\quad
+\dd{f}{y_{TE}},
+\quad
+\dd{f}{z_{LE}},
+\quad
+\dd{f}{z_{TE}}
+\een
+which are
+\beq
+\dd{f}{x_{LE}} = \begin{bmatrix}
+	\frac{ x_{LE,1}-x_{TE,1} }{ \sqrt{ \left( x_{LE,1}-x_{TE,1} \right)^2 + \left( y_{LE,1} - y_{TE,1} \right)^2 + \left( z_{LE,1}-z_{TE,1} \right)^2 }} & 0                                                                                                                                                    & \cdots & 0 \\
+	0                                                                                                                                                    & \frac{ x_{LE,2}-x_{TE,2} }{ \sqrt{ \left( x_{LE,2}-x_{TE,2} \right)^2 + \left( y_{LE,2} - y_{TE,2} \right)^2 + \left( z_{LE,2}-z_{TE,2} \right)^2 }} & 0          \\
+	\vdots                                                                                                                                               & 0                                                                                                                                                    & \ddots     \\
+\end{bmatrix}
+\eeq
+The trailing edge derivatives are the negative equivalent
+
 
 \subsection{Backends}
 

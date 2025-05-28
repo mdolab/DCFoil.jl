@@ -108,19 +108,23 @@ end
 function unpack_appendageParams(appendageParams, appendageOptions)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
-        print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+        println("Reading geometry properties from file:\n", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
+        toc = appendageParams["toc"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
         s_strut = appendageParams["s_strut"]
         c_strut = appendageParams["c_strut"]
+        toc_strut = appendageParams["toc_strut"]
+        ab_strut = appendageParams["ab_strut"]
+        x_ab_strut = appendageParams["x_ab_strut"]
         theta_f_strut = appendageParams["theta_f_strut"]
 
-        toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+        ab, x_ab = get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
     else
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
@@ -382,5 +386,25 @@ function find_signChange(x)
             end
         end
     end
+
+end
+
+function compute_sigmoid(x, xtr, λ, k=20)
+    """
+    Compute the sigmoid function
+    Inputs
+    ------
+        xtr - value at which to transition the sigmoid function
+        λ - shift parameter
+        x - value to evaluate the sigmoid function at
+        k - steepness of the sigmoid function
+    Outputs
+    -------
+        sig - sigmoid function value
+    """
+
+    sig = 1 / (1 + exp(2 * k * (xtr - x + λ)))
+
+    return sig
 
 end

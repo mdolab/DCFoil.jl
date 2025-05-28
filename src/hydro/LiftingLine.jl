@@ -16,6 +16,7 @@
 
              KNOWN BUGS:
              If there are NaNs, check the TV influence functions
+             If there are NaNs in the derivatives, check the sweep angles
 """
 
 module LiftingLine
@@ -55,8 +56,8 @@ for headerName in [
 end
 
 const Δα = 1e-3 # [rad] Finite difference step for lift slope calculations
-# const NPT_WING = 40 # this is known to be accurate
-const NPT_WING = 20
+const NPT_WING = 40 # this is known to be accurate
+# const NPT_WING = 20
 
 export LiftingLineNLParams, XDIM, YDIM, ZDIM, compute_LLresiduals, compute_LLresJacobian,
     compute_KS, GRAV
@@ -128,7 +129,8 @@ struct LiftingLineOutputs{TF,TA<:AbstractVector{TF},TM<:AbstractMatrix{TF}}
     Γdist::TA # Converged circulation distribution (Γᵢ) [m^2/s]
     cla::TA # Spanwise lift slopes [1/rad]
     cl::TA # Spanwise lift coefficients
-    F::TA # Total integrated loads vector [Fx, Fy, Fz] 
+    # F::TA # Total integrated loads vector [Fx, Fy, Fz] [N]
+    F::TA # Total integrated loads vector perpendicular to flow directions [Fdrag, Fside, Flift] [N]
     CL::TF # Lift coefficient (perpendicular to freestream in symmetry plane)
     CDi::TF # Induced drag coefficient (aligned w/ freestream)
     CS::TF # Side force coefficient
@@ -263,7 +265,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
     return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
 end
 
-function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix;
+function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::AbstractMatrix, preTwist;
     npt_wing=99, npt_airfoil=199, blend=0.25, δ=0.15, rc=0.0, rhof=1025.0,
     airfoil_xy=nothing, airfoil_ctrl_xy=nothing, airfoilCoordFile=nothing, options=nothing)
     """
@@ -274,6 +276,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     displacements : array
         The displacements of the wing collocation nodes [m] size 6 x npt_wing.
         This modifies the collocation nodes
+    preTwist : array
+        The pre-twist angles [rad] same size as midchords array.
     wingSpan : scalar
         The span of the wing [m] (after sweep is applied, so this is not the structural span!)
     sweepAng : scalar
@@ -356,24 +360,28 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     start = -aeroWingSpan * 0.5
     stop = aeroWingSpan * 0.5
 
-    # --- Even spacing ---
-    θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
-    wing_xyz_ycomp = reshape(θ_bound[1:2:end], 1, npt_wing + 1)
-    wing_ctrl_xyz_ycomp = reshape(θ_bound[2:2:end], 1, npt_wing)
+    # # --- Even spacing ---
+    # θ_bound = LinRange(start, stop, npt_wing * 2 + 1)
+    # wing_xyz_ycomp = reshape(θ_bound[1:2:end], 1, npt_wing + 1)
+    # wing_ctrl_xyz_ycomp = reshape(θ_bound[2:2:end], 1, npt_wing)
+
+    # --- Cosine spacing ---
+    # if abs_cs_safe(sweepAng) > 0.0 # actually I think this introduces discontinuity wrt sweep angle derivative
+    # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
+    # println("θ_bound: $(θ_bound)")
+    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
+    wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
+    # end
 
     Zeros = zeros(1, npt_wing + 1)
     ZerosCtrl = zeros(1, npt_wing)
     wing_xyz = cat(Zeros, wing_xyz_ycomp, Zeros, dims=1)
     wing_ctrl_xyz = cat(ZerosCtrl, wing_ctrl_xyz_ycomp, ZerosCtrl, dims=1)
 
-    # --- Cosine spacing ---
-    if abs_cs_safe(sweepAng) > 0.0
-        # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
-        # println("θ_bound: $(θ_bound)")
-        θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
-        wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
-        wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
-    end
+    # Interpolate the pre-twist angles to the collocation points
+    idxSort = sortperm(midchords[YDIM, :])
+    preTwistCtrl = do_linear_interp(midchords[YDIM, idxSort], preTwist[idxSort], wing_ctrl_xyz_ycomp)
 
     # ---------------------------
     #   X coords (chord dist)
@@ -392,19 +400,25 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # ---------------------------
     # --- Handle displacements of collocation nodes ---
     size(displacements) == (6, npt_wing) || error("Displacements must be 6 x $(npt_wing). Size is $(size(displacements))")
-    translatDisplCtrl = displacements[1:3, :]
-    translatDisplCtrl[ZDIM, :] .= 0.0 # Ignore any effect of dihedral on the wing GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+    translatDisplCtrl = cat(displacements[1:2, :], zeros(1, length(displacements[1, :])), dims=1) # Ignore any effect of dihedral on the wing
     rotationDisplacementsCtrl = displacements[4:end, :]
-    # For the displacements on the panel edges, we'll use the extrapolated edge values for the tips and the average for the inner vals
-    midVals = (translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end]) * 0.5
-    midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
-    portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
-    halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
-    portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
+    # For the displacements on the panel edges, we want to use the extrapolated edge values for the tips and the average for the inner vals
+    # However, this is not differentiable so we just use the edge values
+    averages = translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end] * 0.5
+    midVals = cat(averages[:, 1:npt_wing÷2-1], zeros(3, 1), averages[:, npt_wing÷2+1:end], dims=2)
+    # midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
+    # portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
+    # halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
+    # portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
+    portTip = translatDisplCtrl[:, 1]# + portSlope * halfDist
+
     # println("Port tip: $(portTip)")
-    stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
-    halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
-    stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
+
+    # stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
+    # halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
+    # stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
+    stbdTip = translatDisplCtrl[:, end] #+ stbdSlope * halfDist
+
     # println("Stbd tip: $(stbdTip)")
     translatDispl = cat(portTip, midVals, stbdTip, dims=2)
 
@@ -474,7 +488,7 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     AirfoilInfluences_z = Zygote.Buffer(AirfoilInfluences)
     for (ii, sweep) in enumerate(localSweepsCtrl)
 
-        twistAngle = rotationDisplacementsCtrl[YDIM, ii]
+        twistAngle = rotationDisplacementsCtrl[YDIM, ii] + preTwistCtrl[ii]
 
         # The airfoils are rotated by the negative twist angle to be consistent with the wing
         ryMat = get_rotate3dMat(-twistAngle, "z")[1:2, 1:2]
@@ -557,19 +571,29 @@ function compute_LAC(AR, LLHydro, y, c, cr, Λ, span; model="kuechemann")
         Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * AR))^2)^(0.25) # aspect ratio effect
         K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
 
-        if Λ == 0
-            fs = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
-        else
-            tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
-            lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
-                  tanl .* abs_cs_safe.(y) .-
-                  .√(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
-                  tanl .* (0.5 * span .- abs_cs_safe.(y))
+        # if Λ == 0
+        #     fs1 = 0.25 * cr .- c * (1.0 - 1.0 / K) / 4.0
+        #     fs = fs1
+        # else
+        tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
+        lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
+              tanl .* abs_cs_safe.(y) .-
+              .√(1.0 .+ (tanl .* (0.5 * span .- abs_cs_safe.(y))) .^ 2) .+
+              tanl .* (0.5 * span .- abs_cs_safe.(y))
 
-            fs = 0.25 * cr .+
-                 tan(Λ) .* abs_cs_safe.(y) .-
-                 c .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
-        end
+        fs = 0.25 * cr .+
+             tan(Λ) .* abs_cs_safe.(y) .-
+             c .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
+
+        # as sweep goes to zero
+        # fs → 0.25 * cr .-  c .* (1.0 .- (1.0 ) / K) * 0.25
+        # end
+
+        # Λtr = 0.0 # when to switch between models
+        # λ = 1e-5 # offset to switch models (want close to zero)
+        # sig = compute_sigmoid(Λ, Λtr, λ, 20)
+        # fs = fs1 + (fs2 - fs1) * sig
+
     else
         println("Model not implemented yet")
     end
@@ -645,24 +669,35 @@ function compute_dLACds(AR, LLHydro, y, c, ∂c∂y, Λ, span; model="kuechemann
         Λₖ = Λ / (1.0 + (LLHydro.airfoil_CLa * cos(Λ) / (π * AR))^2)^(0.25) # aspect ratio effect
         K = (1.0 + (LLHydro.airfoil_CLa * cos(Λₖ) / (π * AR))^2)^(π / (4.0 * (π + 2 * abs_cs_safe(Λₖ))))
 
-        if Λ == 0
-            dx = -∂c∂y * (1.0 - 1.0 / K) * 0.25
-        else
-            tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
-            lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
-                  tanl .* abs_cs_safe.(y) .-
-                  .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
-                  tanl .* (span / 2.0 .- abs_cs_safe.(y))
+        # if Λ == 0
+        #     dx1 = -∂c∂y * (1.0 - 1.0 / K) * 0.25
+        #     dx = dx1
+        # else
+        tanl = vec(2π * tan(Λₖ) ./ (Λₖ * c))
+        lam = .√(1.0 .+ (tanl .* y) .^ 2) .-
+              tanl .* abs_cs_safe.(y) .-
+              .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2) .+
+              tanl .* (span / 2.0 .- abs_cs_safe.(y))
 
-            lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ .√(1.0 .+ (tanl .* y) .^ 2) -
-                    tanl .* (sign.(y) .* c .- abs_cs_safe.(y) .* ∂c∂y) ./ c +
-                    ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
-                    tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
+        lamp = ((tanl .^ 2 .* (y .* c .- y .^ 2 .* ∂c∂y) ./ c) ./ .√(1.0 .+ (tanl .* y) .^ 2) -
+                tanl .* (sign.(y) .* c .- abs_cs_safe.(y) .* ∂c∂y) ./ c +
+                ((tanl .^ 2 .* (sign.(y) .* (span / 2.0 .- abs_cs_safe.(y)) .* c .+ ∂c∂y .* (span / 2.0 .- abs.(y)) .^ 2) ./ c) ./ .√(1.0 .+ (tanl .* (span / 2.0 .- abs_cs_safe.(y))) .^ 2)) -
+                tanl .* (sign.(y) .* c .+ (span / 2.0 .- abs_cs_safe.(y)) .* ∂c∂y) ./ c)
 
-            dx = tan(Λ) * sign.(y) .+
-                 lamp * Λₖ .* c / (2π * K) .-
-                 ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
-        end
+        dx = tan(Λ) * sign.(y) .+
+             lamp * Λₖ .* c / (2π * K) .-
+             ∂c∂y .* (1.0 .- (1.0 .+ 2.0 * lam * Λₖ / π) / K) * 0.25
+
+        # as sweep approaches zero
+        # dx2 → ∂c∂y .* (1.0 .- (1.0) / K) * 0.25
+        # which is the same as the above
+        # end
+
+        # Λtr = 0.0 # when to switch between models
+        # λ = 1e-5 # offset to switch models (want close to zero)
+        # sig = compute_sigmoid(Λ, Λtr, λ, 20)
+        # dx = dx1 + (dx2 - dx1) * sig
+
     else
         println("Model not implemented yet")
     end
@@ -995,7 +1030,7 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     NondimForces = coeff * (uicrossζi .* Gi) .* dAi
 
     # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-    IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
+    IntegratedNondimForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
     # These integrated forces are about the origin
 
     Γdist = Gconv * FlowCond.Uinf # dimensionalize the circulation distribution
@@ -1019,28 +1054,34 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     Uicrossdli = hcat(Uicrossdli...) # now it's a (3, npt) matrix
     DimForces = FlowCond.rhof * (Uicrossdli .* Γi) .* dAi
 
+
     # --- Vortex core viscous correction ---
     if LLMesh.rc != 0
         println("Vortex core viscous correction not implemented yet")
     end
 
     # --- Final outputs ---
-    CL = -IntegratedForces[XDIM] * uz +
-         IntegratedForces[ZDIM] * ux / (ux^2 + uz^2)
+    # NOTE: the X force is the "drive force" in the chordwise direction
+    CL = -IntegratedNondimForces[XDIM] * uz +
+         IntegratedNondimForces[ZDIM] * ux / (ux^2 + uz^2)
 
-    CDi = IntegratedForces[XDIM] * ux +
-          IntegratedForces[YDIM] * uy +
-          IntegratedForces[ZDIM] * uz
+    CDi = IntegratedNondimForces[XDIM] * ux +
+          IntegratedNondimForces[YDIM] * uy +
+          IntegratedNondimForces[ZDIM] * uz
     CS = (
-        -IntegratedForces[XDIM] * ux * uy -
-        IntegratedForces[ZDIM] * uz * uy +
-        IntegratedForces[YDIM] * (uz^2 + ux^2)
+        -IntegratedNondimForces[XDIM] * ux * uy -
+        IntegratedNondimForces[ZDIM] * uz * uy +
+        IntegratedNondimForces[YDIM] * (uz^2 + ux^2)
     ) / √(ux^2 * uy^2 + uz^2 * uy^2 + (uz^2 + ux^2)^2)
 
-    # --- Compute the lift curve slope ---
+    # --- Compute the spanwise lift coefficients ---
     clvec = 2 * Gconv ./ LLMesh.localChordsCtrl
 
-    return DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS
+    # This would be the integrated forces in the x, y, z, directions, but we need drag
+    IntegratedDimForcesXYZ = vec(sum(DimForces, dims=2))
+    IntegratedDimForces = LLMesh.SRef * 0.5 * FlowCond.rhof * FlowCond.Uinf^2 * [CDi, CS, CL]   # [induced drag, sideforce, lift]
+
+    return DimForces, Γdist, clvec, cmvec, IntegratedDimForces, CL, CDi, CS
 end
 
 function compute_TVinfluences(FlowCond, LLMesh)
@@ -1129,7 +1170,6 @@ function compute_LLresiduals(G; solverParams=nothing)
     # else:
     # Actually solve VPM for each local velocity c
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
-    # println("Ui: $(Ui)\n") # OK
 
     hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
 
@@ -1334,7 +1374,7 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     """
 
     LECoords, TECoords = repack_coords(xPt, 3, length(xPt) ÷ 3)
-    midchords, chordVec, spanwiseVectors, sweepAng = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+    midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     α0 = appendageParams["alfa0"]
     β0 = appendageParams["beta"]
@@ -1342,8 +1382,8 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     depth0 = appendageParams["depth0"]
 
     airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
-        npt_wing=npt_wing,
+    LLSystem, FlowCond, LLHydro, Airfoils, AirfoilInfluences = setup(Uvec, sweepAng, rootChord, TR, midchords, displCol, pretwistDist;
+        npt_wing=size(displCol, 2),
         npt_airfoil=npt_airfoil,
         rhof=solverOptions["rhof"],
         # airfoilCoordFile=airfoilCoordFile,
@@ -1360,60 +1400,6 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     return solverParams, FlowCond
 end
 
-# function compute_∂cdi∂Γ(Gconv, LLMesh, FlowCond)
-
-#     function compute_cdi(Gconv)
-#         # ---------------------------
-#         #   Calculate influence matrix
-#         # ---------------------------
-#         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
-
-#         ux, uy, uz = FlowCond.uvec
-#         ζi = LLMesh.sectionVectors
-#         dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-
-
-#         Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-#         Gjvji = TV_influence .* Gi
-#         Gjvjix = TV_influence[XDIM, :, :] * Gconv
-#         Gjvjiy = TV_influence[YDIM, :, :] * Gconv
-#         Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
-#         Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
-#         Gjvji = permutedims(Gjvji, [2, 1])
-#         u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
-
-#         ui = Gjvji .+ u∞ # Local velocities (nondimensional)
-
-#         # This is the Biot--Savart law but nondimensional
-#         # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
-#         uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-#         uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-#         coeff = 2.0 / LLMesh.SRef
-
-#         # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-#         IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
-
-
-#         # --- Final outputs ---
-#         CDi = IntegratedForces[XDIM] * ux +
-#               IntegratedForces[YDIM] * uy +
-#               IntegratedForces[ZDIM] * uz
-#         return CDi
-#     end
-
-#     backend = AD.ReverseDiffBackend()
-#     ∂cdi∂G, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-#     ∂cdi∂Γ = ∂cdi∂G / FlowCond.Uinf
-
-#     # Compares well with finite difference 2024-12-07
-#     # backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
-#     # ∂cdi∂G_FD, = AD.gradient(backend, x -> compute_cdi(x), Gconv)
-#     # println("∂cdi∂Γ: $(∂cdi∂Γ)")
-#     # println("∂cdi∂Γ_FD: $(∂cdi∂Γ_FD)")
-
-#     return ∂cdi∂Γ
-# end
-
 function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
 
     NFORCES = 3
@@ -1426,10 +1412,15 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
 
-        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+        Fnh = FlowCond.Uinf / √(GRAV* FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+        clvent_incep = compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, PVAP)
+
+        ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
+        
+        ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
+        outputvector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksvent, vec(transpose(DimForces)), clvec)
 
         return outputvector
     end
@@ -1442,6 +1433,10 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
     elseif uppercase(mode) == "FIDI"
         # Compares well with finite difference 
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+    elseif uppercase(mode) == "RAD" # with the number of outputs, this is not really worth it. Untested
+        backend = AD.ReverseDiffBackend()
+        backend = AD.ZygoteDiffBackend()
         ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
     end
 
@@ -1473,6 +1468,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
         solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, displCol_in, appendageOptions, appendageParams, solverOptions)
 
         resVec = compute_LLresiduals(Gconv; solverParams=solverParams)
+
         return resVec
     end
 
@@ -1484,9 +1480,15 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
     if uppercase(mode) == "FIDI"
         ∂r∂Xpt = zeros(DTYPE, length(Gconv), length(ptVec))
         ∂r∂Xdispl = zeros(DTYPE, length(Gconv), length(displCol))
-        dh = 1e-4
+        # dh = 1e-5
+        dh = 1e-4 # standard
+        # dh = 1e-3
+        # dh = 1e-2
 
         resVec_i = compute_resFromXpt(ptVec, displVec) # initialize the solver
+
+        # backend = AD.FiniteDifferencesBackend(central_fdm(3, 1))
+        # ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x, displVec), ptVec)
 
         # @inbounds begin # no speedup
         for ii in eachindex(ptVec)
@@ -1494,9 +1496,9 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
 
             resVec_f = compute_resFromXpt(ptVec, displVec)
 
-            ptVec[ii] -= dh
-
             ∂r∂Xpt[:, ii] = (resVec_f - resVec_i) / dh
+
+            ptVec[ii] -= dh
         end
 
         for ii in eachindex(displVec)
@@ -1517,7 +1519,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
 
         for ii in eachindex(ptVec)
             ptVecCS[ii] += 1im * dh
-            resVec_f = compute_resFromXpt(ptVecCS)
+            resVec_f = compute_resFromXpt(ptVecCS, displVec)
             ptVecCS[ii] -= 1im * dh
             ∂r∂Xpt[:, ii] = imag(resVec_f) / dh
         end
@@ -1528,6 +1530,7 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
         ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
 
     elseif uppercase(mode) == "FAD"
+
         backend = AD.ForwardDiffBackend()
         # ∂r∂Xpt, = AD.jacobian(backend, (xPt, xDisplCol) -> compute_resFromXpt(xPt, xDisplCol), ptVec, vec(displCol))
         ∂r∂Xpt = ForwardDiff.jacobian((xPt) -> compute_resFromXpt(xPt, displVec), ptVec)
@@ -1546,7 +1549,8 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
     NFORCES = 3
     NFORCECOEFFS = 3
     NQUANTS = 1
-    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * NPT_WING * NQUANTS + NPT_WING)
+    npt_wing = size(displCol, 2)
+    outputVector = zeros(NFORCES + NFORCECOEFFS + 1 + 3 * npt_wing * NQUANTS + npt_wing)
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
 
@@ -1561,11 +1565,16 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
 
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, solverParams)
 
-        ksclmax = compute_KS(clvec, solverOptions["rhoKS"])
+        Fnh = FlowCond.Uinf / √(GRAV* FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+        clvent_incep = compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, PVAP)
+
+        ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
+        
+        ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
         # THIS ORDER MATTER. Check CostFuncsInOrder variable
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
-        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksclmax, vec(transpose(DimForces)), clvec)
+        outputVector = vcat(IntegratedForces[XDIM], IntegratedForces[YDIM], IntegratedForces[ZDIM], CL, CDi, CS, ksvent, vec(transpose(DimForces)), clvec)
 
         return outputVector
     end
@@ -1640,84 +1649,16 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
     return ∂I∂Xpt, ∂I∂Xdispl
 end
 
-function compute_∂cdi∂Xpt(Gconv, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+function compute_∂collocationPt∂Xpt(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
-    ∂cdi∂Xpt = zeros(DTYPE, 1, length(ptVec))
-    LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    idxTip = get_tipnode(LECoords)
-    function compute_cdifromxpt(xPt)
-
-        solverParams, FlowCond = setup_solverparams(xPt, nodeConn, idxTip, appendageOptions, appendageParams, solverOptions)
-        TV_influence = solverParams.TV_influence
-        LLMesh = solverParams.LLSystem
-
-        ux, uy, uz = FlowCond.uvec
-        ζi = LLMesh.sectionVectors
-        dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
-
-        Gi = reshape(Gconv, 1, size(Gconv)...) # now it's a (1, npt) matrix
-        Gjvji = TV_influence .* Gi
-        Gjvjix = TV_influence[XDIM, :, :] * Gconv
-        Gjvjiy = TV_influence[YDIM, :, :] * Gconv
-        Gjvjiz = -TV_influence[ZDIM, :, :] * Gconv
-        Gjvji = cat(Gjvjix, Gjvjiy, Gjvjiz, dims=2)
-        Gjvji = permutedims(Gjvji, [2, 1])
-        u∞ = repeat(reshape(FlowCond.uvec, 3, 1), 1, LLMesh.npt_wing)
-
-        ui = Gjvji .+ u∞ # Local velocities (nondimensional)
-
-        # This is the Biot--Savart law but nondimensional
-        # fi = 2 | ( ui ) × ζi| Gi dAi / SRef
-        uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
-        uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
-        coeff = 2.0 / LLMesh.SRef
-
-        # Integrated = 2 Σ ( u∞ + Gⱼvⱼᵢ ) x ζᵢ * Gᵢ * dAᵢ / SRef
-        IntegratedForces = vec(coeff * sum((uicrossζi .* Gi) .* dAi, dims=2))
-
-        # --- Final outputs ---
-        CDi = IntegratedForces[XDIM] * ux +
-              IntegratedForces[YDIM] * uy +
-              IntegratedForces[ZDIM] * uz
-
-        return CDi
-    end
-    # ************************************************
-    #     Finite difference
-    # ************************************************
-    if uppercase(mode) == "FIDI"
-        dh = 1e-4
-        CDi_i = compute_cdifromxpt(ptVec)
-
-        for ii in eachindex(ptVec)
-            ptVec[ii] += dh
-
-            CDi_f = compute_cdifromxpt(ptVec)
-
-            ptVec[ii] -= dh
-
-            ∂cdi∂Xpt[1, ii] = (CDi_f - CDi_i) / dh
-        end
-    elseif uppercase(mode) == "RAD"
-        backend = AD.ReverseDiffBackend()
-        ∂cdi∂Xpt, = AD.jacobian(backend, x -> compute_cdifromxpt(x), ptVec)
-    elseif uppercase(mode) == "FAD"
-        backend = AD.ForwardDiffBackend()
-        ∂cdi∂Xpt, = AD.jacobian(backend, x -> compute_cdifromxpt(x), ptVec)
-    end
-
-    return ∂cdi∂Xpt
-end
-
-function compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FAD")
-
-    ∂collocationPt∂Xpt = zeros(DTYPE, NPT_WING * 3, length(ptVec))
+    npt_wing = size(displCol, 2)
+    ∂collocationPt∂Xpt = zeros(DTYPE, npt_wing * 3, length(ptVec))
 
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
 
     function compute_collocationFromXpt(xPt)
-        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, zeros(6, NPT_WING), appendageOptions, appendageParams, solverOptions)
+        solverParams, _ = setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, appendageParams, solverOptions)
 
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
         outputVec = vec(transpose(solverParams.LLSystem.collocationPts))
@@ -1771,7 +1712,8 @@ end
 
 function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 
-    ∂collocationPt∂displCol = zeros(DTYPE, NPT_WING * 3, length(displCol))
+    npt_wing = size(displCol, 2)
+    ∂collocationPt∂displCol = zeros(DTYPE, npt_wing * 3, length(displCol))
 
     LECoords, _ = repack_coords(ptVec, 3, length(ptVec) ÷ 3)
     idxTip = get_tipnode(LECoords)
@@ -1833,7 +1775,11 @@ function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendag
         ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
 
     elseif uppercase(mode) == "ANALYTIC"
-        for ii in 1:NPT_WING*3
+        # for ii in 1:npt_wing*3
+        #     ∂collocationPt∂displCol[ii, ii] = 1.0
+        # end
+        println("WARNING: ignoring dihedral effect in collocation point Jacobian (i.e., z deriv)")
+        for ii in 1:npt_wing*2
             ∂collocationPt∂displCol[ii, ii] = 1.0
         end
     end

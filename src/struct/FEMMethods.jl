@@ -247,19 +247,19 @@ end
 function get_numnodes(config, nNodeWing, nNodeStrut)
 
     nElemWing = nNodeWing - 1
-    if config == "wing"
+    if config == "wing" || config == "strut"
         nElemTot = nElemWing
     elseif config == "full-wing"
         nElemTot = 2 * nElemWing
     elseif config == "t-foil"
         nElemTot = 2 * nElemWing + nNodeStrut - 1
         nElStrut = nNodeStrut - 1
-    else
+    elseif !(config in CONFIGS)
         error("Invalid configuration")
     end
 
     nNodeTot = nElemTot + 1
-    if config == "wing"
+    if config == "wing" || config == "strut"
         nNodeTot = nElemWing + 1
         nElemTot = nElemWing
     elseif config == "full-wing"
@@ -268,7 +268,7 @@ function get_numnodes(config, nNodeWing, nNodeStrut)
     elseif config == "t-foil"
         nNodeTot = 2 * nElemWing + nElStrut + 1
         nElemTot = 2 * nElemWing + nElStrut
-    else
+    elseif !(config in CONFIGS)
         error("Invalid configuration")
     end
     return nNodeTot, nNodeWing, nElemTot, nElemWing
@@ -708,7 +708,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
     Depending on the elemType, return the indices of fixed nodes
     """
     if BCCond == "clamped"
-        if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
+        if appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "strut"
             fixedDOFs = Vector(1:NDOF)
 
         elseif appendageOptions["config"] == "t-foil"
@@ -716,7 +716,7 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
             nNodeTot = nElemTot + 1
             fixedDOFs = Vector(nNodeTot*NDOF:-1:nElemTot*NDOF+1)
 
-        else
+        elseif !(appendageOptions["config"] in CONFIGS)
             error("config not recognized")
         end
 
@@ -946,7 +946,7 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     nNodes = appendageOptions["nNodes"]
 
     if haskey(appendageOptions, "path_to_struct_props") && !isnothing(appendageOptions["path_to_struct_props"])
-        println("Reading structural properties from file: ", appendageOptions["path_to_struct_props"])
+        println("Reading structural properties from file:\n", appendageOptions["path_to_struct_props"])
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = get_1DBeamPropertiesFromFile(appendageOptions["path_to_struct_props"])
     else
         EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = compute_beam(nNodes, chordLengths, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, constitutive; solverOptions=solverOptions)
@@ -977,6 +977,8 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
 
     elseif appendageOptions["config"] == "wing" || appendageOptions["config"] == "full-wing"
         strutModel = nothing
+    elseif appendageOptions["config"] == "strut"
+        strutModel = wingModel
     elseif !(appendageOptions["config"] in CONFIGS)
         error("Unsupported config: ", appendageOptions["config"])
     end
@@ -1250,21 +1252,7 @@ function compute_∂r∂x(
     if uppercase(mode) == "FIDI" # Finite difference
 
         dh = 1e-4
-        # backend = AD.FiniteDifferencesBackend()
-        # ∂r∂xPt, = AD.jacobian(
-        #     backend,
-        #     x -> compute_residualsFromCoords(
-        #         allStructStates,
-        #         x,
-        #         nodeConn,
-        #         fu,
-        #         appendageParamsList,
-        #         appendageOptions=appendageOptions,
-        #         solverOptions=solverOptions,
-        #         iComp=iComp,
-        #     ),
-        #     ptVec, # compute deriv at this DV
-        # )
+
         f_i = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         for ii in eachindex(ptVec)
             ptVec[ii] += dh
@@ -1277,11 +1265,13 @@ function compute_∂r∂x(
         # ************************************************
         #     Params derivatives
         # ************************************************
+        dh = 1e-6 # make tests work
         appendageParamsList[iComp]["theta_f"] += dh
         f_f = compute_residualsFromCoords(allStructStates, ptVec, nodeConn, fu, appendageParamsList; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         appendageParamsList[iComp]["theta_f"] -= dh
         ∂r∂xParams["theta_f"] = (f_f - f_i) / dh
 
+        dh = 1e-4
         ∂r∂xParams["toc"] = zeros(DTYPE, length(f_i), length(appendageParamsList[iComp]["toc"]))
         for ii in eachindex(appendageParamsList[iComp]["toc"])
             appendageParamsList[iComp]["toc"][ii] += dh

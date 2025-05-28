@@ -55,7 +55,7 @@ function test_struct()
     for i in 1:N
         θₗ = θₐ[i]
         section = FEMMethods.SectionProperty(c, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, θₗ, zeros(20, 2))
-        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = FEMMethods.compute_section_property(section, "orthotropic")
+        EIₛ, EIIP, Kₛ, GJₛ, Sₛ, EAₛ, _, _ = FEMMethods.compute_section_property(section, "orthotropic"; solverOptions=Dict())
 
         EIₛₐ[i] = EIₛ
         EIIPₛₐ[i] = EIIP
@@ -107,14 +107,25 @@ function test_COMP2_stiff()
     #     COMP2 element stiff
     # ************************************************
     elemType = "COMP2"
-
-    Ktest = BeamElem.compute_elem_stiff(2, 0.0, 8, 4, 8 / 3, 0.0, 2, 1, elemType, constitutive)
+    EI = 2
+    ab = 1.0
+    Swarp = 8 / 3
+    ab = 0.01
+    b = 1.0
+    Swarp = EI * (1 / 3 * b^2 + ab^2)
+    Ktest = FEMMethods.compute_elem_stiff(EI, 0.0, 8, 4, Swarp, 0.0, 2, ab, elemType, constitutive)
     # show(stdout, "text/plain", Ktest[1:end, 1:end])
+    DOFBlankingList = FEMMethods.get_fixed_dofs(elemType)
+    Kred, Mred, _ = FEMMethods.apply_BCs(Ktest, Ktest, zeros(size(Ktest, 1)), DOFBlankingList)
+    # println("determinant with BC applied:\t$(det(Kred))") # should be >0
 
     # # Reduce the full size to what we actually test
     # blankingList = vcat([1,2,6,9], [1,2,6,9] .+ 9)
     # Ktest = Ktest[1:end.∉[blankingList], 1:end.∉[blankingList]]
 
+    println("Ktest before switch")
+    show(stdout, "text/plain", Ktest)
+    println()
     # Rearrange stuff so we can compare to the matlab training solution
     switch = [3, 5, 8, 4, 7]
     switchid = vcat(switch, switch .+ 9)
@@ -130,38 +141,58 @@ function test_COMP2_stiff()
         Ktest[13, switchid],
         Ktest[16, switchid],
     )
-    println("Ktest")
+    println("Ktest after switch")
     show(stdout, "text/plain", Ktest)
     println()
+
 
     # --- Reference value ---
     # These were obtained from the matlab symbolic script plugging 1 for flexural stiffnesses and 2 for the chord
     ref_sol = vec(
-        [
-            4.2857 4.2857 0.4286 -3.0000 -5.0000 -4.2857 4.2857 -0.4286 3.0000 -1.0000
-            4.2857 5.4857 0.6286 -0.6000 -5.6000 -4.2857 3.0857 -0.2286 0.6000 0.4000
+        # [ # old test using ab = 1.0
+        #     4.2857 4.2857 0.4286 -3.0000 -5.0000 -4.2857 4.2857 -0.4286 3.0000 -1.0000
+        #     4.2857 5.4857 0.6286 -0.6000 -5.6000 -4.2857 3.0857 -0.2286 0.6000 0.4000
+        #     0.4286 0.6286 0.3429 0.4000 0.4000 -0.4286 0.2286 0.0571 -0.4000 0.4000
+        #     -3.0000 -0.6000 0.4000 8.8000 4.8000 3.0000 -5.4000 0.4000 -8.8000 4.8000
+        #     -5.0000 -5.6000 0.4000 4.8000 11.4667 5.0000 -4.4000 0.4000 -4.8000 2.1333
+        #     -4.2857 -4.2857 -0.4286 3.0000 5.0000 4.2857 -4.2857 0.4286 -3.0000 1.0000
+        #     4.2857 3.0857 0.2286 -5.4000 -4.4000 -4.2857 5.4857 -0.6286 5.4000 -2.4000
+        #     -0.4286 -0.2286 0.0571 0.4000 0.4000 0.4286 -0.6286 0.3429 -0.4000 0.4000
+        #     3.0000 0.6000 -0.4000 -8.8000 -4.8000 -3.0000 5.4000 -0.4000 8.8000 -4.8000
+        #     -1.0000 0.4000 0.4000 4.8000 2.1333 1.0000 -2.4000 0.4000 -4.8000 3.4667
+        # ],
+        [4.2857 4.2857 0.4286 -0.0300 -2.0300 -4.2857 4.2857 -0.4286 0.0300 1.9700 # new test using ab = 0.01
+            4.2857 5.4857 0.6286 2.3700 -1.6400 -4.2857 3.0857 -0.2286 -2.3700 2.3800
             0.4286 0.6286 0.3429 0.4000 0.4000 -0.4286 0.2286 0.0571 -0.4000 0.4000
-            -3.0000 -0.6000 0.4000 8.8000 4.8000 3.0000 -5.4000 0.4000 -8.8000 4.8000
-            -5.0000 -5.6000 0.4000 4.8000 11.4667 5.0000 -4.4000 0.4000 -4.8000 2.1333
-            -4.2857 -4.2857 -0.4286 3.0000 5.0000 4.2857 -4.2857 0.4286 -3.0000 1.0000
-            4.2857 3.0857 0.2286 -5.4000 -4.4000 -4.2857 5.4857 -0.6286 5.4000 -2.4000
+            -0.0300 2.3700 0.4000 5.8003 1.8003 0.0300 -2.4300 0.4000 -5.8003 1.8003
+            -2.0300 -1.6400 0.4000 1.8003 3.5071 2.0300 -2.4200 0.4000 -1.8003 0.1335
+            -4.2857 -4.2857 -0.4286 0.0300 2.0300 4.2857 -4.2857 0.4286 -0.0300 -1.9700
+            4.2857 3.0857 0.2286 -2.4300 -2.4200 -4.2857 5.4857 -0.6286 2.4300 1.5600
             -0.4286 -0.2286 0.0571 0.4000 0.4000 0.4286 -0.6286 0.3429 -0.4000 0.4000
-            3.0000 0.6000 -0.4000 -8.8000 -4.8000 -3.0000 5.4000 -0.4000 8.8000 -4.8000
-            -1.0000 0.4000 0.4000 4.8000 2.1333 1.0000 -2.4000 0.4000 -4.8000 3.4667
-        ],
+            0.0300 -2.3700 -0.4000 -5.8003 -1.8003 -0.0300 2.4300 -0.4000 5.8003 -1.8003
+            1.9700 2.3800 0.4000 1.8003 0.1335 -1.9700 1.5600 0.4000 -1.8003 3.4271],
     )
 
     # --- Relative error ---
     answers = vec(Ktest) # put computed solutions here
     rel_err = LinearAlgebra.norm(answers - ref_sol, 2) / LinearAlgebra.norm(ref_sol, 2)
 
+    if rel_err > 5e-5
+        diff = reshape(answers, 10, 10) - reshape(ref_sol, 10, 10)
+        idxMax = argmax(abs.(diff))
+        println("max error at index $(idxMax)")
+        println("matrix of differences")
+        show(stdout, "text/plain", diff)
+        println()
+    end
+
     if det(Ktest) >= 1e-16
-        println("Your stiffness matrix is not singular...it's wrong")
+        error("Your stiffness matrix is not singular...it's wrong")
         rel_err += 1 # make test fail
     end
 
     if Ktest' != Ktest
-        println("Your stiffness matrix is not symmetric...it's wrong")
+        error("Your stiffness matrix is not symmetric...it's wrong")
         rel_err += 1 # make test fail
     end
 
@@ -184,7 +215,7 @@ function test_COMP2_mass()
     le = 2
     xalphab = -1.0 # you can't just change xalpha without changing isea btw
     # Test
-    Mtest = BeamElem.compute_elem_mass(ms, isea, le, xalphab, elemType)
+    Mtest = FEMMethods.compute_elem_mass(ms, isea, le, xalphab, elemType)
     # show(stdout, "text/plain", Mtest[5:end, 5:end])
 
     totalMass = ms * le
@@ -253,10 +284,6 @@ function test_COMP2_mass()
     return rel_err
 end
 
-# ans = test_BT3_mass()
-# ans = test_BT3_stiff()
-# ans1 = test_COMP2_stiff()
-# ans2 = test_COMP2_mass()
 # ==============================================================================
 #                         Test finite element solver with unit loads
 # ==============================================================================

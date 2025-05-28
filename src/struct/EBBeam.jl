@@ -72,6 +72,8 @@ function compute_elem_stiff(
         this is Kₛ from the paper (material bend-twist coupling, +ve for nose-down BTC) [N-m²]
     Sᵉ : 
         structural warping (cross-sections do not retain shape) [N-m⁴]
+        NOTE: this is coupled to the ab parameter so you cannot just set this willy nilly or 
+        you may get incorrect stiffness matrices with negative eigenvalues
     lᵉ : 
         length of the element [m]
     abᵉ : 
@@ -639,54 +641,54 @@ function compute_elem_mass(
     #     Mbot = hcat(M12', M22)
     #     Mᵉ = vcat(Mtop, Mbot)
     # elseif elemType == "COMP2"
-        xb = x_αbᵉ * bz
-        xf = x_αbᵉ * fz
-        xh = x_αbᵉ * hz
-        xc = x_αbᵉ * cz
-        xp = x_αbᵉ * pz
-        xs = x_αbᵉ * sz
-        xu = x_αbᵉ * uz
-        M11 = [
-            ax 00 00 00 00 00 00 00 00
-            00 ay 00 00 00 iy 00 00 qy
-            00 00 az xb iz 00 xh qz 00
-            00 00 xb aτ xf 00 cτ xp 00
-            00 00 iz xf lz 00 xs mz 00
-            00 iy 00 00 00 ly 00 00 my
-            00 00 xh cτ xs 00 eτ xu 00
-            00 00 qz xp mz 00 xu tz 00
-            00 qy 00 00 00 my 00 00 ty
-        ]
-        xg = -x_αbᵉ * gz
-        xe = -x_αbᵉ * ez
-        xo = x_αbᵉ * oz
-        xv = -x_αbᵉ * vz
-        xw = -x_αbᵉ * wz
-        M12 = [
-            bx 00 00 00 00 00 00 00 00
-            00 dy 00 00 00 -jy 00 00 ry
-            00 00 dz xc -jz 00 xg rz 00
-            00 00 xc bτ xe 00 -dτ xo 00
-            00 00 jz -xe -kz 00 xv nz 00
-            00 jy 00 00 00 -ky 00 00 ny
-            00 00 -xg dτ xv 00 -fτ -xw 00
-            00 00 rz xo -nz 00 xw xz 00
-            00 ry 00 00 00 -ny 00 00 xy
-        ]
-        M22 = [
-            ax 00 00 00 00 00 00 00 00
-            00 ay 00 00 00 -iy 00 00 qy
-            00 00 az xb -iz 00 -xh qz 00
-            00 00 xb aτ -xf 00 -cτ xp 00
-            00 00 -iz -xf lz 00 xs -mz 00
-            00 -iy 00 00 00 ly 00 00 -my
-            00 00 -xh -cτ xs 00 eτ -xu 00
-            00 00 qz xp -mz 00 -xu tz 00
-            00 qy 00 00 00 -my 00 00 ty
-        ]
-        Mtop = hcat(M11, M12)
-        Mbot = hcat(M12', M22)
-        Mᵉ = vcat(Mtop, Mbot)
+    xb = x_αbᵉ * bz
+    xf = x_αbᵉ * fz
+    xh = x_αbᵉ * hz
+    xc = x_αbᵉ * cz
+    xp = x_αbᵉ * pz
+    xs = x_αbᵉ * sz
+    xu = x_αbᵉ * uz
+    M11 = [
+        ax 00 00 00 00 00 00 00 00
+        00 ay 00 00 00 iy 00 00 qy
+        00 00 az xb iz 00 xh qz 00
+        00 00 xb aτ xf 00 cτ xp 00
+        00 00 iz xf lz 00 xs mz 00
+        00 iy 00 00 00 ly 00 00 my
+        00 00 xh cτ xs 00 eτ xu 00
+        00 00 qz xp mz 00 xu tz 00
+        00 qy 00 00 00 my 00 00 ty
+    ]
+    xg = -x_αbᵉ * gz
+    xe = -x_αbᵉ * ez
+    xo = x_αbᵉ * oz
+    xv = -x_αbᵉ * vz
+    xw = -x_αbᵉ * wz
+    M12 = [
+        bx 00 00 00 00 00 00 00 00
+        00 dy 00 00 00 -jy 00 00 ry
+        00 00 dz xc -jz 00 xg rz 00
+        00 00 xc bτ xe 00 -dτ xo 00
+        00 00 jz -xe -kz 00 xv nz 00
+        00 jy 00 00 00 -ky 00 00 ny
+        00 00 -xg dτ xv 00 -fτ -xw 00
+        00 00 rz xo -nz 00 xw xz 00
+        00 ry 00 00 00 -ny 00 00 xy
+    ]
+    M22 = [
+        ax 00 00 00 00 00 00 00 00
+        00 ay 00 00 00 -iy 00 00 qy
+        00 00 az xb -iz 00 -xh qz 00
+        00 00 xb aτ -xf 00 -cτ xp 00
+        00 00 -iz -xf lz 00 xs -mz 00
+        00 -iy 00 00 00 ly 00 00 -my
+        00 00 -xh -cτ xs 00 eτ -xu 00
+        00 00 qz xp -mz 00 -xu tz 00
+        00 qy 00 00 00 -my 00 00 ty
+    ]
+    Mtop = hcat(M11, M12)
+    Mbot = hcat(M12', M22)
+    Mᵉ = vcat(Mtop, Mbot)
     # end
 
     return Mᵉ

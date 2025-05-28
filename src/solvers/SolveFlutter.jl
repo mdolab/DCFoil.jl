@@ -28,6 +28,7 @@ using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely
 
 # --- DCFoil modules ---
 for headerName in [
+    "../utils/Utilities",
     "../struct/FEMMethods",
     "../hydro/LiftingLine",
     "../io/MeshIO",
@@ -38,6 +39,7 @@ for headerName in [
     "../constants/DesignConstants",
     "../solvers/DCFoilSolution",
     "../InitModel",
+    "../solvers/SolverSetup",
 ]
     include("$(headerName).jl")
 end
@@ -45,14 +47,6 @@ end
 using .FEMMethods
 using .LiftingLine
 using .HydroStrip
-# using ..InitModel
-# using ..BeamProperties
-# using ..Interpolation
-# using ..DesignConstants: SORTEDDVS
-# using ..DesignVariables: allDesignVariables
-# using ..SolutionConstants: MEPSLARGE, P_IM_TOL, SolutionConstants, XDIM, YDIM, ZDIM, ELEMTYPE
-# using ..Utilities: Utilities, compute_KS
-# using ..TecplotIO
 
 # ==============================================================================
 #                         MODULE CONSTANTS
@@ -313,29 +307,22 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     return FEMESH, LLSystem, LLOutputs, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
-function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict)
+function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict)
     """
+    System natural frequencies
     """
 
-
     # ************************************************
-    #     Initializations
+    #     Initialize
     # ************************************************
-    uRange = solverOptions["uRange"]
+    outputDir = solverOptions["outputDir"]
     nModes = solverOptions["nModes"]
+    # tipMass = appendageOptions["use_tipMass"]
+    tipMass = false
     debug = solverOptions["debug"]
-    println("====================================================================================")
-    println("        BEGINNING FLUTTER SOLUTION")
-    println("====================================================================================")
-    println("Speed range [m/s]: ", uRange)
-    if debug
-        rm("DebugOutput/", recursive=true)
-        mkpath("DebugOutput/")
-        println("+---------------------------+")
-        println("|    Running debug mode!    |")
-        println("+---------------------------+")
-    end
-
+    # --- Initialize the model ---
+    # global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(appendageParams, solverOptions, appendageOptions)
+    # global FOIL, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
     # --- Init model structure ---
     if length(solverOptions["appendageList"]) == 1
         appendageOptions = solverOptions["appendageList"][1]
@@ -352,7 +339,9 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
         rake = appendageParams["rake"]
         depth0 = appendageParams["depth0"]
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol;
+        displCol = zeros(6, npt_wing)
+        npt_wing = size(displCol, 2) # overwrite
+        LLSystem, FlowCond, _, _, _ = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displCol, pretwistDist;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],
@@ -365,75 +354,7 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
     else
         error("Only one appendage is supported at the moment")
     end
-
-
-    # ************************************************
-    #     FLUTTER SOLUTION
-    # ************************************************
-    N_MAX_Q_ITER = solverOptions["maxQIter"]    # TEST VALUE
-    N_R = 8                                     # reduced problem size (Nr x Nr)
-
-
-    x_αbVec = appendageParams["x_ab"]
-
-    # ************************************************
-    #     FEM assembly
-    # ************************************************
-    # globalKs, globalMs, _ = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive;
-    # config=appendageOptions["config"])
-
-    globalKs, globalMs, _, _, FEMESH, WingStructModel, StrutStructModel = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
-
-    abVec = WingStructModel.ab
-    chordVec = WingStructModel.chord
-    ebVec = 0.25 * chordVec .+ abVec
-    b_ref = sum(chordVec) / WingStructModel.nNodes         # mean semichord
-
-    # ---------------------------
-    #   Get structural damping
-    # ---------------------------
-    alphaConst = solverOptions["alphaConst"]
-    betaConst = solverOptions["betaConst"]
-    globalCs = alphaConst * globalMs .+ betaConst * globalKs
-
-    # ---------------------------
-    #   Add any discrete masses
-    # ---------------------------
-    if tipMass
-        bulbMass = 2200 #[kg]
-        bulbInertia = 900 #[kg-m²]
-        x_αbBulb = -0.1 # [m]
-        dR = (structMesh[end, :] - structMesh[end-1, :])
-        elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
-        # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
-        transMat = get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
-    end
-
-    alphaCorrection = 0.0
-    SOLVERPARAMS = DCFoilSolverParams(globalKs, globalMs, globalCs, zeros(2, 2), 0.0, alphaCorrection)
-
-    dim = size(globalKs)[1]
-
-    return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, WingStructModel, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
-end
-
-function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::AbstractDict, solverOptions::AbstractDict, appendageOptions::AbstractDict)
-    """
-    System natural frequencies
-    """
-
-    # ************************************************
-    #     Initialize
-    # ************************************************
-    outputDir = solverOptions["outputDir"]
-    nModes = solverOptions["nModes"]
-    # tipMass = appendageOptions["use_tipMass"]
-    tipMass = false
-    debug = solverOptions["debug"]
-    # --- Initialize the model ---
-    # global FOIL, STRUT, _ = InitModel.init_modelFromDVDict(appendageParams, solverOptions, appendageOptions)
-    global FOIL, STRUT, _, FEMESH, LLOutputs, LLSystem, FlowCond = init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    globalKs, globalMs, globalF, _, FEMESH, WingStructModel, StrutStructModel = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
 
     println("====================================================================================")
     println("        BEGINNING MODAL SOLUTION")
@@ -448,20 +369,17 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # ---------------------------
     #   Assemble structure
     # ---------------------------
-    abVec = appendageParams["ab"]
-    x_αbVec = appendageParams["x_ab"]
-    chordVec = FOIL.chord
-    ebVec = 0.25 * chordVec .+ abVec
+    # chordVec = FOIL.chord
     # Λ = DVDict["sweep"]
     # Preprocessing.
-    globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; config=appendageOptions["config"])
+    # globalKs_work, globalMs_work, globalF_work = FEMMethods.assemble(FEMESH, x_αbVec, FOIL, ELEMTYPE, FOIL.constitutive; config=appendageOptions["config"])
     # There some weird data type bug here so we need to copy the matrices and make them Float64
-    globalKs = zeros(Float64, size(globalKs_work))
-    globalMs = zeros(Float64, size(globalMs_work))
-    globalF = zeros(Float64, size(globalF_work))
-    globalKs .= globalKs_work
-    globalMs .= globalMs_work
-    globalF .= globalF_work
+    # globalKs = zeros(Float64, size(globalKs_work))
+    # globalMs = zeros(Float64, size(globalMs_work))
+    # globalF = zeros(Float64, size(globalF_work))
+    # globalKs .= globalKs_work
+    # globalMs .= globalMs_work
+    # globalF .= globalF_work
 
     if tipMass
         bulbMass = 2200 #[kg]
@@ -483,12 +401,12 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # ---------------------------
     #   Initialize stuff
     # ---------------------------
-    u = zeros(length(globalF))
+    # u = zeros(length(globalF))
     wetModeShapes_sol = zeros(size(globalF, 1), nModes)
     structModeShapes_sol = zeros(size(globalF, 1), nModes)
     # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    alphaCorrection = 0.0
-    global CONSTANTS = DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), zeros(2, 2), 0.0, alphaCorrection)
+    # alphaCorrection = 0.0
+    # global CONSTANTS = DCFoilSolverParams(globalKs, globalMs, real(copy(globalKs)), zeros(2, 2), 0.0, alphaCorrection)
 
     # ---------------------------
     #   Test eigensolver
@@ -506,14 +424,10 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     end
     println("+-------------------------------------+")
     # --- Wetted solve ---
-    # Provide dummy inputs for the hydrodynamic matrices; we really just need the mass!
-    # FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordVec, chordVec, chordVec, chordVec, 0.0, zeros(2, 2)) # dummy inputs
-    if solverOptions["use_nlll"]
-        error("NLLL not implemented yet for natural freq")
-    else 
-        claVec = LLOutputs.cla
-    end
-    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, FOIL, LLSystem, claVec, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
+    claVec = 2π * ones(length(globalF) ÷ FEMMethods.NDOF) # this does not matter
+    # end
+    globalMf, globalCf_r, _, globalKf_r, _ = HydroStrip.compute_AICs(FEMESH, WingStructModel, LLSystem, claVec, FlowCond.rhof, size(globalMs)[1], LLSystem.sweepAng, 0.1, 0.1, FlowCond, ELEMTYPE;
+        appendageOptions=appendageOptions, solverOptions=solverOptions)
     _, _, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
     wetOmegaSquared, wetModeShapes = FEMMethods.compute_eigsolve(Ks, Ms .+ Mf, nModes)
     wetNatFreqs = .√(wetOmegaSquared) / (2π)
@@ -536,10 +450,33 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     # ************************************************
     if !(isempty(outputDir))
         write_modalsol(structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, outputDir)
+        if solverOptions["writeTecplotSolution"]
+            write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, FEMESH.mesh, chordVec, outputDir; solverOptions=solverOptions)
+        end
     end
 
     return structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol
 end # end solve_frequencies
+
+
+# ==============================================================================
+#                         Solution writer
+# ==============================================================================
+function write_solution(FLUTTERSOL, solverOptions, appendageParamsList; callNumber=0)
+    outputDir = solverOptions["outputDir"] * @sprintf("/call_%03d/", callNumber)
+
+    println("="^80)
+    println("Writing solution files...")
+    println("="^80)
+
+    write_sol(FLUTTERSOL, outputDir)
+
+    if solverOptions["writeTecplotSolution"] && solverOptions["run_static"]
+        STATSOL = STATSOLLIST[iComp]
+        FEMESH = STATSOL.FEMESH
+        write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    end
+end
 
 function write_sol(FLUTTERSOL, outputDir="./OUTPUT/")
     """
@@ -613,6 +550,7 @@ function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatF
     write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir; solverOptions=solverOptions)
 
 end
+
 # ==============================================================================
 #                         Flutter routines
 # ==============================================================================
@@ -973,8 +911,9 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     nCorrNewModes::Int64 = 0 # number of new modes to correlate
     is_failed::Bool = false
     nK::Int64 = 22 # number of k values to sweep
-    maxK = 3.5 # max reduced frequency k to search
-    maxK = 60.0 # max reduced frequency k to search
+    maxK = 3.5 # max reduced frequency k to search # this is too low for low speed analysis
+    maxK = 30.0 # max reduced frequency k to search
+    # maxK = 60.0 # max reduced frequency k to search
 
 
     # --- Zygote buffers ---
@@ -1012,8 +951,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         # div_tmp = 1 / tmpFactor
         # kSweep = ωSweep * div_tmp
         # --- Compute generalized hydrodynamic loads ---
-        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, FlowCond.rhof, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
-        # p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(dim, kSweep, b_ref, FOIL, U∞, CONSTANTS.Mmat, CONSTANTS.Kmat, structMesh, globalDOFBlankingList; debug=debug, qiter=nFlow)
+        Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(maxK, nK, U∞, b_ref, dim, AEROMESH, Λ, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE; appendageOptions=appendageOptions, solverOptions=solverOptions)
         p_cross_r, p_cross_i, R_cross_r, R_cross_i, kCtr = compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, dim, kSweep, b_ref, Λ, chordVec, abVec, ebVec, FOIL, U∞, Mr, Kr, Cr, Qr, structMesh, DOFBlankingList; debug=solverOptions["debug"], qiter=nFlow)
         # ---------------------------
         #   Mode correlations

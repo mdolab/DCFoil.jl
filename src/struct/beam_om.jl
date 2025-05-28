@@ -73,7 +73,6 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     """
     Solve the FEM model
     """
-    println("Solving nonlinear beam")
 
     ptVec = inputs["ptVec"]
     theta_f = inputs["theta_f"][1]
@@ -148,6 +147,11 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     ∂rs∂us = zeros(size(globalK))
     ∂rs∂us[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] =
         globalK[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]] # - ∂F∂u looking for direct dependence
+
+    # Set ones to diagonal to the deflections of 1st node (where the BC is applied)
+    for i in 1:9
+        ∂rs∂us[i, i] = 1.0
+    end
 
     # partials["deflections", "ptVec"][:, :] .= 0.0
     # partials["deflections", "ptVec"][1:end.∉[DOFBlankingList], :] = ∂rs∂xPt
