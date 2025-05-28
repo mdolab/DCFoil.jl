@@ -470,7 +470,7 @@ if __name__ == "__main__":
     # ************************************************
     #     OPTIMIZATION
     # ************************************************
-    if args.task == "opt":
+    if args.task in ["opt", "trim"]:
         print("=" * 60)
         print("Running optimization...", flush=True)
         print("=" * 60)

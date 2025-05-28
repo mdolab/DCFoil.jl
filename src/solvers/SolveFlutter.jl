@@ -1016,8 +1016,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     nCorrNewModes::Int64 = 0 # number of new modes to correlate
     is_failed::Bool = false
     nK::Int64 = 22 # number of k values to sweep
-    maxK = 3.5 # max reduced frequency k to search
-    maxK = 10.0 # max reduced frequency k to search
+    maxK = 3.5 # max reduced frequency k to search # this is too low for low speed analysis
+    maxK = 20.0 # max reduced frequency k to search
     # maxK = 60.0 # max reduced frequency k to search
 
 
