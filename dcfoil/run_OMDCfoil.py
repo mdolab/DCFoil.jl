@@ -60,7 +60,7 @@ files["FFDFile"] = FFDFile
 Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
 
 # This chunk of code is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
-nNodes = 5
+nNodes = 10
 nNodesStrut = 3
 appendageOptions = {
     "compName": "rudder",
@@ -168,7 +168,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     #     "scale": 1,
     #     "value": 0.0,
     # },
-    "taper": { # the tip chord can change, but not the root
+    "taper": {  # the tip chord can change, but not the root
         "lower": [1.0, 0.5],
         "upper": [1.0, 1.1],
         "scale": 1.0,
@@ -195,8 +195,8 @@ otherDVs = {
         "value": appendageParams["toc"],
     },
     "theta_f": {
-        "lower": np.deg2rad(-20),
-        "upper": np.deg2rad(20),
+        "lower": np.deg2rad(-30),
+        "upper": np.deg2rad(30),
         "scale": 1.0,
         "value": 0.0,
     },
@@ -300,8 +300,8 @@ class Top(Multipoint):
         if args.task != "trim":
             self.add_constraint("dcfoil.wtip", upper=0.05 * 0.333)  # tip deflection constraint (5% of baseline semispan)
             self.add_constraint("dcfoil.ksvent", upper=0.0)  # ventilation constraint
-            # self.add_constraint("dcfoil.ksflutter", upper=0.0) # flutter constraint
-            # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
+        # self.add_constraint("dcfoil.ksflutter", upper=0.0) # flutter constraint
+        # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
 
 
 # ==============================================================================
@@ -322,8 +322,11 @@ if __name__ == "__main__":
         help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
     )
     parser.add_argument("--name", type=str, default=None, help="Name of the problem to append to .sql recorder")
-    parser.add_argument("--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)")
+    parser.add_argument(
+        "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
+    )
     parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+    parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -335,8 +338,27 @@ if __name__ == "__main__":
 
     # --- Trim only case ---
     if args.task == "trim":
+        thetaStart = np.deg2rad(0.0)
         dvDictInfo = {  # dictionary of design variable parameters
             "sweep": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1,
+                "value": 0.0,
+            },
+            "twist": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1.0,
+                "value": np.zeros(8 // 2),
+            },
+            "taper": {  # the tip chord can change, but not the root
+                "lower": [1.0, 1.0],
+                "upper": [1.0, 1.0],
+                "scale": 1.0,
+                "value": np.ones(2) * 1.0,
+            },
+            "span": {
                 "lower": 0.0,
                 "upper": 0.0,
                 "scale": 1,
@@ -351,16 +373,38 @@ if __name__ == "__main__":
                 "value": appendageParams["alfa0"],
             },
             "toc": {
-                "lower": 0.12,
-                "upper": 0.12,
+                "lower": appendageParams["toc"],
+                "upper": appendageParams["toc"],
                 "scale": 1.0,
                 "value": appendageParams["toc"],
             },
             "theta_f": {
-                "lower": 0.0,
-                "upper": 0.0,
+                "lower": thetaStart,
+                "upper": thetaStart,
                 "scale": 1.0,
-                "value": 0.0,
+                "value": thetaStart,
+            },
+        }
+    if args.fixStruct:
+        thetaStart = np.deg2rad(0.0)
+        otherDVs = {
+            "alfa0": {
+                "lower": -10.0,
+                "upper": 10.0,
+                "scale": 1.0,  # the scale was messing with the DV bounds
+                "value": appendageParams["alfa0"],
+            },
+            "toc": {
+                "lower": appendageParams["toc"],
+                "upper": appendageParams["toc"],
+                "scale": 1.0,
+                "value": appendageParams["toc"],
+            },
+            "theta_f": {
+                "lower": np.deg2rad(-30),
+                "upper": np.deg2rad(30),
+                "scale": 1.0,
+                "value": thetaStart,
             },
         }
 
@@ -391,8 +435,11 @@ if __name__ == "__main__":
     prob.driver.opt_settings["Nonderivative linesearch"] = None
     prob.driver.opt_settings["Major Step Limit"] = 0.2
     outputDir = "output"
-    prob.driver.opt_settings["Print file"] = os.path.join(outputDir, "SNOPT_print.out")
-    prob.driver.opt_settings["Summary file"] = os.path.join(outputDir, "SNOPT_summary.out")
+    fname = "SNOPT"
+    if args.name is not None:
+        fname += "-" + args.name
+    prob.driver.opt_settings["Print file"] = os.path.join(outputDir, f"{fname}_print.out")
+    prob.driver.opt_settings["Summary file"] = os.path.join(outputDir, f"{fname}_summary.out")
 
     # --- Some debug stuff ---
     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
@@ -413,11 +460,12 @@ if __name__ == "__main__":
     prob.driver.add_recorder(recorder)  # attach recorder to the driver
     model = prob.model
     model.dcfoil.add_recorder(recorder)  # attach recorder to the subsystem of interest
+    model.geometry.add_recorder(recorder)  # attach recorder to the geometry subsystem
     # ************************************************
     #     Set starting values
     # ************************************************
     prob.set_val("theta_f", np.deg2rad(0.0))  # this is defined in [rad] in the julia wrapper layer
-    prob.set_val("alfa0", 1.0)  # this is defined in [deg] in the julia wrapper layer
+    prob.set_val("alfa0", 2.0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
     prob.set_val("toc", 0.12 * np.ones(nNodes))
@@ -461,7 +509,6 @@ if __name__ == "__main__":
                 prob.set_val(dv, val)
             else:
                 print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
-
 
     # ==============================================================================
     #                         TASKS
@@ -547,12 +594,13 @@ if __name__ == "__main__":
         prob.run_model()
         fileName = "derivative-check-full.out"
         f = open(fileName, "w")
-        # print("Checking partials...")
-        # f.write("PARTIALS\n")
-        # prob.check_partials(out_stream=f, method="fd", includes=,compact_print=True)
-        # prob.check_partials(out_stream=f, method="fd")
-
         print("Checking totals...")
         f.write("TOTALS\n")
         prob.check_totals(out_stream=f, method="fd", compact_print=True)
         prob.check_totals(out_stream=f, method="fd", step=1e-4)
+
+        print("Checking partials...")
+        f.write("PARTIALS\n")
+        prob.model.dcfoil.liftingline_funcs.set_check_partial_options(wrt=["toc"])
+        prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
+        prob.check_partials(method="fd", includes=["liftingline_funcs"])

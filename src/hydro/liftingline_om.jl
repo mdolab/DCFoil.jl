@@ -58,6 +58,7 @@ function OpenMDAOCore.setup(self::OMLiftingLine)
     outputs = [
         OpenMDAOCore.VarData("gammas", val=zeros(LiftingLine.NPT_WING)),
         OpenMDAOCore.VarData("gammas_d", val=zeros(LiftingLine.NPT_WING)), # perturbed gammas
+        # OpenMDAOCore.VarData("jigtwist", val=ones(npt)), # only saved for post processing stuff
     ]
 
     partials = [
@@ -100,6 +101,8 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
 
     idxTip = LiftingLine.get_tipnode(LECoords)
     midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    # outputs["jigtwist"][:] = pretwistDist
 
     # ---------------------------
     #   Hydrodynamics
@@ -295,6 +298,8 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
 
     idxTip = LiftingLine.get_tipnode(LECoords)
     midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+
+    # outputs["jigtwist"][:] = pretwistDist
 
     # ---------------------------
     #   Hydrodynamics

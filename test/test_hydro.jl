@@ -607,9 +607,9 @@ function test_hydrofoilWaveLoads()
 
     chordVec = chord * ones(2)
     stripWidths = ones(2)
-    fAeySk, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Sears")
-    fAeyCk, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Theodorsen")
-    fAeyQS, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Quasisteady")
+    fAeySk, mAey, ampDist = HydroStrip.compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Sears")
+    fAeyCk, mAey, ampDist = HydroStrip.compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Theodorsen")
+    fAeyQS, mAey, ampDist = HydroStrip.compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Quasisteady")
 
     HwSk = abs.(fAeySk[:, 1])
     HwCk = abs.(fAeyCk[:, 1])

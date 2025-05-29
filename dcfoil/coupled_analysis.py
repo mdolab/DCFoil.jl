@@ -112,7 +112,11 @@ class CoupledAnalysis(om.Group):
                 "liftingline",
                 impcomp_LL_solver,
                 promotes_inputs=["ptVec", "alfa0", "displacements_col"],
-                promotes_outputs=["gammas", "gammas_d"],
+                promotes_outputs=[
+                    "gammas",
+                    "gammas_d",
+                    # "jigtwist",
+                ],
             )
             self.add_subsystem(
                 "liftingline_funcs",
@@ -164,7 +168,11 @@ class CoupledAnalysis(om.Group):
                 "liftingline",
                 impcomp_LL_solver,
                 promotes_inputs=["ptVec", "alfa0", "displacements_col"],
-                promotes_outputs=["gammas", "gammas_d"],
+                promotes_outputs=[
+                    "gammas",
+                    "gammas_d",
+                    # "jigtwist",
+                ],
             )
             couple.add_subsystem(
                 "liftingline_funcs",
@@ -175,6 +183,7 @@ class CoupledAnalysis(om.Group):
                     "ptVec",
                     "alfa0",
                     "displacements_col",
+                    "toc",
                 ],  # promotion auto connects these variables
                 promotes_outputs=["*"],  # everything!
             )

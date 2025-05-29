@@ -7,6 +7,7 @@ include("../src/struct/beam_om.jl")
 using .LiftingLine
 using .FEMMethods
 include("../src/solvers/solveflutter_om.jl")
+include("../src/solvers/solveforced_om.jl")
 include("../src/io/MeshIO.jl")
 const RealOrComplex = Union{Real,Complex}
 # const RealOrComplex = AbstractFloat
@@ -159,7 +160,7 @@ function compute_dcladx(dh)
         rake = appendageParams["rake"]
         depth0 = appendageParams["depth0"]
         airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-        LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, LiftingLine.NPT_WING);
+        LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, LiftingLine.NPT_WING), pretwistDist;
             npt_wing=npt_wing,
             npt_airfoil=npt_airfoil,
             rhof=solverOptions["rhof"],
@@ -213,6 +214,7 @@ dcladg = (dcldg_f - dcldg) / dalfa # this makes sense
 idxTip = LiftingLine.get_tipnode(LECoords)
 midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
+pretwistDist[3:4] .= deg2rad(10.0)
 # Here's a twist distribution
 displacementsCol[5, :] .= vcat(LinRange(deg2rad(10.0), deg2rad(0.0), LiftingLine.NPT_WING ÷ 2), LinRange(deg2rad(0.0), deg2rad(10.0), LiftingLine.NPT_WING ÷ 2))
 
@@ -225,7 +227,7 @@ displacementsCol[3, :] .= vcat(LinRange(dist, 0.0, LiftingLine.NPT_WING ÷ 2), L
 rake = appendageParams["rake"]
 depth0 = appendageParams["depth0"]
 airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol;
+LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, displacementsCol, pretwistDist;
     npt_wing=npt_wing,
     npt_airfoil=npt_airfoil,
     rhof=solverOptions["rhof"],
@@ -257,7 +259,7 @@ midchords, chordVec, spanwiseVectors, sweepAng, pretwistDist = LiftingLine.compu
 rake = appendageParams["rake"]
 depth0 = appendageParams["depth0"]
 airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options = LiftingLine.initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOptions, solverOptions)
-LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, LiftingLine.NPT_WING);
+LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec, sweepAng, rootChord, TR, midchords, zeros(6, LiftingLine.NPT_WING), pretwistDist;
     npt_wing=npt_wing,
     npt_airfoil=npt_airfoil,
     rhof=solverOptions["rhof"],
@@ -281,14 +283,14 @@ drdx_FD, drdxdisp_FD = LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, di
 # @time LiftingLine.compute_∂r∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
 
 # GOOD when full wing
-# --- No longer good with half wing formulation ---
+# --- Good with half wing formulation ---
 dfdxpt, dfdxdispl = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
 dfdxpt_fd, dfdxdispl_fd = LiftingLine.compute_∂I∂Xpt(gconv, ptVec, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
 # GOOD
-∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
-∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
-∂Drag∂Xpt_fd, ∂Drag∂xdispl_fd, ∂Drag∂G_fd = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
+∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G, ∂Drag∂toc = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FAD")
+∂Drag∂Xpt, ∂Drag∂xdispl, ∂Drag∂G, ∂Drag∂toc = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="RAD")
+∂Drag∂Xpt_fd, ∂Drag∂xdispl_fd, ∂Drag∂G_fd, ∂Drag∂toc = LiftingLine.compute_∂EmpiricalDrag(ptVec, gconv, nodeConn, displacementsCol, appendageParams, appendageOptions, solverOptions; mode="FiDi")
 
 # These derivatives are good
 # @time dcolldXpt = LiftingLine.compute_∂collocationPt∂Xpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
@@ -358,8 +360,6 @@ elemConn = [[1 2]
     [7 8]
     [8 9]]
 
-
-# TODO: GPICKUP HERE GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 claVecMod = claVec[end-nNodes+1:end] .+ 1.1
 obj, SOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true)
 SolveFlutter.write_sol(SOL, "./output/")
@@ -368,23 +368,23 @@ dfdx_rad = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridSt
 dfdx_fd = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")
 
 dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                        SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
-                    ptVec,
-                    displacementsCol,
-                    claVecMod,
-                    appendageParams["theta_f"],
-                    appendageParams["toc"],
-                    appendageParams["alfa0"],
-                )
-dIdxDV_fd = FiniteDifferences.jacobian(forward_fdm(2,1),(xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                        SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
-                    ptVec,
-                    displacementsCol,
-                    claVecMod,
-                    appendageParams["theta_f"],
-                    appendageParams["toc"],
-                    appendageParams["alfa0"],
-                )
+        SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+    ptVec,
+    displacementsCol,
+    claVecMod,
+    appendageParams["theta_f"],
+    appendageParams["toc"],
+    appendageParams["alfa0"],
+)
+dIdxDV_fd = FiniteDifferences.jacobian(forward_fdm(2, 1), (xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+        SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+    ptVec,
+    displacementsCol,
+    claVecMod,
+    appendageParams["theta_f"],
+    appendageParams["toc"],
+    appendageParams["alfa0"],
+)
 
 
 FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug =
@@ -403,7 +403,12 @@ dfdx = AbstractDifferentiation.gradient(backend, (x) ->
     appendageParams["theta_f"],
 )
 
-
+# ==============================================================================
+#                         Testing forced vibration
+# ==============================================================================
+evalFunc = "vibarea"
+# TODO PICKUP HERE
+SolveForced.compute_funcsFromDVsOM(evalFunc, ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
 
 # replace(TECoords, 0.0 => 1e-5)
 # replace(LECoords, 0.0 => 1e-5)
@@ -424,17 +429,19 @@ dfdx = AbstractDifferentiation.gradient(backend, (x) ->
 #     (LECoords[XDIM, :])
 # )
 
-# idxTip = FEMMethods.get_tipnode(LECoords)
-# dfdx, = Zygote.jacobian((x) ->
-#         FEMMethods.compute_1DPropsFromGrid(x,TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[1],
-#     LECoords,
-# )
-# dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3,1),(x) ->
-#         FEMMethods.compute_1DPropsFromGrid(x,TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[1],
-#     LECoords,
-# )
+idxTip = FEMMethods.get_tipnode(LECoords)
+dfdx, = Zygote.jacobian((x) ->
+        FEMMethods.compute_1DPropsFromGrid(x, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[5],
+    LECoords,
+)
+dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
+        FEMMethods.compute_1DPropsFromGrid(x, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[5],
+    LECoords,
+)
 
-# --- make_FEMesh ---
+# ************************************************
+#     makeFEMesh
+# ************************************************
 midchords, chordLengths, spanwiseVectors, sweepAng, pretwistDist = FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 dfdx, = Zygote.jacobian((x) ->
@@ -461,7 +468,7 @@ dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
 
 # Full test
 @time dfdx = Zygote.gradient((x1, x2) ->
-# @profview dfdx = Zygote.gradient((x1, x2) ->
+    # @profview dfdx = Zygote.gradient((x1, x2) ->
         SolveFlutter.cost_funcsFromDVsOM(x1, nodeConn, displacementsCol, claVecMod, x2, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=false),
     ptVec,
     appendageParams["theta_f"],

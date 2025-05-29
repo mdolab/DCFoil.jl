@@ -329,6 +329,64 @@ function compute_node_mass(b, ab, rho_f)
     return M_f
 end
 
+
+function compute_gustLoadSears(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
+    """
+    Compute gust loads on a submerged hydrofoil
+    """
+
+    bi = 0.5 * chordLengths
+    S0k = zeros(ComplexF64, size(claVec)...)
+
+    for (ii, kk) in enumerate(kf)
+        Skvec = compute_sears(kk)
+        S0k[ii] = Skvec[2]
+    end
+
+    # Circulatory
+    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* S0k
+
+    # Noncirculatory (added mass type)
+    Lnc = 1im * ϱ * π * bi .^ 2 * w_e * waveCoeff
+
+    return Lc, Lnc
+end
+
+function compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
+    """
+    Compute gust loads on a submerged hydrofoil
+    """
+
+    bi = 0.5 * chordLengths
+    Ck = zeros(ComplexF64, size(claVec)...)
+
+    for (ii, kk) in enumerate(kf)
+        Ckvec = compute_theodorsen(kk)
+        Ck[ii] = Ckvec[1] + 1im * Ckvec[2]
+    end
+
+    # Circulatory
+    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* Ck
+
+    # Noncirculatory (added mass type)
+    Lnc = 1im * ϱ * π * bi .^ 2 * w_e * waveCoeff
+
+    return Lc, Lnc
+end
+
+function compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
+    """
+    Compute gust loads on a submerged hydrofoil
+    """
+
+    # Circulatory
+    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec
+
+    # Noncirculatory (added mass type)
+    Lnc = 0.0
+
+    return Lc, Lnc
+end
 # let
 #     using .Unsteady
 #     precompile(Unsteady.compute_node_mass, (Float64, Float64, Float64))

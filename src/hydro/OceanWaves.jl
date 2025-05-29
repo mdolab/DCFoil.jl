@@ -68,8 +68,7 @@ function compute_BSWaveSpectrum(Hsig, ω_z, w)
     return S
 end
 
-function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears")
-    """
+function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears", debug=false) """
     Compute wave loads on a submerged hydrofoil
 
     Faltinsen Eqn 6.208 with modifications to strip theory and Sears function
@@ -111,11 +110,11 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
         #   Sectional lift loads
         # ---------------------------
         if uppercase(method) == "SEARS" # most accurate
-            Lc, Lnc = compute_gustLoadSears(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+            Lc, Lnc = HydroStrip.compute_gustLoadSears(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
         elseif uppercase(method) == "THEODORSEN"
-            Lc, Lnc = compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+            Lc, Lnc = HydroStrip.compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
         elseif uppercase(method) == "QUASISTEADY"
-            Lc, Lnc = compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+            Lc, Lnc = HydroStrip.compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
         else
             error("Unknown method: $(method)")
         end
@@ -130,50 +129,52 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
         end
     end
 
-    p1 = plot(freqspan, ampDist, ylims=(0, :auto), xlims=(0, 2))
-    xlabel!("Frequency [rad/s]")
-    ylabel!("Wave amplitude [m]")
-    xlims!(0, 20)
+    if debug
+        p1 = plot(freqspan, ampDist, ylims=(0, :auto), xlims=(0, 2))
+        xlabel!("Frequency [rad/s]")
+        ylabel!("Wave amplitude [m]")
+        xlims!(0, 20)
 
-    p2 = plot(freqspan, abs.(fAey[:, end]), xlims=(0, 2))
-    ylabel!("Wave load [N]")
-    title!("Wave loads at the tip of the foil")
-    xlabel!("Frequency [rad/s]")
-    xlims!(0, 20)
+        p2 = plot(freqspan, abs.(fAey[:, end]), xlims=(0, 2))
+        ylabel!("Wave load [N]")
+        title!("Wave loads at the tip of the foil")
+        xlabel!("Frequency [rad/s]")
+        xlims!(0, 20)
 
-    p3 = plot(eachindex(claVec) / length(claVec), abs.(fAey[2, :]))
-    # p3 = plot!(eachindex(claVec) / length(claVec), abs.(mAey[2, :]))
-    ylabel!("Wave load and moment [N]")
-    title!("Spanwise at ω=$(freqspan[2])")
-    xlabel!("Spanwise location")
+        p3 = plot(eachindex(claVec) / length(claVec), abs.(fAey[2, :]))
+        # p3 = plot!(eachindex(claVec) / length(claVec), abs.(mAey[2, :]))
+        ylabel!("Wave load and moment [N]")
+        title!("Spanwise at ω=$(freqspan[2])")
+        xlabel!("Spanwise location")
 
-    p4 = plot(2 * eachindex(claVec) / length(claVec), chordLengths)
-    ylabel!("Chord lengths [m]")
-    title!("Spanwise chord")
-    xlabel!("Spanwise location")
+        p4 = plot(2 * eachindex(claVec) / length(claVec), chordLengths)
+        ylabel!("Chord lengths [m]")
+        title!("Spanwise chord")
+        xlabel!("Spanwise location")
 
-    p5 = plot(2 * eachindex(claVec) / length(claVec), claVec, ylims=(0, :auto))
-    ylabel!("Chord lengths [m]")
-    title!("Spanwise lift slope")
-    xlabel!("Spanwise location")
+        p5 = plot(2 * eachindex(claVec) / length(claVec), claVec, ylims=(0, :auto))
+        ylabel!("Chord lengths [m]")
+        title!("Spanwise lift slope")
+        xlabel!("Spanwise location")
 
 
-    plot(p1, p2)
-    savefig("WaveLoads.png")
-    # println("Saved wave loads plot to WaveLoads.png")
-    # figure()
-    # tt = tiledlayout(1,2); nexttile;
-    # plot(freqv, fAey); xlim([0 1])
-    # xlabel("Frequency [Hz]")
-    # ylabel("Wave force [N]")
-    # l1 = xline(w_e,'--b','DisplayName',['\omega_e = ' num2str(w_e) 'Hz']);
-    # nexttile;
-    # plot(freqv, mAey); xlim([0 1])
-    # xlabel("Frequency [Hz]")
-    # ylabel("Wave moment [N-m]")
-    # l1 = xline(w_e,'--b','DisplayName',['\omega_e = ' num2str(w_e) 'Hz']); legend(l1);
-    # string = ["Wave loads with \omega_0=" num2str(w_0) " Hz"];
-    # title(tt, string);
+        plot(p1, p2)
+        savefig("WaveLoads.png")
+        # println("Saved wave loads plot to WaveLoads.png")
+        # figure()
+        # tt = tiledlayout(1,2); nexttile;
+        # plot(freqv, fAey); xlim([0 1])
+        # xlabel("Frequency [Hz]")
+        # ylabel("Wave force [N]")
+        # l1 = xline(w_e,'--b','DisplayName',['\omega_e = ' num2str(w_e) 'Hz']);
+        # nexttile;
+        # plot(freqv, mAey); xlim([0 1])
+        # xlabel("Frequency [Hz]")
+        # ylabel("Wave moment [N-m]")
+        # l1 = xline(w_e,'--b','DisplayName',['\omega_e = ' num2str(w_e) 'Hz']); legend(l1);
+        # string = ["Wave loads with \omega_0=" num2str(w_0) " Hz"];
+        # title(tt, string);
+    end
 
     return fAey, mAey, ampDist
 
@@ -219,64 +220,6 @@ function compute_AWave(ωRange, ωe, waveamp)
     # println("Rayleigh distributed amplitude spectrum \nω_pk : $(ωe)\nwaveamp : $(waveamp)")
 
     return ampDist
-end
-
-function compute_gustLoadSears(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
-    """
-    Compute gust loads on a submerged hydrofoil
-    """
-
-    bi = 0.5 * chordLengths
-    S0k = zeros(ComplexF64, size(claVec)...)
-
-    for (ii, kk) in enumerate(kf)
-        Skvec = compute_sears(kk)
-        S0k[ii] = Skvec[2]
-    end
-
-    # Circulatory
-    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* S0k
-
-    # Noncirculatory (added mass type)
-    Lnc = 1im * ϱ * π * bi .^ 2 * w_e * waveCoeff
-
-    return Lc, Lnc
-end
-
-function compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
-    """
-    Compute gust loads on a submerged hydrofoil
-    """
-
-    bi = 0.5 * chordLengths
-    Ck = zeros(ComplexF64, size(claVec)...)
-
-    for (ii, kk) in enumerate(kf)
-        Ckvec = compute_theodorsen(kk)
-        Ck[ii] = Ckvec[1] + 1im * Ckvec[2]
-    end
-
-    # Circulatory
-    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* Ck
-
-    # Noncirculatory (added mass type)
-    Lnc = 1im * ϱ * π * bi .^ 2 * w_e * waveCoeff
-
-    return Lc, Lnc
-end
-
-function compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLengths)
-    """
-    Compute gust loads on a submerged hydrofoil
-    """
-
-    # Circulatory
-    Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec
-
-    # Noncirculatory (added mass type)
-    Lnc = 0.0
-
-    return Lc, Lnc
 end
 
 function compute_responseSpectralDensityFunc(Hω::Vector{<:Real}, waveEnergySpectrum::Vector{<:Real})

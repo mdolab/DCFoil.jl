@@ -335,11 +335,17 @@ def plot_dragbuildup(
     cm,
     fs_lgd: float,
     iic: int,
-    solverOptions=None,
+    includes=["cdpr", "cdi", "cdw", "cds", "cdj"],
 ):
 
-    costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
-    labels = ["$C_{D,{pr}}$", "$C_{D,{i}}$", "$C_{D,{s}}$", "$C_{D,{j}}$"]
+    alllabels = ["$C_{D,{pr}}$", "$C_{D,{i}}$", "$C_{D,w}$", "$C_{D,{s}}$", "$C_{D,{j}}$"]
+    costData = []
+    labels = []
+    for ii,cost in enumerate(includes):
+        costData.append(funcs[cost])
+        labels.append(alllabels[ii])
+    
+    # costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
 
     def absolute_value(val):
         """Callback to return labels"""
@@ -361,7 +367,6 @@ def plot_dragbuildup(
     # Bar plot with drag components
     ax.bar(labels, costData, color=cm[0])
     ax.set_ylabel("$C_D$", rotation="horizontal", ha="right", va="center")
-    # TODO: Niceplots horizontal bar plot?
     # Put percentages on top of bars
     for ii, cost in enumerate(costData):
         ax.text(
@@ -374,7 +379,7 @@ def plot_dragbuildup(
         )
 
     # Set title with vertical label pad
-    ax.set_title(f"$\\theta_f=${label}", pad=40)
+    ax.set_title(f"{label}", pad=40)
 
     return fig, axes
 
