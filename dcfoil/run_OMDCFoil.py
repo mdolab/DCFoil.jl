@@ -1,8 +1,8 @@
 # --- Python 3.11 ---
 """
-@File          :   run_OMDCfoil.py
-@Date created  :   2025/05/22
-@Last modified :   2025/05/26
+@File          :   run_OMDCFoil.py
+@Date created  :   2025-05-22
+@Last modified :   2025-05-30
 @Author        :   Galen Ng
 @Desc          :   Run and optimize composite hydrofoil using DCFoil and OpenMDAO.
                    Requires pyGeo so you need to be in docker if on macOS
@@ -20,15 +20,12 @@ from pathlib import Path
 # External Python modules
 # ==============================================================================
 import numpy as np
-import juliacall
-
 from tabulate import tabulate
 
 # ==============================================================================
 # Extension modules
 # ==============================================================================
-# import niceplots as nplt
-import setup_OMdvgeo
+from SETUP import setup_OMdvgeo, setup_dcfoil
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
 from multipoint import Multipoint
@@ -37,18 +34,10 @@ from multipoint import Multipoint
 from coupled_analysis import CoupledAnalysis
 
 # ==============================================================================
-#                         OMDCFoil setup
+#                         Settings
 # ==============================================================================
-jl = juliacall.newmodule("DCFoil")
 
-jl.include("../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
-jl.include("../src/struct/beam_om.jl")  # discipline 1
-jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
-jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
-jl.include("../src/solvers/solveflutter_om.jl")  # discipline 4 flutter solver
-jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
-
-OUTPUTDIR = "test-opt"
+DCFoilOutputDir = "run_OMDCFoil_out/dcfoil"
 files = {}
 files["gridFile"] = [
     f"../INPUT/mothrudder_foil_stbd_mesh.dcf",
@@ -57,97 +46,8 @@ files["gridFile"] = [
 FFDFile = "../test/dcfoil_opt/INPUT/mothrudder_ffd.xyz"
 files["FFDFile"] = FFDFile
 
-Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
-
-# This chunk of code is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
 nNodes = 10
 nNodesStrut = 3
-appendageOptions = {
-    "compName": "rudder",
-    # "config": "full-wing",
-    "config": "wing",
-    "nNodes": nNodes,
-    "nNodeStrut": nNodesStrut,
-    "use_tipMass": False,
-    # "xMount": 3.355,
-    "xMount": 0.0,
-    "material": "cfrp",
-    "strut_material": "cfrp",
-    "path_to_geom_props": "./INPUT/1DPROPS/",
-    "path_to_struct_props": None,
-    "path_to_geom_props": None,
-}
-appendageList = [appendageOptions]
-solverOptions = {
-    # ---------------------------
-    #   I/O
-    # ---------------------------
-    "name": "test",
-    # "gridFile": files["gridFile"],
-    "debug": False,
-    "writeTecplotSolution": True,
-    "outputDir": OUTPUTDIR,
-    # ---------------------------
-    #   General appendage options
-    # ---------------------------
-    "appendageList": appendageList,
-    "gravityVector": [0.0, 0.0, -9.81],
-    # ---------------------------
-    #   Flow
-    # ---------------------------
-    "Uinf": 11.0,  # free stream velocity [m/s]
-    "rhof": 1025.0,  # fluid density [kg/m³]
-    "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
-    "use_nlll": True,
-    "use_freeSurface": False,
-    "use_cavitation": False,
-    "use_ventilation": False,
-    "use_dwCorrection": False,
-    # ---------------------------
-    #   Solver modes
-    # ---------------------------
-    # --- Static solve ---
-    "run_static": True,
-    "res_jacobian": "analytic",
-    # --- Forced solve ---
-    "run_forced": True,
-    "run_forced": False,
-    "fRange": [0.1, 1000.0],
-    "tipForceMag": 1.0,
-    "run_body": False,
-    # --- p-k (Eigen) solve ---
-    "run_modal": False,
-    "run_flutter": False,
-    "nModes": 4,
-    # "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
-    "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
-    "maxQIter": 100,  # that didn't fix the slow run time...
-    "rhoKS": 500.0,
-}
-
-appendageParams = {
-    "alfa0": 6.0,  # initial angle of attack [deg]
-    "zeta": 0.04,  # modal damping ratio at first 2 modes
-    "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
-    "toc": 0.12 * np.ones(nNodes),  # thickness-to-chord ratio
-    "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
-    "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
-    # --- Strut vars ---
-    "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
-    "rake": 0.0,  # rake angle about top of strut [deg]
-    "beta": 0.0,  # yaw angle wrt flow [deg]
-    "s_strut": 1.0,  # [m]
-    "c_strut": 0.14 * np.ones(nNodesStrut),  # chord length [m]
-    "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (mean)
-    "ab_strut": 0.0 * np.ones(nNodesStrut),  # dist from midchord to EA [m]
-    "x_ab_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
-    "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
-}
-
-# Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
-ptVec, m, n = jl.FEMMethods.unpack_coords(Grid.LEMesh, Grid.TEMesh)
-nodeConn = np.array(Grid.nodeConn)
-solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
 
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
@@ -186,13 +86,13 @@ otherDVs = {
         "lower": -10.0,
         "upper": 10.0,
         "scale": 1.0,  # the scale was messing with the DV bounds
-        "value": appendageParams["alfa0"],
+        "value": 4.0,
     },
     "toc": {
         "lower": 0.09,
         "upper": 0.18,
         "scale": 1.0,
-        "value": appendageParams["toc"],
+        "value": 0.10 * np.ones(nNodes),
     },
     "theta_f": {
         "lower": np.deg2rad(-30),
@@ -201,19 +101,7 @@ otherDVs = {
         "value": 0.0,
     },
 }
-# number of strips and FEM nodes
-if appendageOptions["config"] == "full-wing":
-    npt_wing = jl.LiftingLine.NPT_WING
-    npt_wing_full = jl.LiftingLine.NPT_WING
-    n_node = nNodes * 2 - 1  # for full span
-else:
-    npt_wing = jl.LiftingLine.NPT_WING / 2  # for half wing
-    npt_wing_full = jl.LiftingLine.NPT_WING  # full span
-    # check if npt_wing is integer
-    if npt_wing % 1 != 0:
-        raise ValueError("NPT_WING must be an even number for symmetric analysis")
-    npt_wing = int(npt_wing)
-    n_node = nNodes
+
 # ==============================================================================
 #                         Helper functions
 # ==============================================================================
@@ -239,7 +127,7 @@ class Top(Multipoint):
         # --- Add core physics engine ---
         physModel = CoupledAnalysis(
             analysis_mode="coupled",
-            include_flutter=False,
+            include_flutter=args.flutter,
             ptVec_init=np.array(ptVec),
             npt_wing=npt_wing,
             n_node=n_node,
@@ -298,10 +186,14 @@ class Top(Multipoint):
         # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
         self.add_constraint("dcfoil.Flift", lower=2500, upper=2550)  # lift constraint [N]
         if args.task != "trim":
-            self.add_constraint("dcfoil.wtip", upper=0.05 * 0.333)  # tip deflection constraint (5% of baseline semispan)
+            self.add_constraint(
+                "dcfoil.wtip", upper=0.05 * 0.333
+            )  # tip deflection constraint (5% of baseline semispan)
             self.add_constraint("dcfoil.ksvent", upper=0.0)  # ventilation constraint
-        # self.add_constraint("dcfoil.ksflutter", upper=0.0) # flutter constraint
-        # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
+        if args.flutter:
+            self.add_constraint("dcfoil.ksflutter", upper=0.0)  # flutter constraint
+
+            # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
 
 
 # ==============================================================================
@@ -326,6 +218,7 @@ if __name__ == "__main__":
         "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
     )
     parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+    parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
     parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
     args = parser.parse_args()
 
@@ -335,6 +228,22 @@ if __name__ == "__main__":
     for arg in vars(args):
         print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
     print(30 * "-", flush=True)
+
+    # ==============================================================================
+    #                         DCFoil setup
+    # ==============================================================================
+    if args.name is not None:
+        DCFoilOutputDir += "-" + args.name
+    (
+        ptVec,
+        nodeConn,
+        appendageParams,
+        appendageOptions,
+        solverOptions,
+        npt_wing,
+        npt_wing_full,
+        n_node,
+    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, DCFoilOutputDir)
 
     # --- Trim only case ---
     if args.task == "trim":
@@ -408,13 +317,6 @@ if __name__ == "__main__":
             },
         }
 
-    if args.freeSurf:
-        # --- Add free surface corrections to solver options ---
-        solverOptions["use_freeSurface"] = True
-        # solverOptions["use_cavitation"] = True
-        # solverOptions["use_ventilation"] = True
-        # solverOptions["use_dwCorrection"] = True
-
     prob = om.Problem()
     prob.model = Top()
 
@@ -446,7 +348,7 @@ if __name__ == "__main__":
 
     prob.setup()
 
-    Path(OUTPUTDIR).mkdir(exist_ok=True, parents=True)
+    Path(DCFoilOutputDir).mkdir(exist_ok=True, parents=True)
 
     # --- Recorder ---
     recorderName = "dcfoil.sql"

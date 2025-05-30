@@ -12,6 +12,7 @@
 # ==============================================================================
 import os
 import json
+import sys
 import argparse
 from pathlib import Path
 
@@ -29,31 +30,62 @@ import juliacall
 # ==============================================================================
 # Extension modules
 # ==============================================================================
-from helperPlotFuncs import plot_dragbuildup
+from helperFuncs import (
+    load_jld,
+    readlines,
+    get_bendingtwisting,
+    postprocess_flutterevals,
+    find_DivAndFlutterPoints,
+)
+from helperPlotFuncs import plot_dragbuildup, plot_vg_vf_rl, set_my_plot_settings, plot_dlf
 import niceplots as nplt
 import openmdao.api as om
 
+current = os.path.dirname(os.path.realpath(__file__))  # Getting the parent directory name
+# adding the parent directory to the sys. path.
+sys.path.append(os.path.dirname(current))
+from dcfoil.SETUP import setup_dcfoil
+
+
+# ==============================================================================
+#                         Command line arguments
+# ==============================================================================
+parser = argparse.ArgumentParser()
+parser.add_argument("--use_serif", help="use serif", action="store_true", default=False)
+parser.add_argument("--name", type=str, default=None, help="Name of the case to read .sql file")
+parser.add_argument(
+    "--base", type=str, default=None, help="Name of the base case to read .sql file and compare against"
+)
+parser.add_argument("--cases", type=str, default=[], nargs="+", help="Full case folder names in order")
+parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
+args = parser.parse_args()
+# --- Echo the args ---
+print(30 * "-")
+print("Arguments are", flush=True)
+for arg in vars(args):
+    print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+print(30 * "-", flush=True)
+
+# ==============================================================================
+#                         DCFoil setup
+# ==============================================================================
 jl = juliacall.newmodule("DCFoil")
 jl.include("../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
-files = [
+files = {"gridFile" : [
     f"../INPUT/mothrudder_foil_stbd_mesh.dcf",
     f"../INPUT/mothrudder_foil_port_mesh.dcf",
-]
+]}
 
-Grid = jl.DCFoil.add_meshfiles(files, {"junction-first": True})
-
-plotname = f"opt_hist.pdf"
-dragplotname = f"drag_hist.pdf"
-spanliftname = f"spanwise_properties"
+Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
 
 # ==============================================================================
 #                         Other settings
 # ==============================================================================
-linestyles = ["-", "--", "-.", ":"]
-niceColors = sns.color_palette("tab10")
-plt.rcParams["axes.prop_cycle"] = plt.cycler("color", niceColors)
-cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+plotname = f"opt_hist.pdf"
+dragplotname = f"drag_hist.pdf"
+spanliftname = f"spanwise_properties"
 
 Uinf = 11
 density = 1025.0
@@ -61,116 +93,12 @@ semispan = 0.333
 nCol = 40  # number of collocation points in code
 
 
-plt.style.use(nplt.get_style())  # all settings
-myOptions = {
-    "font.size": 20,
-    "font.family": "sans-serif",  # set to "serif" to get the same as latex
-    "font.sans-serif": ["Helvetica"],  # this does not work on all systems
-    "text.usetex": False,
-    "text.latex.preamble": [
-        r"\usepackage{lmodern}",  # latin modern font
-        r"\usepackage{amsmath}",  # for using equation commands
-        r"\usepackage{helvet}",  # should make latex serif in helvet now
-        r"\usepackage{sansmath}",
-        r"\sansmath",  # supposed to force math to be rendered in sans-serif font
-    ],
-}
-myOptions.update(
-    {
-        "font.family": "serif",
-        "text.usetex": True,
-        "text.latex.preamble": [
-            r"\usepackage{lmodern}",  # latin modern font
-            r"\usepackage{amsmath}",  # for using equation commands
-            r"\usepackage{helvet}",  # should make latex serif in helvet now
-        ],
-    }
-)
-plt.rcParams.update(myOptions)
+dataDir = "../dcfoil/run_OMDCFoil_out/"
+cm, fs_lgd, fs, linestyles, markers = set_my_plot_settings(args.use_serif)
+alphas = [1.0, 0.5]
 
 nNodes = 10
 nNodesStrut = 5
-appendageOptions = {
-    "compName": "rudder",
-    # "config": "full-wing",
-    "config": "wing",
-    "nNodes": nNodes,
-    "nNodeStrut": nNodesStrut,
-    "use_tipMass": False,
-    # "xMount": 3.355,
-    "xMount": 0.0,
-    "material": "cfrp",
-    "strut_material": "cfrp",
-    "path_to_geom_props": "./INPUT/1DPROPS/",
-    "path_to_struct_props": None,
-    "path_to_geom_props": None,
-}
-appendageList = [appendageOptions]
-solverOptions = {
-    # ---------------------------
-    #   I/O
-    # ---------------------------
-    "name": "test",
-    # "gridFile": files["gridFile"],
-    "debug": False,
-    "writeTecplotSolution": True,
-    # "outputDir": OUTPUTDIR,
-    # ---------------------------
-    #   General appendage options
-    # ---------------------------
-    "appendageList": appendageList,
-    "gravityVector": [0.0, 0.0, -9.81],
-    # ---------------------------
-    #   Flow
-    # ---------------------------
-    "Uinf": 11.0,  # free stream velocity [m/s]
-    "rhof": 1025.0,  # fluid density [kg/m³]
-    "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
-    "use_nlll": True,
-    "use_freeSurface": False,
-    "use_cavitation": False,
-    "use_ventilation": False,
-    "use_dwCorrection": False,
-    # ---------------------------
-    #   Solver modes
-    # ---------------------------
-    # --- Static solve ---
-    "run_static": True,
-    "res_jacobian": "analytic",
-    # --- Forced solve ---
-    "run_forced": True,
-    "run_forced": False,
-    "fRange": [0.1, 1000.0],
-    "tipForceMag": 1.0,
-    "run_body": False,
-    # --- p-k (Eigen) solve ---
-    "run_modal": False,
-    "run_flutter": False,
-    "nModes": 4,
-    # "uRange": [10.0 / 1.9438, 50.0 / 1.9438],  # [kts -> m/s]
-    "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
-    "maxQIter": 100,  # that didn't fix the slow run time...
-    "rhoKS": 500.0,
-}
-
-appendageParams = {
-    "alfa0": 6.0,  # initial angle of attack [deg]
-    "zeta": 0.04,  # modal damping ratio at first 2 modes
-    "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
-    "toc": 0.12 * np.ones(nNodes),  # thickness-to-chord ratio
-    "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
-    "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
-    # --- Strut vars ---
-    "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
-    "rake": 0.0,  # rake angle about top of strut [deg]
-    "beta": 0.0,  # yaw angle wrt flow [deg]
-    "s_strut": 1.0,  # [m]
-    "c_strut": 0.14 * np.ones(nNodesStrut),  # chord length [m]
-    "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (mean)
-    "ab_strut": 0.0 * np.ones(nNodesStrut),  # dist from midchord to EA [m]
-    "x_ab_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
-    "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
-}
 # ==============================================================================
 #                         Functions
 # ==============================================================================
@@ -196,24 +124,21 @@ def compute_elliptical(Ltotal, Uinf, semispan, rhof=1000, full_wing=False):
 
     return sloc, Lprime, gamma_s
 
-
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--use_serif", help="use serif", action="store_true", default=False)
-    parser.add_argument("--name", type=str, default=None, help="Name of the case to read .sql file")
-    parser.add_argument(
-        "--base", type=str, default=None, help="Name of the base case to read .sql file and compare against"
-    )
-    args = parser.parse_args()
-    # --- Echo the args ---
-    print(30 * "-")
-    print("Arguments are", flush=True)
-    for arg in vars(args):
-        print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
-    print(30 * "-", flush=True)
+
+    (
+        ptVec,
+        nodeConn,
+        appendageParams,
+        appendageOptions,
+        solverOptions,
+        npt_wing,
+        npt_wing_full,
+        n_node,
+    )     = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, None)
 
     datafname = f"../dcfoil/run_OMDCfoil_out/{args.name}.sql"
 
@@ -236,6 +161,48 @@ if __name__ == "__main__":
     pp(constraints)
     # print(constraints["CL"])
 
+    if args.flutter:
+        # ************************************************
+        #     Read in data
+        # ************************************************
+        print("Reading in flutter data...")
+        # Input data read directory
+        caseDirs = []
+        if args.cases is not None:
+            for case in args.cases:
+                caseDirs.append(dataDir + case)
+        else:
+            raise ValueError("Please specify a case to run postprocessing on")
+
+        flutterSolDict = {}
+        instabPtsDict = {}
+        for ii, caseDir in enumerate(caseDirs):
+            key = args.cases[ii]
+            # Remember to transpose data since Julia stores in column major order
+            eigs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_i.jld2")["data"]).T / (
+                2 * np.pi
+            )  # put in units of Hz
+            eigs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_r.jld2")["data"]).T / (
+                2 * np.pi
+            )  # put in units of Hz
+            evecs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_i.jld2")["data"]).T
+            evecs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_r.jld2")["data"]).T
+            flowHistory = np.asarray(load_jld(f"{caseDir}/pkFlutter/flowHistory.jld2")["data"]).T
+            iblank = np.asarray(load_jld(f"{caseDir}/pkFlutter/iblank.jld2")["data"]).T
+
+            # --- Post process the solution ---
+            flutterSolDict[key] = postprocess_flutterevals(
+                iblank,
+                flowHistory[:, 1],
+                flowHistory[:, 0],
+                flowHistory[:, 2],
+                eigs_r,
+                eigs_i,
+                R_r=evecs_r,
+                R_i=evecs_i,
+            )
+            # You only need to know the stability point on one processor really
+            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U", altKey="pvals_i")
     # ************************************************
     #     Plot path of DVs
     # ************************************************
@@ -279,7 +246,7 @@ if __name__ == "__main__":
     dosave = not not plotname
 
     # Create figure object
-    fig, opthistaxes = plt.subplots(nrows=NDV, ncols=2, sharex=True, constrained_layout=True, figsize=(13, 11))
+    fig, opthistaxes = plt.subplots(nrows=NDV, ncols=2, sharex=True, constrained_layout=True, figsize=(15, 13))
 
     for ii, dv in enumerate(design_vars_vals):
         ax = opthistaxes[ii, 0]
@@ -310,7 +277,7 @@ if __name__ == "__main__":
         print(f"{dv} values:")
         print(tabulate(design_vars_vals[dv], headers="keys", tablefmt="grid"))
         print(30 * "-")
-        breakpoint()
+        # breakpoint()
 
     ax = opthistaxes[0, 1]
     ax.plot(range(0, NITER), objectives_vals[obj], label="Dtot")
@@ -319,7 +286,7 @@ if __name__ == "__main__":
     for ii, con in enumerate(constraints_vals):
         ax = opthistaxes[1 + ii, 1]
         ax.plot(range(0, NITER), constraints_vals[con], label="CL")
-        ax.set_ylabel(f"{con}", rotation="horizontal", ha="right", va="center")
+        ax.set_ylabel(f"{con.split('.')[-1]}", rotation="horizontal", ha="right", va="center")
 
     for ax in opthistaxes.flatten():
         nplt.adjust_spines(ax, outward=True)
@@ -330,7 +297,7 @@ if __name__ == "__main__":
     plt.close()
 
     # ************************************************
-    #     Check out history too
+    #     Spanwise history too
     # ************************************************
     dcfoil_cases = cr.list_cases("root.dcfoil", recurse=False)
 
@@ -385,7 +352,7 @@ if __name__ == "__main__":
         ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf * rhoU, "-")
         # ax.plot(sloc, gamma_s, "-", c="k", alpha=0.5, label="Elliptical lift distribution")
         # ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf, "-")
-        ax.legend(fontsize=15, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+        ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
         # ax.set_ylabel("Lift [N]", rotation="horizontal", ha="right", va="center")
         ax.set_ylabel("$\\Gamma$ [m$^2$/s]", rotation="horizontal", ha="right", va="center")
@@ -436,7 +403,7 @@ if __name__ == "__main__":
 
         ax.set_ylabel("Twist [deg]", rotation="horizontal", ha="right", va="center")
         ax.set_ylim(bottom=-3.0, top=8.0)
-        ax.legend(fontsize=16, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+        ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
         ax = axes[3]
         ax.plot(aeroNodesXYZ[1, :], displacements_col[2, nCol // 2 :])
@@ -466,10 +433,10 @@ if __name__ == "__main__":
     dosave = not not dragplotname
 
     # Create figure object
-    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(7, 5))
+    fig, axes = plt.subplots(nrows=2, sharex=True, constrained_layout=True, figsize=(8, 12))
     totalDrags = np.array(drag_vals["Dw"]) + np.array(drag_vals["Dpr"]) + np.array(drag_vals["Fdrag"])
     print("Total drag values:", totalDrags)
-    ax = axes
+    ax = axes[0]
     ax.plot(
         range(0, NITER),
         np.array(drag_vals["Dpr"]) / totalDrags * 100,
@@ -490,7 +457,7 @@ if __name__ == "__main__":
         label="Wave drag",
         color=cm[0],  # ls=linestyles[0]
     )
-    ax.legend(fontsize=18, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+    ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_ylim(bottom=0.0, top=100.0)
     yticks_list = [
         (drag_vals["Dw"])[-1].item() / totalDrags[-1].item() * 100,
@@ -499,13 +466,45 @@ if __name__ == "__main__":
     ]
     ax.set_yticks([0, 50, 100] + yticks_list)
     ax.set_xlim(left=0)
-    ax.set_xlabel("Iteration")
     ax.yaxis.tick_right()
     ax.yaxis.set_label_position("right")
     ax.set_ylabel("Drag\nbreakdown\n[\%]", rotation="horizontal", ha="left", va="center")
 
-    # for ax in axes.flatten():
-    nplt.adjust_spines(ax, ["right", "bottom"], outward=True)
+
+    ax = axes[1]
+    ax.plot(
+        range(0, NITER),
+        np.array(drag_vals["Dpr"]),
+        label="Profile drag",
+        color=cm[1],
+        # ls=linestyles[1],
+    )
+    ax.plot(
+        range(0, NITER),
+        np.array(drag_vals["Fdrag"]),
+        label="Induced drag",
+        color=cm[2],
+        # ls=linestyles[2],
+    )
+    ax.plot(
+        range(0, NITER),
+        np.array(drag_vals["Dw"]),
+        label="Wave drag",
+        color=cm[0],  # ls=linestyles[0]
+    )
+    yticks_list = [
+        (drag_vals["Dw"])[-1].item() ,
+        (drag_vals["Dpr"])[-1].item() ,
+        (drag_vals["Fdrag"])[-1].item(),
+    ]
+    ax.set_yticks(yticks_list)
+    ax.yaxis.tick_right()
+    ax.yaxis.set_label_position("right")
+    ax.set_ylabel("Drag\nbreakdown\n[N]", rotation="horizontal", ha="left", va="center")
+
+    for ax in axes.flatten():
+        ax.set_xlabel("Iteration")
+        nplt.adjust_spines(ax, ["right", "bottom"], outward=True)
     plt.savefig(dragplotname, format="pdf")
     print("Saved to:", dragplotname)
     plt.close()
@@ -522,9 +521,9 @@ if __name__ == "__main__":
         # last case
         base_case = cr.get_case(base_cases[-1])
 
-        # waveDrag = base_case.outputs["dcfoil.Dw"]
-        # profileDrag = base_case.outputs["dcfoil.Dpr"]
-        # inducedDrag = base_case.outputs["dcfoil.Fdrag"]
+        waveDrag = base_case.outputs["dcfoil.Dw"]
+        profileDrag = base_case.outputs["dcfoil.Dpr"]
+        inducedDrag = base_case.outputs["dcfoil.Fdrag"]
         waveDrag_cd = base_case.outputs["dcfoil.CDw"]
         profileDrag_cd = base_case.outputs["dcfoil.CDpr"]
         inducedDrag_cd = base_case.outputs["dcfoil.CDi"]
@@ -547,6 +546,111 @@ if __name__ == "__main__":
         fig, axes = plot_dragbuildup(fig, axes, basefuncs, "Baseline", cm, 15, 0, includes=includes)
         fig, axes = plot_dragbuildup(fig, axes, optfuncs, "Optimized", cm, 15, 1, includes=includes)
 
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
+
+    if args.flutter:
+        # ************************************************
+        #       Standard v-g, v-f, R-L plots
+        # ************************************************
+        # --- File name ---
+        fname = f"{outputDir}/vg-vf-rl.pdf"
+
+        # --- Create figure object ---
+        fact = 0.85  # scale size
+        figsize = (18 * fact, 13 * fact)
+        fig, axes = plt.subplots(
+            nrows=2,
+            ncols=2,
+            sharex="col",
+            sharey="row",
+            constrained_layout=True,
+            figsize=figsize,
+        )
+
+        instabSpeedTicks = []
+        instabFreqTicks = []
+        units = "kts"
+        units = "m/s"
+        for ii, key in enumerate(args.cases):
+            if ii == 0:
+                annotateModes = True
+            else:
+                annotateModes = False
+
+            # # can force to see modes in legend label
+            # annotateModes = False
+
+            # --- Plot ---
+            fig, axes = plot_vg_vf_rl(
+                fig,
+                axes,
+                flutterSol=flutterSolDict[key],
+                cm=cm,
+                ls=ls[ii],
+                alpha=alphas[ii],
+                units=units,
+                # marker="o",
+                showRLlabels=True,
+                annotateModes=annotateModes,
+                # nShift=62,
+                instabPts=instabPtsDict[key],
+            )
+            if units == "kts":
+                unitFactor = 1.9438
+            else:
+                unitFactor = 1.0
+
+            if len(instabPtsDict[key]) != 0:
+                instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
+                instabFreqTicks.append(instabPtsDict[key][0][-1])
+
+        # --- Set limits ---
+        axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
+        axes[1,0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
+
+        axes[0, 0].set_ylim(top=30, bottom=-400)
+        axes[0, 0].set_xlim(left=160, right=175)
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
+        if dosave:
+            plt.savefig(fname, format="pdf")
+            print("Saved to:", fname)
+        plt.close()
+
+        # ************************************************
+        #     Damping loss plots
+        # ************************************************
+        # --- File name ---
+        fname = f"{outputDir}/dlf.pdf"
+
+        # --- Create figure ---
+        fact = 0.85  # scale size
+        figsize = (18 * fact, 6 * fact)
+        fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
+        for ii, key in enumerate(args.cases):
+            # --- Plot ---
+            fig, axes = plot_dlf(
+                fig,
+                axes,
+                flutterSol=flutterSolDict[key],
+                cm=cm,
+                semichord=0.5 * meanChord,
+                sweepAng=sweepAng,
+                ls=ls[ii],
+                units="kts",
+                nShift=500,
+            )
+            axes[0].set_ylim(-0.1, 0.8)
+            axes[0].set_xlim(right=50, left=5)
+            # axes[1].set_ylim(-0.1, 1.2)
+            # axes[1].set_xlim(left=10)
+
+        dosave = not not fname
+        plt.show(block=(not dosave))
         if dosave:
             plt.savefig(fname, format="pdf")
             print("Saved to:", fname)
