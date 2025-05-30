@@ -24,7 +24,7 @@ import seaborn as sns
 from scipy import sparse
 from pprint import pprint as pp
 from tabulate import tabulate
-import juliacall 
+import juliacall
 
 # ==============================================================================
 # Extension modules
@@ -89,7 +89,7 @@ myOptions.update(
 plt.rcParams.update(myOptions)
 
 nNodes = 10
-nNodesStrut = 5  
+nNodesStrut = 5
 appendageOptions = {
     "compName": "rudder",
     # "config": "full-wing",
@@ -204,7 +204,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--use_serif", help="use serif", action="store_true", default=False)
     parser.add_argument("--name", type=str, default=None, help="Name of the case to read .sql file")
-    parser.add_argument("--base", type=str, default=None, help="Name of the base case to read .sql file and compare against")
+    parser.add_argument(
+        "--base", type=str, default=None, help="Name of the base case to read .sql file and compare against"
+    )
     args = parser.parse_args()
     # --- Echo the args ---
     print(30 * "-")
@@ -308,6 +310,7 @@ if __name__ == "__main__":
         print(f"{dv} values:")
         print(tabulate(design_vars_vals[dv], headers="keys", tablefmt="grid"))
         print(30 * "-")
+        breakpoint()
 
     ax = opthistaxes[0, 1]
     ax.plot(range(0, NITER), objectives_vals[obj], label="Dtot")
@@ -374,15 +377,15 @@ if __name__ == "__main__":
         sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
 
         # Create figure object
-        fig, axes = plt.subplots(nrows=5, sharex=True, constrained_layout=True, figsize=(10, 12))
+        fig, axes = plt.subplots(nrows=5, sharex=True, constrained_layout=True, figsize=(10, 16))
 
         ax = axes[0]
         rhoU = density * Uinf  # rho * U
-        ax.plot(sloc, Lprime, "-", c="k", alpha=0.5, label="Elliptical lift distribution")
+        ax.plot(sloc, Lprime, "-", c="k", alpha=0.5, label="Elliptical  distribution")
         ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf * rhoU, "-")
         # ax.plot(sloc, gamma_s, "-", c="k", alpha=0.5, label="Elliptical lift distribution")
         # ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf, "-")
-        ax.legend(fontsize=10, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+        ax.legend(fontsize=15, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
         # ax.set_ylabel("Lift [N]", rotation="horizontal", ha="right", va="center")
         ax.set_ylabel("$\\Gamma$ [m$^2$/s]", rotation="horizontal", ha="right", va="center")
@@ -391,33 +394,48 @@ if __name__ == "__main__":
 
         ax = axes[1]
         ax.plot(aeroNodesXYZ[1, :], spanwise_cl, "-")
-        # plot horizontal line
+        # plot horizontal line for cl_in
         ax.axhline(np.max(spanwise_cl - ventilationCon), ls="--", label="cl Ventilation", color="magenta")
-        ax.annotate("$c_{\ell_{in}}$", xy=(0.95, 0.99), xycoords="axes fraction", color="magenta")
+        ax.annotate("$c_{\ell_{in}}$", xy=(0.92, 0.99), xycoords="axes fraction", color="magenta")
         ax.set_ylabel("$c_\ell$", rotation="horizontal", ha="right", va="center")
+        ax.set_ylim(top=np.max(spanwise_cl - ventilationCon) * 1.1, bottom=0.0)
 
         # --- Twist distribution ---
         ax = axes[2]
-        ax.plot(
-            aeroNodesXYZ[1, :], np.rad2deg(displacements_col[4, nCol // 2 :]), label="twist deflections ($\\Delta$)"
-        )
+        ax.plot(aeroNodesXYZ[1, :], np.rad2deg(displacements_col[4, nCol // 2 :]), label="Deflections")
         try:
             spanVal = design_vars_vals["span"][case_num]
         except KeyError:
             spanVal = 0.0
-        spanY = np.linspace(0, semispan + spanVal, len(design_vars_vals["twist"][case_num]) + 1)
-        twistDist = np.hstack((0.0, design_vars_vals["twist"][case_num]))
-        ax.plot(spanY, twistDist,"s", label="Jig twist (FFD)",zorder=10, clip_on=False)
+        # spanY = np.linspace(0, semispan + spanVal, len(design_vars_vals["twist"][case_num]) + 1)
+        # twistDist = np.hstack((0.0, design_vars_vals["twist"][case_num]))
+        # ax.plot(spanY, twistDist,"s", label="Jig twist (FFD)",zorder=10, clip_on=False)
 
         ptVec = dcfoil_case.inputs["dcfoil.hydroelastic.liftingline.ptVec"]
-        LECoords, TECoords = jl.LiftingLine.repack_coords(ptVec, 3, len(ptVec)//3)  # repack the ptVec to a 3D array
+        LECoords, TECoords = jl.LiftingLine.repack_coords(ptVec, 3, len(ptVec) // 3)  # repack the ptVec to a 3D array
         idxTip = jl.LiftingLine.get_tipnode(LECoords)
-        
-        midchords, _, _, _, pretwistDist = jl.LiftingLine.compute_1DPropsFromGrid(LECoords, TECoords, Grid.nodeConn, idxTip, appendageOptions=appendageOptions, appendageParams=appendageParams)
-        ax.plot(midchords[1,:idxTip], np.rad2deg(pretwistDist[:idxTip]), label="Jig twist (1D props)")
-        
+
+        midchords, _, _, _, pretwistDist = jl.LiftingLine.compute_1DPropsFromGrid(
+            LECoords,
+            TECoords,
+            Grid.nodeConn,
+            idxTip,
+            appendageOptions=appendageOptions,
+            appendageParams=appendageParams,
+        )
+        pretwistAeroNodes = np.interp(
+            aeroNodesXYZ[1, :], midchords[1, :idxTip], np.rad2deg(pretwistDist[:idxTip])
+        )  # interpolate to match the aero nodes
+        # ax.plot(midchords[1,:idxTip], np.rad2deg(pretwistDist[:idxTip]), label="Jig twist (1D props)")
+        ax.plot(aeroNodesXYZ[1, :], pretwistAeroNodes, label="Jig twist")
+        ax.plot(
+            aeroNodesXYZ[1, :],
+            np.rad2deg(displacements_col[4, nCol // 2 :]) + pretwistAeroNodes,
+            label="In-flight twist",
+        )
+
         ax.set_ylabel("Twist [deg]", rotation="horizontal", ha="right", va="center")
-        ax.set_ylim(bottom=-5.0, top=5.0)
+        ax.set_ylim(bottom=-3.0, top=8.0)
         ax.legend(fontsize=16, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
         ax = axes[3]
@@ -425,8 +443,10 @@ if __name__ == "__main__":
         ax.set_ylabel("OOP bending [m]", rotation="horizontal", ha="right", va="center")
         tipConstraint = semispan * 0.05
         ax.axhline(tipConstraint, ls="--", color="magenta")
-        ax.annotate("$\\delta_{\\textrm{max}}$", xy=(0.95, 0.99), xycoords="axes fraction", color="magenta")
+        ax.set_ylim(top=tipConstraint * 1.1)
+        ax.annotate("$\\delta_{\\textrm{max}}$", xy=(0.92, 0.99), xycoords="axes fraction", color="magenta")
         ax.set_yticks(np.arange(0, 0.01, 0.005).tolist() + [tipConstraint])
+        ax.set_xticks([0.0, semispan, semispan + spanVal.item()])
 
         ax = axes[4]
         ax.plot(femNodesXYZ[:, 1], design_vars_vals["toc"][case_num, :])
@@ -448,6 +468,7 @@ if __name__ == "__main__":
     # Create figure object
     fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(7, 5))
     totalDrags = np.array(drag_vals["Dw"]) + np.array(drag_vals["Dpr"]) + np.array(drag_vals["Fdrag"])
+    print("Total drag values:", totalDrags)
     ax = axes
     ax.plot(
         range(0, NITER),
@@ -471,8 +492,12 @@ if __name__ == "__main__":
     )
     ax.legend(fontsize=18, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     ax.set_ylim(bottom=0.0, top=100.0)
-    yticks_list = [(drag_vals["Dw"])[-1] / totalDrags[-1] * 100, (drag_vals["Dpr"])[-1] / totalDrags[-1] * 100, (drag_vals["Fdrag"])[-1] / totalDrags[-1] * 100]
-    ax.set_yticks([0,50,100])
+    yticks_list = [
+        (drag_vals["Dw"])[-1].item() / totalDrags[-1].item() * 100,
+        (drag_vals["Dpr"])[-1].item() / totalDrags[-1].item() * 100,
+        (drag_vals["Fdrag"])[-1].item() / totalDrags[-1].item() * 100,
+    ]
+    ax.set_yticks([0, 50, 100] + yticks_list)
     ax.set_xlim(left=0)
     ax.set_xlabel("Iteration")
     ax.yaxis.tick_right()
@@ -494,7 +519,7 @@ if __name__ == "__main__":
         basecr = om.CaseReader(basename)
         base_cases = basecr.list_cases("root.dcfoil", recurse=False)
 
-         # last case
+        # last case
         base_case = cr.get_case(base_cases[-1])
 
         # waveDrag = base_case.outputs["dcfoil.Dw"]
@@ -516,12 +541,11 @@ if __name__ == "__main__":
         }
         includes = ["cdpr", "cdi", "cdw"]
 
-
         # Create figure object
         fig, axes = plt.subplots(nrows=2, sharex=True, constrained_layout=True, figsize=(14, 10))
-        
-        fig,axes = plot_dragbuildup(fig, axes, basefuncs, "label", cm, 15, 0, includes=includes)
-        fig,axes = plot_dragbuildup(fig, axes, optfuncs, "label", cm, 15, 1, includes=includes)
+
+        fig, axes = plot_dragbuildup(fig, axes, basefuncs, "Baseline", cm, 15, 0, includes=includes)
+        fig, axes = plot_dragbuildup(fig, axes, optfuncs, "Optimized", cm, 15, 1, includes=includes)
 
         if dosave:
             plt.savefig(fname, format="pdf")

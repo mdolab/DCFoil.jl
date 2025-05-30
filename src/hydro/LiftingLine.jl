@@ -1400,7 +1400,7 @@ function setup_solverparams(xPt, nodeConn, idxTip, displCol, appendageOptions, a
     return solverParams, FlowCond
 end
 
-function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
+function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams; mode="FAD")
 
     NFORCES = 3
     NFORCECOEFFS = 3
@@ -1412,11 +1412,12 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mo
         TV_influence = compute_TVinfluences(FlowCond, LLMesh)
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
 
-        Fnh = FlowCond.Uinf / √(GRAV* FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+        depth = appendageParams["depth0"] # FlowCond.depth is wrong
+        Fnh = FlowCond.Uinf / √(GRAV * depth) # depth froude number TODO: make this a vectorized calculation
         clvent_incep = compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, PVAP)
 
         ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
-        
+
         ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
         # Since this is a matrix, it needs to be transposed and then unrolled so that the order matches what python needs (this is sneaky)
@@ -1565,11 +1566,12 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
 
         DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, solverParams)
 
-        Fnh = FlowCond.Uinf / √(GRAV* FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+        depth = appendageParams["depth0"] # FlowCond.depth is wrong
+        Fnh = FlowCond.Uinf / √(GRAV * depth) # depth froude number TODO: make this a vectorized calculation
         clvent_incep = compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, PVAP)
 
         ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
-        
+
         ksvent = compute_KS(ventilationConstraint, solverOptions["rhoKS"])
 
         # THIS ORDER MATTER. Check CostFuncsInOrder variable

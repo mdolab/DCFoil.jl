@@ -142,8 +142,8 @@ function test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptio
     println("="^40)
     println("Running partial derivatives wrt gammas...")
     println("="^40)
-    ∂f∂g_FAD = LiftingLine.compute_∂I∂G(gammas, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
-    ∂f∂g_FiDi = LiftingLine.compute_∂I∂G(gammas, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FiDi")
+    ∂f∂g_FAD = LiftingLine.compute_∂I∂G(gammas, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams; mode="FAD")
+    ∂f∂g_FiDi = LiftingLine.compute_∂I∂G(gammas, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams; mode="FiDi")
 
     err = maximum(abs.(∂f∂g_FiDi - ∂f∂g_FAD))
     println("max ∂f∂g error: $(err)")

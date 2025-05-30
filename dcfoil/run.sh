@@ -11,4 +11,6 @@
 # python run_OMDCfoil.py --task opt --fixStruct --name opt2 --restart dcfoil-trim # elliptical lift distrbution test case using only induced drag and wave drag as the objective
 # 2025-05-28
 # python run_OMDCfoil.py --task opt --name opt3 # test case with all DVs
-python run_OMDCfoil.py --task opt --name opt4 # test case with all DVs and all static constraints
+# THIS IS CALLED opt2 in the paper
+python run_OMDCfoil.py --task opt --name opt4 # test case with all DVs and all static constraints [0/3]
+# python run_OMDCfoil.py --task opt --name opt4-fs --freeSurf # test case with all DVs and all static constraints [0/3]

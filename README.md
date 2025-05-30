@@ -164,7 +164,7 @@ We opted for this over PyCall because it's what's used in the OpenMDAO examples.
 
 The package `juliapkg` handles the Julia packages.
 A juliapkg.json file is in your python environment (e.g., venv or conda).
-For the first time running, run the `update_juliapkg.py` script.
+For the first time running, run the `setup_juliapkg.py` script.
 For any other problems arising, look at the [juliapkg documentation](https://github.com/JuliaPy/PyJuliaPkg)
 
 The list of dependencies is:

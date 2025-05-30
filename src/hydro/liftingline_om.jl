@@ -613,7 +613,8 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
 
     DimForces, Γdist, clvec, cmvec, IntegratedForces, CL, CDi, CS = LiftingLine.compute_outputs(Gconv, LLNLParams.TV_influence, FlowCond, LLNLParams.LLSystem, LLNLParams)
 
-    Fnh = FlowCond.Uinf / √(GRAV * FlowCond.depth) # depth froude number TODO: make this a vectorized calculation
+    depth = appendageParams["depth0"] # FlowCond.depth is wrong
+    Fnh = FlowCond.Uinf / √(GRAV * depth) # depth froude number TODO: make this a vectorized calculation
     clvent_incep = LiftingLine.compute_cl_ventilation(Fnh, FlowCond.rhof, FlowCond.Uinf, LiftingLine.PVAP)
 
     ventilationConstraint = clvec .- clvent_incep # subtract the ventilation inception lift coefficient, this must be less then zero!
@@ -910,7 +911,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
     ∂LLNLParams = LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
-    ∂f∂g = LiftingLine.compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions) # Forward Diff by default
+    ∂f∂g = LiftingLine.compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams) # Forward Diff by default
 
     for (ii, ∂fi∂g) in enumerate(eachrow(∂f∂g[FXIND:CLMAXIND, :]))
         partials[costFuncsInOrder[ii], "gammas"][:] = ∂fi∂g
@@ -931,7 +932,7 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     #   Lift slopes
     # ---------------------------
     dcldg_i = partials["cl", "gammas"]
-    ∂f∂g_d = LiftingLine.compute_∂I∂G(Gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions) # Forward Diff by default
+    ∂f∂g_d = LiftingLine.compute_∂I∂G(Gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions, appendageParams) # Forward Diff by default
     dcldg_f = ∂f∂g_d[end-LiftingLine.NPT_WING+START:end, :]
 
     # println(size(dcldg_i))

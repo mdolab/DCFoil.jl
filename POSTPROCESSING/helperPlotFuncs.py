@@ -341,10 +341,10 @@ def plot_dragbuildup(
     alllabels = ["$C_{D,{pr}}$", "$C_{D,{i}}$", "$C_{D,w}$", "$C_{D,{s}}$", "$C_{D,{j}}$"]
     costData = []
     labels = []
-    for ii,cost in enumerate(includes):
+    for ii, cost in enumerate(includes):
         costData.append(funcs[cost])
         labels.append(alllabels[ii])
-    
+
     # costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
 
     def absolute_value(val):

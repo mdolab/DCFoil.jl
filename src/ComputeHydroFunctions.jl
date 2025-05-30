@@ -347,6 +347,7 @@ function compute_cl_ventilation(Fnh, rhof, Uinf, pcav)
     # σv = (pred - pvap) / (0.5 * rhof * Uinf^2) # Swales et al. 1974 conducted experiments at 35 torr ambient
 
     # println(σv)
+    # println("critical cl_in",clvent)
 
     return clvent
 end
