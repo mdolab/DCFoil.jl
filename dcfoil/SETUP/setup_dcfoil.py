@@ -77,7 +77,7 @@ def setup(nNodes, nNodesStrut, args, comm, files, outputDir: str):
         "run_modal": False,
         "run_flutter": args.flutter,
         "nModes": 4,
-        "uRange": [15.0, 25.0],  # [m/s]
+        "uRange": [24.0, 25.0],  # [m/s]
         # "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
         "maxQIter": 100,  # that didn't fix the slow run time...
         "rhoKS": 500.0,
