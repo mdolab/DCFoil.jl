@@ -98,7 +98,7 @@ def setup_old(args, comm, files, evalFuncs, outputDir: str, ap):
         "beta": 0.0,  # yaw angle wrt flow [deg]
         "s_strut": 1.0,  # [m]
         "c_strut": 0.14 * np.ones(nNodesStrut),  # chord length [m]
-        "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (mean)
+        "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (max t/c if using airfoil correction)
         "ab_strut": 0.0 * np.ones(nNodesStrut),  # dist from midchord to EA [m]
         "x_ab_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
         "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]
@@ -226,7 +226,7 @@ def setup(args, comm, files, evalFuncs, outputDir: str):
         "beta": 0.0,  # yaw angle wrt flow [deg]
         "s_strut": 1.0,  # [m]
         "c_strut": 0.14 * np.ones(nNodesStrut),  # chord length [m]
-        "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (mean)
+        "toc_strut": 0.095 * np.ones(nNodesStrut),  # thickness-to-chord ratio (max t/c if using airfoil correction)
         "ab_strut": 0.0 * np.ones(nNodesStrut),  # dist from midchord to EA [m]
         "x_ab_strut": 0.0 * np.ones(nNodesStrut),  # static imbalance [m]
         "theta_f_strut": np.deg2rad(0),  # fiber angle global [rad]

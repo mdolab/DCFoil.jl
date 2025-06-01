@@ -106,11 +106,17 @@ class Top(Multipoint):
         self.add_subsystem(
             "liftingline_funcs",
             expcomp_LL_func,
-            promotes_inputs=["gammas", "gammas_d", "ptVec", "alfa0", "displacements_col"],  # promotion auto connects these variables
+            promotes_inputs=[
+                "gammas",
+                "gammas_d",
+                "ptVec",
+                "alfa0",
+                "displacements_col",
+            ],  # promotion auto connects these variables
             promotes_outputs=["*"],  # everything!
         )
 
-        self.connect("geometry.x_ptVec0", "ptVec") # connect the geometry to the beam and lifting line solver
+        self.connect("geometry.x_ptVec0", "ptVec")  # connect the geometry to the beam and lifting line solver
 
     def configure(self):
 

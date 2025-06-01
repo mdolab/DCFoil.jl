@@ -68,7 +68,7 @@ function compute_BSWaveSpectrum(Hsig, ω_z, w)
     return S
 end
 
-function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears", debug=false) """
+function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears", debug=false) """
     Compute wave loads on a submerged hydrofoil
 
     Faltinsen Eqn 6.208 with modifications to strip theory and Sears function
@@ -82,8 +82,10 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
     claVec - lift slope
     """
 
-    ωpk = w_e # the peak frequency is the encounter frequency
-    ampDist = compute_AWave(freqspan, ωpk, waveamp)
+    # ωpk = w_e # the peak frequency is the significant encounter frequency
+    # println("ωpk: ", ωpk)
+    # println("freqspan: ", freqspan)
+    ampDist = compute_AWave(freqspan, 0.125, waveamp)
     ampDist .= 1.0 # for now, force wave to be 1.0 m. This would then give the RAO.
     # In other words, the transfer function of 1m input wave to load output
 
@@ -98,7 +100,7 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
 
         kw = ω^2 / GRAV # [1/m] wave number
 
-        kf = (w_e[ii] * bi / Uinf) # reduced freq using wave encounter frequency
+        kf = (ω_e[ii] * bi / Uinf) # reduced freq using wave encounter frequency
 
 
         Aω = ampDist[ii]
@@ -110,11 +112,11 @@ function compute_waveloads(chordLengths, Uinf, ϱ, w_e, freqspan, waveamp, h, st
         #   Sectional lift loads
         # ---------------------------
         if uppercase(method) == "SEARS" # most accurate
-            Lc, Lnc = HydroStrip.compute_gustLoadSears(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+            Lc, Lnc = HydroStrip.compute_gustLoadSears(kf, Uinf, ϱ, ω_e[ii], coeff, claVec, chordLengths)
         elseif uppercase(method) == "THEODORSEN"
-            Lc, Lnc = HydroStrip.compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+            Lc, Lnc = HydroStrip.compute_gustLoadTheodorsen(kf, Uinf, ϱ, ω_e[ii], coeff, claVec, chordLengths)
         elseif uppercase(method) == "QUASISTEADY"
-            Lc, Lnc = HydroStrip.compute_gustLoadQuasisteady(kf, Uinf, ϱ, w_e[ii], coeff, claVec, chordLengths)
+            Lc, Lnc = HydroStrip.compute_gustLoadQuasisteady(kf, Uinf, ϱ, ω_e[ii], coeff, claVec, chordLengths)
         else
             error("Unknown method: $(method)")
         end

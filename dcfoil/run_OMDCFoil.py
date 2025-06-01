@@ -25,7 +25,7 @@ from tabulate import tabulate
 # ==============================================================================
 # Extension modules
 # ==============================================================================
-from SETUP import setup_OMdvgeo, setup_dcfoil
+from SETUP import setup_OMdvgeo, setup_dcfoil, setup_opt
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
 from multipoint import Multipoint
@@ -186,9 +186,7 @@ class Top(Multipoint):
         # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
         self.add_constraint("dcfoil.Flift", lower=2500, upper=2550)  # lift constraint [N]
         if args.task != "trim":
-            self.add_constraint(
-                "dcfoil.wtip", upper=0.05 * 0.333
-            )  # tip deflection constraint (5% of baseline semispan)
+            self.add_constraint("dcfoil.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
             self.add_constraint("dcfoil.ksvent", upper=0.0)  # ventilation constraint
         if args.flutter:
             self.add_constraint("dcfoil.ksflutter", upper=0.0)  # flutter constraint
@@ -214,12 +212,14 @@ if __name__ == "__main__":
         help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
     )
     parser.add_argument("--name", type=str, default=None, help="Name of the problem to append to .sql recorder")
+    parser.add_argument("--optimizer", type=str, default="SNOPT", help="What type of optimizer?")
     parser.add_argument(
         "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
     )
     parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
     parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
     parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
+    parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -316,6 +316,35 @@ if __name__ == "__main__":
                 "value": thetaStart,
             },
         }
+    if args.fixHydro:
+        # Free the DVs that seem to be giving problems for the flutter optimization
+        print("WARNING: Fixing hydro design variables")
+        dvDictInfo = {
+            "twist": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1.0,
+                "value": np.zeros(8 // 2),
+            },
+            "sweep": {
+                "lower": 0.0,
+                "upper": 30.0,
+                "scale": 1,
+                "value": 0.0,
+            },
+            "taper": {  # the tip chord can change, but not the root
+                "lower": [1.0, 1.0],
+                "upper": [1.0, 1.0],
+                "scale": 1.0,
+                "value": np.ones(2) * 1.0,
+            },
+            "span": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1,
+                "value": 0.0,
+            },
+        }
 
     prob = om.Problem()
     prob.model = Top()
@@ -323,28 +352,18 @@ if __name__ == "__main__":
     # ---------------------------
     #   Opt setup
     # ---------------------------
-    prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
-    prob.driver.options["print_results"] = True
-    prob.driver.opt_settings["Major iterations limit"] = 100
-    prob.driver.opt_settings["Major feasibility tolerance"] = 1e-4
-    prob.driver.opt_settings["Major optimality tolerance"] = 1e-4
-    prob.driver.opt_settings["Difference interval"] = 1e-4
-    prob.driver.opt_settings["Verify level"] = -1
-    prob.driver.opt_settings["Function precision"] = 1e-8
-    prob.driver.opt_settings["Hessian full memory"] = None
-    prob.driver.opt_settings["Hessian frequency"] = 100
-    prob.driver.opt_settings["Linesearch tolerance"] = 0.99
-    prob.driver.opt_settings["Nonderivative linesearch"] = None
-    prob.driver.opt_settings["Major Step Limit"] = 0.2
-    outputDir = "output"
-    fname = "SNOPT"
-    if args.name is not None:
-        fname += "-" + args.name
-    prob.driver.opt_settings["Print file"] = os.path.join(outputDir, f"{fname}_print.out")
-    prob.driver.opt_settings["Summary file"] = os.path.join(outputDir, f"{fname}_summary.out")
-
-    # --- Some debug stuff ---
+    prob.driver = om.pyOptSparseDriver(
+        title=f"{args.name}",
+        optimizer="SNOPT",
+        print_results=True,
+        print_opt_prob=True,
+    )
+    prob.driver.options["hist_file"] = "dcfoil.hst"
     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
+    outputDir = "output"
+    optOptions = setup_opt.setup(args, outputDir)
+    for key, val in optOptions.items():
+        prob.driver.opt_settings[key] = val
 
     prob.setup()
 
@@ -503,6 +522,6 @@ if __name__ == "__main__":
 
         print("Checking partials...")
         f.write("PARTIALS\n")
-        prob.model.dcfoil.liftingline_funcs.set_check_partial_options(wrt=["toc"])
+        prob.model.dcfoil.hydroelastic.liftingline_funcs.set_check_partial_options(wrt=["toc"])
         prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
         prob.check_partials(method="fd", includes=["liftingline_funcs"])
