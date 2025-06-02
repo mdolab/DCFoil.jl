@@ -26,6 +26,7 @@ from tabulate import tabulate
 # Extension modules
 # ==============================================================================
 from SETUP import setup_OMdvgeo, setup_dcfoil, setup_opt
+from SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
 from multipoint import Multipoint
@@ -124,25 +125,45 @@ class Top(Multipoint):
             promotes=["twist", "sweep", "dihedral", "taper", "span"],
         )
 
-        # --- Add core physics engine ---
-        physModel = CoupledAnalysis(
-            analysis_mode="coupled",
-            include_flutter=args.flutter,
-            ptVec_init=np.array(ptVec),
-            npt_wing=npt_wing,
-            n_node=n_node,
-            appendageOptions=appendageOptions,
-            appendageParams=appendageParams,
-            nodeConn=nodeConn,
-            solverOptions=solverOptions,
-        )
-        self.add_subsystem("dcfoil", physModel)
+        # --- Add core physics engine for each flight point ---
+        for ptName in probList:
+            print(f"Adding point {ptName} to the problem", flush=True)
+            
+            Uinf = boatSpds[ptName]
+            depth = opdepths[ptName]
+            solverOptions["Uinf"] = Uinf
+            appendageParams["depth0"] = depth
+            solverOptions["outputDir"] += f"/{ptName}"  # add the point name to the output directory
+
+            run_flutter = args.flutter and ptName == "p3"  # only run flutter for p3
+
+            physModel = CoupledAnalysis(
+                analysis_mode="coupled",
+                include_flutter=run_flutter,
+                ptVec_init=np.array(ptVec),
+                npt_wing=npt_wing,
+                n_node=n_node,
+                appendageOptions=appendageOptions,
+                appendageParams=appendageParams,
+                nodeConn=nodeConn,
+                solverOptions=solverOptions,
+            )
+            self.add_subsystem(f"dcfoil_{ptName}", physModel)
+
+
         self.mesh.add_output("x_ptVec0", val=ptVec, distributed=True)
 
         # --- Some post processing manipulation of cost functions ---
         adder = om.AddSubtractComp()
-        cdComps = ["CDi", "CDpr", "CDw"]
-        dragComps = ["Di", "Dpr", "Dw"]
+        cdCompsPt = ["CDi", "CDpr", "CDw"]
+        dragCompsPt = ["Di", "Dpr", "Dw"]
+        cdComps = []
+        dragComps = []
+        for ptName in probList: # loop through all the points so all drags are added
+            for cd in cdCompsPt:
+                cdComps.append(f"{cd}_{ptName}")
+            for drag in dragCompsPt:
+                dragComps.append(f"{drag}_{ptName}")
         adder.add_equation("CD", input_names=cdComps)
         adder.add_equation("Dtot", input_names=dragComps)
         self.add_subsystem("objAdder", adder, promotes_outputs=["*"])
@@ -151,17 +172,23 @@ class Top(Multipoint):
         #     Do connections
         # ************************************************
         self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")  # connect the mesh to the geometry parametrization
-        self.connect("geometry.x_ptVec0", "dcfoil.ptVec")  # connect the geometry to the core physics engine
-        # Connect nongeometry design variables to the core physics engine
-        for dvName, value in otherDVs.items():
-            self.connect(dvName, f"dcfoil.{dvName}")
 
-        # Connect drag build up to total drag
-        for cdName in cdComps:
-            self.connect(f"dcfoil.{cdName}", f"objAdder.{cdName}")
-        self.connect(f"dcfoil.Dpr", f"objAdder.Dpr")
-        self.connect(f"dcfoil.Dw", f"objAdder.Dw")
-        self.connect(f"dcfoil.Fdrag", f"objAdder.Di")
+        for ptName in probList:
+            self.connect("geometry.x_ptVec0", f"dcfoil_{ptName}.ptVec")  # connect the geometry to the core physics engine
+
+            # Connect nongeometry design variables to the core physics engine
+            for dvName, value in otherDVs.items():
+                if dvName == "alfa0":
+                    self.connect(f"{dvName}_{ptName}", f"dcfoil_{ptName}.{dvName}")
+                else:
+                    self.connect(dvName, f"dcfoil_{ptName}.{dvName}")
+
+            # Connect drag build up to total drag
+            for cdName in cdCompsPt:
+                self.connect(f"dcfoil_{ptName}.{cdName}", f"objAdder.{cdName}_{ptName}")
+            self.connect(f"dcfoil_{ptName}.Dpr", f"objAdder.Dpr_{ptName}")
+            self.connect(f"dcfoil_{ptName}.Dw", f"objAdder.Dw_{ptName}")
+            self.connect(f"dcfoil_{ptName}.Fdrag", f"objAdder.Di_{ptName}")
 
     def configure(self):
         """
@@ -177,22 +204,35 @@ class Top(Multipoint):
             self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
 
         for dvName, value in otherDVs.items():
-            self.dvs.add_output(dvName, val=value["value"])
-            self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+            if dvName == "alfa0":
+                for ptName in probList:
+                    self.dvs.add_output(f"{dvName}_{ptName}", val=value["value"])
+                    self.add_design_var(f"{dvName}_{ptName}", lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+            else:
+                self.dvs.add_output(dvName, val=value["value"])
+                self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
 
-        # --- Setup objectives and constraints ---
+        # ************************************************
+        #     Objectives
+        # ************************************************
         # self.add_objective("CD")
         self.add_objective("Dtot")
-        # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
-        self.add_constraint("dcfoil.Flift", lower=2500, upper=2550)  # lift constraint [N]
-        if args.task != "trim":
-            self.add_constraint("dcfoil.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
-            self.add_constraint("dcfoil.ksvent", upper=0.0)  # ventilation constraint
-        if args.flutter:
-            self.add_constraint("dcfoil.ksflutter", upper=0.0)  # flutter constraint
+
+        # ************************************************
+        #     Constraints
+        # ************************************************
+        for ptName in probList:
+            # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
+            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=2500, upper=2550)  # lift constraint [N]
+
+            if args.task != "trim":
+                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
+                self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=0.0)  # ventilation constraint
 
             # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
-
+            
+            if args.flutter and ptName == "p3":
+                self.add_constraint(f"dcfoil_{ptName}.ksflutter", upper=0.0)  # flutter constraint only for p3
 
 # ==============================================================================
 #                         MAIN DRIVER
@@ -220,6 +260,7 @@ if __name__ == "__main__":
     parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
     parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
     parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
+    parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
     args = parser.parse_args()
 
     # --- Echo the args ---
@@ -228,6 +269,11 @@ if __name__ == "__main__":
     for arg in vars(args):
         print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
     print(30 * "-", flush=True)
+
+    probList = []
+    for pt in args.pts:
+        ptName = f"p{pt}"
+        probList.append(ptName)
 
     # ==============================================================================
     #                         DCFoil setup
@@ -380,27 +426,37 @@ if __name__ == "__main__":
     prob.add_recorder(recorder)  # attach recorder to the problem
     prob.driver.add_recorder(recorder)  # attach recorder to the driver
     model = prob.model
-    model.dcfoil.add_recorder(recorder)  # attach recorder to the subsystem of interest
     model.geometry.add_recorder(recorder)  # attach recorder to the geometry subsystem
+
+
+    # attach recorder to the subsystem of interest
+    if "p1" in probList:
+        model.dcfoil_p1.add_recorder(recorder)  
+    if "p2" in probList:
+        model.dcfoil_p2.add_recorder(recorder)
+    if "p3" in probList:
+        model.dcfoil_p3.add_recorder(recorder)
+
     # ************************************************
     #     Set starting values
     # ************************************************
     prob.set_val("theta_f", np.deg2rad(0.0))  # this is defined in [rad] in the julia wrapper layer
-    prob.set_val("alfa0", 2.0)  # this is defined in [deg] in the julia wrapper layer
+    for ptName in probList:
+        prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
     prob.set_val("toc", 0.12 * np.ones(nNodes))
 
     # initialization needed for solvers
     displacementsCol = np.zeros((6, npt_wing_full))
-    prob.set_val("dcfoil.displacements_col", displacementsCol)
-    prob.set_val("dcfoil.gammas", np.zeros(npt_wing_full))
+    for ptName in probList:
+        prob.set_val(f"dcfoil_{ptName}.displacements_col", displacementsCol)
+        prob.set_val(f"dcfoil_{ptName}.gammas", np.zeros(npt_wing_full))
 
     # ************************************************
     #     Other stuff
     # ************************************************
-    om.n2(prob, outfile="n2.html", show_browser=False)
-    # prob.set_val("sweep", 15.0) # there's a lot of lift here...maybe too much?
+    om.n2(prob, outfile=f"n2-{args.name}.html", show_browser=False)
 
     # ==============================================================================
     #                         Restart from an old case
@@ -427,7 +483,10 @@ if __name__ == "__main__":
             if dv in dvDictInfo:
                 prob.set_val(dv, val)
             elif dv in otherDVs:
-                prob.set_val(dv, val)
+                try:
+                    prob.set_val(dv, val)
+                except KeyError:
+                    print(f"WARNING: {dv} not found in prob, skipping...")
             else:
                 print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
 
@@ -471,13 +530,14 @@ if __name__ == "__main__":
         print("=" * 20)
         print("Drag components:")
         print("=" * 20)
-        print("CDi", prob.get_val("dcfoil.CDi"))
-        print("CDpr", prob.get_val("dcfoil.CDpr"))
-        print("CDw", prob.get_val("dcfoil.CDw"))
-        print("Dtot", prob.get_val("Dtot"))
-        print("Fdrag", prob.get_val("dcfoil.Fdrag"))
-        print("Dpr", prob.get_val("dcfoil.Dpr"))
-        print("Dw", prob.get_val("dcfoil.Dw"))
+        for ptName in probList:
+            print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
+            print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
+            print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
+            print("Dtot", prob.get_val("Dtot"))
+            print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
+            print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
+            print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
 
     if args.task in ["run"]:
         print("=" * 60)
@@ -503,13 +563,14 @@ if __name__ == "__main__":
         print("=" * 20)
         print("Drag components:")
         print("=" * 20)
-        print("CDi", prob.get_val("dcfoil.CDi"))
-        print("CDpr", prob.get_val("dcfoil.CDpr"))
-        print("CDw", prob.get_val("dcfoil.CDw"))
-        print("Dtot", prob.get_val("Dtot"))
-        print("Fdrag", prob.get_val("dcfoil.Fdrag"))
-        print("Dpr", prob.get_val("dcfoil.Dpr"))
-        print("Dw", prob.get_val("dcfoil.Dw"))
+        for ptName in probList:
+            print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
+            print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
+            print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
+            print("Dtot", prob.get_val("Dtot"))
+            print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
+            print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
+            print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
 
     if args.task == "deriv":
         prob.run_model()
