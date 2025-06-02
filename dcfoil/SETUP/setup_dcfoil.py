@@ -71,6 +71,11 @@ def setup(nNodes, nNodesStrut, args, comm, files, outputDir: str):
         # --- Forced solve ---
         "run_forced": False,
         "fRange": [0.1, 1000.0],
+        # --- Great lakes ---
+        "waveSpectrum": "ISSC",
+        "Hsig": 1.5,  # significant wave height [m]
+        "omegaz": 2 * np.pi / 3.0,  # zero-crossing frequency [rad/s] 
+        "headingAngle" : np.deg2rad(180.0), # heading angle of the waves [rad]
         "tipForceMag": 1.0,
         "run_body": False,
         # --- p-k (Eigen) solve ---
