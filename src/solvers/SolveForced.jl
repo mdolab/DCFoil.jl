@@ -15,7 +15,7 @@ Frequency domain hydroelastic solver
 using LinearAlgebra, Statistics
 using JSON
 using Zygote
-using ChainRulesCore: ChainRulesCore, @ignore_derivatives
+using ChainRulesCore: ChainRulesCore
 using FileIO
 
 # --- DCFoil modules ---
@@ -32,6 +32,7 @@ for headerName in [
     "../InitModel",
     "../hydro/OceanWaves",
     "../solvers/SolverSetup",
+    "../ComputeForcedFunctions",
 ]
     include("$(headerName).jl")
 end
@@ -48,39 +49,40 @@ const loadType = "force"
 # ==============================================================================
 #                         Top level API routines
 # ==============================================================================
-function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions::AbstractDict, appendageOptions::AbstractDict)
+function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, rake, FOIL, CONSTANTS, idxTip, LLSystem, FlowCond, solverOptions::AbstractDict)
     """
     Solve
-        (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
-    using the 'tipForceMag' as the harmonic forcing on the RHS
+
+    (-ω²[M]-jω[C]+[K]){ũ} = {f̃}
+
+    using the ocean wave spectra as the harmonic forcing on the RHS (wave-induced forces)
+
+    claVec: vector of lift slope for each beam node
     """
     # ---------------------------
     #   Initialize
     # ---------------------------
-    outputDir = solverOptions["outputDir"]
-    tipForceMag = solverOptions["tipForceMag"]
+    appendageOptions = solverOptions["appendageList"][1]
+    # outputDir = solverOptions["outputDir"]
+    # tipForceMag = solverOptions["tipForceMag"]
 
-    WING, STRUT, SOLVERPARAMS, FEMESH, LLSystem, LLOutputs, FlowCond = setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
-    sweepAng = LLSystem.sweepAng
+    # WING, STRUT, CONSTANTS, FEMESH, LLSystem, LLOutputs, FlowCond = setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
+    # sweepAng = LLSystem.sweepAng
     DOFBlankingList = FEMMethods.get_fixed_dofs(ELEMTYPE, "clamped")
-    println("====================================================================================")
-    println("        BEGINNING HARMONIC FORCED HYDROELASTIC SOLUTION")
-    println("====================================================================================")
-
-
 
     # --- Initialize stuff ---
-    u = zeros(size(SOLVERPARAMS.Kmat)[1])
+    u = zeros(size(CONSTANTS.Kmat)[1])
     fSweep = solverOptions["fRange"][1]:solverOptions["df"]:solverOptions["fRange"][end]
 
     # # --- Tip twist approach ---
-    # extForceVec = zeros(size(SOLVERPARAMS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
+    # extForceVec = zeros(size(CONSTANTS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
     # ChainRulesCore.ignore_derivatives() do
     #     extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
     #     extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
     # end
     # --- Wave-induced forces ---
-    extForceVec, Aw = compute_fextwave(fSweep * 2π, FEMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
+    headingAngle = solverOptions["headingAngle"] # [rad] angle of the wave heading relative to the flow direction, π is headseas
+    extForceVec, Aw = compute_fextwave(headingAngle, fSweep * 2π, FEMESH, chordVec, claVec, FlowCond, appendageOptions)
 
     LiftDyn = zeros(ComplexF64, length(fSweep)) # * 0im
     MomDyn = zeros(ComplexF64, length(fSweep)) # * 0im
@@ -94,40 +96,40 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     # These RAOs describe the outputs relation wrt an input wave amplitude
     LiftRAO = zeros(ComplexF64, length(fSweep))
     MomRAO = zeros(ComplexF64, length(fSweep))
+
+    # Z(ω)
     DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
+    # H(ω)
     DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
 
     dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
-    Ms = SOLVERPARAMS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
-    Ks = SOLVERPARAMS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
-    Cs = SOLVERPARAMS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Ms = CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Ks = CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Cs = CONSTANTS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
 
-    maxK = fSweep[end] * 2π / FlowCond.Uinf
+    maxK = fSweep[end] * 2π * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # max reduced frequency
     nK = 22
 
     globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(
-        maxK, nK, FlowCond.Uinf, 1.0, dim, FEMESH, LLSystem.sweepAng, WING, LLSystem, LLOutputs, FlowCond.rhof, FlowCond, ELEMTYPE;
+        maxK, nK, FlowCond.Uinf, b_ref, dim, FEMESH, LLSystem.sweepAng, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
     # ************************************************
     #     For every frequency, solve the system
     # ************************************************
     tFreq = @elapsed begin
+        print_vibration_text(1, 1, 1, 0, 0, 0, 0; printHeader=true)
         for (f_ctr, f) in enumerate(fSweep)
-            if f_ctr % 20 == 1 # header every 10 iterations
-                println("Forcing: ", f, "Hz")
-            end
 
             ω = 2π * f # circular frequency
 
             # ---------------------------
             #   Assemble hydro matrices
             # ---------------------------
-            # TODO: PICKUP HERE to accelerate forced solution
             # # --- Interpolate AICs ---
-            k = ω / FlowCond.Uinf
-            globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
-            globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
+            k0 = ω * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # reduced frequency
+            globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
+            globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
 
             Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
             Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
@@ -139,19 +141,9 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
             # Rows are outputs "i" and columns are inputs "j"
 
-            # # Complex AIC
-            # AIC = -1 * ω^2 * (Mf) + im * ω * Cf + (Kf)
-
-            # Store constants
-            # global CONSTANTS = SolutionConstants.DCFoilDynamicConstants(D, AIC, extForceVec)
-            # global DFOIL = FOIL
-
             # ---------------------------
             #   Solve for dynamic states
             # ---------------------------
-            # The below way is the numerical way to do it but might skip if this doesntwork
-            # qSol, _ = SolverRoutines.converge_resNonlinear(compute_residuals, compute_∂r∂u, q, is_cmplx=true, is_verbose=false)
-
             fextω = extForceVec[:, f_ctr]
             H = inv(D) # system transfer function matrix for a force
             # qSol = real(H * extForceVec)
@@ -160,6 +152,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             # uSol = real(ũSol)
             uSol = abs.(ũSol) # proper way to do it
 
+            # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
             ũout[f_ctr, :] = ũSol
 
             # ---------------------------
@@ -167,7 +160,7 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             # ---------------------------
             fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
 
-            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, appendageParams["alfa0"], appendageParams["rake"], DOFBlankingList, SOLVERPARAMS.downwashAngles, ELEMTYPE;
+            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, alfa0, rake, DOFBlankingList, CONSTANTS.downwashAngles, ELEMTYPE;
                 appendageOptions=appendageOptions, solverOptions=solverOptions)
 
             # --- Store total force and tip deflection values ---
@@ -179,6 +172,10 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
             DeflectionRAO[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
             # DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
 
+            if f_ctr % 20 == 1 # header every 10 iterations
+                print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
+            end
+
             # # DEBUG QUIT ON FIRST FREQ
             # break
             f_ctr += 1
@@ -188,32 +185,41 @@ function solveFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOp
     LiftRAO = LiftDyn ./ Aw
     MomRAO = MomDyn ./ Aw
 
-    SOL = DCFoilSolution.ForcedVibSolution(fSweep, ũout, Aw, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn)
+    SOL = ForcedVibSolution(fSweep, ũout, Aw, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn)
 
     return SOL
 end
 
-function compute_fextwave(ωRange, AEROMESH, WING, LLSystem, LLOutputs, FlowCond, appendageParams, appendageOptions)
+function print_vibration_text(f_ctr, freq, k0, Lmag, Mmag, tipBend, tipTwist; printHeader=false)
+    if printHeader
+        println("+-------+-------------+--------------+-------------+-------------+-------------+-------------+")
+        println("| nIter | freq_0 [Hz] | Red. freq k0 | mag L̃ (self)| mag M̃ (self)|   w tip [m] | θ tip [rad] |")
+        println("+-------+-------------+--------------+-------------+-------------+-------------+-------------+")
+    else
+        println(@sprintf("|  %04d |   %1.3e | %12.6f | %1.5e | %1.5e | %1.5e | %1.5e |", f_ctr, freq, k0, Lmag, Mmag, tipBend, tipTwist))
+    end
+end
+
+function compute_fextwave(headingAngle, ωRange, AEROMESH, chordVec, clαVec, FlowCond, appendageOptions)
     """
     Computes the forces and moments due to wave loads on the elevator
+
+    Inputs
+    ------
+    headingAngle: [rad] angle of the wave heading relative to the flow direction, π is headseas
     """
 
     # --- Wave loads ---
     ω_wave = 0.125 # Peak wave frequency
     Awsig = 0.5 # Wave amplitude [m]
-    ωe = OceanWaves.compute_encounterFreq(π, ωRange, FlowCond.Uinf)
+    ωe = compute_encounterFreq(headingAngle, ωRange, FlowCond.Uinf)
 
     stripVecs = HydroStrip.get_strip_vecs(AEROMESH, appendageOptions)
     spanLocs = AEROMESH.mesh[:, YDIM]
     nVec = stripVecs
     stripWidths = .√(nVec[:, XDIM] .^ 2 + nVec[:, YDIM] .^ 2 + nVec[:, ZDIM] .^ 2) # length of elem
-    xeval = LLSystem.collocationPts[YDIM, :]
-    claVec = Interpolation.do_linear_interp(xeval, LLOutputs.cla, spanLocs)
 
-    # Elevator chord lengths
-    chordLengths = vcat(WING.chord, WING.chord[2:end])
-    fAey, mAey, Aw = OceanWaves.compute_waveloads(chordLengths, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, appendageParams["depth0"], stripWidths, claVec)
-
+    fAey, mAey, Aw = compute_waveloads(chordVec, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, FlowCond.depth, stripWidths, clαVec)
     extForceVec = zeros(ComplexF64, length(spanLocs) * NDOF, length(ωRange))
 
     # --- Populate the force vector ---
@@ -229,6 +235,10 @@ function write_sol(SOL, outputDir="./OUTPUT/")
     """
     Write out the dynamic results
     """
+    # Store solutions here
+    workingOutput = outputDir * "forced/"
+    mkpath(workingOutput)
+    println("Writing out forced solution to ", workingOutput)
 
     fSweep = SOL.fSweep
     Aw = SOL.Awave
@@ -237,9 +247,6 @@ function write_sol(SOL, outputDir="./OUTPUT/")
     LiftRAO = SOL.Zlift
     MomRAO = SOL.Zmom
     GenXferFcn = SOL.RAO
-
-    workingOutput = outputDir * "forced/"
-    mkpath(workingOutput)
 
     # --- Write frequency sweep ---
     fname = workingOutput * "freqSweep.dat"
@@ -319,11 +326,54 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function compute_funcs(evalFunc)
+function compute_funcsFromDVsOM(evalFunc, ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=false)
 
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
+    appendageParams["alfa0"] = alfa0
+
+    FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = setup_solverOM(displacementsCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions, "HARMONIC FORCED VIBRATION")
+
+    SOL = solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
+
+    omegaSweep = SOL.fSweep * 2π # [rad/s] frequency sweep in ω_0 space (not encounter frequency)
+    # omega_eSweep = compute_encounterFreq(solverOptions["headingAngle"], omegaSweep, FlowCond.Uinf) # compute the encounter frequency
+    Hsig = solverOptions["Hsig"] # significant wave height [m]
+    if solverOptions["waveSpectrum"] == "ISSC"
+        ω_z = solverOptions["omegaz"] # significant zero-crossing frequency [rad/s]
+        Swave = compute_BSWaveSpectrum(Hsig, ω_z, omegaSweep)
+    elseif solverOptions["waveSpectrum"] == "PM"
+        Swave, wm, lm, var, Vwind = compute_PMWaveSpectrum(Hsig, omega_eSweep)
+    else
+        waveSpectrum = solverOptions["waveSpectrum"]
+        error("$(waveSpectrum) wave spectrum not implemented")
+    end
+
+    gvib_bend, gvib_twist = compute_PSDArea(SOL, SOL.fSweep, b_ref, Swave)
+
+    ksbend, kstwist = compute_dynDeflectionPk(SOL, solverOptions)
+    
+    obj = [gvib_bend, gvib_twist, ksbend, kstwist]
+
+    if return_all
+        return obj, SOL
+    else
+        return SOL
+    end
 end
 
-function evalFuncsSens(VIBSOL)
+function evalFuncsSens(VIBSOL;mode="RAD")
+    """
+    TODO
+    """
+
+    if uppercase(mode) == "RAD"
+    Zygote.Jacobian
+    else
+        error("Mode $(mode) not implemented")
+    end
 
 end
 

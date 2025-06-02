@@ -20,7 +20,11 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
     println("====================================================================================")
     println("        BEGINNING $(solverType) SOLUTION")
     println("====================================================================================")
-    println("Speed range [m/s]: ", uRange)
+    if solverOptions["run_flutter"] && uppercase(solverType) == "FLUTTER"
+        println("Speed range [m/s]: ", uRange)
+    elseif solverOptions["run_forced"]
+        println("Frequency sweep [Hz]: ", solverOptions["fRange"])
+    end
     if debug
         rm("DebugOutput/", recursive=true)
         mkpath("DebugOutput/")

@@ -96,12 +96,11 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
     alfaRad = deg2rad(DVDict["alfa0"]) + alphaCorrection
     rakeRad = deg2rad(DVDict["rake"])
     betaRad = deg2rad(DVDict["beta"])
-    nDOF = BeamElement.NDOF
 
     # Get flow angles of attack in "local" beam coords first
     #TODO: pretwist will change this
     if elemType == "BT2"
-        nGDOF = nDOF * 3 # number of DOFs on node in global coordinates
+        nGDOF = NDOF * 3 # number of DOFs on node in global coordinates
         staticOffset = [0, 0, alfaRad, 0]
     elseif elemType == "COMP2"
         staticOffset_wing = [0, 0, 0, alfaRad + rakeRad, 0, betaRad, 0, 0, 0]
@@ -151,11 +150,11 @@ function return_totalStates(foilStructuralStates, DVDict, elemType="BT2"; append
     nStrutDOFs = 0
     staticOffsetGlobalRef_strut = []
     if appendageOptions["config"] == "t-foil"
-        nStrutDOFs = (appendageOptions["nNodeStrut"] - 1) * nDOF # subtract 1 because of the junction node
-        w_strut = foilStructuralStates[end-nStrutDOFs+1:nDOF:end]
+        nStrutDOFs = (appendageOptions["nNodeStrut"] - 1) * NDOF # subtract 1 because of the junction node
+        w_strut = foilStructuralStates[end-nStrutDOFs+1:NDOF:end]
         staticOffsetGlobalRef_strut = repeat(staticOffset_strut, outer=[length(w_strut)])
     end
-    w_wing = foilStructuralStates[1:nDOF:end-nStrutDOFs] # These wing DOFS include the junction node
+    w_wing = foilStructuralStates[1:NDOF:end-nStrutDOFs] # These wing DOFS include the junction node
 
     # # Correct the root "junction" node
     staticOffsetGlobalRef_wing = vcat(staticOffset_junctionNode, repeat(staticOffset_wing, outer=[length(w_wing) - 1]))

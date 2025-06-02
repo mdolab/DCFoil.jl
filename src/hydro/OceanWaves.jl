@@ -7,9 +7,6 @@
 """
 
 
-# include("../../src/constants/SolutionConstants.jl")
-
-
 function compute_PMWaveSpectrum(Hsig, w)
     """
     One parameter  Pierson--Moskowitz wave energy spectrum
@@ -63,7 +60,7 @@ function compute_BSWaveSpectrum(Hsig, ω_z, w)
 
     # S = 0.3125 * ω_m^4 * w .^ (-5) * Hsig^2 .* exp.(-1.25 * (ω_m ./ w) .^ 4) # Bretschneider wave spectrum [m^2 - s]
 
-    S = 0.11 * Hsig^2 * ω_z^4 * w .^ (-5) * exp.(-0.44 * (ω_z ./ w) .^ 4) # alternative form using the significant crossing frequency
+    S = 0.11 * Hsig^2 * ω_z^4 * w .^ (-5) .* exp.(-0.44 * (ω_z ./ w) .^ 4) # alternative form using the significant crossing frequency
 
     return S
 end
@@ -200,7 +197,6 @@ function compute_encounterFreq(β, ω_wave::AbstractVector, Ufwd)
     ωₑ : 
         encounter frequency [rad/s]
     """
-
     ωₑ = (1 .- Ufwd * ω_wave * cos(β) / GRAV) .* ω_wave
 
     return ωₑ
@@ -226,6 +222,8 @@ end
 
 function compute_responseSpectralDensityFunc(Hω::Vector{<:Real}, waveEnergySpectrum::Vector{<:Real})
     """
+    waveEnergySpectrum : [m^2 - s] wave energy spectrum
+    Hω : FRF magnitude of response amplitude operator
     """
 
     S_R⁺ = Hω .^ 2 .* waveEnergySpectrum

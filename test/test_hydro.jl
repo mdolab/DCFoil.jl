@@ -11,6 +11,7 @@ for headerName in [
     "../src/hydro/Unsteady",
     "../src/hydro/OceanWaves",
     "../src/ComputeHydroFunctions",
+    "../src/constants/SolutionConstants",
 ]
     include(headerName * ".jl")
 end
@@ -574,7 +575,7 @@ end
 
 function test_hydrofoilWaveLoads()
     # should be higher k
-    chord = 0.1 # m
+    # chord = 0.1 # m
     chord = 0.3 # m
     depth = 0.5 # m
     # depth = 1 # m
@@ -587,6 +588,7 @@ function test_hydrofoilWaveLoads()
     # --- Great Lakes typical seas ---
     T_z = 3.0 # s, significant period
     ω_z = 2 * π / T_z # rad/s significant frequency
+    Hsig = 1.5 # m
     omegaSweep::Vector = (0.05:0.05:3.0*2π) # rad/s
     β = deg2rad(180)
     we = compute_encounterFreq(β, omegaSweep, Uinf)
@@ -607,9 +609,9 @@ function test_hydrofoilWaveLoads()
 
     chordVec = chord * ones(2)
     stripWidths = ones(2)
-    fAeySk, mAey, ampDist = HydroStrip.compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Sears")
-    fAeyCk, mAey, ampDist = HydroStrip.compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Theodorsen")
-    fAeyQS, mAey, ampDist = HydroStrip.compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Quasisteady")
+    fAeySk, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Sears")
+    fAeyCk, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Theodorsen")
+    fAeyQS, mAey, ampDist = compute_waveloads(chordVec, Uinf, rho, we, omegaSweep, 1.0, depth, stripWidths, claVec; method="Quasisteady")
 
     HwSk = abs.(fAeySk[:, 1])
     HwCk = abs.(fAeyCk[:, 1])
@@ -661,7 +663,7 @@ function test_hydrofoilWaveLoads()
 
 end
 
-# test_hydrofoilWaveLoads()
+test_hydrofoilWaveLoads()
 # ==============================================================================
 #                         Test lifting line code
 # ==============================================================================

@@ -43,6 +43,7 @@ for headerName in [
     "../hydro/Unsteady",
     "../utils/Interpolation",
     "../hydro/GlauertLL",
+    "../solvers/SolverRoutines",
 ]
 
     include(headerName * ".jl")
@@ -712,7 +713,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
     for (inode, XN) in enumerate(eachrow(aeroMesh)) # loop aero strips (located at FEM nodes)
         # --- compute strip quantities ---
         yⁿ = XN[YDIM]
-        zⁿ = XN[ZDIM]
+        zⁿ = XN[ZDIM] # need this for depth
 
         nVec = stripVecs[inode, :]
 
@@ -755,7 +756,7 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
         # --- Compute Compute local AIC matrix for this element ---
         p_i = 1.0
         if solverOptions["use_freeSurface"]
-            if appendageOptions["config"] == "full-wing"
+            if appendageOptions["config"] in ["full-wing", "wing"]
                 localspan = 0.5 * LLSystem.span - abs_cs_safe(yⁿ)
             elseif appendageOptions["config"] == "strut"
                 drySpan = 0.5 * LLSystem.span - FlowCond.depth
@@ -771,6 +772,8 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
                 end
                 # println("semispan: ", LLSystem.span * 0.5)
                 # println("depth: ", FlowCond.depth)
+            elseif !(appendageOptions["config"] in CONFIGS)
+                error("Invalid configuration")
             end
             p_i = compute_pFactor(localchord, localspan)
             # println("local span:\t $(localspan)\nyn:\t$(yⁿ)\np factor:\t$(p_i)")
@@ -1458,17 +1461,16 @@ function integrate_hydroLoads(
     ForceVector_z[1:length(foilTotalStates).∉[dofBlank]] = F
     ForceVector = copy(ForceVector_z)
 
-    nDOF = BeamElement.NDOF
 
     if elemType == "bend-twist"
-        My = ForceVector[nDOF:nDOF:end]
+        My = ForceVector[NDOF:NDOF:end]
     elseif elemType == "BT2"
-        My = ForceVector[3:nDOF:end]
-        Lift = ForceVector[1:nDOF:end]
+        My = ForceVector[3:NDOF:end]
+        Lift = ForceVector[1:NDOF:end]
     elseif elemType == "COMP2"
-        My = ForceVector[3+YDIM:nDOF:end]
-        Fz = ForceVector[ZDIM:nDOF:end]
-        Fy = ForceVector[YDIM:nDOF:end]
+        My = ForceVector[3+YDIM:NDOF:end]
+        Fz = ForceVector[ZDIM:NDOF:end]
+        Fy = ForceVector[YDIM:NDOF:end]
     else
         error("Invalid element type")
     end

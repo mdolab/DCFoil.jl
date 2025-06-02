@@ -26,7 +26,7 @@ struct ForcedVibSolution{TF,TC}
     Zdeflection::Matrix{TC} # deflection RAO
     Zlift::Vector{TC} # lift forces RAO
     Zmom::Vector{TC} # moments RAO
-    RAO::Array{TC,3} # RAOs (nFreq, nDOF, nDOF) in the sens of deflection output from an input force
+    RAO::Array{TC,3} # RAOs (nFreq, nDOF, nDOF) in the sens of deflection output from an input force, this is more of a general xfer fcn
 end
 
 struct BodyStaticSolution{TF,TA<:AbstractVector{TF}}
