@@ -31,7 +31,8 @@ def setup(args, model, comm, files: dict):
     #   TWIST
     # ---------------------------
     if "t" in args.geovar:
-        nTwist = nRefAxPts // 2
+        nSkip = 2
+        nTwist = nRefAxPts // 2 - nSkip
         print(f"{nTwist} foil twist vars", flush=True)
 
         twistAxis = "global"
@@ -40,12 +41,11 @@ def setup(args, model, comm, files: dict):
             """
             val array has length of semi-span FFDs only. It's mirrored to the full config
             """
-            nSkip = 0
+            nSkip = 2
             for ii in range(nTwist):
                 # geo.rot_y[twistAxis].coef[ii] = val[ii]
-
-                geo.rot_y[twistAxis].coef[nSkip - ii + nTwist - 1] = val[ii]
-                geo.rot_y[twistAxis].coef[nTwist + ii + nSkip + 1] = val[ii]
+                geo.rot_y[twistAxis].coef[-ii + nTwist - 1] = val[ii]
+                geo.rot_y[twistAxis].coef[nRefAxPts // 2 + nSkip + ii + 1] = val[ii]
 
         model.geometry.nom_addGlobalDV(
             "twist",
@@ -58,12 +58,14 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     if "w" in args.geovar:
         # Determine the number of sections that have sweep control
-        nSweep = nRefAxPts // 2
+        nSkip = 2
+        nSweep = nRefAxPts // 2 - nSkip
 
         print(f"{nSweep} foil sweep vars", flush=True)
         sweepAxis = "global"
 
         def sweep_rot_func(inval, geo):
+            nSkip = 2
             # REVERSE OF RH RULE FOR DCFOIL
             val = -inval
 
@@ -72,7 +74,7 @@ def setup(args, model, comm, files: dict):
             C_orig = C.copy()
             # we will sweep the wing about the first point in the ref axis
             # sweep_ref_pt = C_orig[0, :]
-            sweep_ref_pt = C_orig[nSweep, :]
+            sweep_ref_pt = C_orig[nSweep+nSkip, :]
 
             theta = -val[0] * np.pi / 180
             cc = np.cos(theta)
@@ -102,12 +104,11 @@ def setup(args, model, comm, files: dict):
                 # vec = C[ii + nSweep + 1, :] - sweep_ref_pt
                 # # need to now rotate this by the sweep angle and add back the wing root loc
                 # C[ii + nSweep + 1, :] = sweep_ref_pt + rot_mtx @ vec
+                vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt
+                C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt + rot_mtx @ vec
 
-                vec = C[-ii + nSweep - 1, :] - sweep_ref_pt
-                C[-ii + nSweep - 1, :] = sweep_ref_pt + rot_mtx @ vec
-
-                vec = C[nSweep + ii + 1, :] - sweep_ref_pt
-                C[nSweep + ii + 1, :] = sweep_ref_pt + rot_mtxnew @ vec
+                vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt
+                C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt + rot_mtxnew @ vec
 
             # use the restoreCoef method to put the control points back in the right place
             geo.restoreCoef(C, sweepAxis)
@@ -121,7 +122,7 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     #   DIHEDRAL
     # ---------------------------
-    if "d" in args.geovar:
+    if "d" in args.geovar: #not tested
         nDihedral = nRefAxPts
         dihedralAxis = "global"
 
@@ -164,7 +165,7 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     if "r" in args.geovar:
 
-        nSkip = 4
+        nSkip = 4 + 2
 
         nTaper = nRefAxPts // 2 + 1
 

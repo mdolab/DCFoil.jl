@@ -124,6 +124,98 @@ def compute_elliptical(Ltotal, Uinf, semispan, rhof=1000, full_wing=False):
 
     return sloc, Lprime, gamma_s
 
+def plot_dragiter():
+    dosave = not not dragplotname
+
+    # Create figure object
+    fig, axes = plt.subplots(nrows=2, ncols=npts, sharex=True, constrained_layout=True, figsize=(8*npts, 12))
+
+    for (ii, ptName) in enumerate(probList):
+        systemName = f"dcfoil_{ptName}"
+        
+        waveDrag = drag_vals[f"Dw_{ptName}"]
+        profileDrag = drag_vals[f"Dpr_{ptName}"]
+        inducedDrag = drag_vals[f"Fdrag_{ptName}"]
+        waveDrag_cd = drag_vals[f"CDw_{ptName}"]
+        profileDrag_cd = drag_vals[f"CDpr_{ptName}"]
+        inducedDrag_cd = drag_vals[f"CDi_{ptName}"]
+        breakpoint()
+
+        totalDrags = np.array(waveDrag) + np.array(profileDrag) + np.array(inducedDrag)
+        print("Total drag values:", totalDrags)
+
+        ax = axes[0,ii]
+        ax.plot(
+            range(0, NITER),
+            np.array(profileDrag) / totalDrags * 100,
+            label="Profile drag",
+            color=cm[1],
+            # ls=linestyles[1],
+        )
+        ax.plot(
+            range(0, NITER),
+            np.array(inducedDrag) / totalDrags * 100,
+            label="Induced drag",
+            color=cm[2],
+            # ls=linestyles[2],
+        )
+        ax.plot(
+            range(0, NITER),
+            np.array(waveDrag) / totalDrags * 100,
+            label="Wave drag",
+            color=cm[0],  # ls=linestyles[0]
+        )
+        ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+        ax.set_ylim(bottom=0.0, top=100.0)
+        yticks_list = [
+            (waveDrag)[-1].item() / totalDrags[-1].item() * 100,
+            (profileDrag)[-1].item() / totalDrags[-1].item() * 100,
+            (inducedDrag)[-1].item() / totalDrags[-1].item() * 100,
+        ]
+        ax.set_yticks([0, 50, 100] + yticks_list)
+        ax.set_xlim(left=0)
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
+        ax.set_ylabel("Drag\nbreakdown\n[\%]", rotation="horizontal", ha="left", va="center")
+
+        ax = axes[1,ii]
+        ax.plot(
+            range(0, NITER),
+            np.array(profileDrag),
+            label="Profile drag",
+            color=cm[1],
+            # ls=linestyles[1],
+        )
+        ax.plot(
+            range(0, NITER),
+            np.array(inducedDrag),
+            label="Induced drag",
+            color=cm[2],
+            # ls=linestyles[2],
+        )
+        ax.plot(
+            range(0, NITER),
+            np.array(waveDrag),
+            label="Wave drag",
+            color=cm[0],  # ls=linestyles[0]
+        )
+        yticks_list = [
+            (waveDrag)[-1].item(),
+            (profileDrag)[-1].item(),
+            (inducedDrag)[-1].item(),
+        ]
+        ax.set_yticks(yticks_list)
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
+        ax.set_ylabel("Drag\nbreakdown\n[N]", rotation="horizontal", ha="left", va="center")
+
+    for ax in axes.flatten():
+        ax.set_xlabel("Iteration")
+        nplt.adjust_spines(ax, ["right", "bottom"], outward=True)
+    plt.savefig(dragplotname, format="pdf")
+    print("Saved to:", dragplotname)
+    plt.close()
+
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================

@@ -74,15 +74,15 @@ def setup(nNodes, nNodesStrut, args, comm, files, outputDir: str):
         # --- Great lakes ---
         "waveSpectrum": "ISSC",
         "Hsig": 1.5,  # significant wave height [m]
-        "omegaz": 2 * np.pi / 3.0,  # zero-crossing frequency [rad/s] 
-        "headingAngle" : np.deg2rad(180.0), # heading angle of the waves [rad]
+        "omegaz": 2 * np.pi / 3.0,  # zero-crossing frequency [rad/s]
+        "headingAngle": np.deg2rad(180.0),  # heading angle of the waves [rad]
         "tipForceMag": 1.0,
         "run_body": False,
         # --- p-k (Eigen) solve ---
         "run_modal": False,
         "run_flutter": args.flutter,
         "nModes": 4,
-        "uRange": [24.0, 25.0],  # [m/s]
+        "uRange": [11.0, 25.0],  # [m/s]
         # "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
         "maxQIter": 100,  # that didn't fix the slow run time...
         "rhoKS": 500.0,

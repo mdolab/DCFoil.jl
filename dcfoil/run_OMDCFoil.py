@@ -15,6 +15,7 @@ import os
 import json
 import argparse
 from pathlib import Path
+from datetime import date
 
 # ==============================================================================
 # External Python modules
@@ -38,7 +39,6 @@ from coupled_analysis import CoupledAnalysis
 #                         Settings
 # ==============================================================================
 
-DCFoilOutputDir = "run_OMDCFoil_out/dcfoil"
 files = {}
 files["gridFile"] = [
     f"../INPUT/mothrudder_foil_stbd_mesh.dcf",
@@ -71,13 +71,13 @@ dvDictInfo = {  # dictionary of design variable parameters
     # },
     "taper": {  # the tip chord can change, but not the root
         "lower": [1.0, 0.5],
-        "upper": [1.0, 1.1],
+        "upper": [1.0, 1.4],
         "scale": 1.0,
         "value": np.ones(2) * 1.0,
     },
     "span": {
-        "lower": -0.1,
-        "upper": 0.1,
+        "lower": -0.2,
+        "upper": 0.2,
         "scale": 1,
         "value": 0.0,
     },
@@ -135,6 +135,12 @@ class Top(Multipoint):
             appendageParams["depth0"] = depth
             solverOptions["outputDir"] += f"/{ptName}"  # add the point name to the output directory
 
+            # print(f"Uinf: {Uinf}, depth: {depth}", flush=True)
+            flowOptions = {
+                "Uinf": Uinf,
+                "depth0": depth,
+            }
+
             run_flutter = args.flutter and ptName == "p3"  # only run flutter for p3
 
             physModel = CoupledAnalysis(
@@ -147,6 +153,7 @@ class Top(Multipoint):
                 appendageParams=appendageParams,
                 nodeConn=nodeConn,
                 solverOptions=solverOptions,
+                flowOptions=flowOptions,
             )
             self.add_subsystem(f"dcfoil_{ptName}", physModel)
 
@@ -211,6 +218,19 @@ class Top(Multipoint):
             else:
                 self.dvs.add_output(dvName, val=value["value"])
                 self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+
+        # ************************************************
+        #     Set flow conditions
+        # ************************************************
+        if "p1" in probList:
+            for key, value in self.dcfoil_p1.options["flowOptions"].items():
+                self.dcfoil_p1.options["solverOptions"][key] = value
+        if "p2" in probList:
+            for key, value in self.dcfoil_p2.options["flowOptions"].items():
+                self.dcfoil_p2.options["solverOptions"][key] = value
+        if "p3" in probList:
+            for key, value in self.dcfoil_p3.options["flowOptions"].items():
+                self.dcfoil_p3.options["solverOptions"][key] = value
 
         # ************************************************
         #     Objectives
@@ -278,8 +298,11 @@ if __name__ == "__main__":
     # ==============================================================================
     #                         DCFoil setup
     # ==============================================================================
+    case_name = f"OUTPUT/{date.today().strftime('%Y-%m-%d')}-{args.task}-p{args.pts}"
+    Path(case_name).mkdir(exist_ok=True, parents=True)
+
     if args.name is not None:
-        DCFoilOutputDir += "-" + args.name
+        case_name += "-" + args.name
     (
         ptVec,
         nodeConn,
@@ -289,7 +312,7 @@ if __name__ == "__main__":
         npt_wing,
         npt_wing_full,
         n_node,
-    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, DCFoilOutputDir)
+    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, case_name)
 
     # --- Trim only case ---
     if args.task == "trim":
@@ -403,22 +426,24 @@ if __name__ == "__main__":
         optimizer="SNOPT",
         print_results=True,
         print_opt_prob=True,
+        output_dir=case_name,
     )
     prob.driver.options["hist_file"] = "dcfoil.hst"
     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
-    outputDir = "output"
+    outputDir = case_name
     optOptions = setup_opt.setup(args, outputDir)
     for key, val in optOptions.items():
         prob.driver.opt_settings[key] = val
 
-    prob.setup()
 
-    Path(DCFoilOutputDir).mkdir(exist_ok=True, parents=True)
+    prob.setup()
+    print("Problem setup complete", flush=True)
+
 
     # --- Recorder ---
-    recorderName = "dcfoil.sql"
+    recorderName = f"{case_name}/dcfoil.sql"
     if args.name is not None:
-        recorderName = f"dcfoil-{args.name}.sql"
+        recorderName = recorderName.split(".")[0] + f"-{args.name}.sql"
     print("=" * 60)
     print(f"Saving recorder to {recorderName}", flush=True)
     print("=" * 60)
@@ -481,12 +506,17 @@ if __name__ == "__main__":
         # --- set all the design vars properly now ---
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
+                print(f"Setting {dv} to {val}")
                 prob.set_val(dv, val)
             elif dv in otherDVs:
                 try:
+                    print(f"Setting {dv} to {val}")
                     prob.set_val(dv, val)
                 except KeyError:
                     print(f"WARNING: {dv} not found in prob, skipping...")
+            elif dv.startswith("alfa0_"):
+                print(f"Setting {dv} to {val}")
+                prob.set_val(dv, val)
             else:
                 print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
 
@@ -531,6 +561,8 @@ if __name__ == "__main__":
         print("Drag components:")
         print("=" * 20)
         for ptName in probList:
+            print(f"Point {ptName}:")
+            print("-" * 20)
             print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
             print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
             print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
@@ -564,6 +596,8 @@ if __name__ == "__main__":
         print("Drag components:")
         print("=" * 20)
         for ptName in probList:
+            print(f"Point {ptName}:")
+            print("-" * 20)
             print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
             print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
             print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))

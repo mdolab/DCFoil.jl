@@ -153,7 +153,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             uSol = abs.(ũSol) # proper way to do it
 
             # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
-            ũout[f_ctr, :] = ũSol
+            ũout_z[f_ctr, :] = ũSol
 
             # ---------------------------
             #   Get hydroloads at freq
@@ -164,8 +164,8 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
                 appendageOptions=appendageOptions, solverOptions=solverOptions)
 
             # --- Store total force and tip deflection values ---
-            LiftDyn[f_ctr] = L̃
-            MomDyn[f_ctr] = M̃
+            LiftDyn_z[f_ctr] = L̃
+            MomDyn_z[f_ctr] = M̃
 
             GenXferFcn[f_ctr, :, :] = H
 

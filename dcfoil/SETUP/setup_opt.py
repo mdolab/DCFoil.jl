@@ -16,7 +16,8 @@ def setup(args, outputDir: str):
             "Hessian full memory": None,
             "Hessian frequency": 100,
             "Function precision": 1e-8,
-            "Verify level": 3,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
+            # "Verify level": 3,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
+            "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
             "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
             "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (nonlinear problem)
             "Major Step Limit": 0.5,

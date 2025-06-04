@@ -2,7 +2,7 @@
 """
 @File          :   test_OMpygeo.py
 @Date created  :   2025/03/04
-@Last modified :   2025/03/04
+@Last modified :   2025/05/22
 @Author        :   Galen Ng
 @Desc          :   Test pygeo as an openmdao component. This is similar to a check embedding script
 """
@@ -23,10 +23,10 @@ import numpy as np
 # Extension modules
 # ==============================================================================
 # import niceplots as nplt
-import setup_OMdvgeo
+from SETUP import setup_OMdvgeo
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
-from multipoint import Multipoint  # TODO: just copy this file in so there's no dependency on mphys
+from multipoint import Multipoint
 
 outputDir = "embedding"
 files = {}
@@ -474,7 +474,7 @@ if __name__ == "__main__":
             Path(dirName).mkdir(exist_ok=True, parents=True)
 
             n_all = 20
-            wave = np.sin(np.linspace(0, 2 * np.pi, n_all))
+            wave = np.sin(np.linspace(0, np.pi/2, n_all))
 
             taper_mag = 0.5
             twist_mag = 15.0
@@ -585,6 +585,9 @@ if __name__ == "__main__":
 
     fileName = "partials-geo.out"
     f = open(fileName, "w")
+    print("=" * 20)
     print("Checking partials...")
+    print("=" * 20)
+    prob.check_partials(out_stream=f, method="fd", compact_print=True)
     prob.check_partials(out_stream=f, method="fd")
     # prob.check_totals()
