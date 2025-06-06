@@ -383,10 +383,12 @@ def plot_dragbuildup(
 
     return fig, axes
 
+
 def plot_dimdragbuildup(
     fig,
     axes,
     funcs,
+    title: str,
     label: str,
     cm,
     fs_lgd: float,
@@ -401,6 +403,9 @@ def plot_dimdragbuildup(
         costData.append(funcs[cost])
         labels.append(alllabels[ii])
 
+    xticks = np.arange(len(labels))
+    axes.set_xticks(xticks)
+    width = 0.4
     # costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
 
     def absolute_value(val):
@@ -410,7 +415,8 @@ def plot_dimdragbuildup(
         a = f"{val:.2f}\%"  # output text
         return a
 
-    ax = axes.flatten()[iic]
+    # ax = axes.flatten()[iic]
+    ax = axes
     # _, _, autotexts = ax.pie(
     #     costData,
     #     labels=labels,
@@ -421,24 +427,27 @@ def plot_dimdragbuildup(
     #     autotext.set_color("white")
 
     # Bar plot with drag components
-    ax.bar(labels, costData, color=cm[0])
-    ax.set_ylabel("$D$", rotation="horizontal", ha="right", va="center")
+    # ax.bar(labels, costData, color=cm[0])
+    offset = - width / 2 + width * iic
+    ax.bar(xticks+offset, costData, width, color=cm[iic], label=label)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("$D$ [N]", rotation="horizontal", ha="right", va="center")
     # Put percentages on top of bars
     for ii, cost in enumerate(costData):
         ax.text(
-            ii,
+            xticks[ii]+offset,
             cost,
             f"{cost/np.array(costData).sum()*100:.2f}\%",
             ha="center",
             va="bottom",
             fontsize=fs_lgd,
+            zorder=10,
         )
 
     # Set title with vertical label pad
-    ax.set_title(f"{label}", pad=40)
+    ax.set_title(f"{title}", pad=40)
 
     return fig, axes
-
 
 
 def plot_forced(

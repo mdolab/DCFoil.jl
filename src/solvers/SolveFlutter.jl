@@ -917,6 +917,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     maxK = 30.0 # max reduced frequency k to search
     # maxK = 60.0 # max reduced frequency k to search
     # maxK = 90.0 # max reduced frequency k to search
+    maxK = 150.0 # max reduced frequency k to search (pesky moth case with high k
 
 
     # --- Zygote buffers ---
@@ -1334,6 +1335,8 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
             ylims!((-5, 31.0))
             xlims!((-5, 31.0))
+            ylims!((-1, 1.0))
+            xlims!((-1, 1.0))
             plotTitle = @sprintf("U = %6.3f m/s", U∞)
             title!(plotTitle)
             xlabel!("k")
@@ -1380,6 +1383,7 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             scatter!([U∞], [p_cross_i[8]], label="mode 8")
             xlims!((2, 30))
             ylims!((-10.0, 31.0))
+            ylims!((-1, 1.0))
             plotTitle = @sprintf("U = %.3f m/s", U∞)
             title!(plotTitle)
             xlabel!("V [m/s]")
@@ -1397,6 +1401,7 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             scatter!([U∞], [p_cross_r[8]], label="mode 8")
             xlims!((2, 30))
             ylims!((-10.0, 0.0))
+            ylims!((-1, 1.0))
             plotTitle = @sprintf("U = %.3f m/s", U∞)
             title!(plotTitle)
             xlabel!("V [m/s]")
