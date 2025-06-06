@@ -54,13 +54,13 @@ dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
         "upper": 15.0,
-        "scale": 1.0,
+        "scale": 1.0/30,
         "value": np.zeros(8 // 2),
     },
     "sweep": {
         "lower": 0.0,
         "upper": 30.0,
-        "scale": 1,
+        "scale": 1/30.0,
         "value": 0.0,
     },
     # "dihedral": { # THIS DOES NOT WORK
@@ -78,7 +78,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "span": {
         "lower": -0.2,
         "upper": 0.2,
-        "scale": 1,
+        "scale": 1/(0.4),
         "value": 0.0,
     },
 }
@@ -86,7 +86,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0,  # the scale was messing with the DV bounds
+        "scale": 1.0/(20),  # the scale was messing with the DV bounds
         "value": 4.0,
     },
     "toc": {
@@ -98,7 +98,7 @@ otherDVs = {
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
-        "scale": 1.0,
+        "scale": 1.0/(np.deg2rad(60)),
         "value": 0.0,
     },
 }
@@ -128,6 +128,8 @@ class Top(Multipoint):
         # --- Add core physics engine for each flight point ---
         for ptName in probList:
             print(f"Adding point {ptName} to the problem", flush=True)
+
+            run_flutter = args.flutter and ptName == "p3"  # only run flutter for p3
             
             Uinf = boatSpds[ptName]
             depth = opdepths[ptName]
@@ -139,9 +141,9 @@ class Top(Multipoint):
             flowOptions = {
                 "Uinf": Uinf,
                 "depth0": depth,
+                "alfa0_flutter": alfa0,  # angle of attack for flutter analysis [deg]
             }
 
-            run_flutter = args.flutter and ptName == "p3"  # only run flutter for p3
 
             physModel = CoupledAnalysis(
                 analysis_mode="coupled",
@@ -243,7 +245,7 @@ class Top(Multipoint):
         # ************************************************
         for ptName in probList:
             # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
-            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=2500, upper=2550)  # lift constraint [N]
+            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=2500, upper=2550, scaler=1/2500)  # lift constraint [N]
 
             if args.task != "trim":
                 self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
@@ -253,6 +255,18 @@ class Top(Multipoint):
             
             if args.flutter and ptName == "p3":
                 self.add_constraint(f"dcfoil_{ptName}.ksflutter", upper=0.0)  # flutter constraint only for p3
+
+def print_drags():
+    for ptName in probList:
+        print(f"Point {ptName}:")
+        print("-" * 20)
+        print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
+        print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
+        print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
+        print("Dtot", prob.get_val("Dtot"))
+        print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
+        print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
+        print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
 
 # ==============================================================================
 #                         MAIN DRIVER
@@ -280,6 +294,7 @@ if __name__ == "__main__":
     parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
     parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
     parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
+    parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
     parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
     args = parser.parse_args()
 
@@ -429,7 +444,8 @@ if __name__ == "__main__":
         output_dir=case_name,
     )
     prob.driver.options["hist_file"] = "dcfoil.hst"
-    prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
+    prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
+
     outputDir = case_name
     optOptions = setup_opt.setup(args, outputDir)
     for key, val in optOptions.items():
@@ -441,9 +457,9 @@ if __name__ == "__main__":
 
 
     # --- Recorder ---
-    recorderName = f"{case_name}/dcfoil.sql"
+    recorderName = f"{Path(__file__).parent.resolve()}/dcfoil.sql" # weird bug that OUTPUT can't be written into, but whatever
     if args.name is not None:
-        recorderName = recorderName.split(".")[0] + f"-{args.name}.sql"
+        recorderName = f"{Path(__file__).parent.resolve()}/dcfoil-{args.name}.sql" # weird bug that OUTPUT can't be written into, but whatever
     print("=" * 60)
     print(f"Saving recorder to {recorderName}", flush=True)
     print("=" * 60)
@@ -504,19 +520,24 @@ if __name__ == "__main__":
         print("obj:\t", objectives["Dtot"])
 
         # --- set all the design vars properly now ---
+        # Don't forget scales
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
-                print(f"Setting {dv} to {val}")
-                prob.set_val(dv, val)
+                print(f"Setting {dv} to {val} but scaled")
+                scale = dvDictInfo[dv]["scale"]
+                prob.set_val(dv, val/scale)
             elif dv in otherDVs:
                 try:
-                    print(f"Setting {dv} to {val}")
-                    prob.set_val(dv, val)
+                    print(f"Setting {dv} to {val} but scaled")
+                    scale = otherDVs[dv]["scale"]
+                    prob.set_val(dv, val/scale)
                 except KeyError:
+                    breakpoint()
                     print(f"WARNING: {dv} not found in prob, skipping...")
             elif dv.startswith("alfa0_"):
-                print(f"Setting {dv} to {val}")
-                prob.set_val(dv, val)
+                print(f"Setting {dv} to {val} but scaled")
+                scale = otherDVs["alfa0"]["scale"]
+                prob.set_val(dv, val/scale)
             else:
                 print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
 
@@ -560,16 +581,7 @@ if __name__ == "__main__":
         print("=" * 20)
         print("Drag components:")
         print("=" * 20)
-        for ptName in probList:
-            print(f"Point {ptName}:")
-            print("-" * 20)
-            print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
-            print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
-            print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
-            print("Dtot", prob.get_val("Dtot"))
-            print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
-            print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
-            print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
+        print_drags()
 
     if args.task in ["run"]:
         print("=" * 60)
@@ -595,16 +607,7 @@ if __name__ == "__main__":
         print("=" * 20)
         print("Drag components:")
         print("=" * 20)
-        for ptName in probList:
-            print(f"Point {ptName}:")
-            print("-" * 20)
-            print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
-            print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
-            print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
-            print("Dtot", prob.get_val("Dtot"))
-            print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
-            print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
-            print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
+        print_drags()
 
     if args.task == "deriv":
         prob.run_model()

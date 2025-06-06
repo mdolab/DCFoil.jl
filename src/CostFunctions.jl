@@ -39,8 +39,8 @@ const staticCostFuncs::Vector{String} = [
     "fxpr"
 ]
 const forcedCostFuncs::Vector{String} = [
-    "peakpsitip" # maximum deformation amplitude (abs val) across forced frequency sweep
-    "peakwtip"
+    "kstheta" # maximum deformation amplitude (abs val) across forced frequency sweep
+    "ksbend"
     "vibareapsi" # integrated deformations under the spectral curve (see Ng et al. 2022)
     "vibareaw"
 ]

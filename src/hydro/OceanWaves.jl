@@ -82,13 +82,16 @@ function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, s
     # ωpk = w_e # the peak frequency is the significant encounter frequency
     # println("ωpk: ", ωpk)
     # println("freqspan: ", freqspan)
-    ampDist = compute_AWave(freqspan, 0.125, waveamp)
-    ampDist .= 1.0 # for now, force wave to be 1.0 m. This would then give the RAO.
+    # ampDist = compute_AWave(freqspan, 0.125, waveamp)
+    # ampDist = 1.0 # for now, force wave to be 1.0 m. This would then give the RAO.
+    ampDist = ones(length(freqspan)) # [m] wave amplitude distribution
     # In other words, the transfer function of 1m input wave to load output
 
     nStrip = length(chordLengths)
     fAey = zeros(ComplexF64, length(freqspan), nStrip)
     mAey = zeros(ComplexF64, length(freqspan), nStrip)
+    fAey_z = Zygote.Buffer(fAey)
+    mAey_z = Zygote.Buffer(mAey)
 
     bi = 0.5 * chordLengths
 
@@ -118,15 +121,18 @@ function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, s
             error("Unknown method: $(method)")
         end
 
-        fAey[ii, :] = (Lnc .+ Lc) .* stripWidths# [N]
+        fAey_z[ii, :] = (Lnc .+ Lc) .* stripWidths# [N]
 
-        mAey[ii, :] = 0.25 * Lc .* stripWidths .* chordLengths # [N-m]
+        mAey_z[ii, :] = 0.25 * Lc .* stripWidths .* chordLengths # [N-m]
 
         if abs(ω) < MEPSLARGE
-            fAey[ii, :] = 0
-            mAey[ii, :] = 0
+            fAey_z[ii, :] = 0
+            mAey_z[ii, :] = 0
         end
     end
+
+    fAey = copy(fAey_z)
+    mAey = copy(mAey_z)
 
     if debug
         p1 = plot(freqspan, ampDist, ylims=(0, :auto), xlims=(0, 2))

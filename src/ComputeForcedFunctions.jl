@@ -20,7 +20,7 @@ function compute_PSDArea(VIBSOL, fSweep, meanChord, waveEnergySpectrum)
         Vibration solution object containing the deflection transfer function
     fSweep :
 
-    
+
     """
 
     df = fSweep[2] - fSweep[1] # [Hz] frequency increments
@@ -49,14 +49,14 @@ function compute_PSDArea(VIBSOL, fSweep, meanChord, waveEnergySpectrum)
     # savefig("PSDbend_twist.png")
 
     gvib_bend = (2π)^2 * sum(PSDbend .* fSweep .* df) / (meanChord^2 * ω_char)
-    gvib_twist = (2π)^2 * sum(PSDtwist .* fSweep .* df) / (meanChord^2 * ω_char)
+    gvib_twist = (2π)^2 * sum(PSDtwist .* fSweep .* df) / (ω_char)
 
     return gvib_bend, gvib_twist
 end
 
 function compute_dynDeflectionPk(VIBSOL, solverOptions)
     """
-    Average the dynamic deflection amplitudes over the frequency sweep and body, then find the maximum of that
+    Average the dynamic deflection amplitudes over the frequency sweep, then find the maximum of that
     Done for both bending and twisting shapes respectively
     """
 

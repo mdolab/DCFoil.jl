@@ -148,8 +148,8 @@ function setup_solverFromDVs(α₀, Λ, span, c, toc, ab, x_αb, zeta, theta_f, 
     println("====================================================================================")
     println("Speed range [m/s]: ", uRange)
     if debug
-        rm("DebugOutput/", recursive=true)
-        mkpath("DebugOutput/")
+        rm("./DebugOutput/", recursive=true)
+        mkpath("./DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
         println("+---------------------------+")
@@ -244,8 +244,8 @@ function setup_solverFromCoords(LECoords, TECoords, nodeConn, appendageParams, s
     println("====================================================================================")
     println("Speed range [m/s]: ", uRange)
     if debug
-        rm("DebugOutput/", recursive=true)
-        mkpath("DebugOutput/")
+        rm("./DebugOutput/", recursive=true)
+        mkpath("./DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
         println("+---------------------------+")
@@ -361,8 +361,8 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
     println("        BEGINNING MODAL SOLUTION")
     println("====================================================================================")
     if debug
-        rm("DebugOutput/", recursive=true, force=true) # remove the debug folder even if it doesn't exist
-        mkpath("DebugOutput/")
+        rm("./DebugOutput/", recursive=true, force=true) # remove the debug folder even if it doesn't exist
+        mkpath("./DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
         println("+---------------------------+")
@@ -779,12 +779,12 @@ end # end function
 
 function print_flutter_text(nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalModesFound, isFailed; printHeader=false)
     if printHeader
-        println("+--------+------------------+-----------------+-------+-------+---------------+------------------+----------+")
-        println("|  nFlow | Dyn. press. [Pa] | Velocity [m/s]  | knots | nCorr | nCorrNewModes | NTotalModesFound | flowfail |")
-        println("+--------+------------------+-----------------+-------+-------+---------------+------------------+----------+")
+        println("+--------+-------------------+----------------+---------+-------+---------------+------------------+----------+")
+        println("|  nFlow | Dyn. press. [kPa] | Velocity [m/s] | [knots] | nCorr | nCorrNewModes | NTotalModesFound | flowfail |")
+        println("+--------+-------------------+----------------+---------+-------+---------------+------------------+----------+")
     else
-        println(@sprintf("|  %04d  | %1.9e  | %1.9e | %02.2f |   %03d |        %03d    |            %03d   |       %d  |",
-            nFlow, dynPTmp, U∞, U∞ * 1.9439, nCorr, nCorrNewModes, NTotalModesFound, isFailed))
+        println(@sprintf("|  %04d  | %17.2f | %14.4f | %7.4f |   %03d |        %03d    |            %03d   |       %d  |",
+            nFlow, dynPTmp * 1e-3, U∞, U∞ * 1.94384, nCorr, nCorrNewModes, NTotalModesFound, isFailed))
     end
 
 end
@@ -889,7 +889,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     tmp = zeros(3 * dim) # temp array to store eigenvalues deltas between flow speeds
     dynP = 0.5 * solverOptions["rhof"] * vel .^ 2 # vector of dynamic pressures
     # ωSweep = 2π * FOIL.fRange # sweep of circular frequencies
-    p_diff_max = 0.1 # max allowed change in roots between steps
+    p_diff_max = 0.1 # max allowed change in roots between dynamic pressure steps 
+    # Eirikur had this set to 0.1. If you make this too big, mode coalescence is a problem
 
     if debug
         # Needed for debugging
@@ -914,7 +915,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     nK::Int64 = 22 # number of k values to sweep
     maxK = 3.5 # max reduced frequency k to search # this is too low for low speed analysis
     maxK = 30.0 # max reduced frequency k to search
-    maxK = 60.0 # max reduced frequency k to search
+    # maxK = 60.0 # max reduced frequency k to search
+    # maxK = 90.0 # max reduced frequency k to search
 
 
     # --- Zygote buffers ---
@@ -965,9 +967,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             # --- Print out first flight condition ---
             ChainRulesCore.ignore_derivatives() do
                 print_flutter_text(nFlow, dynPTmp, U∞, nCorr, 0, NTotalModesFound, is_failed)
-                # if debug
-                #     println("kCtr: ", kCtr)
-                # end
             end
 
             # Sort eigenvalues based on the frequency (imaginary part)
@@ -1012,13 +1011,10 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             eigScale = √(dynPTmp / flowHistory_z[nFlow-1, 3]) # This is a velocity scale
 
 
-            # Compute difference between old and new modes
+            # Compute difference between old and new modes 
             inner = (p_r_z[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
                     (p_i_z[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
             tmp_z = Zygote.Buffer(tmp)
-            # for ii in eachindex(tmp)
-            #     tmp_z[ii] = tmp[ii]
-            # end
             tmp_z[:] = tmp
             tmp_z[1:nCorr] = .√(inner)
             tmp = copy(tmp_z)
@@ -1026,20 +1022,22 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             maxVal = maximum(tmp[1:nCorr])
 
             if (maxVal > p_diff_max)
-                println("WARNING: Eigenvalue jump too big btwn speed increments, backing up. p_diff: ", maxVal, " > ", p_diff_max)
-                println("Setting failed flag")
+                ChainRulesCore.ignore_derivatives() do
+                    println("FAILED - pkFlutterAnalysis : p_diff -> ", maxVal, " > ", p_diff_max)
+                end
                 is_failed = true
             end
 
             # ---------------------------
-            #   Disappearing mode
+            #   Disappearing mode check
             # ---------------------------
             # Were there too many iterations w/o progress? Mode probably disappeared
             boolCheck = false # declare it as global for this scope
+            iterTol = 0.1 # tolerance for increment
             if !(isnothing(ΔdynP))
-                boolCheck = dynPTmp - flowHistory_z[nFlow-1, 3] < ΔdynP / 50
+                boolCheck = dynPTmp - flowHistory_z[nFlow-1, 3] < ΔdynP / 50.0
             elseif !(isnothing(Δu))
-                boolCheck = U∞ - flowHistory_z[nFlow-1, 1] < Δu / 50
+                boolCheck = U∞ - flowHistory_z[nFlow-1, 1] < Δu / 50.0
             end
 
             if (boolCheck)
@@ -1060,27 +1058,34 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                     nCorr = nKeep
 
                     is_failed = false
+                    ChainRulesCore.ignore_derivatives() do
+                        println("INFO - pkFlutterAnalysis : Mode disappeared")
+                    end
                 end
             end
 
             # Now we add in any new lower frequency modes that weren't correlated above
-            if (nCorrNewModes != 0)
-                if !is_failed
+            if (nCorrNewModes > 0) && !is_failed
+                # if !is_failed
 
-                    # Append new modes' indices to the new 'm' array
-                    ChainRulesCore.ignore_derivatives() do
-                        for ii in 1:nCorrNewModes
-                            m[nCorr+ii, 1] = NTotalModesFound + ii
-                            m[nCorr+ii, 2] = newModesIdx[ii]
-                        end
+                # Append new modes' indices to the new 'm' array
+                ChainRulesCore.ignore_derivatives() do
+                    for ii in 1:nCorrNewModes
+                        m[nCorr+ii, 1] = NTotalModesFound + ii
+                        m[nCorr+ii, 2] = newModesIdx[ii]
                     end
-                    # Increment the nCorr variable counter to include the recently added modes
-                    nCorr += nCorrNewModes
-
-                    # Increment the shift variable for the next new mode
-                    # NOTE: this shift variable has the total number of modes found over the ENTIRE simulation, not the current number of modes found
-                    NTotalModesFound += nCorrNewModes
                 end
+                # Increment the nCorr variable counter to include the recently added modes
+                nCorr += nCorrNewModes
+
+                # Increment the shift variable for the next new mode
+                # NOTE: this shift variable has the total number of modes found over the ENTIRE simulation, not the current number of modes found
+                NTotalModesFound += nCorrNewModes
+
+                ChainRulesCore.ignore_derivatives() do
+                    println("INFO - pkFlutterAnalysis : Adding new modes")
+                end
+                # end
             end
 
 
@@ -1113,7 +1118,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
 
             dynPTmp = (dynPTmp - flowHistory_z[nFlow-1, 3]) * 0.5 + flowHistory_z[nFlow-1, 3]
             U∞ = √(2 * dynPTmp / flowHistory_z[nFlow-1, 2])
-            println("Flow condition failed, backing up. New dynamic pressure: ", dynPTmp, " Pa and new U∞: ", U∞, " m/s")
 
         else # Store solution
             # --- Unpack values ---
@@ -1198,6 +1202,13 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                 dynPTmp = 0.5 * FlowCond.rhof * U∞^2
             end
 
+            # --- Print out flight condition ---
+            ChainRulesCore.ignore_derivatives() do
+                if (nFlow != 1)
+                    print_flutter_text(nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalModesFound, is_failed)
+                end # end if
+            end
+
             # --- Check if we're done ---
             if (dynPTmp > dynPMax)
                 # We should stop at (or near) the max velocity specified so we should check if we're within some tolerance
@@ -1226,14 +1237,6 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         end
 
 
-        # --- Print out flight condition ---
-        ChainRulesCore.ignore_derivatives() do
-            if (nFlow != 1)
-                # println(@sprintf("|  %04d  | %1.9e  | %1.9e | %02.2f |   %03d |        %03d    |            %03d   |       %d  |",
-                #     nFlow, dynPTmp, U∞, U∞ * 0.514444, nCorr, nCorrNewModes, NTotalModesFound, is_failed))
-                print_flutter_text(nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalModesFound, is_failed)
-            end # end if
-        end
     end # end flow speed loop
 
     # --- Copy buffers ---
@@ -1330,12 +1333,12 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
             ylims!((-5, 30.0))
             xlims!((-5, 30.0))
-            plotTitle = @sprintf("U = %.3f m/s", U∞)
+            plotTitle = @sprintf("U = %6.3f m/s", U∞)
             title!(plotTitle)
             xlabel!("k")
             ylabel!("Im(p)")
             fname = @sprintf("./DebugOutput/kCross-qiter-%03i.png", qiter)
-            println("Saving figure to: ", fname)
+            # println("Saving figure to: ", fname)
             savefig(fname)
         end
     end
@@ -1469,7 +1472,8 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
         omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM .+ Mf, Nr)
         # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
         # println(real.(omegaSquared))
-        Δk = minimum(.√(omegaSquared) * b_ref / (U∞)) * 0.2 # 20% of the minimum wetted natural frequency
+        kwetted = .√(omegaSquared) * b_ref / (U∞)
+        Δk = minimum(kwetted) * 0.2 # 20% of the minimum wetted natural frequency
         # omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM, Nr)
         # println("Dry natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
     end
@@ -1988,11 +1992,11 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     # ---------------------------
     obj = compute_KS(ksTmp, ρKS)
 
-    ChainRulesCore.ignore_derivatives() do
-        # println("ksrho = ", ρKS)
-        println("ksTmp = ", ksTmp)
-        println("obj = ", obj)
-    end
+    # ChainRulesCore.ignore_derivatives() do
+    #     # println("ksrho = ", ρKS)
+    #     println("ksTmp = ", ksTmp)
+    #     println("obj = ", obj)
+    # end
 
     return obj, pmG
 end

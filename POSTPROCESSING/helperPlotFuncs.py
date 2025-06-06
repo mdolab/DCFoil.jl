@@ -383,6 +383,63 @@ def plot_dragbuildup(
 
     return fig, axes
 
+def plot_dimdragbuildup(
+    fig,
+    axes,
+    funcs,
+    label: str,
+    cm,
+    fs_lgd: float,
+    iic: int,
+    includes=["cdpr", "cdi", "cdw", "cds", "cdj"],
+):
+
+    alllabels = ["${D_{pr}}$", "$D_{i}$", "$D_w$", "${D_{s}}$", "${D_{j}}$"]
+    costData = []
+    labels = []
+    for ii, cost in enumerate(includes):
+        costData.append(funcs[cost])
+        labels.append(alllabels[ii])
+
+    # costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
+
+    def absolute_value(val):
+        """Callback to return labels"""
+        a = np.round(val / 100.0 * np.array(costData).sum(), 0)
+        a = f"{a}\n{val:.2f}\%"  # output text
+        a = f"{val:.2f}\%"  # output text
+        return a
+
+    ax = axes.flatten()[iic]
+    # _, _, autotexts = ax.pie(
+    #     costData,
+    #     labels=labels,
+    #     colors=cm,
+    #     autopct=absolute_value,
+    # )
+    # for autotext in autotexts:
+    #     autotext.set_color("white")
+
+    # Bar plot with drag components
+    ax.bar(labels, costData, color=cm[0])
+    ax.set_ylabel("$D$", rotation="horizontal", ha="right", va="center")
+    # Put percentages on top of bars
+    for ii, cost in enumerate(costData):
+        ax.text(
+            ii,
+            cost,
+            f"{cost/np.array(costData).sum()*100:.2f}\%",
+            ha="center",
+            va="bottom",
+            fontsize=fs_lgd,
+        )
+
+    # Set title with vertical label pad
+    ax.set_title(f"{label}", pad=40)
+
+    return fig, axes
+
+
 
 def plot_forced(
     fig,
@@ -1036,7 +1093,7 @@ def plot_vg_vf_rl(
                     textcoords="offset points",
                     bbox=dict(boxstyle="square,pad=-0.1", ec="white", linewidth=0, fc="white", alpha=0.9),
                 )
-            yticks.append(gSweep[end])
+            yticks.append(gSweep[-1])
         except Exception:
             emptyModes.append(key)
     print(f"Empty modes: {emptyModes}")

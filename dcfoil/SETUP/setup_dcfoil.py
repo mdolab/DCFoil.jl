@@ -43,7 +43,7 @@ def setup(nNodes, nNodesStrut, args, comm, files, outputDir: str):
         # ---------------------------
         "name": "test",
         # "gridFile": files["gridFile"],
-        "debug": False,
+        "debug": args.debug,
         "writeTecplotSolution": True,
         "outputDir": outputDir,
         # ---------------------------

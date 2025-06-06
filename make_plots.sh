@@ -93,7 +93,7 @@ cd ..
 # mkdir -p ./POSTPROCESSING/MOVIES/
 
 # # ************************************************
-# #     Debug output
+# #     Debug output (handy for seeing the jumps)
 # # ************************************************
 # ffmpeg -r $fps -i ./DebugOutput/kCross-qiter-%03d.png movie.mp4
 # mv movie.mp4 ./POSTPROCESSING/MOVIES/kCrossings.mp4

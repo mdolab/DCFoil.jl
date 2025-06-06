@@ -39,6 +39,8 @@ struct OMLiftingLine <: OpenMDAOCore.AbstractImplicitComp
     appendageParams
     appendageOptions
     solverOptions
+    Uinf
+    depth0
 end
 
 function OpenMDAOCore.setup(self::OMLiftingLine)
@@ -90,6 +92,10 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    solverOptions["Uinf"] = self.Uinf
+    solverOptions["depth0"] = self.depth0
+    # println("julia free stream velocity: ", solverOptions["Uinf"])
 
     # --- Set hydro vars ---
     appendageParams["alfa0"] = alfa0
@@ -193,6 +199,10 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
 
+    solverOptions["Uinf"] = self.Uinf
+    solverOptions["depth0"] = self.depth0
+    # println("julia free stream velocity: ", solverOptions["Uinf"])
+
     # --- Set hydro vars ---
     appendageParams["alfa0"] = alfa0
 
@@ -290,6 +300,10 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
 
+    solverOptions["Uinf"] = self.Uinf
+    solverOptions["depth0"] = self.depth0
+    # println("julia free stream velocity: ", solverOptions["Uinf"])
+
     # --- Set hydro vars ---
     appendageParams["alfa0"] = alfa0
 
@@ -364,6 +378,9 @@ function OpenMDAOCore.apply_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
 
+    solverOptions["Uinf"] = self.Uinf
+    solverOptions["depth0"] = self.depth0
+    # println("julia free stream velocity: ", solverOptions["Uinf"])
     # --- Set hydro vars ---
     appendageParams["alfa0"] = alfa0
 
@@ -440,6 +457,8 @@ struct OMLiftingLineFuncs <: OpenMDAOCore.AbstractExplicitComp
     appendageParams
     appendageOptions
     solverOptions
+    Uinf
+    depth0
 end
 
 function OpenMDAOCore.setup(self::OMLiftingLineFuncs)
@@ -599,6 +618,10 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
 
+    solverOptions["Uinf"] = self.Uinf
+    solverOptions["depth0"] = self.depth0
+    # println("julia free stream velocity: ", solverOptions["Uinf"])
+
     # --- Set hydro vars ---
     appendageParams["alfa0"] = alfa0
     appendageParams["toc"] = toc
@@ -689,6 +712,10 @@ function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partia
     appendageParams = self.appendageParams
     solverOptions = self.solverOptions
     appendageOptions = self.appendageOptions
+
+    solverOptions["Uinf"] = self.Uinf
+    solverOptions["depth0"] = self.depth0
+    # println("julia free stream velocity: ", solverOptions["Uinf"])
 
     # --- Set hydro vars ---
     appendageParams["alfa0"] = alfa0

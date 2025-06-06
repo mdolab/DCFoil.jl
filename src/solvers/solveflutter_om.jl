@@ -83,6 +83,10 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
     toc = inputs["toc"]
     displacements_col = inputs["displacements_col"]
     alfa0 = appendageParams["alfa0"]
+    println("=============================")
+    println("Flutter alfa0 = $(alfa0) deg")
+    println("=============================")
+
     # --- Set struct vars ---
     appendageParams["theta_f"] = theta_f
     appendageParams["toc"] = toc

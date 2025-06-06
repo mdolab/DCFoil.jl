@@ -336,12 +336,16 @@ function compute_gustLoadSears(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLength
     """
 
     bi = 0.5 * chordLengths
+    
     S0k = zeros(ComplexF64, size(claVec)...)
+    S0k_z = Zygote.Buffer(S0k)
+    S0k_z[:] = S0k
 
     for (ii, kk) in enumerate(kf)
         Skvec = compute_sears(kk)
-        S0k[ii] = Skvec[2]
+        S0k_z[ii] = Skvec[2]
     end
+    S0k = copy(S0k_z)
 
     # Circulatory
     Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* S0k
