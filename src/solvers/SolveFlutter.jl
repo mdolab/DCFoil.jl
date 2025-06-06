@@ -1033,11 +1033,11 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             # ---------------------------
             # Were there too many iterations w/o progress? Mode probably disappeared
             boolCheck = false # declare it as global for this scope
-            iterTol = 0.1 # tolerance for increment
+            iterTol = 0.05 # tolerance for increment
             if !(isnothing(ΔdynP))
-                boolCheck = dynPTmp - flowHistory_z[nFlow-1, 3] < ΔdynP / 50.0
+                boolCheck = dynPTmp - flowHistory_z[nFlow-1, 3] < ΔdynP * iterTol
             elseif !(isnothing(Δu))
-                boolCheck = U∞ - flowHistory_z[nFlow-1, 1] < Δu / 50.0
+                boolCheck = U∞ - flowHistory_z[nFlow-1, 1] < Δu * iterTol
             end
 
             if (boolCheck)
@@ -1099,9 +1099,10 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
 
                     fname = @sprintf("./DebugOutput/m-%03i.dat", nFlow)
                     open(fname, "w") do io
-                        write(io, "m\n")
-                        for ii in 1:lineCtr
-                            stringData = @sprintf("%1.9e %1.9e\n", m[ii, 1], m[ii, 2])
+                        write(io, "m matrix\n")
+                        write(io, "old\tnew\n")
+                        for ii in 1:size(m)[1]
+                            stringData = @sprintf("%03d %03d\n", m[ii, 1], m[ii, 2])
                             write(io, stringData)
                         end
                     end
@@ -1160,13 +1161,13 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                     gs[m[1:nCorr, 1]] = p_cross_r[m[1:nCorr, 2]] * dimensionalization
                     fs[m[1:nCorr, 1]] = p_cross_i[m[1:nCorr, 2]] * dimensionalization
                     fname = @sprintf("./DebugOutput/eigenvalues-%03i.dat", nFlow)
-                    speedString = @sprintf("Flow speed [m/s]: %e\n", U∞)
-                    stringData = "g_[1/s]     f_[Hz]\n"
+                    speedString = @sprintf("Flow speed [m/s]: %10.8f\n", U∞)
+                    stringData = "g [1/s]     f [Hz]\n"
                     open(fname, "w") do io
                         write(io, speedString)
                         write(io, stringData)
                         for ii in 1:3*nModes
-                            stringData = @sprintf("%e %e\n", gs[ii], fs[ii])
+                            stringData = @sprintf("%e %10.2f\n", gs[ii], fs[ii])
                             write(io, stringData)
                         end
                     end
@@ -1331,8 +1332,8 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             plot!(k_history[1:ik], p_eigs_i[10, 1:ik], label="mode 10", marker=marker)
             plot!(k_history[1:ik], p_eigs_i[11, 1:ik], label="mode 11", marker=marker)
             plot!(k_history[1:ik], k_history[1:ik], lc=:black, label="Im(p)=k")
-            ylims!((-5, 30.0))
-            xlims!((-5, 30.0))
+            ylims!((-5, 31.0))
+            xlims!((-5, 31.0))
             plotTitle = @sprintf("U = %6.3f m/s", U∞)
             title!(plotTitle)
             xlabel!("k")
@@ -1378,7 +1379,7 @@ function compute_kCrossings(Mf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, 
             scatter!([U∞], [p_cross_i[7]], label="mode 7")
             scatter!([U∞], [p_cross_i[8]], label="mode 8")
             xlims!((2, 30))
-            ylims!((-10.0, 100.0))
+            ylims!((-10.0, 31.0))
             plotTitle = @sprintf("U = %.3f m/s", U∞)
             title!(plotTitle)
             xlabel!("V [m/s]")
@@ -1658,7 +1659,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
     # --- Look for crossing of diagonal line Im(p) = k ---
     ctr::Int64 = 1 # counter for number of found matched points and index for arrays
     # @simd for ii in 1:2*dim # loop over flutter modes (lines)
-    # About a sixth of the tim eis here
+    # About a sixth of the time is here
     @inbounds begin
         for ii in 1:2*dim # loop over flutter modes (lines)
             for jj in 1:ik # loop over all reduced frequencies (tracing the mode line)

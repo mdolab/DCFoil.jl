@@ -26,8 +26,11 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
         println("Frequency sweep [Hz]: ", solverOptions["fRange"])
     end
     if debug
-        rm("DebugOutput/", recursive=true)
-        mkpath("DebugOutput/")
+        if isdir("./DebugOutput/")
+            println("Removing old debug output directory...")
+            rm("./DebugOutput/", recursive=true)
+        end
+        mkpath("./DebugOutput/")
         println("+---------------------------+")
         println("|    Running debug mode!    |")
         println("+---------------------------+")
