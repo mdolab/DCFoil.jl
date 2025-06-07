@@ -41,7 +41,7 @@ outputDir = "output"
 files = {
     "gridFile": [
         "../INPUT/amc_foil_stbd_mesh.dcf",
-        "../INPUT/amc_foil_port_mesh.dcf", # only add this if config is full wing
+        "../INPUT/amc_foil_port_mesh.dcf",  # only add this if config is full wing
     ]
 }
 Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
@@ -63,6 +63,7 @@ appendageOptions = {
     # "material": "al6061",
     # "strut_material": "al6061",
     "material": "cfrp",
+    # "material": "ss",
     "strut_material": "cfrp",
     "path_to_geom_props": "./INPUT/1DPROPS/",
     "path_to_struct_props": None,
@@ -83,11 +84,12 @@ solverOptions = {
     # ---------------------------
     "appendageList": appendageList,
     "gravityVector": [0.0, 0.0, -9.81],
-    "correct_xsect": True,
+    # "correct_xsect": True,
+    "correct_xsect": False,
     # ---------------------------
     #   Flow
     # ---------------------------
-    "Uinf": 11.4,  # free stream velocity [m/s]
+    "Uinf": 9.6,  # free stream velocity [m/s]
     "rhof": 998.0,  # fluid density [kg/m³]
     "nu": 1.1892e-06,  # fluid kinematic viscosity [m²/s]
     "use_nlll": True,
@@ -143,10 +145,10 @@ solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams
 if appendageOptions["config"] == "full-wing":
     npt_wing = jl.LiftingLine.NPT_WING
     npt_wing_full = jl.LiftingLine.NPT_WING
-    n_node = nNodes * 2 - 1   # for full span
+    n_node = nNodes * 2 - 1  # for full span
 else:
-    npt_wing = jl.LiftingLine.NPT_WING / 2   # for half wing
-    npt_wing_full = jl.LiftingLine.NPT_WING   # full span
+    npt_wing = jl.LiftingLine.NPT_WING / 2  # for half wing
+    npt_wing_full = jl.LiftingLine.NPT_WING  # full span
     # check if npt_wing is integer
     if npt_wing % 1 != 0:
         raise ValueError("NPT_WING must be an even number for symmetric analysis")
@@ -154,9 +156,6 @@ else:
     n_node = nNodes
 
 
-# ==============================================================================
-#                         MAIN DRIVER
-# ==============================================================================
 def main(theta_fiber, alfa0, initialize=True, plot=False):
     """
     Run static hydroelastic analysis and compute deflections
@@ -213,11 +212,11 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     # prob.driver = om.ScipyOptimizeDriver()
     # prob.driver.options["optimizer"] = "SLSQP"
     prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
-    prob.driver.options['print_results'] = True
+    prob.driver.options["print_results"] = True
     prob.driver.opt_settings["Major iterations limit"] = 100
     prob.driver.opt_settings["Major feasibility tolerance"] = 1e-4
     prob.driver.opt_settings["Major optimality tolerance"] = 1e-4
-    prob.driver.opt_settings["Difference interval"] = 1e-4,
+    prob.driver.opt_settings["Difference interval"] = (1e-4,)
     prob.driver.opt_settings["Verify level"] = -1
     prob.driver.opt_settings["Function precision"] = 1e-8
     prob.driver.opt_settings["Hessian full memory"] = None
@@ -240,11 +239,11 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     #     Set starting values
     # ************************************************
     # set sweep parameters
-    prob.set_val("theta_f", np.deg2rad(theta_fiber))   # this is defined in [rad] in the julia wrapper layer
+    prob.set_val("theta_f", np.deg2rad(theta_fiber))  # this is defined in [rad] in the julia wrapper layer
     prob.set_val("alfa0", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
-    prob.set_val('toc', 0.09 * np.ones(nNodes))
+    prob.set_val("toc", tocVal * np.ones(nNodes))
 
     # initialization for solvers
     if initialize:
@@ -268,7 +267,7 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     bending = prob.get_val("deflections")[2::9]
     twist = prob.get_val("deflections")[4::9]
     CL = prob.get_val("CL")
-    print('----------------------------------')
+    print("----------------------------------")
     print("alfa0", prob.get_val("alfa0"), "deg")
     print("fiber angle", prob.get_val("theta_f"), "rad")
     print("bending deflections", bending)
@@ -276,7 +275,7 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     print("induced drag force", prob.get_val("F_x"))
     print("lift force", prob.get_val("F_z"))
     print("lift coefficient", CL)
-    print('----------------------------------')
+    print("----------------------------------")
 
     # --- plot ---
     if plot:
@@ -284,31 +283,38 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
 
         ny = 39 if appendageOptions["config"] == "full-wing" else 20
         ptVec3D = np.array(ptVec).reshape(2, ny, 3)
-        nodes = prob.get_val('nodes').swapaxes(0, 1)  # shape (3, n_nodes)
-        collocationPts = prob.get_val('collocationPts')    # shape (3, n_strip)
-        force_colloc = prob.get_val('forces_dist')   # shape (3, n_strip)
-        force_FEM = prob.get_val('traction_forces').reshape(9, n_node, order='F')   # shape (9, n_nodes)
+        nodes = prob.get_val("nodes").swapaxes(0, 1)  # shape (3, n_nodes)
+        collocationPts = prob.get_val("collocationPts")  # shape (3, n_strip)
+        force_colloc = prob.get_val("forces_dist")  # shape (3, n_strip)
+        force_FEM = prob.get_val("traction_forces").reshape(9, n_node, order="F")  # shape (9, n_nodes)
 
         import matplotlib.pyplot as plt
 
         # --- 3D plot ---
-        z_scaler = 10   # exaggerate vertical deflections
-        fig, ax = plt.subplots(subplot_kw={'projection': '3d'})
-        ax.plot(ptVec3D[:, :, 0], ptVec3D[:, :, 1], ptVec3D[:, :, 2], 'o', color='k', ms=3)
-        ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], 'o', color='darkgray', ms=5)
-        ax.plot(collocationPts[0, :] - appendageOptions['xMount'], collocationPts[1, :], collocationPts[2, :] * z_scaler, 'o-', color='C0', ms=3)
-        ax.set_aspect('equal')
+        z_scaler = 10  # exaggerate vertical deflections
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        ax.plot(ptVec3D[:, :, 0], ptVec3D[:, :, 1], ptVec3D[:, :, 2], "o", color="k", ms=3)
+        ax.plot(nodes[0, :], nodes[1, :], nodes[2, :], "o", color="darkgray", ms=5)
+        ax.plot(
+            collocationPts[0, :] - appendageOptions["xMount"],
+            collocationPts[1, :],
+            collocationPts[2, :] * z_scaler,
+            "o-",
+            color="C0",
+            ms=3,
+        )
+        ax.set_aspect("equal")
 
         # --- top view of planform ---
         fig, ax = plt.subplots()
-        ax.plot(ptVec3D[:, :, 1], ptVec3D[:, :, 0], 'o', color='k', ms=3)
-        ax.plot(nodes[1, :], nodes[0, :], 'o', color='darkgray', ms=5)
-        ax.plot(collocationPts[1, :], collocationPts[0, :] - appendageOptions['xMount'], 'o-', color='C0', ms=3)
-        ax.set_aspect('equal')
+        ax.plot(ptVec3D[:, :, 1], ptVec3D[:, :, 0], "o", color="k", ms=3)
+        ax.plot(nodes[1, :], nodes[0, :], "o", color="darkgray", ms=5)
+        ax.plot(collocationPts[1, :], collocationPts[0, :] - appendageOptions["xMount"], "o-", color="C0", ms=3)
+        ax.set_aspect("equal")
 
         # --- plot displacements ---
-        disp_nodes = prob.get_val('deflections').reshape(n_node, 9)
-        disp_colloc = prob.get_val('displacements_col')
+        disp_nodes = prob.get_val("deflections").reshape(n_node, 9)
+        disp_colloc = prob.get_val("displacements_col")
         if appendageOptions["config"] == "wing":
             # just use right wing
             disp_colloc = disp_colloc[:, npt_wing:]
@@ -316,88 +322,88 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
         colloc_y = collocationPts[1, :]
 
         fig, axs = plt.subplots(3, 2, figsize=(8, 8))
-        fig.suptitle('Displacements')
-        axs[0, 0].plot(node_y, disp_nodes[:, 0], 'o', color='darkgray', ms=5, label='FEM nodes')
-        axs[0, 0].plot(colloc_y, disp_colloc[0, :], 'o-', color='C0', ms=3, label='Collocation points')
-        axs[0, 0].set_ylabel('disp X')
+        fig.suptitle("Displacements")
+        axs[0, 0].plot(node_y, disp_nodes[:, 0], "o", color="darkgray", ms=5, label="FEM nodes")
+        axs[0, 0].plot(colloc_y, disp_colloc[0, :], "o-", color="C0", ms=3, label="Collocation points")
+        axs[0, 0].set_ylabel("disp X")
         axs[0, 0].set_xticklabels([])
         axs[0, 0].legend()
 
-        axs[1, 0].plot(node_y, disp_nodes[:, 1], 'o', color='darkgray', ms=5)
-        axs[1, 0].plot(colloc_y, disp_colloc[1, :], 'o-', color='C0', ms=3)
-        axs[1, 0].set_ylabel('disp Y')
+        axs[1, 0].plot(node_y, disp_nodes[:, 1], "o", color="darkgray", ms=5)
+        axs[1, 0].plot(colloc_y, disp_colloc[1, :], "o-", color="C0", ms=3)
+        axs[1, 0].set_ylabel("disp Y")
         axs[1, 0].set_xticklabels([])
 
-        axs[2, 0].plot(node_y, disp_nodes[:, 2], 'o', color='darkgray', ms=5)
-        axs[2, 0].plot(colloc_y, disp_colloc[2, :], 'o-', color='C0', ms=3)
-        axs[2, 0].set_ylabel('disp Z')
-        axs[2, 0].set_xlabel('spanwise location')
-        
-        axs[0, 1].plot(node_y, disp_nodes[:, 3], 'o', color='darkgray', ms=5)
-        axs[0, 1].plot(colloc_y, disp_colloc[3, :], 'o-', color='C0', ms=3)
-        axs[0, 1].set_ylabel('disp Rx')
+        axs[2, 0].plot(node_y, disp_nodes[:, 2], "o", color="darkgray", ms=5)
+        axs[2, 0].plot(colloc_y, disp_colloc[2, :], "o-", color="C0", ms=3)
+        axs[2, 0].set_ylabel("disp Z")
+        axs[2, 0].set_xlabel("spanwise location")
+
+        axs[0, 1].plot(node_y, disp_nodes[:, 3], "o", color="darkgray", ms=5)
+        axs[0, 1].plot(colloc_y, disp_colloc[3, :], "o-", color="C0", ms=3)
+        axs[0, 1].set_ylabel("disp Rx")
         axs[0, 1].set_xticklabels([])
 
-        axs[1, 1].plot(node_y, disp_nodes[:, 4], 'o', color='darkgray', ms=5)
-        axs[1, 1].plot(colloc_y, disp_colloc[4, :], 'o-', color='C0', ms=3)
-        axs[1, 1].set_ylabel('disp Ry')
+        axs[1, 1].plot(node_y, disp_nodes[:, 4], "o", color="darkgray", ms=5)
+        axs[1, 1].plot(colloc_y, disp_colloc[4, :], "o-", color="C0", ms=3)
+        axs[1, 1].set_ylabel("disp Ry")
         axs[1, 1].set_xticklabels([])
 
-        axs[2, 1].plot(node_y, disp_nodes[:, 5], 'o', color='darkgray', ms=5)
-        axs[2, 1].plot(colloc_y, disp_colloc[5, :], 'o-', color='C0', ms=3)
-        axs[2, 1].set_ylabel('disp Rz')
-        axs[2, 1].set_xlabel('spanwise location')
+        axs[2, 1].plot(node_y, disp_nodes[:, 5], "o", color="darkgray", ms=5)
+        axs[2, 1].plot(colloc_y, disp_colloc[5, :], "o-", color="C0", ms=3)
+        axs[2, 1].set_ylabel("disp Rz")
+        axs[2, 1].set_xlabel("spanwise location")
 
         fig.tight_layout()
-        fig.savefig('displacements.pdf', bbox_inches='tight')
+        fig.savefig("displacements.pdf", bbox_inches="tight")
 
         # --- plot forces ---
         fig, axs = plt.subplots(3, 2, figsize=(8, 8))
-        fig.suptitle('Forces')
+        fig.suptitle("Forces")
 
-        axs[0, 0].plot(node_y, force_FEM[0, :], 'o', color='darkgray', ms=5)
-        axs[0, 0].plot(colloc_y, force_colloc[0, :], 'o-', color='C0', ms=3)
-        axs[0, 0].set_ylabel('force X')
+        axs[0, 0].plot(node_y, force_FEM[0, :], "o", color="darkgray", ms=5)
+        axs[0, 0].plot(colloc_y, force_colloc[0, :], "o-", color="C0", ms=3)
+        axs[0, 0].set_ylabel("force X")
         axs[0, 0].set_xticklabels([])
 
-        axs[1, 0].plot(node_y, force_FEM[1, :], 'o', color='darkgray', ms=5)
-        axs[1, 0].plot(colloc_y, force_colloc[1, :], 'o-', color='C0', ms=3)
-        axs[1, 0].set_ylabel('force Y')
+        axs[1, 0].plot(node_y, force_FEM[1, :], "o", color="darkgray", ms=5)
+        axs[1, 0].plot(colloc_y, force_colloc[1, :], "o-", color="C0", ms=3)
+        axs[1, 0].set_ylabel("force Y")
         axs[1, 0].set_xticklabels([])
 
-        axs[2, 0].plot(node_y, force_FEM[2, :], 'o', color='darkgray', ms=5)
-        axs[2, 0].plot(colloc_y, force_colloc[2, :], 'o-', color='C0', ms=3)
-        axs[2, 0].set_ylabel('force Z')
-        axs[2, 0].set_xlabel('spanwise location')
+        axs[2, 0].plot(node_y, force_FEM[2, :], "o", color="darkgray", ms=5)
+        axs[2, 0].plot(colloc_y, force_colloc[2, :], "o-", color="C0", ms=3)
+        axs[2, 0].set_ylabel("force Z")
+        axs[2, 0].set_xlabel("spanwise location")
 
-        axs[0, 1].plot(node_y, force_FEM[3, :], 'o', color='darkgray', ms=5)
-        axs[0, 1].set_ylabel('moment X')
+        axs[0, 1].plot(node_y, force_FEM[3, :], "o", color="darkgray", ms=5)
+        axs[0, 1].set_ylabel("moment X")
         axs[0, 1].set_xticklabels([])
 
-        axs[1, 1].plot(node_y, force_FEM[4, :], 'o', color='darkgray', ms=5)
-        axs[1, 1].set_ylabel('moment Y')
+        axs[1, 1].plot(node_y, force_FEM[4, :], "o", color="darkgray", ms=5)
+        axs[1, 1].set_ylabel("moment Y")
         axs[1, 1].set_xticklabels([])
 
-        axs[2, 1].plot(node_y, force_FEM[5, :], 'o', color='darkgray', ms=5)
-        axs[2, 1].set_ylabel('moment Z')
-        axs[2, 1].set_xlabel('spanwise location')
-        
+        axs[2, 1].plot(node_y, force_FEM[5, :], "o", color="darkgray", ms=5)
+        axs[2, 1].set_ylabel("moment Z")
+        axs[2, 1].set_xlabel("spanwise location")
+
         fig.tight_layout()
-        fig.savefig('forces.pdf', bbox_inches='tight')
+        fig.savefig("forces.pdf", bbox_inches="tight")
 
         # --- plot CL_alpha ---
         cla_flow = prob.get_val("cla")
         cla_node = prob.get_val("cla_node")
         fig, ax = plt.subplots()
-        ax.plot(colloc_y, cla_flow, 'o-', color='C0', ms=3, label='flow collocation points')
-        ax.plot(node_y, cla_node, 'o', color='darkgray', ms=5, label='FEM nodes')
-        ax.set_xlabel('spanwise location [m]')
+        ax.plot(colloc_y, cla_flow, "o-", color="C0", ms=3, label="flow collocation points")
+        ax.plot(node_y, cla_node, "o", color="darkgray", ms=5, label="FEM nodes")
+        ax.set_xlabel("spanwise location [m]")
         ax.set_ylabel("CL_alpha")
         ax.legend()
-        fig.savefig('CLa.pdf', bbox_inches='tight')
+        fig.savefig("CLa.pdf", bbox_inches="tight")
 
         # total lift force
-        loads = prob.get_val('traction_forces').reshape(9, n_node, order='F')
+        loads = prob.get_val("traction_forces").reshape(9, n_node, order="F")
         lift = np.sum(loads[2, :])  # sum of all lift forces
         print("Total lift force:", float(lift), "(not really total if config = wing)")
 
@@ -407,35 +413,55 @@ def main(theta_fiber, alfa0, initialize=True, plot=False):
     return bending[-1], twist[-1], CL
 
 
+# ==============================================================================
+#                         MAIN DRIVER
+# ==============================================================================
 if __name__ == "__main__":
     # --- set fiber angle ---
     # NOTE: flow speed should be set in the solverOptions
-    fiber_angle = 30
+    # fiber_angle = -15
 
-    dz_tip_list = []
-    theta_tip_list = []
-    CL_list = []
-    
+    # fiber_list = [-30, -15, 0, 15, 30]
+    fiber_list = [00]
     alfa_list = [0, 2, 4, 6, 8, 10, 11, 12]
-    for alfa0 in alfa_list:
-        dz_tip, theta_tip, CL = main(fiber_angle, alfa0, initialize=True)
-        ### initialize = False   # restart from previous solution. NOTE: This doesn't work!!
-        dz_tip_list.append(dz_tip)
-        theta_tip_list.append(theta_tip)
-        CL_list.append(CL)
+    toc_list = [0.06, 0.07, 0.08, 0.09]
+
+    for fiber_angle in fiber_list:
+        for tocVal in toc_list:
+            dz_tip_list = []
+            theta_tip_list = []
+            CL_list = []
+            for alfa0 in alfa_list:
+                dz_tip, theta_tip, CL = main(fiber_angle, alfa0, initialize=True)
+                ### initialize = False   # restart from previous solution. NOTE: This doesn't work!!
+                dz_tip_list.append(dz_tip)
+                theta_tip_list.append(theta_tip)
+                CL_list.append(CL)
+
+            # save output to text file
+            # with open(f"output/tip_deflections_fiber{fiber_angle}deg_toc{tocVal}.txt", "w") as f:
+            with open(
+                f"output/tip_deflections_{appendageOptions['material']}{fiber_angle}deg_toc{tocVal}.txt", "w"
+            ) as f:
+                f.write("alpha [deg], tip deflection [m], tip twist [rad], CL\n")
+                for i in range(len(alfa_list)):
+                    f.write(f"{alfa_list[i]}, {dz_tip_list[i]}, {theta_tip_list[i]}, {CL_list[i].item()}\n")
 
     # convert theta to degree
     theta_tip_list = np.rad2deg(np.array(theta_tip_list))
 
     # normalize dz
-    dz_tip_normalized = np.array(dz_tip_list) * 2 / 0.09   # same normalization as Liao 2019. 0.09 = mean chord
+    dz_tip_normalized = np.array(dz_tip_list) * 2 / 0.09  # same normalization as Liao 2019. 0.09 = mean chord
 
-    print('\n\n-----------------------------------')
+    print("\n\n-----------------------------------")
     print("fiber angle [deg]", fiber_angle)
-    print("alpha [deg]", alfa_list,)
+    print(
+        "alpha [deg]",
+        alfa_list,
+    )
     print("tip deflections (normalized)", dz_tip_normalized)
     print("tip twist [deg]", list(theta_tip_list))
-    print('-----------------------------------')
+    print("-----------------------------------")
 
     import matplotlib.pyplot as plt
 

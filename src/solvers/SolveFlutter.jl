@@ -917,7 +917,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     maxK = 30.0 # max reduced frequency k to search
     # maxK = 60.0 # max reduced frequency k to search
     # maxK = 90.0 # max reduced frequency k to search
-    maxK = 150.0 # max reduced frequency k to search (pesky moth case with high k
+    maxK = 180.0 # max reduced frequency k to search (pesky moth and 0.9m semispan case with high k
 
 
     # --- Zygote buffers ---
