@@ -842,16 +842,18 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
         toc::Vector{RealOrComplex} = appendageParams["toc"]
         ab::Vector{RealOrComplex} = appendageParams["ab"]
         x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+        a::Vector{RealOrComplex} = appendageParams["abar"]
+        x_a::Vector{RealOrComplex} = appendageParams["x_a"]
 
-        WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
-
+        # WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
         midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        ab = a .* chordLengths * 0.5
+        x_ab = x_a .* chordLengths * 0.5
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 
         FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], idxTip, zeros(10, 2))
 
-        # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
         areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
         meanChord = sum(chordLengths) / length(chordLengths)
         rootChord = chordLengths[1]
@@ -869,16 +871,19 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
         toc::Vector{RealOrComplex} = appendageParams["toc"]
         ab::Vector{RealOrComplex} = appendageParams["ab"]
         x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+        a::Vector{RealOrComplex} = appendageParams["abar"]
+        x_a::Vector{RealOrComplex} = appendageParams["x_a"]
 
-        WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
+        # WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
         midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
+        ab = a .* chordLengths * 0.5
+        x_ab = x_a .* chordLengths * 0.5
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
 
         FEMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, appendageParams["theta_f"], idxTip, zeros(10, 2))
 
-        # areaRef = HydroStrip.compute_areas(FEMESH, WING; appendageOptions=appendageOptions, STRUT=STRUT)
         areaRef = Preprocessing.compute_areas(LECoords, TECoords, nodeConn)
         meanChord = sum(chordLengths) / length(chordLengths)
         rootChord = chordLengths[1]
@@ -1255,6 +1260,8 @@ function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendagePara
         toc::Vector{RealOrComplex} = appendageParams["toc"]
         ab::Vector{RealOrComplex} = appendageParams["ab"]
         x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
+        a::Vector{RealOrComplex} = appendageParams["abar"]
+        x_a::Vector{RealOrComplex} = appendageParams["x_a"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]

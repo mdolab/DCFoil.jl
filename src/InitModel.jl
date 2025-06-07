@@ -26,15 +26,15 @@ function init_static(
   depth0,
   appendageOptions::AbstractDict, solverOptions::AbstractDict
 )
-"""
-  Initialize a static hydrofoil model
-
-  Inputs:
-      DVs for derivative computation
-
-  returns:
-    foil: struct
   """
+    Initialize a static hydrofoil model
+
+    Inputs:
+        DVs for derivative computation
+
+    returns:
+      foil: struct
+    """
 
   # ---------------------------
   #   Geometry
@@ -205,6 +205,8 @@ function init_modelFromDVDict(DVDict::AbstractDict, solverOptions::AbstractDict,
     toc = DVDict["toc"]
     ab = DVDict["ab"]
     x_ab = DVDict["x_ab"]
+    abar = DVDict["abar"]
+    x_a = DVDict["x_a"]
     # toc = DVDict["toc"]
     # ab = DVDict["ab"]
     # x_ab = DVDict["x_ab"]
@@ -265,13 +267,15 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     theta_f_strut = appendageParams["theta_f_strut"]
     depth0 = appendageParams["depth0"]
 
-    toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = FEMMethods.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+    toc, abar, x_a, toc_strut, ab_strut, x_ab_strut = FEMMethods.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
   else
     rake = appendageParams["rake"]
     # span = appendageParams["s"] * 2
     toc = appendageParams["toc"]
-    ab = appendageParams["ab"]
-    x_ab = appendageParams["x_ab"]
+    # ab = appendageParams["ab"]
+    # x_ab = appendageParams["x_ab"]
+    abar = appendageParams["abar"]
+    x_a = appendageParams["x_a"]
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     beta = appendageParams["beta"]
@@ -282,6 +286,9 @@ function init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, sol
     x_ab_strut = appendageParams["x_ab_strut"]
     theta_f_strut = appendageParams["theta_f_strut"]
   end
+
+  ab = abar .* chordLengths * 0.5
+  x_ab = x_a .* chordLengths * 0.5
 
   WingModel, StrutModel, LLOutputs, LLSystem, FlowCond = init_dynamic(LECoords, TECoords, nodeConn, toc, ab, zeta, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions; fRange=fRange, uRange=uRange)
 

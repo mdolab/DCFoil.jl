@@ -1097,7 +1097,9 @@ function setup_FEBeamFromCoords(
     fRange = solverOptions["fRange"]
     uRange = solverOptions["uRange"]
 
-    rake, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut = unpack_appendageParams(appendageParams, appendageOptions)
+    rake, toc, abar, x_a, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut = unpack_appendageParams(appendageParams, appendageOptions)
+    ab = abar .* chordLengths * 0.5
+    x_ab = x_a .* chordLengths * 0.5
 
     statWingStructModel, statStrutStructModel = init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
     WingStructModel = DynamicFoil(

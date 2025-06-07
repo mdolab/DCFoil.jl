@@ -129,8 +129,10 @@ function unpack_appendageParams(appendageParams, appendageOptions)
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
         toc::Vector{RealOrComplex} = appendageParams["toc"]
-        ab::Vector{Real} = appendageParams["ab"]
-        x_ab::Vector{Real} = appendageParams["x_ab"]
+        # ab::Vector{Real} = appendageParams["ab"]
+        # x_ab::Vector{Real} = appendageParams["x_ab"]
+        abar::Vector{Real} = appendageParams["abar"]
+        x_a::Vector{Real} = appendageParams["x_a"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -142,7 +144,7 @@ function unpack_appendageParams(appendageParams, appendageOptions)
         theta_f_strut = appendageParams["theta_f_strut"]
     end
 
-    return rake, toc, ab, x_ab, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut
+    return rake, toc, abar, x_a, zeta, theta_f, beta, s_strut, c_strut, toc_strut, ab_strut, x_ab_strut, theta_f_strut
 end
 
 

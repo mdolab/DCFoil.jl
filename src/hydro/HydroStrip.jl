@@ -1163,15 +1163,17 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             theta_f_strut = appendageParams["theta_f_strut"]
             depth0 = appendageParams["depth0"]
 
-            toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+            toc, abar, x_a, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
         else
             α₀ = appendageParams["alfa0"]
             # sweepAng = appendageParams["sweep"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
             toc = appendageParams["toc"]
-            ab = appendageParams["ab"]
-            x_ab = appendageParams["x_ab"]
+            # ab = appendageParams["ab"]
+            # x_ab = appendageParams["x_ab"]
+            abar = appendageParams["abar"]
+            x_a = appendageParams["x_a"]
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1183,6 +1185,10 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
             theta_f_strut = appendageParams["theta_f_strut"]
             depth0 = appendageParams["depth0"]
         end
+
+        ab = abar .* chordLengths * 0.5
+        x_ab = x_a .* chordLengths * 0.5
+
         AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
         FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
         # Λ = sweepAng
@@ -1212,15 +1218,17 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
                 theta_f_strut = appendageParams["theta_f_strut"]
                 depth0 = appendageParams["depth0"]
 
-                toc, ab, x_ab, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
+                toc, abar, x_a, toc_strut, ab_strut, x_ab_strut = Preprocessing.get_1DGeoPropertiesFromFile(appendageOptions["path_to_geom_props"])
             else
                 α₀ = appendageParams["alfa0"]
                 # sweepAng = appendageParams["sweep"]
                 rake = appendageParams["rake"]
                 # span = appendageParams["s"] * 2
                 toc = appendageParams["toc"]
-                ab = appendageParams["ab"]
-                x_ab = appendageParams["x_ab"]
+                # ab = appendageParams["ab"]
+                # x_ab = appendageParams["x_ab"]
+                abar = appendageParams["abar"]
+                x_a = appendageParams["x_a"]
                 zeta = appendageParams["zeta"]
                 theta_f = appendageParams["theta_f"]
                 beta = appendageParams["beta"]
@@ -1232,6 +1240,10 @@ function compute_∂Kff∂Xpt(dim, ptVec, nodeConn, appendageOptions, appendageP
                 theta_f_strut = appendageParams["theta_f_strut"]
                 depth0 = appendageParams["depth0"]
             end
+
+            ab = abar .* chordLengths * 0.5
+            x_ab = x_a .* chordLengths * 0.5
+
             AEROMESH = FEMMethods.StructMesh(structMesh, elemConn, chordLengths, toc, ab, x_ab, theta_f, idxTip, zeros(10, 2))
             FOIL, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_strut, ab_strut, theta_f_strut, appendageParams, appendageOptions, solverOptions)
 
