@@ -1239,7 +1239,7 @@ function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendagePara
     midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
-        print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+        println("Reading geometry properties from file:\n", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
         rake = appendageParams["rake"]
@@ -1327,7 +1327,7 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
 
         structMesh, elemConn = FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
         if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
-            print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+            println("Reading geometry properties from file:\n", appendageOptions["path_to_geom_props"])
 
             α₀ = appendageParams["alfa0"]
             rake = appendageParams["rake"]
@@ -1423,7 +1423,7 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
     midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
     if haskey(appendageOptions, "path_to_geom_props") && !isnothing(appendageOptions["path_to_geom_props"])
-        print("Reading geometry properties from file: ", appendageOptions["path_to_geom_props"])
+        println("Reading geometry properties from file:\n", appendageOptions["path_to_geom_props"])
 
         α₀ = appendageParams["alfa0"]
         rake = appendageParams["rake"]

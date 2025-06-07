@@ -112,6 +112,11 @@ solverOptions = Dict(
     # "df" => 0.05, # frequency step size
     "df" => 0.005, # frequency step size
     "tipForceMag" => 1.0,
+    # --- Great lakes ---
+    "waveSpectrum" => "ISSC",
+    "Hsig" => 1.5,  # significant wave height [m]
+    "omegaz" => 2π / 3.0,  # zero-crossing frequency [rad/s] 
+    "headingAngle" => deg2rad(180.0), # heading angle of the waves [rad]
     # --- p-k (Eigen) solve ---
     "run_modal" => true,
     "run_flutter" => true,
@@ -201,8 +206,8 @@ dh = 1e-5
 ∂TV_influence = LiftingLine.compute_TVinfluences(∂FlowCond, LLMesh)
 ∂LLNLParams = LiftingLine.LiftingLineNLParams(∂TV_influence, LLMesh, LLHydro, ∂FlowCond, Airfoils, AirfoilInfluences)
 
-dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FAD")
-dfdg_f = LiftingLine.compute_∂I∂G(gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions; mode="FAD")
+dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams; mode="FAD")
+dfdg_f = LiftingLine.compute_∂I∂G(gconv_d, LLMesh, ∂FlowCond, ∂LLNLParams, solverOptions, appendageParams; mode="FAD")
 dcldg = dfdg[end-LiftingLine.NPT_WING+1:end, :]
 dcldg_f = dfdg_f[end-LiftingLine.NPT_WING+1:end, :]
 
@@ -271,8 +276,8 @@ LLMesh, FlowCond, LLHydro, Airfoils, AirfoilInfluences = LiftingLine.setup(Uvec,
 TV_influence = LiftingLine.compute_TVinfluences(FlowCond, LLMesh)
 
 LLNLParams = LiftingLine.LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
-dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions)
-dfdg_FD = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions; mode="FiDi")
+dfdg = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams)
+dfdg_FD = LiftingLine.compute_∂I∂G(gconv, LLMesh, FlowCond, LLNLParams, solverOptions, appendageParams; mode="FiDi")
 
 
 # smaller gconv
@@ -407,8 +412,41 @@ dfdx = AbstractDifferentiation.gradient(backend, (x) ->
 #                         Testing forced vibration
 # ==============================================================================
 evalFunc = "vibarea"
-# TODO PICKUP HERE
-SolveForced.compute_funcsFromDVsOM(evalFunc, ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+obj, SOL = SolveForced.compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true)
+SolveForced.write_sol(SOL)
+dfdx_rad = SolveForced.evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
+dfdx_fidi = SolveForced.evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")
+
+function test_func(ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa0, appendageParams, solverOptions)
+
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+
+    appendageParams["theta_f"] = theta_f
+    appendageParams["toc"] = toc
+    appendageParams["alfa0"] = alfa0
+
+    FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveForced.setup_solverOM(displacementsCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions, "HARMONIC FORCED VIBRATION")
+
+    # SOL = SolveForced.solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
+    D = SolveForced.solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
+    # return abs.(SOL.Zdeflection[1,:])
+    # return real.(SOL.dynStructStates[1,:])
+    # return real.(D[:,1])
+    return vec(D)
+end
+using Zygote, ReverseDiff
+# TODO GGGGGGGGGGGG figure out why this is NaN
+dfdx = Zygote.jacobian((xpt, xcla) -> test_func(xpt, GridStruct.nodeConn, displacementsCol, xcla, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions),
+    ptVec,
+    claVecMod
+)
+
+ans = test_func(ptVec, GridStruct.nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+
+# stack overflow
+# dfdx = ReverseDiff.jacobian((xpt) -> test_func(xpt, GridStruct.nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions),
+#     ptVec
+# )
 
 # replace(TECoords, 0.0 => 1e-5)
 # replace(LECoords, 0.0 => 1e-5)

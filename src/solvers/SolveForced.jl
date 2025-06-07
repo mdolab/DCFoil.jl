@@ -14,7 +14,8 @@ Frequency domain hydroelastic solver
 # --- PACKAGES ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote
+using Zygote, FiniteDifferences, ReverseDiff, ForwardDiff
+using AbstractDifferentiation: AbstractDifferentiation as AD
 using ChainRulesCore: ChainRulesCore
 using FileIO
 
@@ -93,14 +94,26 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
     # These describe the output deflection relation wrt an input force vector
     GenXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList), length(u) - length(DOFBlankingList))
 
-    # These RAOs describe the outputs relation wrt an input wave amplitude
-    LiftRAO = zeros(ComplexF64, length(fSweep))
-    MomRAO = zeros(ComplexF64, length(fSweep))
+    # # These RAOs describe the outputs relation wrt an input wave amplitude
+    # LiftRAO = zeros(ComplexF64, length(fSweep))
+    # MomRAO = zeros(ComplexF64, length(fSweep))
 
     # Z(ω)
     DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
-    # H(ω)
-    DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
+    # # H(ω)
+    # DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
+
+    # --- Zygote buffers ---
+    ũout_z = Zygote.Buffer(ũout)
+    LiftDyn_z = Zygote.Buffer(LiftDyn) # will divide by Aw later
+    MomDyn_z = Zygote.Buffer(MomDyn) # will divide by Aw later
+    DeflectionRAO_z = Zygote.Buffer(DeflectionRAO)
+    ũout_z[:, :] = ũout
+    LiftDyn_z[:] = LiftDyn
+    MomDyn_z[:] = MomDyn
+    GenXferFcn_z = Zygote.Buffer(GenXferFcn)
+    GenXferFcn_z[:, :, :] = GenXferFcn
+    DeflectionRAO_z[:, :] = DeflectionRAO
 
     dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
     Ms = CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
@@ -114,11 +127,14 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
         maxK, nK, FlowCond.Uinf, b_ref, dim, FEMESH, LLSystem.sweepAng, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
+    return Kf_r_sweep[1:9,1:9,1] # this seems to give an answer that is not NaN
     # ************************************************
     #     For every frequency, solve the system
     # ************************************************
     tFreq = @elapsed begin
-        print_vibration_text(1, 1, 1, 0, 0, 0, 0; printHeader=true)
+        ChainRulesCore.ignore_derivatives() do
+            print_vibration_text(1, 1, 1, 0, 0, 0, 0; printHeader=true)
+        end
         for (f_ctr, f) in enumerate(fSweep)
 
             ω = 2π * f # circular frequency
@@ -138,13 +154,13 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             Kf = Kf_r + 1im * Kf_i
 
             #  Dynamic matrix. also written as Λ_ij in na520 notes
-            D = -1 * ω^2 * (Ms + Mf) + im * ω * (Cf + Cs) + (Ks + Kf)
+            D = -1 * ω^2 * (Ms + Mf) + 1im * ω * (Cf + Cs) + (Ks + Kf)
             # Rows are outputs "i" and columns are inputs "j"
 
             # ---------------------------
             #   Solve for dynamic states
             # ---------------------------
-            fextω = extForceVec[:, f_ctr]
+            fextω = extForceVec[f_ctr, :]
             H = inv(D) # system transfer function matrix for a force
             # qSol = real(H * extForceVec)
             qSol = H * fextω[1:end.∉[DOFBlankingList]]
@@ -167,20 +183,33 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             LiftDyn_z[f_ctr] = L̃
             MomDyn_z[f_ctr] = M̃
 
-            GenXferFcn[f_ctr, :, :] = H
+            GenXferFcn_z[f_ctr, :, :] = H
 
-            DeflectionRAO[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+            DeflectionRAO_z[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
             # DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
 
-            if f_ctr % 20 == 1 # header every 10 iterations
-                print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
+            ChainRulesCore.ignore_derivatives() do
+                if f_ctr % 20 == 1 # header every 10 iterations
+                    print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
+                end
             end
 
             # # DEBUG QUIT ON FIRST FREQ
             # break
             f_ctr += 1
+            # return D
+            # return Kf
+            return Kf_r
         end
     end
+
+    # --- Copy back from Zygote buffer ---
+    ũout = copy(ũout_z)
+    LiftDyn = copy(LiftDyn_z)
+    MomDyn = copy(MomDyn_z)
+    GenXferFcn = copy(GenXferFcn_z)
+    DeflectionRAO = copy(DeflectionRAO_z)
+
 
     LiftRAO = LiftDyn ./ Aw
     MomRAO = MomDyn ./ Aw
@@ -220,13 +249,18 @@ function compute_fextwave(headingAngle, ωRange, AEROMESH, chordVec, clαVec, Fl
     stripWidths = .√(nVec[:, XDIM] .^ 2 + nVec[:, YDIM] .^ 2 + nVec[:, ZDIM] .^ 2) # length of elem
 
     fAey, mAey, Aw = compute_waveloads(chordVec, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, FlowCond.depth, stripWidths, clαVec)
-    extForceVec = zeros(ComplexF64, length(spanLocs) * NDOF, length(ωRange))
+    extForceVec = zeros(ComplexF64, length(ωRange), length(spanLocs) * NDOF)
+    extForceVec_z = Zygote.Buffer(extForceVec)
+    extForceVec_z[:, :] = extForceVec
 
     # --- Populate the force vector ---
     # println("shape:$(size(fAey))")
     # println("shape:$(size(extForceVec[WIND:NDOF:end, :]))")
-    extForceVec[WIND:NDOF:end, :] .= transpose(fAey)
-    extForceVec[ΘIND:NDOF:end, :] .= transpose(mAey)
+    extForceVec_z[:, WIND:NDOF:end] = fAey
+    extForceVec_z[:, ΘIND:NDOF:end] = mAey
+
+    extForceVec = copy(extForceVec_z)
+
 
     return extForceVec, Aw
 end
@@ -326,7 +360,7 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function compute_funcsFromDVsOM(evalFunc, ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=false)
+function compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=false)
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
@@ -354,27 +388,90 @@ function compute_funcsFromDVsOM(evalFunc, ptVec, nodeConn, displacementsCol, cla
     gvib_bend, gvib_twist = compute_PSDArea(SOL, SOL.fSweep, b_ref, Swave)
 
     ksbend, kstwist = compute_dynDeflectionPk(SOL, solverOptions)
-    
-    obj = [gvib_bend, gvib_twist, ksbend, kstwist]
+
+    # obj = [gvib_bend, gvib_twist, ksbend, kstwist]
+    obj = [gvib_bend, ksbend, kstwist]
 
     if return_all
         return obj, SOL
     else
-        return SOL
+        return obj
     end
 end
 
-function evalFuncsSens(VIBSOL;mode="RAD")
+function evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, solverOptions; mode="RAD")
     """
-    TODO
+    Derivative of cost functions
     """
 
+    println("===================================================================================================")
+    println("        FORCED VIBRATION SENSITIVITIES: ", mode)
+    println("===================================================================================================")
+
+    # Initialize output dictionary
+
+    LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
+    ptVec, mm, NPT = LiftingLine.unpack_coords(GridStruct.LEMesh, GridStruct.TEMesh)
+
+    # these structural damping constants are hidden in this dictionary to keep them constant throughout optimization
+    haskey(solverOptions, "alphaConst") || error("solverOptions must contain 'alphaConst'")
+
+
     if uppercase(mode) == "RAD"
-    Zygote.Jacobian
+        dIdxDV = Zygote.jacobian((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+            ptVec,
+            displacementsCol,
+            claVec,
+            appendageParams["theta_f"],
+            appendageParams["toc"],
+            appendageParams["alfa0"])
+
+
+        # dIdxDV = ReverseDiff.jacobian((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+        #         compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+        #     ptVec,
+        #     displacementsCol,
+        #     claVec,
+        #     appendageParams["theta_f"],
+        #     appendageParams["toc"],
+        #     appendageParams["alfa0"])
+    elseif uppercase(mode) == "FIDI"
+        backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
+
+        dIdxDV = AD.jacobian(backend, (xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+                compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+            ptVec,
+            displacementsCol,
+            claVec,
+            appendageParams["theta_f"],
+            appendageParams["toc"],
+            appendageParams["alfa0"])
     else
         error("Mode $(mode) not implemented")
     end
 
+    dfdxParams = Dict()
+    DesignVariables = ["displCol", "cla", "theta_f", "toc", "alfa0"] # every DV except ptVec in order
+    # for (ii, dvkey) in enumerate(alldesignvariables) # old
+
+    costFuncs = ["vibareaw", "ksbend", "kstwist"]
+    # return dIdxDV
+    funcsSens = Dict(
+    #     "mesh" => reshape(dIdxDV[1], 3, NPT),
+    # "params" => dfdxParams,
+    )
+    for (ii, func) in enumerate(costFuncs)
+        for (jj, dvkey) in enumerate(DesignVariables)
+            dfdxParams[dvkey] = dIdxDV[1+jj][ii, :]
+        end
+        funcsSens[func] = Dict(
+            "mesh" => reshape(dIdxDV[1][ii, :], 3, NPT),
+            "params" => dfdxParams,
+        )
+    end
+
+    return funcsSens
 end
 
 end # end module
