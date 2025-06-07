@@ -17,7 +17,7 @@ jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 
 
-def setup(nNodes, nNodesStrut, args, comm, files, outputDir: str):
+def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
 
     Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
     # This chunk of code is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
@@ -82,7 +82,7 @@ def setup(nNodes, nNodesStrut, args, comm, files, outputDir: str):
         "run_modal": False,
         "run_flutter": args.flutter,
         "nModes": 4,
-        "uRange": [5.0, 25],  # [m/s] # just throttle this to get convergent results
+        "uRange": flutterSpeed,  # [m/s] # just throttle this to get convergent results
         # "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
         "maxQIter": 100,  # that didn't fix the slow run time...
         "rhoKS": 500.0,

@@ -282,10 +282,10 @@ class Top(Multipoint):
         # ************************************************
         for ptName in probList:
             # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
-            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=2500, upper=2550, scaler=1/2500)  # lift constraint [N]
+            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=Fliftstars[ptName], upper=Fliftstars[ptName], scaler=1/Fliftstars[ptName])  # lift constraint [N]
 
             if args.task != "trim":
-                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
+                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.9)  # tip defl con (5% of baseline semispan)
                 self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=0.0)  # ventilation constraint
 
             # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
@@ -331,7 +331,7 @@ if __name__ == "__main__":
         npt_wing,
         npt_wing_full,
         n_node,
-    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, case_name)
+    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, boatSpds["f1"], case_name)
 
     # --- Trim only case ---
     if args.task == "trim":

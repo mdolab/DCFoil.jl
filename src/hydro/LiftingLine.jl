@@ -261,6 +261,7 @@ function initialize_LL(α0, β0, rake, sweepAng, chordVec, depth0, appendageOpti
         "translation" => vec([appendageOptions["xMount"], 0, 0]), # of the midchord
         "debug" => true,
         "depth" => depth,
+        "is_antisymmetry" => false,
     )
     return airfoilXY, airfoilCtrlXY, npt_wing, npt_airfoil, rootChord, TR, Uvec, options
 end
@@ -406,21 +407,26 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # However, this is not differentiable so we just use the edge values
     averages = translatDisplCtrl[:, 1:end-1] .+ translatDisplCtrl[:, 2:end] * 0.5
     midVals = cat(averages[:, 1:npt_wing÷2-1], zeros(3, 1), averages[:, npt_wing÷2+1:end], dims=2)
-    # midVals[:, NPT_WING÷2] .= 0.0  # wing center should have 0 displacements
-    # portSlope = translatDisplCtrl[:, 1] - translatDisplCtrl[:, 2]
-    # halfDist = √(portSlope[XDIM]^2 + portSlope[YDIM]^2 + portSlope[ZDIM]^2) * 0.5
-    # portTip = translatDisplCtrl[:, 1] + portSlope * halfDist
     portTip = translatDisplCtrl[:, 1]# + portSlope * halfDist
 
-    # println("Port tip: $(portTip)")
-
-    # stbdSlope = translatDisplCtrl[:, end] - translatDisplCtrl[:, end-1]
-    # halfDist = √(stbdSlope[XDIM]^2 + stbdSlope[YDIM]^2 + stbdSlope[ZDIM]^2) * 0.5
-    # stbdTip = translatDisplCtrl[:, end] + stbdSlope * halfDist
     stbdTip = translatDisplCtrl[:, end] #+ stbdSlope * halfDist
 
     # println("Stbd tip: $(stbdTip)")
     translatDispl = cat(portTip, midVals, stbdTip, dims=2)
+    if options["is_antisymmetry"]
+        # TODO GGGGGGGGG
+        translatDisplCtrl[:,1:npt_wing÷2] *= -1.0 # flip 
+        rotationDisplacementsCtrl[:,1:npt_wing÷2] *= -1.0 # flip
+        # swap twists and displacements
+        midVals = cat(
+            -averages[:, 1:npt_wing÷2-1],
+            zeros(3, 1),
+            averages[:, npt_wing÷2+1:end],
+            dims=2)
+        translatDispl = cat(-portTip, midVals, stbdTip, dims=2)
+        println("Using antisymmetry conditions")
+        show(stdout, "text/plain", translatDispl)
+    end
 
     # --- x shift setup ---
     # Apply translation wrt using the root airfoil midchord as origin 
