@@ -23,142 +23,63 @@ import numpy as np
 # Extension modules
 # ==============================================================================
 # import niceplots as nplt
-from SETUP import setup_OMdvgeo
+from SETUP import setup_OMdvgeo, setup_dcfoil
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
 from multipoint import Multipoint
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--geovar",
+    type=str,
+    default="trwpd",
+    help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
+)
+parser.add_argument("--animate", default=False, action="store_true")
+parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
+parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
+parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
+parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
+parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
+parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
+args = parser.parse_args()
+
+# --- Echo the args ---
+print(30 * "-")
+print("Arguments are", flush=True)
+for arg in vars(args):
+    print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+print(30 * "-", flush=True)
+
 outputDir = "embedding"
 files = {}
-# files["gridFile"] = [
-#         f"../test/dcfoil_opt/mothrudder_foil_stbd_mesh.dcf",
-#         f"../test/dcfoil_opt/mothrudder_foil_port_mesh.dcf",
-#     ]
-FFDFile = "../test/dcfoil_opt/INPUT/mothrudder_ffd.xyz"
+files["gridFile"] = [
+        f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
+        f"../INPUT/{args.foil}_foil_port_mesh.dcf",
+    ]
+FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
 files["FFDFile"] = FFDFile
 
-ptVec = np.array(
-    [
-        -0.07,
-        0.0,
-        0.0,
-        -0.0675,
-        0.037,
-        0.0,
-        -0.065,
-        0.074,
-        0.0,
-        -0.0625,
-        0.111,
-        0.0,
-        -0.06,
-        0.148,
-        0.0,
-        -0.0575,
-        0.185,
-        0.0,
-        -0.055,
-        0.222,
-        0.0,
-        -0.0525,
-        0.259,
-        0.0,
-        -0.05,
-        0.296,
-        0.0,
-        -0.0475,
-        0.333,
-        0.0,
-        -0.0675,
-        -0.037,
-        0.0,
-        -0.065,
-        -0.074,
-        0.0,
-        -0.0625,
-        -0.111,
-        0.0,
-        -0.06,
-        -0.148,
-        0.0,
-        -0.0575,
-        -0.185,
-        0.0,
-        -0.055,
-        -0.222,
-        0.0,
-        -0.0525,
-        -0.259,
-        0.0,
-        -0.05,
-        -0.296,
-        0.0,
-        -0.0475,
-        -0.333,
-        0.0,
-        0.07,
-        0.0,
-        0.0,
-        0.0675,
-        0.037,
-        0.0,
-        0.065,
-        0.074,
-        0.0,
-        0.0625,
-        0.111,
-        0.0,
-        0.06,
-        0.148,
-        0.0,
-        0.0575,
-        0.185,
-        0.0,
-        0.055,
-        0.222,
-        0.0,
-        0.0525,
-        0.259,
-        0.0,
-        0.05,
-        0.296,
-        0.0,
-        0.0475,
-        0.333,
-        0.0,
-        0.0675,
-        -0.037,
-        0.0,
-        0.065,
-        -0.074,
-        0.0,
-        0.0625,
-        -0.111,
-        0.0,
-        0.06,
-        -0.148,
-        0.0,
-        0.0575,
-        -0.185,
-        0.0,
-        0.055,
-        -0.222,
-        0.0,
-        0.0525,
-        -0.259,
-        0.0,
-        0.05,
-        -0.296,
-        0.0,
-        0.0475,
-        -0.333,
-        0.0,
-    ]
-)
-nnodes = len(ptVec) // 3 // 2
-XCoords = ptVec.reshape(-1, 3)
-LEcoords = XCoords[:nnodes]
-TEcoords = XCoords[nnodes:]
+
+nNodes = 10
+nNodesStrut = 5
+case_name = "embedding"
+(
+    ptVec,
+    nodeConn,
+    appendageParams,
+    appendageOptions,
+    solverOptions,
+    npt_wing,
+    npt_wing_full,
+    n_node,
+) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, case_name)
+
+# nnodes = len(ptVec) // 3 // 2
+# XCoords = ptVec.reshape(-1, 3)
+# LEcoords = XCoords[:nnodes]
+# TEcoords = XCoords[nnodes:]
 
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
@@ -204,8 +125,6 @@ class Top(Multipoint):
         self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
         self.add_subsystem("mesh", om.IndepVarComp())
 
-        # self.mesh.add_output("x_leptVec0", val=LEcoords.flatten(), distributed=True)
-        # self.mesh.add_output("x_teptVec0", val=TEcoords.flatten(), distributed=True)
         self.mesh.add_output("x_ptVec0", val=ptVec, distributed=True)
 
         self.add_subsystem(
@@ -214,15 +133,11 @@ class Top(Multipoint):
             promotes=["twist", "sweep", "dihedral", "taper", "span"],
         )
 
-        # self.connect("mesh.x_leptVec0", "geometry.x_leptVec_in")
-        # self.connect("mesh.x_teptVec0", "geometry.x_teptVec_in")
         self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")
 
     def configure(self):
 
-        # self.geometry.nom_add_discipline_coords("leptVec", LEcoords.flatten())
-        # self.geometry.nom_add_discipline_coords("teptVec", TEcoords.flatten())
-        self.geometry.nom_add_discipline_coords("ptVec", ptVec)
+        self.geometry.nom_add_discipline_coords("ptVec", np.array(ptVec))
 
         self = setup_OMdvgeo.setup(args, self, None, files)
 
@@ -237,22 +152,6 @@ class Top(Multipoint):
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--geovar",
-        type=str,
-        default="trwpd",
-        help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
-    )
-    parser.add_argument("--animate", default=False, action="store_true")
-    args = parser.parse_args()
-
-    # --- Echo the args ---
-    print(30 * "-")
-    print("Arguments are", flush=True)
-    for arg in vars(args):
-        print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
-    print(30 * "-", flush=True)
 
     prob = om.Problem()
     prob.model = Top()
@@ -271,10 +170,6 @@ if __name__ == "__main__":
         "Print file": os.path.join(outputDir, "SNOPT_print.out"),
         "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
         "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
-        # "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
-        # "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (nonlinear problem)
-        # "Major Step Limit": 5e-3,
-        # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
     }
 
     prob.setup()

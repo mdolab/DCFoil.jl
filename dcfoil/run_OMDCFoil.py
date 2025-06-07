@@ -36,15 +36,52 @@ from multipoint import Multipoint
 from coupled_analysis import CoupledAnalysis
 
 # ==============================================================================
+#                         Command line arguments
+# ==============================================================================
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--task",
+    help="Check end of script for task type",
+    type=str,
+    default="run",
+)
+parser.add_argument(
+    "--geovar",
+    type=str,
+    default="trwpd",
+    help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
+)
+parser.add_argument("--name", type=str, default=None, help="Name of the problem to append to .sql recorder")
+parser.add_argument("--optimizer", type=str, default="SNOPT", help="What type of optimizer?")
+parser.add_argument(
+    "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
+)
+parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
+parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
+parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
+parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
+parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
+parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
+args = parser.parse_args()
+
+# --- Echo the args ---
+print(30 * "-")
+print("Arguments are", flush=True)
+for arg in vars(args):
+    print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+print(30 * "-", flush=True)
+
+# ==============================================================================
 #                         Settings
 # ==============================================================================
 
 files = {}
 files["gridFile"] = [
-    f"../INPUT/mothrudder_foil_stbd_mesh.dcf",
-    f"../INPUT/mothrudder_foil_port_mesh.dcf",
+    f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
+    f"../INPUT/{args.foil}_foil_port_mesh.dcf",
 ]
-FFDFile = "../test/dcfoil_opt/INPUT/mothrudder_ffd.xyz"
+FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
 files["FFDFile"] = FFDFile
 
 nNodes = 10
@@ -272,39 +309,6 @@ def print_drags():
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--task",
-        help="Check end of script for task type",
-        type=str,
-        default="run",
-    )
-    parser.add_argument(
-        "--geovar",
-        type=str,
-        default="trwpd",
-        help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
-    )
-    parser.add_argument("--name", type=str, default=None, help="Name of the problem to append to .sql recorder")
-    parser.add_argument("--optimizer", type=str, default="SNOPT", help="What type of optimizer?")
-    parser.add_argument(
-        "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
-    )
-    parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
-    parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
-    parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
-    parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
-    parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
-    parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
-    args = parser.parse_args()
-
-    # --- Echo the args ---
-    print(30 * "-")
-    print("Arguments are", flush=True)
-    for arg in vars(args):
-        print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
-    print(30 * "-", flush=True)
-
     probList = []
     for pt in args.pts:
         ptName = f"p{pt}"
@@ -453,7 +457,7 @@ if __name__ == "__main__":
 
 
     prob.setup()
-    print("Problem setup complete", flush=True)
+    print("Problem setup complete!", flush=True)
 
 
     # --- Recorder ---
