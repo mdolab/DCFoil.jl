@@ -510,7 +510,7 @@ if __name__ == "__main__":
         print("=" * 60)
         print(f"Restarting from {args.restart}", flush=True)
         print("=" * 60)
-        datafname = f"./run_OMDCfoil_out/{args.restart}.sql"
+        datafname = f"./run_OMDCFoil_out/{args.restart}.sql"
         cr = om.CaseReader(datafname)
 
         driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
