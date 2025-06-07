@@ -91,9 +91,9 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
     appendageParams = {
         "alfa0": 6.0,  # initial angle of attack [deg]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
-        "ab": 0 * np.ones(nNodes),  # dist from midchord to EA [m]
         "toc": 0.12 * np.ones(nNodes),  # thickness-to-chord ratio
-        "x_ab": 0 * np.ones(nNodes),  # static imbalance [m]
+        "abar": 0 * np.ones(nNodes),  # nondim dist from midchord to EA
+        "x_a": 0 * np.ones(nNodes),  # nondim static imbalance
         "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
         # --- Strut vars ---
         "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
@@ -125,5 +125,9 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
             raise ValueError("NPT_WING must be an even number for symmetric analysis")
         npt_wing = int(npt_wing)
         n_node = nNodes
+
+    if args.foil == "amcfull":
+        appendageParams["abar"] = -0.0464 * 2.0 # she nondimensionalized by chord, not semichord
+        print("Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper")
 
     return ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, npt_wing, npt_wing_full, n_node
