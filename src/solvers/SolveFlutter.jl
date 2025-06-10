@@ -1062,6 +1062,13 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                     ChainRulesCore.ignore_derivatives() do
                         println("INFO - pkFlutterAnalysis : Mode disappeared")
                     end
+
+                    if nCorr == size(old_r)[2]
+                        ChainRulesCore.ignore_derivatives() do
+                            println("INFO - pkFlutterAnalysis : Mode disappeared but all modes are correlated. Failing") # --- Copy buffers ---
+                        end
+                        error("Throwing a flutter error") # TODO: figure out if this is the same as JuliaError
+                    end
                 end
             end
 

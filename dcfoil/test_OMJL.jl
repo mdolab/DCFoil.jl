@@ -32,9 +32,11 @@ appendageParams = Dict(
     "zeta" => 0.04, # modal damping ratio at first 2 modes
     # "c" => collect(LinRange(0.14, 0.095, nNodes)), # chord length [m]
     "ab" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
+    "abar" => 0.0 * ones(RealOrComplex, nNodes), # dist from midchord to EA [m]
     # "toc" => 0.075 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean)
     "toc" => 0.06 * ones(RealOrComplex, nNodes), # thickness-to-chord ratio (mean) #FLAGSTAFF
     "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
+    "x_a" => 0.0 * ones(nNodes), # static imbalance [m]
     "theta_f" => deg2rad(0), # fiber angle global [rad]
     # --- Strut vars ---
     "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
@@ -411,7 +413,7 @@ dfdx = AbstractDifferentiation.gradient(backend, (x) ->
 # ==============================================================================
 #                         Testing forced vibration
 # ==============================================================================
-evalFunc = "vibarea"
+# evalFunc = "vibarea"
 obj, SOL = SolveForced.compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true)
 SolveForced.write_sol(SOL)
 dfdx_rad = SolveForced.evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
@@ -427,15 +429,146 @@ function test_func(ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa
 
     FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveForced.setup_solverOM(displacementsCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions, "HARMONIC FORCED VIBRATION")
 
+    # ---------------------------
+    #   Initialize
+    # ---------------------------
+    appendageOptions = solverOptions["appendageList"][1]
+    # outputDir = solverOptions["outputDir"]
+    # tipForceMag = solverOptions["tipForceMag"]
+
+    # WING, STRUT, CONSTANTS, FEMESH, LLSystem, LLOutputs, FlowCond = setup_problem(LECoords, TECoords, nodeConn, appendageParams, appendageOptions, solverOptions)
+    # sweepAng = LLSystem.sweepAng
+    DOFBlankingList = FEMMethods.get_fixed_dofs(SolveForced.ELEMTYPE, "clamped")
+
+    # --- Initialize stuff ---
+    u = zeros(size(CONSTANTS.Kmat)[1])
+    fSweep = solverOptions["fRange"][1]:solverOptions["df"]:solverOptions["fRange"][end]
+
+    # # --- Tip twist approach ---
+    # extForceVec = zeros(size(CONSTANTS.Cmat)[1] - length(DOFBlankingList)) # this is a vector excluded the BC nodes
+    # ChainRulesCore.ignore_derivatives() do
+    #     extForceVec[end-NDOF+ΘIND] = tipForceMag # this is applying a tip twist
+    #     extForceVec[end-NDOF+WIND] = tipForceMag # this is applying a tip lift
+    # end
+    # --- Wave-induced forces ---
+    headingAngle = solverOptions["headingAngle"] # [rad] angle of the wave heading relative to the flow direction, π is headseas
+    extForceVec, Aw = SolveForced.compute_fextwave(headingAngle, fSweep * 2π, FEMESH, chordVec, claVec, FlowCond, appendageOptions)
+
+    LiftDyn = zeros(ComplexF64, length(fSweep)) # * 0im
+    MomDyn = zeros(ComplexF64, length(fSweep)) # * 0im
+
+    ũout = zeros(ComplexF64, length(fSweep), length(u))
+
+    # --- Initialize transfer functions ---
+    # These describe the output deflection relation wrt an input force vector
+    GenXferFcn = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList), length(u) - length(DOFBlankingList))
+
+    # # These RAOs describe the outputs relation wrt an input wave amplitude
+    # LiftRAO = zeros(ComplexF64, length(fSweep))
+    # MomRAO = zeros(ComplexF64, length(fSweep))
+
+    # Z(ω)
+    DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
+    # # H(ω)
+    # DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
+
+    # --- Zygote buffers ---
+    ũout_z = Zygote.Buffer(ũout)
+    LiftDyn_z = Zygote.Buffer(LiftDyn) # will divide by Aw later
+    MomDyn_z = Zygote.Buffer(MomDyn) # will divide by Aw later
+    DeflectionRAO_z = Zygote.Buffer(DeflectionRAO)
+    ũout_z[:, :] = ũout
+    LiftDyn_z[:] = LiftDyn
+    MomDyn_z[:] = MomDyn
+    GenXferFcn_z = Zygote.Buffer(GenXferFcn)
+    GenXferFcn_z[:, :, :] = GenXferFcn
+    DeflectionRAO_z[:, :] = DeflectionRAO
+
+    dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
+    Ms = CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Ks = CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+    Cs = CONSTANTS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
+
+    maxK = fSweep[end] * 2π * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # max reduced frequency
+    nK = 22
+
+    globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = SolveForced.HydroStrip.compute_genHydroLoadsMatrices(
+        maxK, nK, FlowCond.Uinf, b_ref, dim, FEMESH, LLSystem.sweepAng, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, SolveForced.ELEMTYPE;
+        appendageOptions=appendageOptions, solverOptions=solverOptions)
+
+    # ************************************************
+    #     For every frequency, solve the system
+    # ************************************************
+    f_ctr = 1 # frequency counter
+    f = fSweep[1]
+    ω = 2π * f # circular frequency
+
+    # ---------------------------
+    #   Assemble hydro matrices
+    # ---------------------------
+    # # --- Interpolate AICs ---
+    k0 = ω * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # reduced frequency
+    globalCf_r, globalCf_i = SolveForced.HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
+    globalKf_r, globalKf_i = SolveForced.HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
+
+    Kf_r, Cf_r, Mf = SolveForced.HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
+    Kf_i, Cf_i, _ = SolveForced.HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
+
+    # Cf = Cf_r + 1im * Cf_i
+    # Kf = Kf_r + 1im * Kf_i
+
+    #  Dynamic matrix. also written as Λ_ij in na520 notes
+    # D = -1 * ω^2 * (Ms + Mf) +
+    #     1im * ω * (Cf + Cs) +
+    #     (Ks + Kf)
+    D_r = -1 * ω^2 * (Ms + Mf) + ω * (-Cf_i) + Ks + Kf_r
+    D_i = ω * (Cs + Cf_r) + Kf_i
+
+    D = D_r + 1im * D_i
+    # diff = D - Ddiff # should be zero
+    # println(maximum(abs.(diff))) # should be zero
+
+    # Rows are outputs "i" and columns are inputs "j"
+    # return real.(D[1:9,1:9]) # 
+
+    # ---------------------------
+    #   Solve for dynamic states
+    # ---------------------------
+    fextω_r = real.(extForceVec[f_ctr, :])
+    fextω_i = imag.(extForceVec[f_ctr, :])
+    fextω = fextω_r + 1im * fextω_i # complex force vector
+    H = inv(D) # system transfer function matrix for a force
+    # H_r, H_i = cmplxInverse(D_r, D_i, dim - length(DOFBlankingList)) # system transfer function matrix for a force
+    # H = H_r + 1im * H_i # complex transfer function matrix
+    # qSol = real(H * extForceVec)
+    qSol = H * fextω[1:end.∉[DOFBlankingList]]
+    ũSol, _ = FEMMethods.put_BC_back(qSol, SolveForced.ELEMTYPE)
+    # uSol = real(ũSol)
+    uSol = abs.(ũSol) # proper way to do it
+
+    # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
+    ũout_z[f_ctr, :] = ũSol
+
+    # ---------------------------
+    #   Get hydroloads at freq
+    # ---------------------------
+    fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
+
+    fDynamic, L̃, M̃ = SolveForced.HydroStrip.integrate_hydroLoads(uSol, fullAIC, alfa0, 0.0, DOFBlankingList, CONSTANTS.downwashAngles, SolveForced.ELEMTYPE;
+        appendageOptions=appendageOptions, solverOptions=solverOptions)
+
+
     # SOL = SolveForced.solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
-    D = SolveForced.solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
+
+    # D = SolveForced.solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
+
     # return abs.(SOL.Zdeflection[1,:])
     # return real.(SOL.dynStructStates[1,:])
     # return real.(D[:,1])
-    return vec(D)
+    return vec(real.(D[1:9,1:9]))
 end
 using Zygote, ReverseDiff
-# TODO GGGGGGGGGGGG figure out why this is NaN
+
 dfdx = Zygote.jacobian((xpt, xcla) -> test_func(xpt, GridStruct.nodeConn, displacementsCol, xcla, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions),
     ptVec,
     claVecMod

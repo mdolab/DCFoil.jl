@@ -75,7 +75,9 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
     N_R = 8                                     # reduced problem size (Nr x Nr)
 
 
-    x_αbVec = appendageParams["x_ab"]
+    # x_αbVec = appendageParams["x_ab"]
+    x_a = appendageParams["x_a"]
+    x_αbVec = x_a .* chordVec * 0.5
 
     # ************************************************
     #     FEM assembly

@@ -127,9 +127,8 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
         maxK, nK, FlowCond.Uinf, b_ref, dim, FEMESH, LLSystem.sweepAng, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
-    return Kf_r_sweep[1:9,1:9,1] # this seems to give an answer that is not NaN
-    # ************************************************
-    #     For every frequency, solve the system
+        # ************************************************
+        #     For every frequency, solve the system
     # ************************************************
     tFreq = @elapsed begin
         ChainRulesCore.ignore_derivatives() do
@@ -146,40 +145,56 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             k0 = ω * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # reduced frequency
             globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
             globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
-
+            
             Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
             Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
-
-            Cf = Cf_r + 1im * Cf_i
-            Kf = Kf_r + 1im * Kf_i
-
+            
+            # Cf = Cf_r + 1im * Cf_i
+            # Kf = Kf_r + 1im * Kf_i
+            
             #  Dynamic matrix. also written as Λ_ij in na520 notes
-            D = -1 * ω^2 * (Ms + Mf) + 1im * ω * (Cf + Cs) + (Ks + Kf)
+            # D = -1 * ω^2 * (Ms + Mf) +
+            #     1im * ω * (Cf + Cs) +
+            #     (Ks + Kf)
+            D_r = -1 * ω^2 * (Ms + Mf) + ω * (-Cf_i) + Ks + Kf_r
+            D_i = ω * (Cs + Cf_r) + Kf_i
+            
+            D = D_r + 1im * D_i
+            # diff = D - Ddiff # should be zero
+            # println(maximum(abs.(diff))) # should be zero
+
             # Rows are outputs "i" and columns are inputs "j"
+            # return real.(D[1:9,1:9]) # 
 
             # ---------------------------
             #   Solve for dynamic states
             # ---------------------------
-            fextω = extForceVec[f_ctr, :]
+            fextω_r = real.(extForceVec[f_ctr, :])
+            fextω_i = imag.(extForceVec[f_ctr, :])
+            fextω = fextω_r + 1im * fextω_i # complex force vector
             H = inv(D) # system transfer function matrix for a force
+            # H_r, H_i = cmplxInverse(D_r, D_i, dim - length(DOFBlankingList)) # system transfer function matrix for a force
+            # H = H_r + 1im * H_i # complex transfer function matrix
             # qSol = real(H * extForceVec)
             qSol = H * fextω[1:end.∉[DOFBlankingList]]
             ũSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE)
             # uSol = real(ũSol)
             uSol = abs.(ũSol) # proper way to do it
-
+            
             # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
             ũout_z[f_ctr, :] = ũSol
-
+            
             # ---------------------------
             #   Get hydroloads at freq
             # ---------------------------
             fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-
+            
+            # return Kf_r[1:9, 1:9] # GOOD HERE
             fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, alfa0, rake, DOFBlankingList, CONSTANTS.downwashAngles, ELEMTYPE;
                 appendageOptions=appendageOptions, solverOptions=solverOptions)
 
             # --- Store total force and tip deflection values ---
+            # return Kf_r[1:9, 1:9] # bad
             LiftDyn_z[f_ctr] = L̃
             MomDyn_z[f_ctr] = M̃
 
@@ -188,6 +203,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             DeflectionRAO_z[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
             # DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
 
+            # return Kf_r[1:9, 1:9] # bad
             ChainRulesCore.ignore_derivatives() do
                 if f_ctr % 20 == 1 # header every 10 iterations
                     print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
@@ -197,9 +213,9 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             # # DEBUG QUIT ON FIRST FREQ
             # break
             f_ctr += 1
-            # return D
+            # return D # bad
             # return Kf
-            return Kf_r
+            # return Kf_r[1:9, 1:9] # broken here
         end
     end
 

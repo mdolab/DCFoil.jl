@@ -1458,6 +1458,7 @@ function integrate_hydroLoads(
     foilTotalStates = return_totalStates(foilStructuralStates, DVDict, elemType;
         appendageOptions=appendageOptions, alphaCorrection=downwashAngles)
 
+    # return ForceVector, 0.0, 0.0 # Good here
     # --- Strip theory ---
     # This is the hydro force traction vector
     # The problem is the full AIC matrix build (RHS). These states look good
@@ -1466,13 +1467,17 @@ function integrate_hydroLoads(
     ForceVector_z = Zygote.Buffer(ForceVector)
     ForceVector_z[:] = ForceVector
 
+    # return ForceVector, 0.0, 0.0 # good here
     # Only compute forces not at the blanked BC node
     Kff = fullAIC[1:end.∉[dofBlank], 1:end.∉[dofBlank]]
     utot = foilTotalStates[1:end.∉[dofBlank]]
     F = -Kff * utot
+    return ForceVector, 0.0, 0.0 # good
+    # TODO: PICKUP RIGHT HERE
     ForceVector_z[1:length(foilTotalStates).∉[dofBlank]] = F
     ForceVector = copy(ForceVector_z)
 
+    # return ForceVector, 0.0, 0.0 # bad
 
     if elemType == "bend-twist"
         My = ForceVector[NDOF:NDOF:end]
