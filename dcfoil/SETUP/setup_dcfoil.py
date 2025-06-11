@@ -127,7 +127,7 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         n_node = nNodes
 
     if args.foil == "amcfull":
-        appendageParams["abar"] = -0.0464 * 2.0 # she nondimensionalized by chord, not semichord
+        appendageParams["abar"] = -0.0464 * 2.0 * np.ones(nNodes) # she nondimensionalized by chord, not semichord
         print("Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper")
 
     return ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, npt_wing, npt_wing_full, n_node

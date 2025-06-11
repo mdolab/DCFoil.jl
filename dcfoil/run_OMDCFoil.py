@@ -130,7 +130,7 @@ otherDVs = {
         "lower": 0.09,
         "upper": 0.18,
         "scale": 1.0,
-        "value": 0.10 * np.ones(nNodes),
+        "value": 0.09 * np.ones(nNodes),
     },
     "theta_f": {
         "lower": np.deg2rad(-30),
@@ -282,7 +282,7 @@ class Top(Multipoint):
         # ************************************************
         for ptName in probList:
             # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
-            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=Fliftstars[ptName], upper=Fliftstars[ptName], scaler=1/Fliftstars[ptName])  # lift constraint [N]
+            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=Fliftstars[ptName], upper=Fliftstars[ptName]+10, scaler=1/Fliftstars[ptName])  # lift constraint [N]
 
             if args.task != "trim":
                 self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.9)  # tip defl con (5% of baseline semispan)
@@ -318,10 +318,10 @@ if __name__ == "__main__":
     #                         DCFoil setup
     # ==============================================================================
     case_name = f"OUTPUT/{date.today().strftime('%Y-%m-%d')}-{args.task}-p{args.pts}"
-    Path(case_name).mkdir(exist_ok=True, parents=True)
-
     if args.name is not None:
         case_name += "-" + args.name
+    Path(case_name).mkdir(exist_ok=True, parents=True)
+
     (
         ptVec,
         nodeConn,
@@ -366,14 +366,14 @@ if __name__ == "__main__":
             "alfa0": {
                 "lower": -10.0,
                 "upper": 10.0,
-                "scale": 1.0,  # the scale was messing with the DV bounds
+                "scale": 1.0/20.0,  # the scale was messing with the DV bounds
                 "value": appendageParams["alfa0"],
             },
             "toc": {
-                "lower": appendageParams["toc"],
-                "upper": appendageParams["toc"],
+                "lower": otherDVs["toc"]["value"][0],
+                "upper": otherDVs["toc"]["value"][0],
                 "scale": 1.0,
-                "value": appendageParams["toc"],
+                "value": otherDVs["toc"]["value"],
             },
             "theta_f": {
                 "lower": thetaStart,
@@ -448,7 +448,9 @@ if __name__ == "__main__":
         output_dir=case_name,
     )
     prob.driver.options["hist_file"] = "dcfoil.hst"
-    prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
+    prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
+    if args.flutter:
+        prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
 
     outputDir = case_name
     optOptions = setup_opt.setup(args, outputDir)
@@ -461,9 +463,9 @@ if __name__ == "__main__":
 
 
     # --- Recorder ---
-    recorderName = f"{Path(__file__).parent.resolve()}/dcfoil.sql" # weird bug that OUTPUT can't be written into, but whatever
+    recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/dcfoil.sql" # weird bug that OUTPUT can't be written into, but whatever
     if args.name is not None:
-        recorderName = f"{Path(__file__).parent.resolve()}/dcfoil-{args.name}.sql" # weird bug that OUTPUT can't be written into, but whatever
+        recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/dcfoil-{args.name}.sql" # weird bug that OUTPUT can't be written into, but whatever
     print("=" * 60)
     print(f"Saving recorder to {recorderName}", flush=True)
     print("=" * 60)
@@ -490,7 +492,7 @@ if __name__ == "__main__":
         prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
-    prob.set_val("toc", 0.12 * np.ones(nNodes))
+    prob.set_val("toc", 0.09 * np.ones(nNodes))
 
     # initialization needed for solvers
     displacementsCol = np.zeros((6, npt_wing_full))

@@ -63,6 +63,7 @@ parser.add_argument("--flutter", action="store_true", default=False, help="Run f
 parser.add_argument("--forced", action="store_true", default=False)
 parser.add_argument("--debug", action="store_true", default=False)
 parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
+parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
 args = parser.parse_args()
 # --- Echo the args ---
 print(30 * "-")
@@ -95,7 +96,7 @@ dragplotname = f"drag_hist.pdf"
 spanliftname = f"spanwise_properties"
 
 density = 1025.0
-semispan = 0.333
+semispan = 0.9
 nCol = 40  # number of collocation points in code
 
 spanScale = 0.4  # scale factor for the span because of OpenMDAO scaling
@@ -350,7 +351,16 @@ def plot_spanwise():
             except KeyError:
                 spanVal = 0.0
             TotalLift = dcfoil_case.outputs[f"{systemName}.Flift"]
+            ax = axes[0,ii]
+            ax.annotate(f"{TotalLift[0]:.0f} N",
+                xy=(0.5, 0.3 - 0.13 * icase),
+                xycoords="axes fraction",
+                color=cm[icase],
+                ha="left",
+                fontsize=fs_lgd,
+            )
             print("Total lift:", TotalLift)
+            print("Span value:", spanVal)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
 
             ax = axes[0, ii]
@@ -419,7 +429,7 @@ def plot_spanwise():
             if ii == 0:
                 ax.set_ylabel("Twist [deg]", rotation="horizontal", ha="right", va="center")
             ax.set_ylim(bottom=-3.0, top=8.0)
-            if icase == 1:
+            if icase == len(args.cases) - 1:
                 ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
             ax = axes[3, ii]
