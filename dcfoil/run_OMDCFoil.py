@@ -286,7 +286,7 @@ class Top(Multipoint):
 
             if args.task != "trim":
                 self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.9)  # tip defl con (5% of baseline semispan)
-                self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=0.0)  # ventilation constraint
+                self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=0.01)  # ventilation constraint loosened by cl 0.01 so p3 isn't a problem
 
             # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
             
@@ -463,9 +463,9 @@ if __name__ == "__main__":
 
 
     # --- Recorder ---
-    recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/dcfoil.sql" # weird bug that OUTPUT can't be written into, but whatever
+    recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil.sql" # weird bug that OUTPUT can't be written into, but whatever
     if args.name is not None:
-        recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/dcfoil-{args.name}.sql" # weird bug that OUTPUT can't be written into, but whatever
+        recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil-{args.name}.sql" # weird bug that OUTPUT can't be written into, but whatever
     print("=" * 60)
     print(f"Saving recorder to {recorderName}", flush=True)
     print("=" * 60)
@@ -538,12 +538,14 @@ if __name__ == "__main__":
                     scale = otherDVs[dv]["scale"]
                     prob.set_val(dv, val/scale)
                 except KeyError:
-                    breakpoint()
                     print(f"WARNING: {dv} not found in prob, skipping...")
             elif dv.startswith("alfa0_"):
-                print(f"Setting {dv} to {val} but scaled")
-                scale = otherDVs["alfa0"]["scale"]
-                prob.set_val(dv, val/scale)
+                try:
+                    print(f"Setting {dv} to {val} but scaled")
+                    scale = otherDVs["alfa0"]["scale"]
+                    prob.set_val(dv, val/scale)
+                except KeyError:
+                    print(f"WARNING: {dv} not found in prob, skipping...")
             else:
                 print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
 
