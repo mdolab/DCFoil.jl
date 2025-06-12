@@ -100,8 +100,8 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
 
     # Z(ω)
     DeflectionRAO = zeros(ComplexF64, length(fSweep), length(u) - length(DOFBlankingList))
-    # # H(ω)
-    # DeflectionMagRAO = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
+    # H(ω)
+    DeflectionFRF = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
 
     # --- Zygote buffers ---
     ũout_z = Zygote.Buffer(ũout)
@@ -127,95 +127,92 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
         maxK, nK, FlowCond.Uinf, b_ref, dim, FEMESH, LLSystem.sweepAng, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
 
-        # ************************************************
-        #     For every frequency, solve the system
     # ************************************************
-    tFreq = @elapsed begin
-        ChainRulesCore.ignore_derivatives() do
-            print_vibration_text(1, 1, 1, 0, 0, 0, 0; printHeader=true)
-        end
-        for (f_ctr, f) in enumerate(fSweep)
+    #     For every frequency, solve the system
+    # ************************************************
+    ChainRulesCore.ignore_derivatives() do
+        print_vibration_text(1, 1, 1, 0, 0, 0, 0; printHeader=true)
+    end
+    FSTOP = length(fSweep) - 10 # stop condition for the loop
+    for (f_ctr, f) in enumerate(fSweep)
 
-            ω = 2π * f # circular frequency
+        ω = 2π * f # circular frequency
 
-            # ---------------------------
-            #   Assemble hydro matrices
-            # ---------------------------
-            # # --- Interpolate AICs ---
-            k0 = ω * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # reduced frequency
-            globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
-            globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
-            
-            Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
-            Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
-            
-            # Cf = Cf_r + 1im * Cf_i
-            # Kf = Kf_r + 1im * Kf_i
-            
-            #  Dynamic matrix. also written as Λ_ij in na520 notes
-            # D = -1 * ω^2 * (Ms + Mf) +
-            #     1im * ω * (Cf + Cs) +
-            #     (Ks + Kf)
-            D_r = -1 * ω^2 * (Ms + Mf) + ω * (-Cf_i) + Ks + Kf_r
-            D_i = ω * (Cs + Cf_r) + Kf_i
-            
-            D = D_r + 1im * D_i
-            # diff = D - Ddiff # should be zero
-            # println(maximum(abs.(diff))) # should be zero
+        # ---------------------------
+        #   Assemble hydro matrices
+        # ---------------------------
+        # # --- Interpolate AICs ---
+        k0 = ω * b_ref / (FlowCond.Uinf * cos(LLSystem.sweepAng)) # reduced frequency
+        globalCf_r, globalCf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Cf_r_sweep, Cf_i_sweep, dim, "ng")
+        globalKf_r, globalKf_i = HydroStrip.interpolate_influenceCoeffs(k0, kSweep, Kf_r_sweep, Kf_i_sweep, dim, "ng")
 
-            # Rows are outputs "i" and columns are inputs "j"
-            # return real.(D[1:9,1:9]) # 
+        Kf_r, Cf_r, Mf = HydroStrip.apply_BCs(globalKf_r, globalCf_r, globalMf, DOFBlankingList)
+        Kf_i, Cf_i, _ = HydroStrip.apply_BCs(globalKf_i, globalCf_i, globalMf, DOFBlankingList)
 
-            # ---------------------------
-            #   Solve for dynamic states
-            # ---------------------------
-            fextω_r = real.(extForceVec[f_ctr, :])
-            fextω_i = imag.(extForceVec[f_ctr, :])
-            fextω = fextω_r + 1im * fextω_i # complex force vector
-            H = inv(D) # system transfer function matrix for a force
-            # H_r, H_i = cmplxInverse(D_r, D_i, dim - length(DOFBlankingList)) # system transfer function matrix for a force
-            # H = H_r + 1im * H_i # complex transfer function matrix
-            # qSol = real(H * extForceVec)
-            qSol = H * fextω[1:end.∉[DOFBlankingList]]
-            ũSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE)
-            # uSol = real(ũSol)
-            uSol = abs.(ũSol) # proper way to do it
-            
-            # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
-            ũout_z[f_ctr, :] = ũSol
-            
-            # ---------------------------
-            #   Get hydroloads at freq
-            # ---------------------------
-            fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
-            
-            # return Kf_r[1:9, 1:9] # GOOD HERE
+        # Cf = Cf_r + 1im * Cf_i
+        # Kf = Kf_r + 1im * Kf_i
+
+        #  Dynamic matrix. also written as Λ_ij in na520 notes
+        # D = -1 * ω^2 * (Ms + Mf) +
+        #     1im * ω * (Cf + Cs) +
+        #     (Ks + Kf)
+        D_r = -1 * ω^2 * (Ms + Mf) + ω * (-Cf_i) + Ks + Kf_r
+        D_i = ω * (Cs + Cf_r) + Kf_i
+
+        D = D_r + 1im * D_i
+        # diff = D - Ddiff # should be zero
+        # println(maximum(abs.(diff))) # should be zero
+
+
+        # ---------------------------
+        #   Solve for dynamic states
+        # ---------------------------
+        fextω_r = real.(extForceVec[f_ctr, :])
+        fextω_i = imag.(extForceVec[f_ctr, :])
+        fextω = fextω_r + 1im * fextω_i # complex force vector
+        H = inv(D) # system transfer function matrix for a force
+        # H_r, H_i = cmplxInverse(D_r, D_i, dim - length(DOFBlankingList)) # system transfer function matrix for a force
+        # H = H_r + 1im * H_i # complex transfer function matrix
+        # qSol = real(H * extForceVec)
+        qSol = H * fextω[1:end.∉[DOFBlankingList]]
+        ũSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE)
+        # uSol = real(ũSol)
+        uSol = abs.(ũSol) # proper way to do it
+
+        # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
+        ũout_z[f_ctr, :] = ũSol
+
+        # ---------------------------
+        #   Get hydroloads at freq
+        # ---------------------------
+        fullAIC = -1 * ω^2 * (globalMf) + im * ω * (globalCf_r + 1im * globalCf_i) + (globalKf_r + 1im * globalKf_i)
+
+        ChainRulesCore.ignore_derivatives() do # this makes it so you cannot compute derivatives of the lift or moment RAO
+
             fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, alfa0, rake, DOFBlankingList, CONSTANTS.downwashAngles, ELEMTYPE;
-                appendageOptions=appendageOptions, solverOptions=solverOptions)
-
+            appendageOptions=appendageOptions, solverOptions=solverOptions)
+            
             # --- Store total force and tip deflection values ---
-            # return Kf_r[1:9, 1:9] # bad
             LiftDyn_z[f_ctr] = L̃
             MomDyn_z[f_ctr] = M̃
 
-            GenXferFcn_z[f_ctr, :, :] = H
-
-            DeflectionRAO_z[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
-            # DeflectionMagRAO[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
-
-            # return Kf_r[1:9, 1:9] # bad
-            ChainRulesCore.ignore_derivatives() do
-                if f_ctr % 20 == 1 # header every 10 iterations
-                    print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
-                end
+            if f_ctr % 10 == 1 # header every 10 iterations
+                print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
             end
+        end
 
-            # # DEBUG QUIT ON FIRST FREQ
-            # break
-            f_ctr += 1
-            # return D # bad
-            # return Kf
-            # return Kf_r[1:9, 1:9] # broken here
+        GenXferFcn_z[f_ctr, :, :] = H
+
+        DeflectionRAO_z[f_ctr, :] = ũSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+        # DeflectionFRF[f_ctr, :] = uSol[1:end.∉[DOFBlankingList]] / Aw[f_ctr]
+
+
+        if f_ctr == FSTOP
+            ChainRulesCore.ignore_derivatives() do
+                println("Exiting after $(FSTOP) frequencies at f = $(f) Hz")
+            end
+            break
+            # I need to break the loop in order for derivatives to work properly
         end
     end
 
@@ -230,7 +227,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
     LiftRAO = LiftDyn ./ Aw
     MomRAO = MomDyn ./ Aw
 
-    SOL = ForcedVibSolution(fSweep, ũout, Aw, DeflectionRAO, LiftRAO, MomRAO, GenXferFcn)
+    SOL = ForcedVibSolution(fSweep[1:FSTOP], ũout[1:FSTOP, :], Aw[1:FSTOP], DeflectionRAO[1:FSTOP, :], LiftRAO[1:FSTOP], MomRAO[1:FSTOP], GenXferFcn[1:FSTOP, :, :])
 
     return SOL
 end
@@ -388,6 +385,7 @@ function compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, theta
 
     SOL = solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa0, 0.0, FOIL, CONSTANTS, FEMESH.idxTip, LLSystem, FlowCond, solverOptions)
 
+
     omegaSweep = SOL.fSweep * 2π # [rad/s] frequency sweep in ω_0 space (not encounter frequency)
     # omega_eSweep = compute_encounterFreq(solverOptions["headingAngle"], omegaSweep, FlowCond.Uinf) # compute the encounter frequency
     Hsig = solverOptions["Hsig"] # significant wave height [m]
@@ -401,9 +399,9 @@ function compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, theta
         error("$(waveSpectrum) wave spectrum not implemented")
     end
 
-    gvib_bend, gvib_twist = compute_PSDArea(SOL, SOL.fSweep, b_ref, Swave)
+    gvib_bend, gvib_twist = compute_PSDArea(SOL.Zdeflection, SOL.fSweep, b_ref, ChainRulesCore.ignore_derivatives(Swave))
 
-    ksbend, kstwist = compute_dynDeflectionPk(SOL, solverOptions)
+    ksbend, kstwist = compute_dynDeflectionPk(SOL.dynStructStates, solverOptions)
 
     # obj = [gvib_bend, gvib_twist, ksbend, kstwist]
     obj = [gvib_bend, ksbend, kstwist]

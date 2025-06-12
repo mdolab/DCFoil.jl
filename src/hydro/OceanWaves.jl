@@ -226,13 +226,14 @@ function compute_AWave(ωRange, ωe, waveamp)
     return ampDist
 end
 
-function compute_responseSpectralDensityFunc(Hω::Vector{<:Real}, waveEnergySpectrum::Vector{<:Real})
+function compute_responseSpectralDensityFunc(Zω::Vector{<:Complex}, waveEnergySpectrum::Vector{<:Real})
     """
     waveEnergySpectrum : [m^2 - s] wave energy spectrum
-    Hω : FRF magnitude of response amplitude operator
     """
 
-    S_R⁺ = Hω .^ 2 .* waveEnergySpectrum
+    HωSquared = real.(Zω).^2 .+ imag.(Zω).^2 # square of the frequency response function
+
+    S_R⁺ = HωSquared .* waveEnergySpectrum
 
     return S_R⁺
 end

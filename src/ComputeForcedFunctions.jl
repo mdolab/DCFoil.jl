@@ -7,7 +7,7 @@
 @Desc          :   Compute cost functions from the forced vibration response
 """
 
-function compute_PSDArea(VIBSOL, fSweep, meanChord, waveEnergySpectrum)
+function compute_PSDArea(Zω, fSweep, meanChord, waveEnergySpectrum)
     """
 
     Compute the area under the PSD curve nondimensionalized
@@ -16,7 +16,7 @@ function compute_PSDArea(VIBSOL, fSweep, meanChord, waveEnergySpectrum)
 
     Inputs
     ------
-    VIBSOL : 
+    Zω : 
         Vibration solution object containing the deflection transfer function
     fSweep :
 
@@ -27,19 +27,18 @@ function compute_PSDArea(VIBSOL, fSweep, meanChord, waveEnergySpectrum)
 
     ω_char = √(GRAV / (0.5 * meanChord)) # [Hz] characteristic frequency for nondimensionalization
 
-    Zω = VIBSOL.Zdeflection # complex transfer function
-    Hω = abs.(Zω)
+    # Hωsquare = real.(Zω).^2 .+ imag.(Zω).^2 # transfer function for the deflection response
 
-    Hωbend = Hω[:, WIND:NDOF:end] # bending shape
-    Hωtwist = Hω[:, ΘIND:NDOF:end] # twisting shape
+    Zωbend = Zω[:, WIND:NDOF:end] # bending shape
+    Zωtwist = Zω[:, ΘIND:NDOF:end] # twisting shape
 
     # sum over space
-    Hωsumbend = vec(sum(Hωbend, dims=2)) # bending shape
-    Hωsumtwist = vec(sum(Hωtwist, dims=2)) # twisting shape
+    Zωsumbend = vec(sum(Zωbend, dims=2)) # bending shape
+    Zωsumtwist = vec(sum(Zωtwist, dims=2)) # twisting shape
 
     # PSD : [m^2 - sec] Power Spectral Density of the deformations in response to the wave energy spectrum
-    PSDbend = compute_responseSpectralDensityFunc(Hωsumbend, waveEnergySpectrum)
-    PSDtwist = compute_responseSpectralDensityFunc(Hωsumtwist, waveEnergySpectrum)
+    PSDbend = compute_responseSpectralDensityFunc(Zωsumbend, waveEnergySpectrum)
+    PSDtwist = compute_responseSpectralDensityFunc(Zωsumtwist, waveEnergySpectrum)
 
     # p1 = plot(fSweep, PSDbend, label="Bending PSD")
     # p2 = plot(fSweep, PSDtwist, label="Twisting PSD")
@@ -54,14 +53,17 @@ function compute_PSDArea(VIBSOL, fSweep, meanChord, waveEnergySpectrum)
     return gvib_bend, gvib_twist
 end
 
-function compute_dynDeflectionPk(VIBSOL, solverOptions)
+function compute_dynDeflectionPk(dynStructStates, solverOptions)
     """
     Average the dynamic deflection amplitudes over the frequency sweep, then find the maximum of that
     Done for both bending and twisting shapes respectively
     """
 
-    dynBending = abs.(VIBSOL.dynStructStates[:, WIND:NDOF:end]) # bending shape
-    dynTwisting = abs.(VIBSOL.dynStructStates[:, ΘIND:NDOF:end]) # twisting shape
+    dynH = dynStructStates[:, WIND:NDOF:end]
+    dynTheta = dynStructStates[:, ΘIND:NDOF:end]
+
+    dynBending = real.(dynH) .^ 2 + imag(dynH) .^ 2 # bending shape squared
+    dynTwisting = real.(dynTheta) .^ 2 + imag.(dynTheta) .^ 2 # twisting shape squared
 
     ksbend = compute_KS(dynBending, solverOptions["rhoKS"])
     kstwist = compute_KS(dynTwisting, solverOptions["rhoKS"])

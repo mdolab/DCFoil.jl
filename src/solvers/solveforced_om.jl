@@ -69,7 +69,8 @@ function OpenMDAOCore.compute!(self::OMForced, inputs, outputs)
     appendageOptions = self.appendageOptions
     solverOptions = self.solverOptions
 
-    vibarea = SolveForced.compute_funcsFromDVsOM()
+    obj, VIBSOL = SolveForced.compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=true)
+    SolveForced.write_sol(VIBSOL, solverOptions["outputDir"])
 
     return nothing
 end

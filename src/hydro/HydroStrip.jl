@@ -1458,39 +1458,29 @@ function integrate_hydroLoads(
     foilTotalStates = return_totalStates(foilStructuralStates, DVDict, elemType;
         appendageOptions=appendageOptions, alphaCorrection=downwashAngles)
 
-    # return ForceVector, 0.0, 0.0 # Good here
     # --- Strip theory ---
     # This is the hydro force traction vector
     # The problem is the full AIC matrix build (RHS). These states look good
     # fhydro RHS = -Kf * states
-    ForceVector = zeros(typeof(fullAIC[1, 1]), length(foilTotalStates))
-    ForceVector_z = Zygote.Buffer(ForceVector)
-    ForceVector_z[:] = ForceVector
 
-    # return ForceVector, 0.0, 0.0 # good here
     # Only compute forces not at the blanked BC node
     Kff = fullAIC[1:end.∉[dofBlank], 1:end.∉[dofBlank]]
     utot = foilTotalStates[1:end.∉[dofBlank]]
     F = -Kff * utot
-    return ForceVector, 0.0, 0.0 # good
-    # TODO: PICKUP RIGHT HERE
-    ForceVector_z[1:length(foilTotalStates).∉[dofBlank]] = F
-    ForceVector = copy(ForceVector_z)
+    ForceVector, _ = FEMMethods.put_BC_back(F, elemType; appendageOptions=appendageOptions)
 
-    # return ForceVector, 0.0, 0.0 # bad
-
-    if elemType == "bend-twist"
-        My = ForceVector[NDOF:NDOF:end]
-    elseif elemType == "BT2"
-        My = ForceVector[3:NDOF:end]
-        Lift = ForceVector[1:NDOF:end]
-    elseif elemType == "COMP2"
-        My = ForceVector[3+YDIM:NDOF:end]
-        Fz = ForceVector[ZDIM:NDOF:end]
-        Fy = ForceVector[YDIM:NDOF:end]
-    else
-        error("Invalid element type")
-    end
+    # if elemType == "bend-twist"
+    #     My = ForceVector[NDOF:NDOF:end]
+    # elseif elemType == "BT2"
+    #     My = ForceVector[3:NDOF:end]
+    #     Lift = ForceVector[1:NDOF:end]
+    # elseif elemType == "COMP2"
+    My = ForceVector[ΘIND:NDOF:end]
+    Fz = ForceVector[WIND:NDOF:end]
+    # Fy = ForceVector[YDIM:NDOF:end]
+    # else
+    #     error("Invalid element type")
+    # end
 
     ChainRulesCore.ignore_derivatives() do
         if solverOptions["debug"]
@@ -1515,14 +1505,8 @@ function integrate_hydroLoads(
     end
 
     # --- Total dynamic hydro force calcs ---
-    CmplxTotalLift = 0.0
-    for secLift in Fz
-        CmplxTotalLift += secLift
-    end
-    CmplxTotalMoment = 0.0
-    for secMom in My
-        CmplxTotalMoment += secMom
-    end
+    CmplxTotalLift = sum(Fz) # This is the total lift
+    CmplxTotalMoment = sum(My) # This is the total moment
 
     return ForceVector, CmplxTotalLift, CmplxTotalMoment
 end
