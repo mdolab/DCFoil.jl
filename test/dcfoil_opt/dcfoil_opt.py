@@ -58,7 +58,7 @@ def compute_clvent(Fnh: float, Ufs):
     """
     PC = P_VAP  # cavity pressure
     sigmav = (P_ATM - PC) / (0.5 * RHO_F * Ufs**2)
-    clvent = (1 - np.exp(-sigmav * Fnh)) / np.sqrt(sigmav * Fnh)
+    clvent = (1 - np.exp(-sigmav * Fnh)) / np.sqrt(Fnh)
 
     return clvent
 
