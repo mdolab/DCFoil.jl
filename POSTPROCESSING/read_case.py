@@ -37,7 +37,7 @@ from helperFuncs import (
     postprocess_flutterevals,
     find_DivAndFlutterPoints,
 )
-from helperPlotFuncs import plot_dragbuildup, plot_dimdragbuildup, plot_vg_vf_rl, set_my_plot_settings, plot_dlf
+from helperPlotFuncs import plot_dragbuildup, plot_dimdragbuildup, plot_vg_vf_rl, set_my_plot_settings, plot_dlf, plot_forced
 import niceplots as nplt
 import openmdao.api as om
 
@@ -671,7 +671,7 @@ if __name__ == "__main__":
     # ************************************************
     #     Spanwise history too
     # ************************************************
-    if not args.flutter:
+    if not args.flutter and not args.forced:
         plot_spanwise()
 
     #     # ************************************************
@@ -682,22 +682,24 @@ if __name__ == "__main__":
     # ************************************************
     #     Compare drag buildup with base case
     # ************************************************
-    if not args.flutter:
+    if not args.flutter and not args.forced:
         plot_dragbuildupcomp()
 
+    # Input data read directory
+    caseDirs = []
+    if args.cases is not None:
+        for case in args.cases:
+            for ptName in probList:
+                caseDirs.append(dataDir + case + f"/{ptName}")
+    else:
+        raise ValueError("Please specify a case to run postprocessing on")
+    
     if args.flutter:
         # ************************************************
         #     Read in data
         # ************************************************
         print("Reading in flutter data...")
-        # Input data read directory
-        caseDirs = []
-        if args.cases is not None:
-            for case in args.cases:
-                for ptName in probList:
-                    caseDirs.append(dataDir + case + f"/{ptName}")
-        else:
-            raise ValueError("Please specify a case to run postprocessing on")
+        
 
         flutterSolDict = {}
         instabPtsDict = {}
@@ -834,4 +836,77 @@ if __name__ == "__main__":
         plt.close()
 
     if args.forced:
-        print("not ready yet")
+        print("Reading in forced vibration data")
+        for ii, caseDir in enumerate(caseDirs):
+            key = args.cases[ii]
+
+            # --- Read frequencies ---
+            fExtSweep = np.loadtxt(f"{caseDir}/forced/freqSweep.dat")
+
+            # --- Read tip bending ---
+            dynTipBending = np.asarray(load_jld(f"{caseDir}/forced/tipBendDyn.jld2")["data"]).T
+
+            # --- Read tip twisting ---
+            dynTipTwisting = np.rad2deg(np.asarray(load_jld(f"{caseDir}/forced/tipTwistDyn.jld2")["data"]).T)
+
+            # --- Read lift ---
+            dynLiftRAO = np.asarray(load_jld(f"{caseDir}/forced/totalLiftRAO.jld2")["data"]).T
+
+            # --- Read moment ---
+            dynMomentRAO = np.asarray(load_jld(f"{caseDir}/forced/totalMomentRAO.jld2")["data"]).T
+
+            # --- Read wave amp ---
+            waveAmpSpectrum = np.asarray(load_jld(f"{caseDir}/forced/waveAmpSpectrum.jld2")["data"]).T
+
+            # --- Read RAO (general xfer fcn for deflections) ---
+            rao = np.asarray(load_jld(f"{caseDir}/forced/GenXferFcn.jld2")["data"]).T
+            deflectionRAO = np.asarray(load_jld(f"{caseDir}/forced/deflectionRAO.jld2")["data"]).T
+
+            # ************************************************
+            #     Plot the frequency spectra
+            # ************************************************
+            fname = f"{outputDir}/forced-dynamics.pdf"
+
+            # Create figure object
+            nrows = 2
+            ncols = 4
+            figsize = (20 * ncols, 4 * nrows)
+            fig, axes = plt.subplots(
+                nrows=nrows,
+                ncols=ncols,
+                sharex="col",
+                constrained_layout=True,
+                figsize=figsize,
+            )
+
+            # fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
+            # flowSpeed = SolverOptions[key]["Uinf"]
+            # --- Plot ---
+            fig, axes = plot_forced(
+                fig,
+                axes,
+                fExtSweep,
+                waveAmpSpectrum,
+                deflectionRAO,
+                dynLiftRAO,
+                dynMomentRAO,
+                rao,
+                boatSpds[ptName],
+                fs_lgd,
+                cm,
+            )
+
+            fig.suptitle("Frequency response spectra")
+
+            for ax in axes.flatten():
+                ax.set_xlim(left=0.0)
+
+            for ax in axes[0, :].flatten():
+                ax.set_ylim(bottom=0.0)
+
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()

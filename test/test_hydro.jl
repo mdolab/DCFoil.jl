@@ -616,9 +616,15 @@ function test_hydrofoilWaveLoads()
     HwSk = abs.(fAeySk[:, 1])
     HwCk = abs.(fAeyCk[:, 1])
     HwQS = abs.(fAeyQS[:, 1])
-    SliftSk = compute_responseSpectralDensityFunc(HwSk, Swave_bs)
-    SliftCk = compute_responseSpectralDensityFunc(HwCk, Swave_bs)
-    SliftQS = compute_responseSpectralDensityFunc(HwQS, Swave_bs)
+    # SliftSk = compute_responseSpectralDensityFunc(HwSk, Swave_bs)
+    # SliftCk = compute_responseSpectralDensityFunc(HwCk, Swave_bs)
+    # SliftQS = compute_responseSpectralDensityFunc(HwQS, Swave_bs)
+    ZwSk = fAeySk[:, 1]
+    ZwCk = fAeyCk[:, 1]
+    ZwQS = fAeyQS[:, 1]
+    SliftSk = compute_responseSpectralDensityFunc(ZwSk, Swave_bs)
+    SliftCk = compute_responseSpectralDensityFunc(ZwCk, Swave_bs)
+    SliftQS = compute_responseSpectralDensityFunc(ZwQS, Swave_bs)
 
     percDiff = abs.(SliftCk - SliftSk) ./ (abs.(SliftSk) .+ 1)
     println("="^100)
