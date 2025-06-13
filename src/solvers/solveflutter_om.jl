@@ -71,12 +71,6 @@ end
 
 function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
 
-    # --- Deal with options here ---
-    nodeConn = self.nodeConn
-    appendageParams = self.appendageParams
-    appendageOptions = self.appendageOptions
-    solverOptions = self.solverOptions
-
     cla = inputs["cla"]
     ptVec = inputs["ptVec"]
     theta_f = inputs["theta_f"][1]
@@ -109,10 +103,6 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
 end
 
 function OpenMDAOCore.compute_partials!(self::OMFlutter, inputs, partials)
-
-    cla = inputs["cla"]
-    ptVec = inputs["ptVec"]
-    displacements_col = inputs["displacements_col"]
 
     # --- Deal with options here ---
     nodeConn = self.nodeConn

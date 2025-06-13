@@ -567,8 +567,8 @@ function compute_correlationMatrix(old_r, old_i, new_r, new_i)
     **Arguments
     Inputs
     ------
-        old_r, old_i - the real/imaginary part of the old eigenvectors from previous iteration. The size is (Mold, Mold)
-        new_r, new_i - the real/imaginary part of the new eigenvector from current iteration. The size is (Mnew, Mnew)
+        old_r, old_i - the real/imaginary part of the old eigenvectors from previous iteration. The size is (Mold, Nold)
+        new_r, new_i - the real/imaginary part of the new eigenvector from current iteration. The size is (Mnew, Nnew)
     Outputs
     -------
         C - The square correlation matrix. Values range from 0-1 where rows represent old eigenvectors and columns new eigenvectors.
@@ -1061,11 +1061,12 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                     is_failed = false
                     ChainRulesCore.ignore_derivatives() do
                         println("INFO - pkFlutterAnalysis : Mode disappeared")
+                        println("INFO - n old modes $(size(old_r)[2]), n corr $(nCorr)")
                     end
 
                     if nCorr == size(old_r)[2]
                         ChainRulesCore.ignore_derivatives() do
-                            println("INFO - pkFlutterAnalysis : Mode disappeared but all modes are correlated. Failing") # --- Copy buffers ---
+                            println("INFO - pkFlutterAnalysis : Mode disappeared but all modes are correlated. Failing")
                         end
                         error("Throwing a flutter error") # TODO: figure out if this is the same as JuliaError
                     end

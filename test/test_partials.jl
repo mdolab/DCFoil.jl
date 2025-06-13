@@ -17,6 +17,7 @@ end
 using .LiftingLine
 using .FEMMethods
 using .SolveFlutter
+using .SolveForced
 
 # ==============================================================================
 #                         Lifting line partials
@@ -457,4 +458,62 @@ function test_FlutterJacobians(appendageParams, appendageOptions, solverOptions,
 
 
     return maximum([err1, err2, err3, err4])
+end
+
+# ==============================================================================
+#                         Forced vibe partials
+# ==============================================================================
+function test_ForcedJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol)
+
+    # ************************************************
+    #     Setups
+    # ************************************************
+    appendageOptions["config"] = "wing"
+    LECoords = zeros(3, 5)
+    LECoords[1, :] .= -0.5
+    LECoords[2, :] .= 0.0:0.2:0.9
+    nodeConn = transpose([1 2; 2 3; 3 4; 4 5])
+    TECoords = copy(LECoords)
+    TECoords[1, :] .= 0.5
+    ptVec, m, n = FEMMethods.unpack_coords(LECoords, TECoords)
+    GridStruct = Grid(LECoords, nodeConn, TECoords)
+
+    nNodes = appendageOptions["nNodes"]
+    claVec = 2π * ones(nNodes)
+    solverOptions = FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageOptions)
+
+    # ************************************************
+    #     Evaluate Jacobians
+    # ************************************************
+
+    dIdxDV = SolveForced.evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, solverOptions; mode="RAD")
+    dIdxDV_fd = SolveForced.evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, solverOptions; mode="FiDi")
+
+    # --- One cost function ---
+    errors = []
+    for costFunc in ["vibareaw", "ksbend", "kstwist"]
+        dIdmesh = dIdxDV[costFunc]["mesh"]
+        dIdmesh_fd = dIdxDV_fd[costFunc]["mesh"]
+    
+        dIdcla = dIdxDV[costFunc]["params"]["cla"]
+        dIdcla_fd = dIdxDV_fd[costFunc]["params"]["cla"]
+    
+        dIdtheta_f = dIdxDV[costFunc]["params"]["theta_f"]
+        dIdtheta_f_fd = dIdxDV_fd[costFunc]["params"]["theta_f"]
+    
+        dIdtoc = dIdxDV[costFunc]["params"]["toc"]
+        dIdtoc_fd = dIdxDV_fd[costFunc]["params"]["toc"]
+    
+        err1 = maximum(abs.(dIdmesh_fd .- dIdmesh))
+        err2 = maximum(abs.(dIdcla_fd .- dIdcla))
+        err3 = maximum(abs.(dIdtheta_f_fd .- dIdtheta_f))
+        err4 = maximum(abs.(dIdtoc_fd .- dIdtoc))
+        println("Maximum absolute errors:\n$(err1), $(err2), $(err3), $(err4)")
+
+        errmax = maximum([err1, err2, err3, err4])
+        push!(errors, errmax)
+    end
+
+
+    return maximum(errors)
 end

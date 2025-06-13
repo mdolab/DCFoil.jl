@@ -224,6 +224,9 @@ include("test_partials.jl")
     @test test_LLcostFuncJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-10
     @test test_LLresidualJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-10
 
+    # --- Forced derivative test ---
+    @test test_ForcedJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-4
+
     # --- Flutter derivative test ---
     @test test_FlutterJacobians(appendageParams, appendageOptions, solverOptions, displacementsCol) <= 1e-4
 
