@@ -57,6 +57,7 @@ parser.add_argument(
     "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
 )
 parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+parser.add_argument("--noVent", action="store_true", default=False, help="Turn off ventilation constraints")
 parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
 parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
 parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
@@ -286,7 +287,11 @@ class Top(Multipoint):
 
             if args.task != "trim":
                 self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.9)  # tip defl con (5% of baseline semispan)
-                self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=0.01)  # ventilation constraint loosened by cl 0.01 so p3 isn't a problem
+                if args.noVent:
+                    upperVent = 0.2
+                else:
+                    upperVent = 0.02
+                self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=upperVent)  # ventilation constraint loosened by cl 0.02 so p3 isn't a problem
 
             # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
             

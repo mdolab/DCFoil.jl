@@ -146,8 +146,10 @@ include("test_partials.jl")
         "alfa0" => 6.0, # initial angle of attack [deg] (angle of flow vector)
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
+        "abar" => 0.0 * ones(nNodes), # dist from midchord to EA [-]
         "toc" => 0.06 * ones(nNodes), # thickness-to-chord ratio (max t/c if using airfoil correction) #FLAGSTAFF
         "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
+        "x_a" => 0.0 * ones(nNodes), # static imbalance [-]
         "theta_f" => deg2rad(0), # fiber angle global [rad]
         # --- Strut vars ---
         "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
@@ -210,6 +212,11 @@ include("test_partials.jl")
         # "df" => 0.05, # frequency step size
         "df" => 0.005, # frequency step size
         "tipForceMag" => 1.0,
+        # --- Great lakes ---
+        "waveSpectrum" => "ISSC",
+        "Hsig" => 1.5,  # significant wave height [m]
+        "omegaz" => 2π / 3.0,  # zero-crossing frequency [rad/s] 
+        "headingAngle" => deg2rad(180.0), # heading angle of the waves [rad]
         # --- p-k (Eigen) solve ---
         "run_modal" => true,
         "run_flutter" => true,
@@ -240,8 +247,10 @@ include("test_partials.jl")
         "alfa0" => 6.0, # initial angle of attack [deg] (angle of flow vector)
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "ab" => 0.0 * ones(nNodes), # dist from midchord to EA [m]
+        "abar" => 0.0 * ones(nNodes), # dist from midchord to EA [-]
         "toc" => 0.06 * ones(nNodes), # thickness-to-chord ratio (max t/c if using airfoil correction) #FLAGSTAFF
         "x_ab" => 0.0 * ones(nNodes), # static imbalance [m]
+        "x_a" => 0.0 * ones(nNodes), # static imbalance [-]
         "theta_f" => deg2rad(0), # fiber angle global [rad]
         # --- Strut vars ---
         "depth0" => 0.4, # submerged depth of strut [m] # from Yingqian
@@ -300,7 +309,7 @@ include("test_partials.jl")
         "res_jacobian" => "analytic",
         # --- Forced solve ---
         "run_forced" => true,
-        "fRange" => [0.01, 2.0], # forcing frequency sweep [Hz]
+        "fRange" => [0.01, 1.0], # forcing frequency sweep [Hz]
         # "df" => 0.05, # frequency step size
         "df" => 0.005, # frequency step size
         "tipForceMag" => 1.0,

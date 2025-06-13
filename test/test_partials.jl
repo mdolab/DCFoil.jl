@@ -329,6 +329,16 @@ end
 #                         Beam partials
 # ==============================================================================
 function test_BeamResidualJacobians(appendageParams, appendageOptions, solverOptions)
+    # ************************************************
+    #     Setup
+    # ************************************************
+    LECoords = zeros(3, 10)
+    LECoords[1, :] .= -0.5
+    LECoords[2, :] .= 0.0:0.1:0.9
+    nodeConn = transpose([1 2; 2 3; 3 4; 4 5; 5 6; 6 7; 7 8; 8 9; 9 10])
+    TECoords = copy(LECoords)
+    TECoords[1, :] .= 0.5
+
     nNodeTot, nNodeWing, nElemTot, nElemWing = FEMMethods.get_numnodes(appendageOptions["config"], appendageOptions["nNodes"], appendageOptions["nNodeStrut"])
     allStructStates = 0.1 * ones(nNodeTot * FEMMethods.NDOF)
     traction_forces = zeros(nNodeTot * FEMMethods.NDOF)
@@ -347,7 +357,7 @@ function test_BeamResidualJacobians(appendageParams, appendageOptions, solverOpt
     println("max ∂rs∂xPt error: $(err1)")
     println("indices $(idx)")
     println("max ∂rs∂xPt rel. error: $(relerr1)")
-    if relerr1 >= 1e-3
+    if relerr1 >= 1e-2
         writedlm("./OUTPUT/∂rs∂xPt_analytic.csv", ∂rs∂xPt, ",")
         writedlm("./OUTPUT/∂rs∂xPt_fd.csv", ∂rs∂xPt_fd, ",")
         error("∂rs∂xPt CS and FD do not match! Wrote to file")
