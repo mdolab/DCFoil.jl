@@ -226,7 +226,7 @@ function compute_AWave(ωRange, ωe, waveamp)
     return ampDist
 end
 
-function compute_responseSpectralDensityFunc(Zω::Vector{<:Complex}, waveEnergySpectrum::Vector{<:Real})
+function compute_responseSpectralDensityFunc(Zω::AbstractVector{<:Complex}, waveEnergySpectrum::Vector{<:Real})
     """
     waveEnergySpectrum : [m^2 - s] wave energy spectrum
     """

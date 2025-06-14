@@ -25,32 +25,42 @@ function compute_PSDArea(Zω, fSweep, meanChord, waveEnergySpectrum)
 
     df = fSweep[2] - fSweep[1] # [Hz] frequency increments
 
-    ω_char = √(GRAV / (0.5 * meanChord)) # [Hz] characteristic frequency for nondimensionalization
+    f_char = √(GRAV / (0.5 * meanChord)) # [Hz] characteristic frequency for nondimensionalization
 
     # Hωsquare = real.(Zω).^2 .+ imag.(Zω).^2 # transfer function for the deflection response
 
     Zωbend = Zω[:, WIND:NDOF:end] # bending shape
     Zωtwist = Zω[:, ΘIND:NDOF:end] # twisting shape
 
-    # sum over space
-    Zωsumbend = vec(sum(Zωbend, dims=2)) # bending shape
-    Zωsumtwist = vec(sum(Zωtwist, dims=2)) # twisting shape
+    gvib_bend = 0.0 # bending vibration func
+    gvib_twist = 0.0 # twisting vibration func
+    for (ii, Zωbendi) in enumerate(eachcol(Zωbend)) # loop over space
 
-    # PSD : [m^2 - sec] Power Spectral Density of the deformations in response to the wave energy spectrum
-    PSDbend = compute_responseSpectralDensityFunc(Zωsumbend, waveEnergySpectrum)
-    PSDtwist = compute_responseSpectralDensityFunc(Zωsumtwist, waveEnergySpectrum)
+        # PSD : [m^2 - sec] Power Spectral Density of the deformations in response to the wave energy spectrum
+        PSDbendi = compute_responseSpectralDensityFunc(vec(Zωbendi), waveEnergySpectrum)
+        PSDtwisti = compute_responseSpectralDensityFunc(Zωtwist[:, ii], waveEnergySpectrum)
 
-    # p1 = plot(fSweep, PSDbend, label="Bending PSD")
-    # p2 = plot(fSweep, PSDtwist, label="Twisting PSD")
-    # p3 = plot(fSweep, waveEnergySpectrum, label="Wave Energy Spectrum", xlabel="Frequency [Hz]", ylabel="Power Spectral Density [m^2 - sec]")
-    # p4 = plot(fSweep, Hωsumbend, label="Bending Transfer Function", xlabel="Frequency [Hz]", ylabel="Transfer Function Magnitude")
-    # plot(p1, p2, p3, p4, layout=(2, 2), xlabel="Frequency [Hz]")
-    # savefig("PSDbend_twist.png")
+        # m0 = sum(PSDbendi * df) # zeroth spectral moment
+        # println("m0: $m0")
+        # m1 = sum(PSDbendi .* fSweep * df) # first spectral moment
+        # println("m1: $m1")
 
-    gvib_bend = (2π)^2 * sum(PSDbend .* fSweep .* df) / (meanChord^2 * ω_char)
-    gvib_twist = (2π)^2 * sum(PSDtwist .* fSweep .* df) / (ω_char)
+        gvib_bend += sum(PSDbendi .* fSweep * df) / ((0.5 * meanChord)^2 * f_char)
+        gvib_twist += sum(PSDtwisti .* fSweep * df) / (f_char)
+    end
+    # Zωsumbend = vec(sum(Zωbend, dims=2)) # bending shape
+    # Zωsumtwist = vec(sum(Zωtwist, dims=2)) # twisting shape
 
-    return gvib_bend, gvib_twist
+    # # PSD : [m^2 - sec] Power Spectral Density of the deformations in response to the wave energy spectrum
+    # PSDbend = compute_responseSpectralDensityFunc(Zωsumbend, waveEnergySpectrum)
+    # PSDtwist = compute_responseSpectralDensityFunc(Zωsumtwist, waveEnergySpectrum)
+
+    # gvib_bend = sum(PSDbend .* fSweep * df) / (meanChord^2 * f_char)
+    # gvib_twist = sum(PSDtwist .* fSweep * df) / (f_char)
+
+    scaler = 1e9
+
+    return gvib_bend * scaler, gvib_twist * scaler
 end
 
 function compute_dynDeflectionPk(dynStructStates, solverOptions)
@@ -65,8 +75,26 @@ function compute_dynDeflectionPk(dynStructStates, solverOptions)
     dynBending = real.(dynH) .^ 2 + imag(dynH) .^ 2 # bending shape squared
     dynTwisting = real.(dynTheta) .^ 2 + imag.(dynTheta) .^ 2 # twisting shape squared
 
-    ksbend = compute_KS(dynBending, solverOptions["rhoKS"])
-    kstwist = compute_KS(dynTwisting, solverOptions["rhoKS"])
+    ksTmpBend = zeros(size(dynBending, 1))
+    ksTmpBend_z = Zygote.Buffer(ksTmpBend)
+    ksTmpTwist = zeros(size(dynBending, 1))
+    ksTmpTwist_z = Zygote.Buffer(ksTmpTwist)
+
+    for (ifreq, dynBω) in enumerate(eachrow(dynBending)) # loop over frequencies
+
+        ksbend = compute_KS(dynBω, solverOptions["rhoKS"])
+        kstwist = compute_KS(dynTwisting[ifreq, :], solverOptions["rhoKS"])
+        # Find the maximum of that
+        ksTmpBend_z[ifreq] = ksbend
+        ksTmpTwist_z[ifreq] = kstwist
+
+    end
+
+    ksTmpBend = copy(ksTmpBend_z)
+    ksTmpTwist = copy(ksTmpTwist_z)
+
+    ksbend = compute_KS(ksTmpBend, solverOptions["rhoKS"])
+    kstwist = compute_KS(ksTmpTwist, solverOptions["rhoKS"])
 
     return ksbend, kstwist
 end

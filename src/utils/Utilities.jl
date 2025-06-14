@@ -266,7 +266,7 @@ function generate_naca4dig(toc)
     return foil_coords
 end
 
-function compute_KS(g, ρKS)
+function compute_KS(g::AbstractVector, ρKS)
     """
     Compute the KS function
 
