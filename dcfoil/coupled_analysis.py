@@ -36,6 +36,7 @@ class CoupledAnalysis(om.Group):
         # define all options and defaults
         self.options.declare("analysis_mode", values=["struct", "flow", "coupled"], desc="Analysis mode")
         self.options.declare("include_flutter", default=True, desc="Include flutter analysis")
+        self.options.declare("include_forced", default=True, desc="Include forced vibration analysis")
         self.options.declare("ptVec_init", types=np.ndarray, desc="Initial value of the point vector")
         self.options.declare("npt_wing", default=0, desc="Number of flow collocation points for full or half wing")
         self.options.declare("n_node", default=0, desc="Number of FEM nodes for full or half wing")
@@ -44,7 +45,9 @@ class CoupledAnalysis(om.Group):
         self.options.declare("appendageParams", types=dict, desc="Appendage parameters")
         self.options.declare("nodeConn", types=np.ndarray, desc="Node connectivity")
         self.options.declare("solverOptions", types=dict, desc="Solver options")
-        self.options.declare("flowOptions", types=dict, desc="Flow options") # had to hack this to give point specific options
+        self.options.declare(
+            "flowOptions", types=dict, desc="Flow options"
+        )  # had to hack this to give point specific options
 
     def setup(self):
         npt_wing = self.options["npt_wing"]
@@ -71,10 +74,14 @@ class CoupledAnalysis(om.Group):
             jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
         impcomp_LL_solver = JuliaImplicitComp(
-            jlcomp=jl.OMLiftingLine(nodeConn, appendageParams, appendageOptions, solverOptions, flowOptions["Uinf"], flowOptions["depth0"])
+            jlcomp=jl.OMLiftingLine(
+                nodeConn, appendageParams, appendageOptions, solverOptions, flowOptions["Uinf"], flowOptions["depth0"]
+            )
         )
         expcomp_LL_func = JuliaExplicitComp(
-            jlcomp=jl.OMLiftingLineFuncs(nodeConn, appendageParams, appendageOptions, solverOptions, flowOptions["Uinf"], flowOptions["depth0"])
+            jlcomp=jl.OMLiftingLineFuncs(
+                nodeConn, appendageParams, appendageOptions, solverOptions, flowOptions["Uinf"], flowOptions["depth0"]
+            )
         )
         # --- Make it so AoA is set for flutter solver ---
         appendageParamsCopy = appendageParams.copy()
@@ -82,7 +89,7 @@ class CoupledAnalysis(om.Group):
         expcomp_flutter = JuliaExplicitComp(
             jlcomp=jl.OMFlutter(nodeConn, appendageParamsCopy, appendageOptions, solverOptions)
         )
-        
+
         expcomp_forced = JuliaExplicitComp(
             jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptions)
         )
@@ -226,7 +233,8 @@ class CoupledAnalysis(om.Group):
             # --- Dynamic solvers ---
             if self.options["include_flutter"]:
                 self.add_subsystem("flutter_funcs", expcomp_flutter, promotes_inputs=["*"], promotes_outputs=["*"])
-                # model.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
+            if self.options["include_forced"]:
+                self.add_subsystem("forced_funcs", expcomp_forced, promotes_inputs=["*"], promotes_outputs=["*"])
 
         else:
             raise ValueError("Invalid analysis mode. Choose 'struct', 'flow', or 'coupled'.")
