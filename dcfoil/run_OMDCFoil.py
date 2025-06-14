@@ -59,6 +59,7 @@ parser.add_argument(
 parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
 parser.add_argument("--noVent", action="store_true", default=False, help="Turn off ventilation constraints")
 parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
+parser.add_argument("--forced", action="store_true", default=False, help="Run forced vibration analysis")
 parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
 parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
 parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
@@ -92,13 +93,13 @@ dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
         "upper": 15.0,
-        "scale": 1.0/30,
+        "scale": 1.0 / 30,
         "value": np.zeros(8 // 2),
     },
     "sweep": {
         "lower": 0.0,
         "upper": 30.0,
-        "scale": 1/30.0,
+        "scale": 1 / 30.0,
         "value": 0.0,
     },
     # "dihedral": { # THIS DOES NOT WORK
@@ -116,7 +117,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "span": {
         "lower": -0.2,
         "upper": 0.2,
-        "scale": 1/(0.4),
+        "scale": 1 / (0.4),
         "value": 0.0,
     },
 }
@@ -124,7 +125,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0/(20),  # the scale was messing with the DV bounds
+        "scale": 1.0 / 30,
         "value": 4.0,
     },
     "toc": {
@@ -136,10 +137,11 @@ otherDVs = {
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
-        "scale": 1.0/(np.deg2rad(60)),
+        "scale": 1.0 / (np.deg2rad(60)),
         "value": 0.0,
     },
 }
+
 
 # ==============================================================================
 #                         Helper functions
@@ -150,7 +152,6 @@ class Top(Multipoint):
     """
 
     def setup(self):
-
         # ************************************************
         #     Add subsystems
         # ************************************************
@@ -168,7 +169,7 @@ class Top(Multipoint):
             print(f"Adding point {ptName} to the problem", flush=True)
 
             run_flutter = args.flutter and ptName == "p3"  # only run flutter for p3
-            
+
             Uinf = boatSpds[ptName]
             depth = opdepths[ptName]
             solverOptions["Uinf"] = Uinf
@@ -182,10 +183,10 @@ class Top(Multipoint):
                 "alfa0_flutter": alfa0,  # angle of attack for flutter analysis [deg]
             }
 
-
             physModel = CoupledAnalysis(
                 analysis_mode="coupled",
                 include_flutter=run_flutter,
+                include_forced=args.forced,
                 ptVec_init=np.array(ptVec),
                 npt_wing=npt_wing,
                 n_node=n_node,
@@ -197,7 +198,6 @@ class Top(Multipoint):
             )
             self.add_subsystem(f"dcfoil_{ptName}", physModel)
 
-
         self.mesh.add_output("x_ptVec0", val=ptVec, distributed=True)
 
         # --- Some post processing manipulation of cost functions ---
@@ -206,7 +206,7 @@ class Top(Multipoint):
         dragCompsPt = ["Di", "Dpr", "Dw"]
         cdComps = []
         dragComps = []
-        for ptName in probList: # loop through all the points so all drags are added
+        for ptName in probList:  # loop through all the points so all drags are added
             for cd in cdCompsPt:
                 cdComps.append(f"{cd}_{ptName}")
             for drag in dragCompsPt:
@@ -221,7 +221,9 @@ class Top(Multipoint):
         self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")  # connect the mesh to the geometry parametrization
 
         for ptName in probList:
-            self.connect("geometry.x_ptVec0", f"dcfoil_{ptName}.ptVec")  # connect the geometry to the core physics engine
+            self.connect(
+                "geometry.x_ptVec0", f"dcfoil_{ptName}.ptVec"
+            )  # connect the geometry to the core physics engine
 
             # Connect nongeometry design variables to the core physics engine
             for dvName, value in otherDVs.items():
@@ -254,7 +256,9 @@ class Top(Multipoint):
             if dvName == "alfa0":
                 for ptName in probList:
                     self.dvs.add_output(f"{dvName}_{ptName}", val=value["value"])
-                    self.add_design_var(f"{dvName}_{ptName}", lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+                    self.add_design_var(
+                        f"{dvName}_{ptName}", lower=value["lower"], upper=value["upper"], scaler=value["scale"]
+                    )
             else:
                 self.dvs.add_output(dvName, val=value["value"])
                 self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
@@ -276,14 +280,19 @@ class Top(Multipoint):
         #     Objectives
         # ************************************************
         # self.add_objective("CD")
-        self.add_objective("Dtot")
+        self.add_objective("Dtot", scaler=1e-5)  # total drag objective [N] scaled to 1e5 for optimization
 
         # ************************************************
         #     Constraints
         # ************************************************
         for ptName in probList:
             # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
-            self.add_constraint(f"dcfoil_{ptName}.Flift", lower=Fliftstars[ptName], upper=Fliftstars[ptName]+10, scaler=1/Fliftstars[ptName])  # lift constraint [N]
+            self.add_constraint(
+                f"dcfoil_{ptName}.Flift",
+                lower=Fliftstars[ptName] - 10,
+                upper=Fliftstars[ptName] + 10,
+                scaler=1e-5,
+            )  # lift constraint [N]
 
             if args.task != "trim":
                 self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.9)  # tip defl con (5% of baseline semispan)
@@ -291,12 +300,18 @@ class Top(Multipoint):
                     upperVent = 0.2
                 else:
                     upperVent = 0.02
-                self.add_constraint(f"dcfoil_{ptName}.ksvent", upper=upperVent)  # ventilation constraint loosened by cl 0.02 so p3 isn't a problem
+                self.add_constraint(
+                    f"dcfoil_{ptName}.ksvent", upper=upperVent
+                )  # ventilation constraint loosened by cl 0.02 so p3 isn't a problem
 
             # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
-            
+
             if args.flutter and ptName == "p3":
                 self.add_constraint(f"dcfoil_{ptName}.ksflutter", upper=0.0)  # flutter constraint only for p3
+            if args.forced:
+                INITVAL = vibareaw[ptName]
+                self.add_constraint(f"dcfoil_{ptName}.vibareaw", upper=0.9 * INITVAL)  # forced vibration constraint
+
 
 def print_drags():
     for ptName in probList:
@@ -310,6 +325,12 @@ def print_drags():
         print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
         print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
 
+
+vibareaw = {
+    "p1": 1e-2,
+    "p2": 1e-2,
+    "p3": 1e-2,
+}
 # ==============================================================================
 #                         MAIN DRIVER
 # ==============================================================================
@@ -371,7 +392,7 @@ if __name__ == "__main__":
             "alfa0": {
                 "lower": -10.0,
                 "upper": 10.0,
-                "scale": 1.0/20.0,  # the scale was messing with the DV bounds
+                "scale": 1.0 / 20.0,  # the scale was messing with the DV bounds
                 "value": appendageParams["alfa0"],
             },
             "toc": {
@@ -454,7 +475,7 @@ if __name__ == "__main__":
     )
     prob.driver.options["hist_file"] = "dcfoil.hst"
     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
-    if args.flutter:
+    if args.flutter or args.forced:
         prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
 
     outputDir = case_name
@@ -462,15 +483,13 @@ if __name__ == "__main__":
     for key, val in optOptions.items():
         prob.driver.opt_settings[key] = val
 
-
     prob.setup()
     print("Problem setup complete!", flush=True)
 
-
     # --- Recorder ---
-    recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil.sql" # weird bug that OUTPUT can't be written into, but whatever
+    recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil.sql"  # weird bug that OUTPUT can't be written into, but whatever
     if args.name is not None:
-        recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil-{args.name}.sql" # weird bug that OUTPUT can't be written into, but whatever
+        recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil-{args.name}.sql"  # weird bug that OUTPUT can't be written into, but whatever
     print("=" * 60)
     print(f"Saving recorder to {recorderName}", flush=True)
     print("=" * 60)
@@ -480,10 +499,9 @@ if __name__ == "__main__":
     model = prob.model
     model.geometry.add_recorder(recorder)  # attach recorder to the geometry subsystem
 
-
     # attach recorder to the subsystem of interest
     if "p1" in probList:
-        model.dcfoil_p1.add_recorder(recorder)  
+        model.dcfoil_p1.add_recorder(recorder)
     if "p2" in probList:
         model.dcfoil_p2.add_recorder(recorder)
     if "p3" in probList:
@@ -536,19 +554,19 @@ if __name__ == "__main__":
             if dv in dvDictInfo:
                 print(f"Setting {dv} to {val} but scaled")
                 scale = dvDictInfo[dv]["scale"]
-                prob.set_val(dv, val/scale)
+                prob.set_val(dv, val / scale)
             elif dv in otherDVs:
                 try:
                     print(f"Setting {dv} to {val} but scaled")
                     scale = otherDVs[dv]["scale"]
-                    prob.set_val(dv, val/scale)
+                    prob.set_val(dv, val / scale)
                 except KeyError:
                     print(f"WARNING: {dv} not found in prob, skipping...")
             elif dv.startswith("alfa0_"):
                 try:
                     print(f"Setting {dv} to {val} but scaled")
                     scale = otherDVs["alfa0"]["scale"]
-                    prob.set_val(dv, val/scale)
+                    prob.set_val(dv, val / scale)
                 except KeyError:
                     print(f"WARNING: {dv} not found in prob, skipping...")
             else:

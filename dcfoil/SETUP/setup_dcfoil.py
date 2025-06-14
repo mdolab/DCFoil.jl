@@ -90,7 +90,7 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
     appendageParams = {
         "alfa0": 6.0,  # initial angle of attack [deg]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
-        "toc": 0.12 * np.ones(nNodes),  # thickness-to-chord ratio
+        "toc": 0.09 * np.ones(nNodes),  # thickness-to-chord ratio
         "abar": 0 * np.ones(nNodes),  # nondim dist from midchord to EA
         "x_a": 0 * np.ones(nNodes),  # nondim static imbalance
         "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]

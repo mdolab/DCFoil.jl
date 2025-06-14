@@ -74,7 +74,7 @@ def setup(args, model, comm, files: dict):
             C_orig = C.copy()
             # we will sweep the wing about the first point in the ref axis
             # sweep_ref_pt = C_orig[0, :]
-            sweep_ref_pt = C_orig[nSweep+nSkip, :]
+            sweep_ref_pt = C_orig[nSweep + nSkip, :]
 
             theta = -val[0] * np.pi / 180
             cc = np.cos(theta)
@@ -122,7 +122,7 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     #   DIHEDRAL
     # ---------------------------
-    if "d" in args.geovar: #not tested
+    if "d" in args.geovar:  # not tested
         nDihedral = nRefAxPts
         dihedralAxis = "global"
 
@@ -164,7 +164,6 @@ def setup(args, model, comm, files: dict):
     #   CHORD
     # ---------------------------
     if "r" in args.geovar:
-
         nSkip = 4 + 2
 
         nTaper = nRefAxPts // 2 + 1
