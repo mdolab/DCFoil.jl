@@ -71,6 +71,12 @@ end
 
 function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
 
+    # --- Deal with options here ---
+    nodeConn = self.nodeConn
+    appendageParams = self.appendageParams
+    appendageOptions = self.appendageOptions
+    solverOptions = self.solverOptions
+
     cla = inputs["cla"]
     ptVec = inputs["ptVec"]
     theta_f = inputs["theta_f"][1]
@@ -86,11 +92,6 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
     appendageParams["toc"] = toc
 
 
-    # --- Deal with options here ---
-    nodeConn = self.nodeConn
-    appendageParams = self.appendageParams
-    appendageOptions = self.appendageOptions
-    solverOptions = self.solverOptions
 
     obj, FLUTTERSOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, cla, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=true)
 
