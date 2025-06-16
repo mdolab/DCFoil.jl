@@ -76,6 +76,9 @@ def setup(args, model, comm, files: dict):
             # sweep_ref_pt = C_orig[0, :]
             sweep_ref_pt = C_orig[nSweep + nSkip, :]
 
+            sweep_ref_pt_port = C_orig[nSweep + nSkip-nSkip, :]
+            sweep_ref_pt_stbd = C_orig[nSweep + nSkip+nSkip, :]
+
             theta = -val[0] * np.pi / 180
             cc = np.cos(theta)
             ss = np.sin(theta)
@@ -104,11 +107,20 @@ def setup(args, model, comm, files: dict):
                 # vec = C[ii + nSweep + 1, :] - sweep_ref_pt
                 # # need to now rotate this by the sweep angle and add back the wing root loc
                 # C[ii + nSweep + 1, :] = sweep_ref_pt + rot_mtx @ vec
-                vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt
-                C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt + rot_mtx @ vec
 
-                vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt
-                C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt + rot_mtxnew @ vec
+                # # --- Rotate about wing root ---
+                # vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt
+                # C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt + rot_mtx @ vec
+
+                # vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt
+                # C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt + rot_mtxnew @ vec
+
+                # --- Alternative sweep about offset root (much better) ---
+                vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt_port
+                C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt_port + rot_mtx @ vec
+
+                vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt_stbd
+                C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt_stbd + rot_mtxnew @ vec
 
             # use the restoreCoef method to put the control points back in the right place
             geo.restoreCoef(C, sweepAxis)
