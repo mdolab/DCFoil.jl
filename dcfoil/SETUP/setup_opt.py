@@ -13,7 +13,8 @@ def setup(args, outputDir: str):
             "Major optimality tolerance": 1e-4,
             "Difference interval": 1e-4,
             "Hessian full memory": None,
-            "Hessian frequency": 50,  # reset approximate Hessian more often (10-30) for nonlinear problems like hydrostructural allegedly
+            # "Hessian frequency": 50,  # reset approximate Hessian more often (10-30) for nonlinear problems like hydrostructural allegedly
+            "Hessian frequency": 100,  # reset approximate Hessian more often (10-30) for nonlinear problems (TRY THIS)
             "Function precision": 1e-8,
             # "Verify level": 3,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
             "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
@@ -29,6 +30,7 @@ def setup(args, outputDir: str):
     if args.task == "opt":
         optOptions["Major Step Limit"] = 5e-2
         # optOptions["Major Step Limit"] = 5e-3 # maybe this was too small
+        optOptions["Backoff factor"] = 0.05
         # optOptions["Linesearch tolerance"] = 0.9,  # all gradients are known so we can do less accurate LS
         optOptions[
             "Penalty parameter"

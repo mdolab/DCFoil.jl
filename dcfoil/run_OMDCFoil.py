@@ -53,9 +53,8 @@ parser.add_argument(
 )
 parser.add_argument("--name", type=str, default=None, help="Name of the problem to append to .sql recorder")
 parser.add_argument("--optimizer", type=str, default="SNOPT", help="What type of optimizer?")
-parser.add_argument(
-    "--restart", type=str, default=None, help="Restart from a previous case's DVs (without .sql extension)"
-)
+parser.add_argument("--restart", type=str, default=None, help="Restart from a previous case's DVs (w/o .sql extension)")
+parser.add_argument("--restart_num", type=int, default=-1, help="index of restart (-1 is last)")
 parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
 parser.add_argument("--noVent", action="store_true", default=False, help="Turn off ventilation constraints")
 parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
@@ -126,7 +125,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0 / 20,
+        "scale": 1.0,
         "value": 4.0,
     },
     "toc": {
@@ -283,7 +282,9 @@ class Top(Multipoint):
         #     Objectives
         # ************************************************
         # self.add_objective("CD")
-        self.add_objective("Dtot", scaler=1e-5)  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
+        self.add_objective("Dtot",
+                           scaler=1e-3,
+                           )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
 
         # ************************************************
         #     Constraints
@@ -294,7 +295,7 @@ class Top(Multipoint):
                 f"dcfoil_{ptName}.Flift",
                 lower=Fliftstars[ptName] - 10,
                 upper=Fliftstars[ptName] + 10,
-                scaler=1e-5,
+                # scaler=1e-5,
             )  # lift constraint [N]
 
             if args.task != "trim":
@@ -395,7 +396,7 @@ if __name__ == "__main__":
             "alfa0": {
                 "lower": -10.0,
                 "upper": 10.0,
-                "scale": 1.0/ 20.0,  # the scale was messing with the DV bounds
+                "scale": 1.0,  # the scale was messing with the DV bounds
                 "value": appendageParams["alfa0"],
             },
             "toc": {
@@ -465,13 +466,7 @@ if __name__ == "__main__":
     if args.debug_opt:
         # Free the DVs that seem to be giving problems for the flutter optimization
         dvDictInfo = {
-            # "twist": dvDictInfo["twist"], # this one gives 60/63 >:( probably need scaling
-            "twist": {
-                "lower": -5.0,
-                "upper": 5.0,
-                "scale": 1.0,
-                "value": np.zeros(8 // 2),
-            },
+            "twist": dvDictInfo["twist"],
             "sweep": dvDictInfo["sweep"],
             "taper": dvDictInfo["taper"],
             "span": dvDictInfo["span"],
@@ -528,18 +523,19 @@ if __name__ == "__main__":
     # ************************************************
     #     Set starting values
     # ************************************************
-    prob.set_val("theta_f", np.deg2rad(0.0))  # this is defined in [rad] in the julia wrapper layer
-    for ptName in probList:
-        prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
+    # prob.set_val("theta_f", np.deg2rad(0.0))  # this is defined in [rad] in the julia wrapper layer
+    # for ptName in probList:
+    #     prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
-    # set thickness-to-chord (NACA0009)
-    prob.set_val("toc", 0.09 * np.ones(nNodes))
+    # # set thickness-to-chord (NACA0009)
+    # prob.set_val("toc", 0.09 * np.ones(nNodes))
 
     # initialization needed for solvers
     displacementsCol = np.zeros((6, npt_wing_full))
     for ptName in probList:
         prob.set_val(f"dcfoil_{ptName}.displacements_col", displacementsCol)
         prob.set_val(f"dcfoil_{ptName}.gammas", np.zeros(npt_wing_full))
+        prob.set_val(f"dcfoil_{ptName}.gammas_d", np.zeros(npt_wing_full))
 
     # ************************************************
     #     Other stuff
@@ -559,7 +555,7 @@ if __name__ == "__main__":
         driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
 
         # --- pickup last case ---
-        last_case = cr.get_case(driver_cases[-1])
+        last_case = cr.get_case(driver_cases[args.restart_num])
 
         objectives = last_case.get_objectives()
         design_vars = last_case.get_design_vars()
@@ -570,20 +566,21 @@ if __name__ == "__main__":
         # Don't forget scales
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
-                print(f"Setting {dv} to {val} but scaled")
                 scale = dvDictInfo[dv]["scale"]
+                print(f"Setting {dv} to {val} but scaled by {scale}")
                 prob.set_val(dv, val / scale)
             elif dv in otherDVs:
                 try:
-                    print(f"Setting {dv} to {val} but scaled")
                     scale = otherDVs[dv]["scale"]
+                    print(f"Setting {dv} to {val} but scaled by {scale}")
                     prob.set_val(dv, val / scale)
                 except KeyError:
                     print(f"WARNING: {dv} not found in prob, skipping...")
             elif dv.startswith("alfa0_"):
                 try:
-                    print(f"Setting {dv} to {val} but scaled")
                     scale = otherDVs["alfa0"]["scale"]
+                    print(f"Setting {dv} to {val} but scaled by {scale}")
+                    scale = 1/20
                     prob.set_val(dv, val / scale)
                 except KeyError:
                     print(f"WARNING: {dv} not found in prob, skipping...")
@@ -599,11 +596,20 @@ if __name__ == "__main__":
     # ************************************************
     if args.task in ["opt", "trim"]:
         print("=" * 60)
-        print("Running optimization...", flush=True)
+        print("First running model...", flush=True)
         print("=" * 60)
         prob.run_model()
+        # print("=" * 60)
+        # print("Now computing derivative...", flush=True)
+        # print("=" * 60)
+        # totals = prob.compute_totals()
+        # print("Total derivatives computed:", totals)
+        print("=" * 60)
+        print("Running optimization...", flush=True)
+        print("=" * 60)
         prob.run_driver()
         prob.record("final_state")
+        # breakpoint()
 
         print("=" * 20)
         print("Design variables:")
@@ -657,6 +663,20 @@ if __name__ == "__main__":
         print("Drag components:")
         print("=" * 20)
         print_drags()
+
+        # ---------------------------
+        #   Write out FFD and shape too
+        # ---------------------------
+        DVGeo = prob.model.geometry.nom_getDVGeo()
+
+        # Write deformed FFD
+        DVGeo.writeTecplot(f"{outputDir}/final_ffd.dat")
+        DVGeo.writeRefAxes(f"{outputDir}/final_axes")
+
+        ptSetName = "x_ptVec0"
+        DVGeo.writePointSet(ptSetName, f"{outputDir}/final", solutionTime=0)
+
+        print(f"Writing ptSets to tecplot {outputDir}...")
 
     if args.task == "deriv":
         prob.run_model()
