@@ -189,16 +189,19 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     if "p" in args.geovar:
         # nSpan = nRefAxPts
-        nSpan = nRefAxPts // 2 + 1
+        nSkip = 2
+        nSpan = nRefAxPts // 2 - nSkip
 
         def span(val, geo):
+            nSkip = 2
             C = geo.extractCoef("global")
             s = geo.extractS("global")
-            for ii in range(1, nSpan):
-                # C[ii, 1] += val * s[ii]
 
-                C[ii + nSpan - 1, 1] += val.item() * s[ii + nSpan - 1]
-                C[nSpan - ii - 1, 1] += -val.item() * s[ii + nSpan - 1]
+            for ii in range(nSpan):
+                # stbd wing
+                C[nRefAxPts // 2 + ii + nSkip + 1, 1] += val.item() * s[ii + nSpan - 1]
+                # port
+                C[-ii + nSpan - 1, 1] += -val.item() * s[ii + nSpan - 1]
             geo.restoreCoef(C, "global")
 
         model.geometry.nom_addGlobalDV(dvName="span", value=0.0, func=span)
