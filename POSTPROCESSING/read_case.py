@@ -37,7 +37,14 @@ from helperFuncs import (
     postprocess_flutterevals,
     find_DivAndFlutterPoints,
 )
-from helperPlotFuncs import plot_dragbuildup, plot_dimdragbuildup, plot_vg_vf_rl, set_my_plot_settings, plot_dlf, plot_forced
+from helperPlotFuncs import (
+    plot_dragbuildup,
+    plot_dimdragbuildup,
+    plot_vg_vf_rl,
+    set_my_plot_settings,
+    plot_dlf,
+    plot_forced,
+)
 import niceplots as nplt
 import openmdao.api as om
 
@@ -99,7 +106,7 @@ density = 1025.0
 semispan = 0.9
 nCol = 40  # number of collocation points in code
 
-spanScale = 0.4  # scale factor for the span because of OpenMDAO scaling
+forceScale = 1e5
 
 # dataDir = "../dcfoil/run_OMDCFoil_out/"
 dataDir = "../dcfoil/OUTPUT/"
@@ -113,13 +120,13 @@ dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
         "upper": 15.0,
-        "scale": 1.0 / 30,
+        "scale": 1.0 ,
         "value": np.zeros(8 // 2),
     },
     "sweep": {
         "lower": 0.0,
         "upper": 30.0,
-        "scale": 1 / 30.0,
+        "scale": 1.0,
         "value": 0.0,
     },
     # "dihedral": { # THIS DOES NOT WORK
@@ -137,7 +144,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "span": {
         "lower": -0.2,
         "upper": 0.2,
-        "scale": 1 / (0.4),
+        "scale": 1.0,
         "value": 0.0,
     },
 }
@@ -145,7 +152,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0 / (20),  # the scale was messing with the DV bounds
+        "scale": 1.0 / 20,
         "value": 4.0,
     },
     "toc": {
@@ -157,10 +164,11 @@ otherDVs = {
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
-        "scale": 1.0 / (np.deg2rad(60)),
+        "scale": 1.0,
         "value": 0.0,
     },
 }
+
 
 # ==============================================================================
 #                         Functions
@@ -194,7 +202,7 @@ def plot_dragiter():
     # Create figure object
     fig, axes = plt.subplots(nrows=2, ncols=npts, sharex=True, constrained_layout=True, figsize=(8 * npts, 12))
 
-    for (ii, ptName) in enumerate(probList):
+    for ii, ptName in enumerate(probList):
         systemName = f"dcfoil_{ptName}"
 
         waveDrag = drag_vals[f"Dw_{ptName}"]
@@ -279,8 +287,8 @@ def plot_dragiter():
     print("Saved to:", dragplotname)
     plt.close()
 
-def plot_spanwise():
 
+def plot_spanwise():
     drag_vals = {}
     for ptName in probList:
         drag_vals[f"Dw_{ptName}"] = []
@@ -309,12 +317,14 @@ def plot_spanwise():
             fontsize=fs_lgd,
         )
 
-        for (ii, ptName) in enumerate(probList):
-
+        for ii, ptName in enumerate(probList):
             systemName = f"dcfoil_{ptName}"
 
             Uinf = boatSpds[ptName]  # boat speed [m/s]
-            axes[0, ii].set_title(f"{ptName}: $U_\infty={Uinf:.1f}$ m/s", fontsize=fs * 1.1)
+            try:
+                axes[0, ii].set_title(f"{ptName}: $U_\infty={Uinf:.1f}$ m/s", fontsize=fs * 1.1)
+            except Exception:
+                axes[0].set_title(f"{ptName}: $U_\infty={Uinf:.1f}$ m/s", fontsize=fs * 1.1)
 
             dcfoil_cases = cr.list_cases(f"root.{systemName}", recurse=False)
             # for case_num, case_id in enumerate(dcfoil_cases[:-1]):
@@ -346,13 +356,19 @@ def plot_spanwise():
 
             ventilationCon = dcfoil_case.outputs[f"{systemName}.ksvent"]
 
+
+            # --- Lift distribution ---
             try:
-                spanVal = design_vars_vals["span"][case_num] * spanScale
+                spanVal = design_vars_vals["span"][case_num] /dvDictInfo["span"]["scale"]
             except KeyError:
                 spanVal = 0.0
             TotalLift = dcfoil_case.outputs[f"{systemName}.Flift"]
-            ax = axes[0,ii]
-            ax.annotate(f"{TotalLift[0]:.0f} N",
+            try:
+                ax = axes[0, ii]
+            except IndexError:
+                ax = axes[0]
+            ax.annotate(
+                f"{TotalLift[0]:.0f} N\n$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
                 xy=(0.5, 0.3 - 0.13 * icase),
                 xycoords="axes fraction",
                 color=cm[icase],
@@ -361,9 +377,11 @@ def plot_spanwise():
             )
             print("Total lift:", TotalLift)
             print("Span value:", spanVal)
+            actualSpan = aeroNodesXYZ[1,-1]
+            print("Actual span:", actualSpan)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
+            sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, actualSpan, density)
 
-            ax = axes[0, ii]
             rhoU = density * Uinf  # rho * U
             ax.plot(sloc, Lprime, "-", c="k", alpha=0.5, label="Elliptical  distribution")
             ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf * rhoU, c=cm[icase])
@@ -378,12 +396,15 @@ def plot_spanwise():
                 ax.set_ylabel("$L'$ [N/m]", rotation="horizontal", ha="right", va="center")
             # ax.set_ylim(bottom=0.0, top=150)
 
-            ax = axes[1, ii]
+            try:
+                ax = axes[1, ii]
+            except IndexError:
+                ax = axes[1]
             ax.plot(aeroNodesXYZ[1, :], spanwise_cl, c=cm[icase])
             # plot horizontal line for cl_in
-            ax.axhline(np.max(spanwise_cl - ventilationCon), ls="--", label="cl Ventilation", color="magenta")
+            ax.axhline(np.max(spanwise_cl - ventilationCon) + 0.01, ls="--", label="cl Ventilation", color="magenta")
             ax.annotate(
-                "$c_{\ell_{in}}=$" + f"${np.max(spanwise_cl - ventilationCon):.2f}$",
+                "$c_{\ell_{in}}=$" + f"${np.max(spanwise_cl - ventilationCon)+0.01:.2f}$",
                 xy=(0.85, 0.99),
                 xycoords="axes fraction",
                 color="magenta",
@@ -393,7 +414,10 @@ def plot_spanwise():
             ax.set_ylim(top=np.max(spanwise_cl - ventilationCon) * 1.1, bottom=0.0)
 
             # --- Twist distribution ---
-            ax = axes[2, ii]
+            try:
+                ax = axes[2, ii]
+            except IndexError:
+                ax = axes[2]
             # ax.plot(aeroNodesXYZ[1, :], np.rad2deg(displacements_col[4, nCol // 2 :]), label="Deflections")
             # spanY = np.linspace(0, semispan + spanVal, len(design_vars_vals["twist"][case_num]) + 1)
             # twistDist = np.hstack((0.0, design_vars_vals["twist"][case_num]))
@@ -432,7 +456,10 @@ def plot_spanwise():
             if icase == len(args.cases) - 1:
                 ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
-            ax = axes[3, ii]
+            try:
+                ax = axes[3, ii]
+            except IndexError:
+                ax = axes[3]
             ax.plot(aeroNodesXYZ[1, :], displacements_col[2, nCol // 2 :], c=cm[icase])
             if ii == 0:
                 ax.set_ylabel("OOP bending [m]", rotation="horizontal", ha="right", va="center")
@@ -440,34 +467,42 @@ def plot_spanwise():
             ax.axhline(tipConstraint, ls="--", color="magenta")
             ax.set_ylim(top=tipConstraint * 1.1)
             ax.annotate("$\\delta_{\\textrm{max}}$", xy=(0.92, 0.99), xycoords="axes fraction", color="magenta")
-            ax.set_yticks(np.arange(0, 0.01, 0.005).tolist() + [tipConstraint])
+            ax.set_yticks(np.arange(0, 0.05, 0.025).tolist() + [tipConstraint])
             ax.set_xticks([0.0, semispan, semispan + spanVal.item()])
+            ax.set_xticks([0.0, semispan, actualSpan])
 
-            ax = axes[4, ii]
+            try:
+                ax = axes[4, ii]
+            except IndexError:
+                ax = axes[4]
             ax.plot(femNodesXYZ[:, 1], design_vars_vals["toc"][case_num, :], c=cm[icase])
             if ii == 0:
                 ax.set_ylabel("$t/c$", rotation="horizontal", ha="right", va="center")
 
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
-    for ax in axes[-1, :]:
-        ax.set_xlabel("Spanwise position [m]")
+    try:
+        for ax in axes[-1,:]:
+            ax.set_xlabel("Spanwise position [m]")
+    except Exception:
+        axes[-1].set_xlabel("Spanwise position [m]")
     plt.suptitle(f"Spanwise properties for {args.name}", fontsize=fs * 1.1)
     plt.savefig(spanliftname + f".pdf", format="pdf")
     print("Saved to:", spanliftname + f".pdf")
     plt.close()
 
+
 def plot_dragbuildupcomp():
-    Dtotal = 0
-    Dtotalopt = 0
     fname = f"drag_buildup_{args.name}-vs-{args.base}.pdf"
     # Create figure object
     fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10))
-    for (icase, case) in enumerate(args.cases):
-
+    for icase, case in enumerate(args.cases):
         # basename = f"../dcfoil/run_OMDCfoil_out/{case}.sql"
         basename = f"../dcfoil/OUTPUT/{case}/{case}.sql"
         cr = om.CaseReader(basename)
+
+        Dtotal = 0
+        Dtotalopt = 0
 
         for ii, ptName in enumerate(probList):
             systemName = f"dcfoil_{ptName}"
@@ -504,7 +539,9 @@ def plot_dragbuildupcomp():
         # fig, axes = plot_dragbuildup(fig, axes, optfuncs, "Optimized", cm, 15, 1, includes=includes)
 
         includes = ["Dpr", "Di", "Dw"]
-        fig, axes = plot_dimdragbuildup(fig, axes, basedragfuncs, f"Drag breakdown", f"{case} ($D={Dtotal:.1f}$)", cm, 15, icase, includes=includes)
+        fig, axes = plot_dimdragbuildup(
+            fig, axes, basedragfuncs, f"Drag breakdown", f"{case} ($D={Dtotal:.1f}$)", cm, 15, icase, includes=includes
+        )
 
         # axes.annotate(f"$D={Dtotalbase:.1f}$", xy=(axes-fractions), xycoords="axes fraction")
 
@@ -515,6 +552,7 @@ def plot_dragbuildupcomp():
         plt.savefig(fname, format="pdf")
         print("Saved to:", fname)
     plt.close()
+
 
 # ==============================================================================
 #                         MAIN DRIVER
@@ -534,7 +572,7 @@ if __name__ == "__main__":
         npt_wing,
         npt_wing_full,
         n_node,
-    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, [0.5,1.0], None)
+    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, [0.5, 1.0], None)
 
     datafname = f"../dcfoil/run_OMDCfoil_out/{args.name}.sql"
     datafname = f"../dcfoil/OUTPUT/{args.cases[0]}/{args.name}.sql"
@@ -604,7 +642,7 @@ if __name__ == "__main__":
     # Create figure object
     nrows = np.max([NDV, NCON + 1])
     # fig, opthistaxes = plt.subplots(nrows=nrows, ncols=2, sharex=True, constrained_layout=True, figsize=(16, 3 * nrows))
-    fig, opthistaxes = plt.subplots(nrows=2, ncols=nrows, sharex=True, constrained_layout=True, figsize=(5*nrows, 8))
+    fig, opthistaxes = plt.subplots(nrows=2, ncols=nrows, sharex=True, constrained_layout=True, figsize=(5 * nrows, 8))
 
     for ii, dv in enumerate(design_vars_vals):
         # ax = opthistaxes[ii, 0]
@@ -645,17 +683,19 @@ if __name__ == "__main__":
         # print(f"{dv} values:")
         # print(tabulate(design_vars_vals[dv], headers="keys", tablefmt="grid"))
         # print(30 * "-")
-        # breakpoint()
 
     # ax = opthistaxes[0, 1]
     ax = opthistaxes[1, 0]
-    ax.plot(range(0, NITER), objectives_vals[obj], label="Dtot")
+    ax.plot(range(0, NITER), objectives_vals[obj]*forceScale, label="Dtot")
     ax.set_ylabel(f"{obj}", rotation="horizontal", ha="right", va="center")
 
     for ii, con in enumerate(constraints_vals):
         # ax = opthistaxes[1 + ii, 1]
         ax = opthistaxes[1, 1 + ii]
-        ax.plot(range(0, NITER), constraints_vals[con])
+        if "lift" in con:
+            ax.plot(range(0, NITER), constraints_vals[con]*forceScale)
+        else:
+            ax.plot(range(0, NITER), constraints_vals[con])
         ax.set_ylabel(f"{con.lstrip('dcfoil.')}", rotation="horizontal", ha="right", va="center")
 
     for ax in opthistaxes.flatten():
@@ -693,13 +733,12 @@ if __name__ == "__main__":
                 caseDirs.append(dataDir + case + f"/{ptName}")
     else:
         raise ValueError("Please specify a case to run postprocessing on")
-    
+
     if args.flutter:
         # ************************************************
         #     Read in data
         # ************************************************
         print("Reading in flutter data...")
-        
 
         flutterSolDict = {}
         instabPtsDict = {}

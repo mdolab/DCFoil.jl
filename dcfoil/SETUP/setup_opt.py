@@ -20,16 +20,16 @@ def setup(args, outputDir: str):
             "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
             "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (if derivs are expensive, use this)
             "Major Step Limit": 1e-2,  # good for trim problems
-            "Major iterations limit": 100,
+            "Major iterations limit": 200,
             # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
             "Print file": os.path.join(outputDir, "SNOPT_print.out"),
             "Summary file": os.path.join(outputDir, "SNOPT_summary.out"),
         }
 
     if args.task == "opt":
-        optOptions["Major Step Limit"] = 1e-2
+        optOptions["Major Step Limit"] = 5e-2
         # optOptions["Major Step Limit"] = 5e-3 # maybe this was too small
-        # optOptions["Backoff factor"]
+        # optOptions["Linesearch tolerance"] = 0.9,  # all gradients are known so we can do less accurate LS
         optOptions[
             "Penalty parameter"
         ] = 1e-1  # initial penalty parameter for SNOPT; higher means it favors going feasible first

@@ -27,7 +27,7 @@ from tabulate import tabulate
 # Extension modules
 # ==============================================================================
 from SETUP import setup_OMdvgeo, setup_dcfoil, setup_opt
-from SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0
+from SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0, ptWeights
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
 from multipoint import Multipoint
@@ -63,6 +63,7 @@ parser.add_argument("--forced", action="store_true", default=False, help="Run fo
 parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
 parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
 parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
+parser.add_argument("--debug_opt", action="store_true", default=False, help="Debug the optimization")
 parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
 parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
 args = parser.parse_args()
@@ -91,15 +92,15 @@ nNodesStrut = 3
 
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
-        "lower": -15.0,
-        "upper": 15.0,
-        "scale": 1.0 / 30,
+        "lower": -10.0,
+        "upper": 10.0,
+        "scale": 1.0,
         "value": np.zeros(8 // 2),
     },
     "sweep": {
         "lower": 0.0,
         "upper": 30.0,
-        "scale": 1 / 30.0,
+        "scale": 1.0,
         "value": 0.0,
     },
     # "dihedral": { # THIS DOES NOT WORK
@@ -117,7 +118,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "span": {
         "lower": -0.2,
         "upper": 0.2,
-        "scale": 1 / (0.4),
+        "scale": 1.0,
         "value": 0.0,
     },
 }
@@ -125,7 +126,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0 / 30,
+        "scale": 1.0 / 20,
         "value": 4.0,
     },
     "toc": {
@@ -137,7 +138,7 @@ otherDVs = {
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
-        "scale": 1.0 / (np.deg2rad(60)),
+        "scale": 1.0,
         "value": 0.0,
     },
 }
@@ -206,13 +207,15 @@ class Top(Multipoint):
         dragCompsPt = ["Di", "Dpr", "Dw"]
         cdComps = []
         dragComps = []
+        scaling_factors = []
         for ptName in probList:  # loop through all the points so all drags are added
             for cd in cdCompsPt:
                 cdComps.append(f"{cd}_{ptName}")
             for drag in dragCompsPt:
                 dragComps.append(f"{drag}_{ptName}")
-        adder.add_equation("CD", input_names=cdComps)
-        adder.add_equation("Dtot", input_names=dragComps)
+            scaling_factors += [ptWeights[ptName]]*len(dragCompsPt)  # weight the drag components by the point weights
+        adder.add_equation("CD", input_names=cdComps, scaling_factors=scaling_factors)
+        adder.add_equation("Dtot", input_names=dragComps, scaling_factors=scaling_factors)
         self.add_subsystem("objAdder", adder, promotes_outputs=["*"])
 
         # ************************************************
@@ -280,7 +283,7 @@ class Top(Multipoint):
         #     Objectives
         # ************************************************
         # self.add_objective("CD")
-        self.add_objective("Dtot", scaler=1e-5)  # total drag objective [N] scaled to 1e5 for optimization
+        self.add_objective("Dtot", scaler=1e-5)  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
 
         # ************************************************
         #     Constraints
@@ -366,7 +369,7 @@ if __name__ == "__main__":
             "sweep": {
                 "lower": 0.0,
                 "upper": 0.0,
-                "scale": 1,
+                "scale": 1.0,
                 "value": 0.0,
             },
             "twist": {
@@ -392,7 +395,7 @@ if __name__ == "__main__":
             "alfa0": {
                 "lower": -10.0,
                 "upper": 10.0,
-                "scale": 1.0 / 20.0,  # the scale was messing with the DV bounds
+                "scale": 1.0/ 20.0,  # the scale was messing with the DV bounds
                 "value": appendageParams["alfa0"],
             },
             "toc": {
@@ -414,8 +417,8 @@ if __name__ == "__main__":
             "alfa0": {
                 "lower": -10.0,
                 "upper": 10.0,
-                "scale": 1.0,  # the scale was messing with the DV bounds
-                "value": appendageParams["alfa0"],
+                "scale": otherDVs["alfa0"]["scale"],  # the scale was messing with the DV bounds
+                "value": otherDVs["alfa0"]["value"],
             },
             "toc": {
                 "lower": appendageParams["toc"],
@@ -459,6 +462,21 @@ if __name__ == "__main__":
                 "value": 0.0,
             },
         }
+    if args.debug_opt:
+        # Free the DVs that seem to be giving problems for the flutter optimization
+        dvDictInfo = {
+            # "twist": dvDictInfo["twist"], # this one gives 60/63 >:( probably need scaling
+            "twist": {
+                "lower": -5.0,
+                "upper": 5.0,
+                "scale": 1.0,
+                "value": np.zeros(8 // 2),
+            },
+            "sweep": dvDictInfo["sweep"],
+            "taper": dvDictInfo["taper"],
+            "span": dvDictInfo["span"],
+        }
+
 
     prob = om.Problem()
     prob.model = Top()
