@@ -28,13 +28,11 @@ def setup(args, outputDir: str):
         }
 
     if args.task == "opt":
-        optOptions["Major Step Limit"] = 5e-2
+        optOptions["Major Step Limit"] = 1e-2
         # optOptions["Major Step Limit"] = 5e-3 # maybe this was too small
-        optOptions["Backoff factor"] = 0.05
+        # optOptions["Backoff factor"] = 0.05
         # optOptions["Linesearch tolerance"] = 0.9,  # all gradients are known so we can do less accurate LS
-        optOptions[
-            "Penalty parameter"
-        ] = 1e-1  # initial penalty parameter for SNOPT; higher means it favors going feasible first
+        # optOptions["Penalty parameter"] = 1e-1  # initial penalty parameter ; higher means it favors going feasible first
 
     # opt = OPT(args.optimizer, options=optOptions)
 
