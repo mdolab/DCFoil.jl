@@ -45,7 +45,6 @@ analysisDir = "../OUTPUT/akcabay_U0-"
 speeds = np.arange(1, 40 + 1, 1)
 
 if __name__ == "__main__":
-
     # --- Read data ---
     for ii, speed in enumerate(speeds):
         dataDir = f"{analysisDir}{speed:.1f}/"

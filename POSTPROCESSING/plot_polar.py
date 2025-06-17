@@ -255,7 +255,6 @@ if __name__ == "__main__":
         CLDict[fiberang] = []
         CDDict[fiberang] = []
         for ii, caseDir in enumerate(caseDirs):
-
             # --- Read in DVDict ---
             try:
                 DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
@@ -283,7 +282,6 @@ if __name__ == "__main__":
         CDFSDict[fiberang] = []
         AlfaList = []
         for ii, caseDir in enumerate(caseFSDirs):
-
             # --- Read in DVDict ---
             try:
                 DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
@@ -318,7 +316,6 @@ if __name__ == "__main__":
     CLDict["rigid"] = []
     CDDict["rigid"] = []
     for ii, caseDir in enumerate(caseDirs):
-
         # --- Read in DVDict ---
         try:
             DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))
@@ -341,7 +338,6 @@ if __name__ == "__main__":
     CDFSDict["rigid"] = []
     AlfaList = []
     for ii, caseDir in enumerate(caseFSDirs):
-
         # --- Read in DVDict ---
         try:
             DVDict = json.load(open(f"{caseDir}/init_DVDict.json"))

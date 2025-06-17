@@ -219,6 +219,7 @@ class CoupledAnalysis(om.Group):
 
             # hydroelastic coupled solver
             couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=True, maxiter=200, iprint=2, atol=1e-6, rtol=0)
+            # couple.nonlinear_solver = om.NonlinearBlockGS(use_aitken=False, maxiter=200, iprint=2, atol=1e-6, rtol=0, err_on_non_converge=True)
             ### couple.nonlinear_solver = om.NewtonSolver(solve_subsystems=True, maxiter=50, iprint=2, atol=1e-7, rtol=0)
             couple.linear_solver = om.DirectSolver()  # for adjoint
 

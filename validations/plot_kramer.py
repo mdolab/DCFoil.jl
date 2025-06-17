@@ -73,7 +73,6 @@ cm = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-
     # --- Read data ---
     structNatFreqs = np.zeros((len(fiberAngles), nModes))
     wetNatFreqs = np.zeros((len(fiberAngles), nModes))

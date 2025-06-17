@@ -29,7 +29,6 @@ targetFile = None  # Set to None to use default location...I can't seem to get t
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-
     juliapkg.require_julia("1.11", target=targetFile)
 
     f = open(fname, "r").read()

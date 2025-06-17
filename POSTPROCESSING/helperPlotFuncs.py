@@ -337,7 +337,6 @@ def plot_dragbuildup(
     iic: int,
     includes=["cdpr", "cdi", "cdw", "cds", "cdj"],
 ):
-
     alllabels = ["$C_{D,{pr}}$", "$C_{D,{i}}$", "$C_{D,w}$", "$C_{D,{s}}$", "$C_{D,{j}}$"]
     costData = []
     labels = []
@@ -395,7 +394,6 @@ def plot_dimdragbuildup(
     iic: int,
     includes=["cdpr", "cdi", "cdw", "cds", "cdj"],
 ):
-
     alllabels = ["${D_{pr}}$", "$D_{i}$", "$D_w$", "${D_{s}}$", "${D_{j}}$"]
     costData = []
     labels = []
@@ -1546,11 +1544,7 @@ def set_my_plot_settings(is_paper=False):
             {
                 "font.family": "serif",
                 "text.usetex": True,
-                "text.latex.preamble": [
-                    r"\usepackage{lmodern}",  # latin modern font
-                    r"\usepackage{amsmath}",  # for using equation commands
-                    r"\usepackage{helvet}",  # should make latex serif in helvet now
-                ],
+                "text.latex.preamble": r"\usepackage{lmodern} \usepackage{amsmath}  \usepackage{helvet}",
             }
         )
     plt.rcParams.update(myOptions)

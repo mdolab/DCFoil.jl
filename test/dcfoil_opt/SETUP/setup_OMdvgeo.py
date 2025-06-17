@@ -163,7 +163,6 @@ def setup(args, model, comm, files: dict):
     #   CHORD
     # ---------------------------
     if "r" in args.geovar:
-
         nSkip = 4
 
         nTaper = nRefAxPts // 2 + 1

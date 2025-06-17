@@ -187,7 +187,6 @@ else:
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_struct", action="store_true", default=False)
     parser.add_argument("--run_flow", action="store_true", default=False)
@@ -497,7 +496,6 @@ if __name__ == "__main__":
     # --- Check partials after you've solve the system!! ---
     starttime = time.time()
     if args.test_partials:
-
         np.set_printoptions(linewidth=1000, precision=4)
 
         fileName = "partials.out"

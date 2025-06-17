@@ -3,7 +3,6 @@ import os
 
 
 def setup(args, outputDir: str):
-
     if args.optimizer == "SLSQP":
         optOptions = {
             "IFILE": "SLSQP.out",

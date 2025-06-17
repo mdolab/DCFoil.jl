@@ -44,12 +44,17 @@ set -e #
 # python run_OMDCFoil.py --foil amcfull --task trim --pts 123 --name trimMP # multipoint [0/1]
 # python run_OMDCFoil.py --foil amcfull --task trim --freeSurf --pts 123 --name trimMP-fs # multipoint [0/1]
 
-python run_OMDCFoil.py --foil amcfull --task trim --restart dcfoil-trimMP --pts 123 --name trim1MP # multipoint []
-python run_OMDCFoil.py --foil amcfull --task trim --restart dcfoil-trimMP-fs --freeSurf --pts 123 --name trim1MP-fs # multipoint []
+# python run_OMDCFoil.py --foil amcfull --task trim --restart dcfoil-trimMP --pts 123 --name trim1MP # multipoint [0/1]
+# python run_OMDCFoil.py --foil amcfull --task trim --restart dcfoil-trimMP-fs --freeSurf --pts 123 --name trim1MP-fs # multipoint [0/1]
 
-python run_OMDCFoil.py --foil amcfull --task opt --restart dcfoil-trim1MP --pts 123 --name opt1MP # multipoint  []
-python run_OMDCFoil.py --foil amcfull --task opt --restart dcfoil-trim1MP-fs --pts 123 --freeSurf --name opt1MP-fs # multipoint []
+# python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart dcfoil-trim1MP --pts 3 --name opt1-novent #   [??]
+# python run_OMDCFoil.py --foil amcfull --task opt --fixHydro --noVent --restart dcfoil-trim1MP --pts 3 --name opt1-novent-fixHydro #   [0/1 so some hydro variable is breaking this]
+python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1-novent-debug --debug_opt #   [??TODO PICKUP HERE tomorrow if the multipoint fails]
+python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1 #   [??]
+# python run_OMDCFoil.py --foil amcfull --task opt --fixHydro --noVent --restart dcfoil-trim1MP --pts 123 --name opt1MP-novent # multipoint  []
+# python run_OMDCFoil.py --foil amcfull --task opt --fixStruct --noVent --restart dcfoil-trim1MP --pts 123 --name opt1MP-novent-fixStruct # multipoint  []
+# python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart dcfoil-trim1MP-fs --pts 123 --freeSurf --name opt1MP-novent-fs # multipoint []
 
-python run_OMDCFoil.py --foil amcfull --task opt --flutter --freeSurf --pts 3 --name opt2-fs # static and dynamic optimization
+# python run_OMDCFoil.py --foil amcfull --task opt --flutter --freeSurf --pts 3 --name opt2-fs # static and dynamic optimization
 
 # may need to nohup ./run.sh > run.out 2>&1 

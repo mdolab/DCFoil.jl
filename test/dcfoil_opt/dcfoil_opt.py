@@ -38,6 +38,7 @@ from multipoint import multiPointSparse
 from INPUT.flow_constants import TEMP, MU, RHO_F, P_ATM, GRAV, P_VAP
 from SPECS.point_specs import boatSpds, clstars, opdepths, alfa0
 
+
 # ==============================================================================
 #                         MODELING FUNCTIONS
 # ==============================================================================
@@ -455,7 +456,6 @@ if __name__ == "__main__":
     #   ANALYSIS
     # ---------------------------
     if args.task in ["run", "opt"]:
-
         if args.task == "run":
             x_init = DVGeo.getValues()
             run_dvs = x_init

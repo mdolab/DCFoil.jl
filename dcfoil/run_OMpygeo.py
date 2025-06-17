@@ -122,7 +122,6 @@ class Top(Multipoint):
     """
 
     def setup(self):
-
         self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
         self.add_subsystem("mesh", om.IndepVarComp())
 
@@ -137,7 +136,6 @@ class Top(Multipoint):
         self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")
 
     def configure(self):
-
         self.geometry.nom_add_discipline_coords("ptVec", np.array(ptVec))
 
         self = setup_OMdvgeo.setup(args, self, None, files)
@@ -153,7 +151,6 @@ class Top(Multipoint):
 #                         MAIN DRIVER
 # ==============================================================================
 if __name__ == "__main__":
-
     prob = om.Problem()
     prob.model = Top()
 
@@ -224,7 +221,6 @@ if __name__ == "__main__":
 
             i_frame = 0
             for ii in range(nTwist):
-
                 print("index: ", ii)
                 # for ind, val in enumerate(twist_vals):
                 for val in wave:
@@ -265,7 +261,6 @@ if __name__ == "__main__":
             i_frame = 0
             # loop over wave
             for ind, val in enumerate(wave):
-
                 print(ind, val)
 
                 prob.set_val("span", val)
@@ -305,7 +300,6 @@ if __name__ == "__main__":
             sweep_vals = wave
 
             for ind, val in enumerate(sweep_vals):
-
                 print("index:", ind, val)
                 prob.set_val("sweep", val)
                 prob.run_model()

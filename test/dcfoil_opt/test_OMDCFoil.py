@@ -46,6 +46,7 @@ from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
 # ==============================================================================
 outputDir = "output"
 
+
 # ==============================================================================
 #                         OpenMDAO model
 # ==============================================================================
@@ -55,7 +56,6 @@ class Top(Multipoint):
     """
 
     def setup(self):
-
         self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
         self.add_subsystem("mesh", om.IndepVarComp())
 
@@ -119,7 +119,6 @@ class Top(Multipoint):
         self.connect("geometry.x_ptVec0", "ptVec")  # connect the geometry to the beam and lifting line solver
 
     def configure(self):
-
         # ************************************************
         #     Geometry
         # ************************************************

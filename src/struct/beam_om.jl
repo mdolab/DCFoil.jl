@@ -105,6 +105,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     outputs["deflections"][:] = uSol
 
 
+    # println("states" , outputs["deflections"][:]) # OK
     # --- Also write out solution ---
     # SOLVERPARAMS = 
     # STATSOL = FEMMethods.StaticSolution(uSol, traction_forces, FEMESH, SOLVERPARAMS, FOIL, STRUT)

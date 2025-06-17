@@ -475,7 +475,6 @@ class DCFOIL:
         )
 
         for obj in evalFuncs:
-
             # Get the sensitivity of the cost function wrt all coordinates
             # this is 'dIdpt' of size(Npt, 3)
             try:
@@ -614,7 +613,6 @@ class DCFOIL:
         )
 
     def getValues(self):
-
         x = {}
 
         for key, value in self.appendageParamsList[0].items():
@@ -651,7 +649,6 @@ class DCFOIL:
 
         # Now check if we have an DVGeo object to deal with:
         if self.DVGeo is not None:
-
             # DVGeo appeared and we have not embedded points!
             if not ptSetName in self.DVGeo.points:
                 self.DVGeo.addPointSet(self.X, ptSetName)
@@ -678,7 +675,6 @@ class DCFOIL:
         self.curAP = aeroProblem
 
     def __call__(self, aeroProblem):
-
         self.setAeroProblem(aeroProblem)
         self.callCounter += 1
 

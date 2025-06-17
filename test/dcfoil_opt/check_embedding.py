@@ -326,7 +326,6 @@ if __name__ == "__main__":
     #   CHORD
     # ---------------------------
     if "r" in args.geovar:
-
         nSkip = 4
 
         nTaper = nRefAxPts // 2 + 1
@@ -438,10 +437,8 @@ if __name__ == "__main__":
             # )
             # for ii in range(1, nTwist):
             for ii in range(nTwist):
-
                 # for ind, val in enumerate(twist_vals):
                 for val in wave:
-
                     print(val)
                     dvDict = DVGeo.getValues()
                     dvDict["twist"][ii] = val
@@ -475,7 +472,6 @@ if __name__ == "__main__":
             i_frame = 0
             # loop over wave
             for ind, val in enumerate(wave):
-
                 print(ind, val)
 
                 dvDict = DVGeo.getValues()
@@ -521,7 +517,6 @@ if __name__ == "__main__":
             sweep_vals = wave
 
             for ind, val in enumerate(sweep_vals):
-
                 print(ind, val)
                 dvDict = DVGeo.getValues()
                 dvDict["sweep"] = val
