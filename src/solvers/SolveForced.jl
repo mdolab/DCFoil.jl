@@ -190,8 +190,8 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
         ChainRulesCore.ignore_derivatives() do # this makes it so you cannot compute derivatives of the lift or moment RAO
 
             fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, alfa0, rake, DOFBlankingList, CONSTANTS.downwashAngles, ELEMTYPE;
-            appendageOptions=appendageOptions, solverOptions=solverOptions)
-            
+                appendageOptions=appendageOptions, solverOptions=solverOptions)
+
             # --- Store total force and tip deflection values ---
             LiftDyn_z[f_ctr] = L̃
             MomDyn_z[f_ctr] = M̃
@@ -283,7 +283,7 @@ function write_sol(SOL, outputDir="./OUTPUT/")
     Write out the dynamic results
     """
     # Store solutions here
-    workingOutput = outputDir * "forced/"
+    workingOutput = outputDir * "/forced/"
     mkpath(workingOutput)
     println("Writing out forced solution to ", workingOutput)
 
@@ -453,14 +453,24 @@ function evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, so
     elseif uppercase(mode) == "FIDI"
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
 
-        dIdxDV = AD.jacobian(backend, (xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-                compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
-            ptVec,
-            displacementsCol,
-            claVec,
-            appendageParams["theta_f"],
-            appendageParams["toc"],
-            appendageParams["alfa0"])
+        # dIdxDV, = AD.jacobian(backend, (xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+        #         compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
+        #     ptVec,
+        #     displacementsCol,
+        #     claVec,
+        #     appendageParams["theta_f"],
+        #     appendageParams["toc"],
+        #     appendageParams["alfa0"])
+        f_i = compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+
+        for dh in [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
+            f_f = compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, appendageParams["theta_f"] + dh, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions)
+            dfdx = (f_f .- f_i) ./ dh # finite difference
+            println("Finite difference step size: ", dh)
+            println("perturbed obj", f_f)
+            println("deriv wrt theta", dfdx)
+        end
+        
     else
         error("Mode $(mode) not implemented")
     end

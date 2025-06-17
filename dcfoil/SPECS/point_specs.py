@@ -37,9 +37,9 @@ opdepths = {
 }
 
 ptWeights = {
-    "p1": 0.3,  
-    "p2": 0.6,  
-    "p3": 0.1,  
+    "p1": 0.3,
+    "p2": 0.6,
+    "p3": 0.1,
 }
 
 alfa0 = 4.0  # angle of attack for flutter analysis [deg]

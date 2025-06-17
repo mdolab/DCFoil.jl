@@ -428,14 +428,14 @@ def plot_dimdragbuildup(
 
     # Bar plot with drag components
     # ax.bar(labels, costData, color=cm[0])
-    offset = - width / 2 + width * iic
-    ax.bar(xticks+offset, costData, width, color=cm[iic], label=label)
+    offset = -width / 2 + width * iic
+    ax.bar(xticks + offset, costData, width, color=cm[iic], label=label)
     ax.set_xticklabels(labels)
     ax.set_ylabel("$D$ [N]", rotation="horizontal", ha="right", va="center")
     # Put percentages on top of bars
     for ii, cost in enumerate(costData):
         ax.text(
-            xticks[ii]+offset,
+            xticks[ii] + offset,
             cost,
             f"{cost/np.array(costData).sum()*100:.2f}\%",
             ha="center",

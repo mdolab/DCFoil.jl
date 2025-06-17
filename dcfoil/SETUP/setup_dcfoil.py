@@ -68,8 +68,9 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         "run_static": True,
         "res_jacobian": "analytic",
         # --- Forced solve ---
-        "run_forced": False,
-        "fRange": [0.1, 1000.0],
+        "run_forced": args.forced,
+        "fRange": [0.01, 0.8],
+        "df": 0.005,  # frequency step size
         # --- Great lakes ---
         "waveSpectrum": "ISSC",
         "Hsig": 1.5,  # significant wave height [m]

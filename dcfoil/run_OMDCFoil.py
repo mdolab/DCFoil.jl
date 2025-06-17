@@ -212,7 +212,7 @@ class Top(Multipoint):
                 cdComps.append(f"{cd}_{ptName}")
             for drag in dragCompsPt:
                 dragComps.append(f"{drag}_{ptName}")
-            scaling_factors += [ptWeights[ptName]]*len(dragCompsPt)  # weight the drag components by the point weights
+            scaling_factors += [ptWeights[ptName]] * len(dragCompsPt)  # weight the drag components by the point weights
         adder.add_equation("CD", input_names=cdComps, scaling_factors=scaling_factors)
         adder.add_equation("Dtot", input_names=dragComps, scaling_factors=scaling_factors)
         self.add_subsystem("objAdder", adder, promotes_outputs=["*"])
@@ -315,6 +315,8 @@ class Top(Multipoint):
             if args.forced:
                 INITVAL = vibareaw[ptName]
                 self.add_constraint(f"dcfoil_{ptName}.vibareaw", upper=0.9 * INITVAL)  # forced vibration constraint
+                self.add_constraint(f"dcfoil_{ptName}.ksbend", upper=0.9 * INITVAL)  # forced vibration constraint
+                self.add_constraint(f"dcfoil_{ptName}.kstwist", upper=0.9 * INITVAL)  # forced vibration constraint
 
 
 def print_drags():
@@ -471,7 +473,6 @@ if __name__ == "__main__":
             "taper": dvDictInfo["taper"],
             "span": dvDictInfo["span"],
         }
-
 
     prob = om.Problem()
     prob.model = Top()
@@ -682,13 +683,18 @@ if __name__ == "__main__":
         prob.run_model()
         fileName = "derivative-check-full.out"
         f = open(fileName, "w")
-        print("Checking totals...")
-        f.write("TOTALS\n")
-        prob.check_totals(out_stream=f, method="fd", compact_print=True)
-        prob.check_totals(out_stream=f, method="fd", step=1e-4)
+        # print("Checking totals...")
+        # f.write("TOTALS\n")
+        # prob.check_totals(out_stream=f, method="fd", compact_print=True)
+        # prob.check_totals(out_stream=f, method="fd", step=1e-3)
 
         print("Checking partials...")
         f.write("PARTIALS\n")
-        prob.model.dcfoil.hydroelastic.liftingline_funcs.set_check_partial_options(wrt=["toc"])
-        prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
-        prob.check_partials(method="fd", includes=["liftingline_funcs"])
+        # prob.model.dcfoil_p3.hydroelastic.liftingline_funcs.set_check_partial_options(wrt=["toc"])
+        # prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
+        # prob.check_partials(method="fd", includes=["liftingline_funcs"])
+        prob.check_partials(
+            out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"], compact_print=True
+        )
+        prob.check_partials(out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"])
+        f.close()

@@ -120,7 +120,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
         "upper": 15.0,
-        "scale": 1.0 ,
+        "scale": 1.0,
         "value": np.zeros(8 // 2),
     },
     "sweep": {
@@ -356,10 +356,9 @@ def plot_spanwise():
 
             ventilationCon = dcfoil_case.outputs[f"{systemName}.ksvent"]
 
-
             # --- Lift distribution ---
             try:
-                spanVal = design_vars_vals["span"][case_num] /dvDictInfo["span"]["scale"]
+                spanVal = design_vars_vals["span"][case_num] / dvDictInfo["span"]["scale"]
             except KeyError:
                 spanVal = 0.0
             TotalLift = dcfoil_case.outputs[f"{systemName}.Flift"]
@@ -377,7 +376,7 @@ def plot_spanwise():
             )
             print("Total lift:", TotalLift)
             print("Span value:", spanVal)
-            actualSpan = aeroNodesXYZ[1,-1]
+            actualSpan = aeroNodesXYZ[1, -1]
             print("Actual span:", actualSpan)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, actualSpan, density)
@@ -482,7 +481,7 @@ def plot_spanwise():
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
     try:
-        for ax in axes[-1,:]:
+        for ax in axes[-1, :]:
             ax.set_xlabel("Spanwise position [m]")
     except Exception:
         axes[-1].set_xlabel("Spanwise position [m]")
@@ -874,14 +873,14 @@ if __name__ == "__main__":
 
     # ax = opthistaxes[0, 1]
     ax = opthistaxes[1, 0]
-    ax.plot(range(0, NITER), objectives_vals[obj]*forceScale, label="Dtot")
+    ax.plot(range(0, NITER), objectives_vals[obj] * forceScale, label="Dtot")
     ax.set_ylabel(f"{obj}", rotation="horizontal", ha="right", va="center")
 
     for ii, con in enumerate(constraints_vals):
         # ax = opthistaxes[1 + ii, 1]
         ax = opthistaxes[1, 1 + ii]
         if "lift" in con:
-            ax.plot(range(0, NITER), constraints_vals[con]*forceScale)
+            ax.plot(range(0, NITER), constraints_vals[con] * forceScale)
         else:
             ax.plot(range(0, NITER), constraints_vals[con])
         ax.set_ylabel(f"{con.lstrip('dcfoil.')}", rotation="horizontal", ha="right", va="center")

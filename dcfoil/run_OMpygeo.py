@@ -38,6 +38,7 @@ parser.add_argument(
 parser.add_argument("--animate", default=False, action="store_true")
 parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
 parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
+parser.add_argument("--forced", action="store_true", default=False, help="Run forced vibration analysis")
 parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
 parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
 parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
@@ -55,9 +56,9 @@ print(30 * "-", flush=True)
 outputDir = "embedding"
 files = {}
 files["gridFile"] = [
-        f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
-        f"../INPUT/{args.foil}_foil_port_mesh.dcf",
-    ]
+    f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
+    f"../INPUT/{args.foil}_foil_port_mesh.dcf",
+]
 FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
 files["FFDFile"] = FFDFile
 
@@ -74,7 +75,7 @@ case_name = "embedding"
     npt_wing,
     npt_wing_full,
     n_node,
-) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, case_name)
+) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, [0.01, 1.0], case_name)
 
 # nnodes = len(ptVec) // 3 // 2
 # XCoords = ptVec.reshape(-1, 3)
@@ -369,14 +370,38 @@ if __name__ == "__main__":
             Path(dirName).mkdir(exist_ok=True, parents=True)
 
             n_all = 20
-            wave = np.sin(np.linspace(0, np.pi/2, n_all))
+            wave = np.sin(np.linspace(0, np.pi / 2, n_all))
 
             taper_mag = 0.5
             twist_mag = 15.0
             sweep_mag = 30.0
-            span_mag = 0.1
+            span_mag = 0.2
 
             i_frame = 0
+            
+            # --- SPAN ---
+            # wave = np.sin(np.linspace(0, np.pi, n_all))
+            for ind, val in enumerate(wave):
+                print(ind, val)
+
+                prob.set_val("span", val=val * span_mag)
+                prob.run_model()
+                DVGeo = prob.model.geometry.nom_getDVGeo()
+
+                # Write deformed FFD
+                DVGeo.writeTecplot(f"{dirName}/all_{i_frame:03d}_ffd.dat")
+                DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
+
+                print("Writing ptSets to tecplot...")
+
+                ptSetName = "x_ptVec0"
+                DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_leptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+                # ptSetName = "x_teptVec0"
+                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
+
+                i_frame += 1
 
             # --- TAPER ---
             for ind, val in enumerate(wave):
@@ -405,7 +430,7 @@ if __name__ == "__main__":
                 i_frame += 1
 
             # --- TWIST ---
-            for ii in range(1, nTwist):
+            for ii in range(nTwist):
                 for ind, val in enumerate(wave):
                     print(ind, val)
 
@@ -450,29 +475,7 @@ if __name__ == "__main__":
 
                 i_frame += 1
 
-            # --- SPAN ---
-            wave = np.sin(np.linspace(0, np.pi, n_all))
-            for ind, val in enumerate(wave):
-                print(ind, val)
-
-                prob.set_val("span", val=val * span_mag)
-                prob.run_model()
-                DVGeo = prob.model.geometry.nom_getDVGeo()
-
-                # Write deformed FFD
-                DVGeo.writeTecplot(f"{dirName}/all_{i_frame:03d}_ffd.dat")
-                DVGeo.writeRefAxes(f"{dirName}/all_{i_frame:03d}_axes")
-
-                print("Writing ptSets to tecplot...")
-
-                ptSetName = "x_ptVec0"
-                DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-                # ptSetName = "x_leptVec0"
-                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-                # ptSetName = "x_teptVec0"
-                # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
-
-                i_frame += 1
+            
 
     # ************************************************
     #     Check partials
