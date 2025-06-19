@@ -1061,16 +1061,13 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                     is_failed = false
                     ChainRulesCore.ignore_derivatives() do
                         println("INFO - pkFlutterAnalysis : Mode disappeared")
-                        println("INFO - n old modes $(size(old_r)), n corr $(nCorr)")
-                        println("old eigs", p_old_i)
-                        println("nModes to search for", nModes)
                     end
 
-                    if nCorr == nModes
+                    if nCorr == NTotalModesFound
                         ChainRulesCore.ignore_derivatives() do
-                            println("INFO - pkFlutterAnalysis : Mode disappeared but all modes are correlated. Failing")
+                            println("INFO - pkFlutterAnalysis : Mode disappeared but all modes found are correlated. Failing")
                         end
-                        error("Throwing a flutter error") # TODO: figure out if this is the same as JuliaError
+                        error("Throwing a flutter error") # Throws error that works for OpenMDAO
                     end
                 end
             end
