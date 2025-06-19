@@ -1061,10 +1061,12 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                     is_failed = false
                     ChainRulesCore.ignore_derivatives() do
                         println("INFO - pkFlutterAnalysis : Mode disappeared")
-                        println("INFO - n old modes $(size(old_r)[2]), n corr $(nCorr)")
+                        println("INFO - n old modes $(size(old_r)), n corr $(nCorr)")
+                        println("old eigs", p_old_i)
+                        println("nModes to search for", nModes)
                     end
 
-                    if nCorr == size(old_r)[2]
+                    if nCorr == nModes
                         ChainRulesCore.ignore_derivatives() do
                             println("INFO - pkFlutterAnalysis : Mode disappeared but all modes are correlated. Failing")
                         end
