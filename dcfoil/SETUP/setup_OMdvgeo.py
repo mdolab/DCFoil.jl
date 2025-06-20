@@ -81,8 +81,8 @@ def setup(args, model, comm, files: dict):
             # sweep_ref_pt = C_orig[0, :]
             sweep_ref_pt = C_orig[nSweep + nSkip, :]
 
-            sweep_ref_pt_port = C_orig[nSweep + nSkip-nSkip, :]
-            sweep_ref_pt_stbd = C_orig[nSweep + nSkip+nSkip, :]
+            sweep_ref_pt_port = C_orig[nSweep + nSkip - nSkip, :]
+            sweep_ref_pt_stbd = C_orig[nSweep + nSkip + nSkip, :]
 
             theta = -val[0] * np.pi / 180
             cc = np.cos(theta)

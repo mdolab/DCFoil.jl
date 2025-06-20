@@ -125,7 +125,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0/10,
+        "scale": 1.0 / 10,
         "value": 4.0,
     },
     "toc": {
@@ -282,12 +282,13 @@ class Top(Multipoint):
         #     Objectives
         # ************************************************
         # self.add_objective("CD")
-        self.add_objective("Dtot",
-                        #    scaler=1e-2,  # 60/63 because it could not meet feasibility or optimality
-                        #    scaler=1e-3, # not working
-                        #    scaler=1e-4, # WORKS AND GIVES 0/1
-                           scaler=5e-5, # 
-                           )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
+        self.add_objective(
+            "Dtot",
+            #    scaler=1e-2,  # 60/63 because it could not meet feasibility or optimality
+            #    scaler=1e-3, # not working
+            #    scaler=1e-4, # WORKS AND GIVES 0/1
+            scaler=5e-5,  #
+        )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
 
         # ************************************************
         #     Constraints
@@ -301,7 +302,8 @@ class Top(Multipoint):
                 # scaler=1e-2, # 60/63 because it could not meet feasibility or optimality
                 # scaler=1e-3, # had this before
                 # scaler=1e-4, # WORKS AND GIVES 0/1
-                scaler=5e-5, # 
+                # scaler=5e-5, # 60/63 with drag
+                scaler=1 / (Fliftstars[ptName] * 10),  #
             )  # lift constraint [N]
 
             if args.task != "trim":
@@ -612,7 +614,7 @@ if __name__ == "__main__":
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
                 scale = dvDictInfo[dv]["scale"]
-                if dv != "twist":  
+                if dv != "twist":
                     print(f"Setting {dv} to {val} but scaled by {scale}")
                     prob.set_val(dv, val / scale)
             elif dv in otherDVs:
@@ -625,8 +627,9 @@ if __name__ == "__main__":
             elif dv.startswith("alfa0_"):
                 try:
                     scale = otherDVs["alfa0"]["scale"]
+                    # scale = 1/20
+                    # val = .28
                     print(f"Setting {dv} to {val} but scaled by {scale}")
-                    scale = 1/20
                     prob.set_val(dv, val / scale)
                 except Exception:
                     print(f"WARNING: {dv} not found in prob, skipping...")
@@ -683,7 +686,7 @@ if __name__ == "__main__":
         print("Drag components:")
         print("=" * 20)
         print_drags()
-        
+
         # ---------------------------
         #   Write out FFD and shape too
         # ---------------------------

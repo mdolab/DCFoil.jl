@@ -379,7 +379,7 @@ def plot_spanwise():
             actualSpan = aeroNodesXYZ[1, -1]
             print("Actual span:", actualSpan)
             spanXYZ = aeroNodesXYZ[:, -1]
-            dist = np.sqrt(spanXYZ[0]**2+ spanXYZ[1]**2 + spanXYZ[2]**2)  # this is the span from origin
+            dist = np.sqrt(spanXYZ[0] ** 2 + spanXYZ[1] ** 2 + spanXYZ[2] ** 2)  # this is the span from origin
             print("Span distance:", dist)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, actualSpan, density)

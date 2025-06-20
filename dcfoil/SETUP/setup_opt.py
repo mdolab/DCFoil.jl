@@ -28,7 +28,8 @@ def setup(args, outputDir: str):
         }
 
     if args.task == "opt":
-        optOptions["Major Step Limit"] = 1e-2
+        optOptions["Major Step Limit"] = 1e-2  # trying this when t/c is a variable
+        # optOptions["Major Step Limit"] = 1e-1 # bigger # failed
         # optOptions["Major Step Limit"] = 5e-3 # maybe this was too small
         # optOptions["Backoff factor"] = 0.05
         # optOptions["Linesearch tolerance"] = 0.9,  # all gradients are known so we can do less accurate LS

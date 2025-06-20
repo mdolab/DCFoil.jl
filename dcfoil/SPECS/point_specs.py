@@ -21,7 +21,7 @@ boatSpds = {  # boat speeds [m/s]
     "p1": 24.0,
     "p2": 20.0,
     "p3": 17.0,
-    "f1": [5.0, 30.0],  # speed sweep
+    "f1": [5.0, 25.0],  # speed sweep
 }
 
 Fliftstars = {
