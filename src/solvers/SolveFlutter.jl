@@ -94,6 +94,7 @@ function solve(structMesh, elemConn, solverOptions, uRange, b_ref, chordVec, abV
         # --- Optional args ---
         # ΔdynP=0.5 * FlowCond.rhof * 1^2,
         Δu=0.4,
+        # Δu=0.3,
         debug=debug,
         solverOptions=solverOptions,
         appendageOptions=appendageOptions
@@ -1124,8 +1125,8 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         #   Store solution
         # ---------------------------
         if is_failed # backup dynamic pressure
-
-            dynPTmp = (dynPTmp - flowHistory_z[nFlow-1, 3]) * 0.5 + flowHistory_z[nFlow-1, 3]
+            backoffFactor = 0.5
+            dynPTmp = (dynPTmp - flowHistory_z[nFlow-1, 3]) * backoffFactor + flowHistory_z[nFlow-1, 3]
             U∞ = √(2 * dynPTmp / flowHistory_z[nFlow-1, 2])
 
         else # Store solution

@@ -126,7 +126,7 @@ otherDVs = {
         "lower": -10.0,
         "upper": 10.0,
         "scale": 1.0 / 10,
-        "value": 4.0,
+        "value": 3.0,
     },
     "toc": {
         "lower": 0.09,
@@ -185,8 +185,8 @@ class Top(Multipoint):
 
             physModel = CoupledAnalysis(
                 analysis_mode="coupled",
-                include_flutter=True,
-                include_forced=True,
+                include_flutter=run_flutter,
+                include_forced=args.forced,
                 ptVec_init=np.array(ptVec),
                 npt_wing=npt_wing,
                 n_node=n_node,
@@ -387,7 +387,7 @@ if __name__ == "__main__":
                 "lower": 0.0,
                 "upper": 0.0,
                 "scale": 1.0,
-                "value": np.zeros(8 // 2),
+                "value": np.zeros(nTwist),
             },
             "taper": {  # the tip chord can change, but not the root
                 "lower": [1.0, 1.0],
@@ -407,7 +407,7 @@ if __name__ == "__main__":
                 "lower": -10.0,
                 "upper": 10.0,
                 "scale": 1.0,  # the scale was messing with the DV bounds
-                "value": appendageParams["alfa0"],
+                "value": otherDVs["alfa0"]["value"],
             },
             "toc": {
                 "lower": otherDVs["toc"]["value"][0],

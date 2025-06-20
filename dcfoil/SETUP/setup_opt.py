@@ -20,7 +20,8 @@ def setup(args, outputDir: str):
             "Verify level": -1,  # NOTE: verify level 0 is pretty useless; just use level 1--3 when testing a new feature
             "Linesearch tolerance": 0.99,  # all gradients are known so we can do less accurate LS
             "Nonderivative linesearch": None,  # Comment out to specify yes nonderivative (if derivs are expensive, use this)
-            "Major Step Limit": 1e-2,  # good for trim problems
+            # "Major Step Limit": 1e-2,  # good for trim problems
+            "Major Step Limit": 5e-1,  # good for trim problems
             "Major iterations limit": 200,
             # "Major iterations limit": 1,  # NOTE: for debugging; remove before runs if left active by accident
             "Print file": os.path.join(outputDir, "SNOPT_print.out"),
