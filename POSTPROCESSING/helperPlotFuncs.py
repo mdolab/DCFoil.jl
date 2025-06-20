@@ -563,7 +563,7 @@ def plot_forced(
 
         M_wRAO[ii] = meanDef
 
-    ax.plot(fExtSweep, M_wRAO, color=cm[0], alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, M_wRAO, color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 0]
@@ -578,7 +578,7 @@ def plot_forced(
         tipDef = bendingRAO[-1][0] + 1j * bendingRAO[-1][1]
         arg_wRAO[ii] = np.angle(tipDef, deg=True)
 
-    ax.plot(fExtSweep, arg_wRAO, color=cm[0], alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, arg_wRAO, color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
     ax.set_ylim(-angleLim, angleLim)
 
@@ -594,7 +594,7 @@ def plot_forced(
 
         M_thetaRAO[ii] = meanDef
 
-    ax.plot(fExtSweep, np.rad2deg(M_thetaRAO), color=cm[0], alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, np.rad2deg(M_thetaRAO), color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 1]
@@ -610,7 +610,7 @@ def plot_forced(
 
         arg_thetaRAO[ii] = np.angle(tipDef, deg=True)
 
-    ax.plot(fExtSweep, arg_thetaRAO, color=cm[0], alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, arg_thetaRAO, color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
     ax.set_ylim(-angleLim, angleLim)
 
@@ -627,7 +627,7 @@ def plot_forced(
     LiftRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynLiftRAO):
         LiftRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, LiftRAO, color=cm[0], alpha=alpha)
+    ax.plot(fExtSweep, LiftRAO, color=cm, alpha=alpha)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     # ax.set_xlabel(xLabel)
 
@@ -636,7 +636,7 @@ def plot_forced(
     argLiftRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynLiftRAO):
         argLiftRAO[ii] = np.angle(entry[0] + 1j * entry[1], deg=True)
-    ax.plot(fExtSweep, argLiftRAO, color=cm[0], alpha=alpha)
+    ax.plot(fExtSweep, argLiftRAO, color=cm, alpha=alpha)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_ylim(-angleLim, angleLim)
 
@@ -645,7 +645,7 @@ def plot_forced(
     MomRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynMomentRAO):
         MomRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, MomRAO, color=cm[0], alpha=alpha)
+    ax.plot(fExtSweep, MomRAO, color=cm, alpha=alpha)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 3]
@@ -653,7 +653,7 @@ def plot_forced(
     argMomRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynMomentRAO):
         argMomRAO[ii] = np.angle(entry[0] + 1j * entry[1], deg=True)
-    ax.plot(fExtSweep, argMomRAO, color=cm[0], alpha=alpha)
+    ax.plot(fExtSweep, argMomRAO, color=cm, alpha=alpha)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_ylim(-angleLim, angleLim)
 
@@ -662,7 +662,7 @@ def plot_forced(
     # # ************************************************
     # ax = axes[0, -1]
     # yLabel = r"$\zeta(\omega)$"
-    # ax.plot(fExtSweep, waveAmpSpectrum, color=cm[0])
+    # ax.plot(fExtSweep, waveAmpSpectrum, color=cm)
     # ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     # # ax.set_xlabel(xLabel)
 

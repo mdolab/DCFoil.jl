@@ -174,13 +174,13 @@ class Top(Multipoint):
             depth = opdepths[ptName]
             solverOptions["Uinf"] = Uinf
             appendageParams["depth0"] = depth
-            solverOptions["outputDir"] += f"/{ptName}"  # add the point name to the output directory
-
+            solverOptions["outputDir"] = f"{case_name}/{ptName}"  # add the point name to the output directory
             # print(f"Uinf: {Uinf}, depth: {depth}", flush=True)
             flowOptions = {
                 "Uinf": Uinf,
                 "depth0": depth,
                 "alfa0_flutter": alfa0,  # angle of attack for flutter analysis [deg]
+                "outputDir": f"{case_name}/{ptName}",  # add the point name to the output directory
             }
 
             physModel = CoupledAnalysis(
@@ -403,12 +403,7 @@ if __name__ == "__main__":
             },
         }
         otherDVs = {
-            "alfa0": {
-                "lower": -10.0,
-                "upper": 10.0,
-                "scale": 1.0,  # the scale was messing with the DV bounds
-                "value": otherDVs["alfa0"]["value"],
-            },
+            "alfa0":  otherDVs["alfa0"],
             "toc": {
                 "lower": otherDVs["toc"]["value"][0],
                 "upper": otherDVs["toc"]["value"][0],

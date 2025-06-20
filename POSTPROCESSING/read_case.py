@@ -759,157 +759,161 @@ if __name__ == "__main__":
         n_node,
     ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, [0.5, 1.0], None)
 
-    datafname = f"../dcfoil/run_OMDCfoil_out/{args.name}.sql"
+    # datafname = f"../dcfoil/run_OMDCfoil_out/{args.name}.sql"
     datafname = f"../dcfoil/OUTPUT/{args.cases[0]}/{args.name}.sql"
 
-    cr = om.CaseReader(datafname)
+    try:
+        cr = om.CaseReader(datafname)
 
-    driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
+        driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
 
-    # ************************************************
-    #     Last case
-    # ************************************************
-    last_case = cr.get_case(driver_cases[-1])
+        # ************************************************
+        #     Last case
+        # ************************************************
+        last_case = cr.get_case(driver_cases[-1])
 
-    objectives = last_case.get_objectives()
-    design_vars = last_case.get_design_vars()
-    constraints = last_case.get_constraints()
-    print("obj:\t", objectives["Dtot"])
-    print("dv:")
-    pp(design_vars)
-    print("constraints:")
-    pp(constraints)
-    # print(constraints["CL"])
+        objectives = last_case.get_objectives()
+        design_vars = last_case.get_design_vars()
+        constraints = last_case.get_constraints()
+        print("obj:\t", objectives["Dtot"])
+        print("dv:")
+        pp(design_vars)
+        print("constraints:")
+        pp(constraints)
+        # print(constraints["CL"])
 
-    # ************************************************
-    #     Plot path of DVs
-    # ************************************************
-    design_vars_vals = {}
-    for dv, val in design_vars.items():
-        design_vars_vals[dv] = []
+        # ************************************************
+        #     Plot path of DVs
+        # ************************************************
+        design_vars_vals = {}
+        for dv, val in design_vars.items():
+            design_vars_vals[dv] = []
 
-    objectives_vals = {}
+        objectives_vals = {}
 
-    for obj, val in objectives.items():
-        objectives_vals[obj] = []
+        for obj, val in objectives.items():
+            objectives_vals[obj] = []
 
-    constraints_vals = {}
+        constraints_vals = {}
 
-    for con, val in constraints.items():
-        constraints_vals[con] = []
+        for con, val in constraints.items():
+            constraints_vals[con] = []
 
-    NDV = len(design_vars_vals)
-    NITER = len(driver_cases)
-    NCON = len(constraints_vals)
-    for case in driver_cases:
-        current_case = cr.get_case(case)
-        case_design_vars = current_case.get_design_vars()
+        NDV = len(design_vars_vals)
+        NITER = len(driver_cases)
+        NCON = len(constraints_vals)
+        for case in driver_cases:
+            current_case = cr.get_case(case)
+            case_design_vars = current_case.get_design_vars()
+            for dv, val in case_design_vars.items():
+                design_vars_vals[dv].append(val)
+
+            case_objectives = current_case.get_objectives()
+            for obj, val in case_objectives.items():
+                objectives_vals[obj].append(val)
+
+            case_constraints = current_case.get_constraints()
+            for con, val in case_constraints.items():
+                constraints_vals[con].append(val)
+
         for dv, val in case_design_vars.items():
-            design_vars_vals[dv].append(val)
-
-        case_objectives = current_case.get_objectives()
+            design_vars_vals[dv] = np.array(design_vars_vals[dv])
         for obj, val in case_objectives.items():
-            objectives_vals[obj].append(val)
-
-        case_constraints = current_case.get_constraints()
+            objectives_vals[obj] = np.array(objectives_vals[obj])
         for con, val in case_constraints.items():
-            constraints_vals[con].append(val)
+            constraints_vals[con] = np.array(constraints_vals[con])
 
-    for dv, val in case_design_vars.items():
-        design_vars_vals[dv] = np.array(design_vars_vals[dv])
-    for obj, val in case_objectives.items():
-        objectives_vals[obj] = np.array(objectives_vals[obj])
-    for con, val in case_constraints.items():
-        constraints_vals[con] = np.array(constraints_vals[con])
+        dosave = not not plotname
 
-    dosave = not not plotname
+        # Create figure object
+        nrows = np.max([NDV, NCON + 1])
+        # fig, opthistaxes = plt.subplots(nrows=nrows, ncols=2, sharex=True, constrained_layout=True, figsize=(16, 3 * nrows))
+        fig, opthistaxes = plt.subplots(nrows=2, ncols=nrows, sharex=True, constrained_layout=True, figsize=(5 * nrows, 8))
 
-    # Create figure object
-    nrows = np.max([NDV, NCON + 1])
-    # fig, opthistaxes = plt.subplots(nrows=nrows, ncols=2, sharex=True, constrained_layout=True, figsize=(16, 3 * nrows))
-    fig, opthistaxes = plt.subplots(nrows=2, ncols=nrows, sharex=True, constrained_layout=True, figsize=(5 * nrows, 8))
+        for ii, dv in enumerate(design_vars_vals):
+            # ax = opthistaxes[ii, 0]
+            ax = opthistaxes[0, ii]
 
-    for ii, dv in enumerate(design_vars_vals):
-        # ax = opthistaxes[ii, 0]
-        ax = opthistaxes[0, ii]
+            # Check if dv key is in dvDictInfo, if not use otherDVs
+            if dv in dvDictInfo:
+                scaleFactor = 1 / dvDictInfo[dv]["scale"]
+            elif dv in otherDVs:
+                scaleFactor = 1 / otherDVs[dv]["scale"]
+            elif "alfa0" in dv:
+                scaleFactor = 1 / otherDVs["alfa0"]["scale"]
 
-        # Check if dv key is in dvDictInfo, if not use otherDVs
-        if dv in dvDictInfo:
-            scaleFactor = 1 / dvDictInfo[dv]["scale"]
-        elif dv in otherDVs:
-            scaleFactor = 1 / otherDVs[dv]["scale"]
-        elif "alfa0" in dv:
-            scaleFactor = 1 / otherDVs["alfa0"]["scale"]
+            if dv in ["theta_f"]:
+                design_vars_vals[dv] *= 180 / np.pi * scaleFactor  # convert to degrees
+            if design_vars_vals[dv].ndim != 1:
+                for jj in range(design_vars_vals[dv].shape[1]):
+                    ax.plot(
+                        range(0, NITER),
+                        design_vars_vals[dv][:, jj] * scaleFactor,
+                        label=f"{dv}-{jj}",
+                        color=cm[jj],
+                        ls=linestyles[jj % len(linestyles)],
+                    )
 
-        if dv in ["theta_f"]:
-            design_vars_vals[dv] *= 180 / np.pi * scaleFactor  # convert to degrees
-        if design_vars_vals[dv].ndim != 1:
-            for jj in range(design_vars_vals[dv].shape[1]):
-                ax.plot(
-                    range(0, NITER),
-                    design_vars_vals[dv][:, jj] * scaleFactor,
-                    label=f"{dv}-{jj}",
-                    color=cm[jj],
-                    ls=linestyles[jj % len(linestyles)],
+                ax.legend(
+                    fontsize=fs_lgd,
+                    labelcolor="linecolor",
+                    loc="upper left",
+                    frameon=False,  # ncol=design_vars_vals[dv].shape[1]
                 )
+            else:
+                ax.plot(range(0, NITER), design_vars_vals[dv])
 
-            ax.legend(
-                fontsize=fs_lgd,
-                labelcolor="linecolor",
-                loc="upper left",
-                frameon=False,  # ncol=design_vars_vals[dv].shape[1]
-            )
-        else:
-            ax.plot(range(0, NITER), design_vars_vals[dv])
+            ax.set_ylabel(f"{dv}", rotation="horizontal", ha="right", va="center")
+            # ax.set_ylim(bottom=0.0)
 
-        ax.set_ylabel(f"{dv}", rotation="horizontal", ha="right", va="center")
-        # ax.set_ylim(bottom=0.0)
+            # print(f"{dv} values:")
+            # print(tabulate(design_vars_vals[dv], headers="keys", tablefmt="grid"))
+            # print(30 * "-")
 
-        # print(f"{dv} values:")
-        # print(tabulate(design_vars_vals[dv], headers="keys", tablefmt="grid"))
-        # print(30 * "-")
+        # ax = opthistaxes[0, 1]
+        ax = opthistaxes[1, 0]
+        ax.plot(range(0, NITER), objectives_vals[obj] * forceScale, label="Dtot")
+        ax.set_ylabel(f"{obj}", rotation="horizontal", ha="right", va="center")
 
-    # ax = opthistaxes[0, 1]
-    ax = opthistaxes[1, 0]
-    ax.plot(range(0, NITER), objectives_vals[obj] * forceScale, label="Dtot")
-    ax.set_ylabel(f"{obj}", rotation="horizontal", ha="right", va="center")
+        for ii, con in enumerate(constraints_vals):
+            # ax = opthistaxes[1 + ii, 1]
+            ax = opthistaxes[1, 1 + ii]
+            if "lift" in con:
+                ax.plot(range(0, NITER), constraints_vals[con] * forceScale)
+            else:
+                ax.plot(range(0, NITER), constraints_vals[con])
+            ax.set_ylabel(f"{con.lstrip('dcfoil.')}", rotation="horizontal", ha="right", va="center")
 
-    for ii, con in enumerate(constraints_vals):
-        # ax = opthistaxes[1 + ii, 1]
-        ax = opthistaxes[1, 1 + ii]
-        if "lift" in con:
-            ax.plot(range(0, NITER), constraints_vals[con] * forceScale)
-        else:
-            ax.plot(range(0, NITER), constraints_vals[con])
-        ax.set_ylabel(f"{con.lstrip('dcfoil.')}", rotation="horizontal", ha="right", va="center")
+        for ax in opthistaxes.flatten():
+            nplt.adjust_spines(ax, outward=True)
 
-    for ax in opthistaxes.flatten():
-        nplt.adjust_spines(ax, outward=True)
+        for ax in opthistaxes[-1, :]:
+            ax.set_xlabel("Iteration")
+        if dosave:
+            plt.savefig(plotname, format="pdf")
+            print("Saved to:", plotname)
+        plt.close()
 
-    for ax in opthistaxes[-1, :]:
-        ax.set_xlabel("Iteration")
-    if dosave:
-        plt.savefig(plotname, format="pdf")
-        print("Saved to:", plotname)
-    plt.close()
+        # ************************************************
+        #     Spanwise history too
+        # ************************************************
+        # if not args.flutter and not args.forced:
+        plot_spanwise()
+        plot_spanwiseperiter(args.name)
 
-    # ************************************************
-    #     Spanwise history too
-    # ************************************************
-    # if not args.flutter and not args.forced:
-    plot_spanwise()
-    plot_spanwiseperiter(args.name)
+        #     # ************************************************
+        #     #     Also plot drag breakdown vs. iteration
+        #     # ************************************************
+        #    plot_dragiter()
 
-    #     # ************************************************
-    #     #     Also plot drag breakdown vs. iteration
-    #     # ************************************************
-    #    plot_dragiter()
+        # ************************************************
+        #     Compare drag buildup with base case
+        # ************************************************
+        # if not args.flutter and not args.forced:
+        plot_dragbuildupcomp()
 
-    # ************************************************
-    #     Compare drag buildup with base case
-    # ************************************************
-    # if not args.flutter and not args.forced:
-    plot_dragbuildupcomp()
+    except Exception:
+        print("No case file found")
 
     if args.flutter:
         if args.cases is not None:
@@ -927,8 +931,8 @@ if __name__ == "__main__":
                 flutterSolDict = {}
                 instabPtsDict = {}
                 for ii, caseDir in enumerate(caseDirs):
-                    if not os.path.exists(caseDir):
-                        print(f"Case directory {caseDir} does not exist. Skipping...")
+                    if not os.path.exists(caseDir + "/pkFlutter"):
+                        print(f"Case directory {caseDir}/pkFlutter does not exist. Skipping...")
                         continue
                     else:
                         print(f"Processing case directory: {caseDir}")
@@ -960,111 +964,115 @@ if __name__ == "__main__":
                         instabPtsDict[key] = find_DivAndFlutterPoints(
                             flutterSolDict[key], "pvals_r", "U", altKey="pvals_i"
                         )
-                # ************************************************
-                #       Standard v-g, v-f, R-L plots
-                # ************************************************
-                # --- File name ---
-                fname = f"{outputDir}/vg-vf-rl-{ptName}.pdf"
+                
+                if os.path.exists(caseDirs[0] + "/pkFlutter"):
+                    # ************************************************
+                    #       Standard v-g, v-f, R-L plots
+                    # ************************************************
+                    # --- File name ---
+                    fname = f"{outputDir}/vg-vf-rl-{ptName}.pdf"
 
-                # --- Create figure object ---
-                fact = 0.85  # scale size
-                figsize = (18 * fact, 13 * fact)
-                fig, axes = plt.subplots(
-                    nrows=2,
-                    ncols=2,
-                    sharex="col",
-                    sharey="row",
-                    constrained_layout=True,
-                    figsize=figsize,
-                )
-
-                instabSpeedTicks = []
-                instabFreqTicks = []
-                units = "kts"
-                units = "m/s"
-                for ii, key in enumerate(args.cases):
-                    if ii == 0:
-                        annotateModes = True
-                    else:
-                        annotateModes = False
-
-                    # # can force to see modes in legend label
-                    # annotateModes = False
-
-                    # --- Plot ---
-                    fig, axes = plot_vg_vf_rl(
-                        fig,
-                        axes,
-                        flutterSol=flutterSolDict[key],
-                        cm=cm,
-                        ls=linestyles[ii],
-                        alpha=alphas[ii],
-                        units=units,
-                        # marker="o",
-                        showRLlabels=True,
-                        annotateModes=annotateModes,
-                        # nShift=62,
-                        instabPts=instabPtsDict[key],
+                    # --- Create figure object ---
+                    fact = 0.85  # scale size
+                    figsize = (18 * fact, 13 * fact)
+                    fig, axes = plt.subplots(
+                        nrows=2,
+                        ncols=2,
+                        sharex="col",
+                        sharey="row",
+                        constrained_layout=True,
+                        figsize=figsize,
                     )
-                    if units == "kts":
-                        unitFactor = 1.9438
-                    else:
-                        unitFactor = 1.0
 
-                    if len(instabPtsDict[key]) != 0:
-                        instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
-                        instabFreqTicks.append(instabPtsDict[key][0][-1])
+                    instabSpeedTicks = []
+                    instabFreqTicks = []
+                    units = "kts"
+                    units = "m/s"
+                    for ii, key in enumerate(args.cases):
+                        if ii == 0:
+                            annotateModes = True
+                        else:
+                            annotateModes = False
 
-                # --- Set limits ---
-                # axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
-                # axes[1, 0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
+                        # # can force to see modes in legend label
+                        # annotateModes = False
 
-                # axes[0, 0].set_ylim(top=30, bottom=-400)
-                # axes[1, 0].set_ylim(top=0.005, bottom=0)
-                # axes[0, 0].set_xlim(left=160, right=175)
+                        # --- Plot ---
+                        fig, axes = plot_vg_vf_rl(
+                            fig,
+                            axes,
+                            flutterSol=flutterSolDict[key],
+                            cm=cm,
+                            ls=linestyles[ii],
+                            alpha=alphas[ii],
+                            units=units,
+                            # marker="o",
+                            showRLlabels=True,
+                            annotateModes=annotateModes,
+                            # nShift=62,
+                            instabPts=instabPtsDict[key],
+                        )
+                        if units == "kts":
+                            unitFactor = 1.9438
+                        else:
+                            unitFactor = 1.0
 
-                dosave = not not fname
-                plt.show(block=(not dosave))
-                if dosave:
-                    plt.savefig(fname, format="pdf")
-                    print("Saved to:", fname)
-                plt.close()
+                        if len(instabPtsDict[key]) != 0:
+                            instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
+                            instabFreqTicks.append(instabPtsDict[key][0][-1])
 
-                # # ************************************************
-                # #     Damping loss plots
-                # # ************************************************
-                # # --- File name ---
-                # fname = f"{outputDir}/dlf.pdf"
+                    # --- Set limits ---
+                    # axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
+                    # axes[1, 0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
 
-                # # --- Create figure ---
-                # fact = 0.85  # scale size
-                # figsize = (18 * fact, 6 * fact)
-                # fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
-                # for ii, key in enumerate(args.cases):
-                #     # --- Plot ---
-                #     fig, axes = plot_dlf(
-                #         fig,
-                #         axes,
-                #         flutterSol=flutterSolDict[key],
-                #         cm=cm,
-                #         semichord=0.5 * meanChord,
-                #         sweepAng=sweepAng,
-                #         ls=linestyles[ii],
-                #         units="kts",
-                #         nShift=500,
-                #     )
-                #     axes[0].set_ylim(-0.1, 0.8)
-                #     axes[0].set_xlim(right=50, left=5)
-                #     # axes[1].set_ylim(-0.1, 1.2)
-                #     # axes[1].set_xlim(left=10)
+                    # axes[0, 0].set_ylim(top=30, bottom=-400)
+                    # axes[1, 0].set_ylim(top=0.005, bottom=0)
+                    # axes[0, 0].set_xlim(left=160, right=175)
 
-                # dosave = not not fname
-                # plt.show(block=(not dosave))
-                # if dosave:
-                #     plt.savefig(fname, format="pdf")
-                #     print("Saved to:", fname)
-                # plt.close()
+                    dosave = not not fname
+                    plt.show(block=(not dosave))
+                    if dosave:
+                        plt.savefig(fname, format="pdf")
+                        print("Saved to:", fname)
+                    plt.close()
 
+                    # # ************************************************
+                    # #     Damping loss plots
+                    # # ************************************************
+                    # # --- File name ---
+                    # fname = f"{outputDir}/dlf.pdf"
+
+                    # # --- Create figure ---
+                    # fact = 0.85  # scale size
+                    # figsize = (18 * fact, 6 * fact)
+                    # fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
+                    # for ii, key in enumerate(args.cases):
+                    #     # --- Plot ---
+                    #     fig, axes = plot_dlf(
+                    #         fig,
+                    #         axes,
+                    #         flutterSol=flutterSolDict[key],
+                    #         cm=cm,
+                    #         semichord=0.5 * meanChord,
+                    #         sweepAng=sweepAng,
+                    #         ls=linestyles[ii],
+                    #         units="kts",
+                    #         nShift=500,
+                    #     )
+                    #     axes[0].set_ylim(-0.1, 0.8)
+                    #     axes[0].set_xlim(right=50, left=5)
+                    #     # axes[1].set_ylim(-0.1, 1.2)
+                    #     # axes[1].set_xlim(left=10)
+
+                    # dosave = not not fname
+                    # plt.show(block=(not dosave))
+                    # if dosave:
+                    #     plt.savefig(fname, format="pdf")
+                    #     print("Saved to:", fname)
+                    # plt.close()
+
+                else:
+                    print(f"No flutter data found for {ptName}. Skipping flutter plots.")
     if args.forced:
 
         print("Reading in forced vibration data")
@@ -1073,7 +1081,21 @@ if __name__ == "__main__":
         dynLiftRAODict = {}
         dynMomentRAODict = {}
         if args.cases is not None:
-            for ptName in probList:
+            
+            fname = f"{outputDir}/forced-dynamics-allpts.pdf"
+
+            # Create figure object
+            nrows = 2
+            ncols = 4
+            figsize = (8 * ncols, 4 * nrows)
+            fig, axes = plt.subplots(
+                nrows=nrows,
+                ncols=ncols,
+                sharex="col",
+                constrained_layout=True,
+                figsize=figsize,
+            )
+            for (jj, ptName) in enumerate(probList):
                 # Input data read directory
                 caseDirs = []
                 for case in args.cases:
@@ -1113,20 +1135,16 @@ if __name__ == "__main__":
                 #     Plot the frequency spectra
                 # ************************************************
 
-                # Create figure object
-                nrows = 2
-                ncols = 4
-                figsize = (40 * ncols, 4 * nrows)
 
-                fname = f"{outputDir}/forced-dynamics-{ptName}.pdf"
+                # fname = f"{outputDir}/forced-dynamics-{ptName}.pdf"
 
-                fig, axes = plt.subplots(
-                    nrows=nrows,
-                    ncols=ncols,
-                    sharex="col",
-                    constrained_layout=True,
-                    figsize=figsize,
-                )
+                # fig, axes = plt.subplots(
+                #     nrows=nrows,
+                #     ncols=ncols,
+                #     sharex="col",
+                #     constrained_layout=True,
+                #     figsize=figsize,
+                # )
 
                 for ii, key in enumerate(args.cases):
                     # --- Plot ---
@@ -1141,21 +1159,22 @@ if __name__ == "__main__":
                         raoDict[key],
                         boatSpds[ptName],
                         fs_lgd,
-                        cm,
+                        cm[jj],
                         alphas[ii],
                     )
 
-                fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
+                # fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
+            fig.suptitle("Frequency response spectra")
+            axes[0,0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+            for ax in axes.flatten():
+                ax.set_xlim(left=0.0)
 
-                for ax in axes.flatten():
-                    ax.set_xlim(left=0.0)
+            for ax in axes[0, :].flatten():
+                ax.set_ylim(bottom=0.0)
 
-                for ax in axes[0, :].flatten():
-                    ax.set_ylim(bottom=0.0)
-
-                dosave = not not fname
-                plt.show(block=(not dosave))
-                if dosave:
-                    plt.savefig(fname, format="pdf")
-                    print("Saved to:", fname)
-                plt.close()
+            dosave = not not fname
+            plt.show(block=(not dosave))
+            if dosave:
+                plt.savefig(fname, format="pdf")
+                print("Saved to:", fname)
+            plt.close()
