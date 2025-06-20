@@ -31,7 +31,10 @@ def setup(args, model, comm, files: dict):
     #   TWIST
     # ---------------------------
     if "t" in args.geovar:
-        nSkip = 2
+        # nSkip = 2
+        # nTwist = nRefAxPts // 2 - nSkip
+        nSkip = 1
+        # nSkip = 0
         nTwist = nRefAxPts // 2 - nSkip
         print(f"{nTwist} foil twist vars", flush=True)
 
@@ -42,6 +45,8 @@ def setup(args, model, comm, files: dict):
             val array has length of semi-span FFDs only. It's mirrored to the full config
             """
             nSkip = 2
+            nSkip = 1
+            # nSkip = 0
             for ii in range(nTwist):
                 # geo.rot_y[twistAxis].coef[ii] = val[ii]
                 geo.rot_y[twistAxis].coef[-ii + nTwist - 1] = val[ii]

@@ -74,7 +74,7 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         # --- Great lakes ---
         "waveSpectrum": "ISSC",
         "Hsig": 1.5,  # significant wave height [m]
-        "omegaz": 2 * np.pi / 3.0,  # zero-crossing frequency [rad/s]
+        "omegaz": 2 * np.pi / 5.0,  # significant zero-crossing frequency [rad/s] 5s period for developing seas is typical
         "headingAngle": np.deg2rad(180.0),  # heading angle of the waves [rad]
         "tipForceMag": 1.0,
         "run_body": False,

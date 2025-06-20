@@ -88,13 +88,13 @@ files["FFDFile"] = FFDFile
 
 nNodes = 10
 nNodesStrut = 3
-
+nTwist = 8 // 2 + 1
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
-        "lower": -10.0,
-        "upper": 10.0,
-        "scale": 1.0,
-        "value": np.zeros(8 // 2),
+        "lower": -5.0,
+        "upper": 5.0,
+        "scale": 1.0 / 10.0,
+        "value": np.zeros(nTwist),
     },
     "sweep": {
         "lower": 0.0,
@@ -125,7 +125,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0,
+        "scale": 1.0/10,
         "value": 4.0,
     },
     "toc": {
@@ -185,8 +185,8 @@ class Top(Multipoint):
 
             physModel = CoupledAnalysis(
                 analysis_mode="coupled",
-                include_flutter=run_flutter,
-                include_forced=args.forced,
+                include_flutter=True,
+                include_forced=True,
                 ptVec_init=np.array(ptVec),
                 npt_wing=npt_wing,
                 n_node=n_node,
@@ -283,7 +283,10 @@ class Top(Multipoint):
         # ************************************************
         # self.add_objective("CD")
         self.add_objective("Dtot",
-                           scaler=1e-3,
+                        #    scaler=1e-2,  # 60/63 because it could not meet feasibility or optimality
+                        #    scaler=1e-3, # not working
+                        #    scaler=1e-4, # WORKS AND GIVES 0/1
+                           scaler=5e-5, # 
                            )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
 
         # ************************************************
@@ -293,9 +296,12 @@ class Top(Multipoint):
             # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
             self.add_constraint(
                 f"dcfoil_{ptName}.Flift",
-                lower=Fliftstars[ptName] - 10,
-                upper=Fliftstars[ptName] + 10,
-                # scaler=1e-5,
+                lower=Fliftstars[ptName],
+                upper=Fliftstars[ptName],
+                # scaler=1e-2, # 60/63 because it could not meet feasibility or optimality
+                # scaler=1e-3, # had this before
+                # scaler=1e-4, # WORKS AND GIVES 0/1
+                scaler=5e-5, # 
             )  # lift constraint [N]
 
             if args.task != "trim":
@@ -444,7 +450,7 @@ if __name__ == "__main__":
                 "lower": 0.0,
                 "upper": 0.0,
                 "scale": 1.0,
-                "value": np.zeros(8 // 2),
+                "value": np.zeros(nTwist),
             },
             "sweep": {
                 "lower": 0.0,
@@ -469,10 +475,48 @@ if __name__ == "__main__":
         # Free the DVs that seem to be giving problems for the flutter optimization
         dvDictInfo = {
             "twist": dvDictInfo["twist"],
-            "sweep": dvDictInfo["sweep"],
-            "taper": dvDictInfo["taper"],
-            "span": dvDictInfo["span"],
+            # "sweep": dvDictInfo["sweep"],
+            # "taper": dvDictInfo["taper"],
+            # "span": dvDictInfo["span"],
+            "sweep": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1.0,
+                "value": 0.0,
+            },
+            "taper": {  # the tip chord can change, but not the root
+                "lower": [1.0, 1.0],
+                "upper": [1.0, 1.0],
+                "scale": 1.0,
+                "value": np.ones(2) * 1.0,
+            },
+            "span": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1,
+                "value": 0.0,
+            },
         }
+        # otherDVs = {
+        #     "alfa0": {
+        #         "lower": otherDVs["alfa0"]["lower"],
+        #         "upper":otherDVs["alfa0"]["upper"],
+        #         "scale": otherDVs["alfa0"]["scale"],  # the scale was messing with the DV bounds
+        #         "value": otherDVs["alfa0"]["value"],
+        #     },
+        #     "toc": {
+        #         "lower": appendageParams["toc"],
+        #         "upper": appendageParams["toc"],
+        #         "scale": 1.0,
+        #         "value": appendageParams["toc"],
+        #     },
+        #     "theta_f": {
+        #         "lower": np.deg2rad(0),
+        #         "upper": np.deg2rad(0),
+        #         "scale": 1.0,
+        #         "value": 0.0,
+        #     },
+        # }
 
     prob = om.Problem()
     prob.model = Top()
@@ -568,14 +612,15 @@ if __name__ == "__main__":
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
                 scale = dvDictInfo[dv]["scale"]
-                print(f"Setting {dv} to {val} but scaled by {scale}")
-                prob.set_val(dv, val / scale)
+                if dv != "twist":  
+                    print(f"Setting {dv} to {val} but scaled by {scale}")
+                    prob.set_val(dv, val / scale)
             elif dv in otherDVs:
                 try:
                     scale = otherDVs[dv]["scale"]
                     print(f"Setting {dv} to {val} but scaled by {scale}")
                     prob.set_val(dv, val / scale)
-                except KeyError:
+                except Exception:
                     print(f"WARNING: {dv} not found in prob, skipping...")
             elif dv.startswith("alfa0_"):
                 try:
@@ -583,7 +628,7 @@ if __name__ == "__main__":
                     print(f"Setting {dv} to {val} but scaled by {scale}")
                     scale = 1/20
                     prob.set_val(dv, val / scale)
-                except KeyError:
+                except Exception:
                     print(f"WARNING: {dv} not found in prob, skipping...")
             else:
                 print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
@@ -638,6 +683,20 @@ if __name__ == "__main__":
         print("Drag components:")
         print("=" * 20)
         print_drags()
+        
+        # ---------------------------
+        #   Write out FFD and shape too
+        # ---------------------------
+        DVGeo = prob.model.geometry.nom_getDVGeo()
+
+        # Write deformed FFD
+        DVGeo.writeTecplot(f"{outputDir}/final_ffd.dat")
+        DVGeo.writeRefAxes(f"{outputDir}/final_axes")
+
+        ptSetName = "x_ptVec0"
+        DVGeo.writePointSet(ptSetName, f"{outputDir}/final", solutionTime=0)
+
+        print(f"Writing ptSets to tecplot {outputDir}...")
 
     if args.task in ["run"]:
         print("=" * 60)

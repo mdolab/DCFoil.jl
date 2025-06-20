@@ -378,6 +378,9 @@ def plot_spanwise():
             print("Span value:", spanVal)
             actualSpan = aeroNodesXYZ[1, -1]
             print("Actual span:", actualSpan)
+            spanXYZ = aeroNodesXYZ[:, -1]
+            dist = np.sqrt(spanXYZ[0]**2+ spanXYZ[1]**2 + spanXYZ[2]**2)  # this is the span from origin
+            print("Span distance:", dist)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, actualSpan, density)
 
@@ -501,11 +504,9 @@ def plot_spanwiseperiter(case):
         drag_vals[f"CDpr_{ptName}"] = []
         drag_vals[f"CDi_{ptName}"] = []
 
-
     datafname = f"../dcfoil/OUTPUT/{case}/{case}.sql"
 
     cr = om.CaseReader(datafname)
-
 
     systemName = f"dcfoil_{probList[0]}"
     dcfoil_cases = cr.list_cases(f"root.{systemName}", recurse=False)
@@ -513,7 +514,7 @@ def plot_spanwiseperiter(case):
         # Create figure object
         fig, axes = plt.subplots(nrows=5, ncols=npts, sharex="col", constrained_layout=True, figsize=(10 * npts, 16))
         dcfoil_case = cr.get_case(case_id)
-        
+
         for ii, ptName in enumerate(probList):
             systemName = f"dcfoil_{ptName}"
 
@@ -522,7 +523,6 @@ def plot_spanwiseperiter(case):
                 axes[0, ii].set_title(f"{ptName}: $U_\infty={Uinf:.1f}$ m/s", fontsize=fs * 1.1)
             except Exception:
                 axes[0].set_title(f"{ptName}: $U_\infty={Uinf:.1f}$ m/s", fontsize=fs * 1.1)
-
 
         waveDrag = dcfoil_case.outputs[f"{systemName}.Dw"]
         profileDrag = dcfoil_case.outputs[f"{systemName}.Dpr"]
@@ -546,10 +546,9 @@ def plot_spanwiseperiter(case):
 
         ventilationCon = dcfoil_case.outputs[f"{systemName}.ksvent"]
 
-
         # --- Lift distribution ---
         try:
-            spanVal = design_vars_vals["span"][case_num] /dvDictInfo["span"]["scale"]
+            spanVal = design_vars_vals["span"][case_num] / dvDictInfo["span"]["scale"]
         except KeyError:
             spanVal = 0.0
         TotalLift = dcfoil_case.outputs[f"{systemName}.Flift"]
@@ -567,7 +566,7 @@ def plot_spanwiseperiter(case):
         )
         print("Total lift:", TotalLift)
         print("Span value:", spanVal)
-        actualSpan = aeroNodesXYZ[1,-1]
+        actualSpan = aeroNodesXYZ[1, -1]
         print("Actual span:", actualSpan)
         sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, semispan + spanVal, density)
         sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, actualSpan, density)
@@ -613,9 +612,7 @@ def plot_spanwiseperiter(case):
         # ax.plot(spanY, twistDist,"s", label="Jig twist (FFD)",zorder=10, clip_on=False)
 
         ptVec = dcfoil_case.inputs[f"{systemName}.hydroelastic.liftingline.ptVec"]
-        LECoords, TECoords = jl.LiftingLine.repack_coords(
-            ptVec, 3, len(ptVec) // 3
-        )  # repack the ptVec to a 3D array
+        LECoords, TECoords = jl.LiftingLine.repack_coords(ptVec, 3, len(ptVec) // 3)  # repack the ptVec to a 3D array
         idxTip = jl.LiftingLine.get_tipnode(LECoords)
 
         midchords, _, _, _, pretwistDist = jl.LiftingLine.compute_1DPropsFromGrid(
@@ -670,14 +667,15 @@ def plot_spanwiseperiter(case):
         for ax in axes.flatten():
             nplt.adjust_spines(ax, outward=True)
         try:
-            for ax in axes[-1,:]:
+            for ax in axes[-1, :]:
                 ax.set_xlabel("Spanwise position [m]")
         except Exception:
             axes[-1].set_xlabel("Spanwise position [m]")
         plt.suptitle(f"Spanwise properties for {args.name}", fontsize=fs * 1.1)
         plt.savefig(spanliftname + f"-{case_num}.pdf", format="pdf")
-        print("Saved to:", spanliftname + f".pdf")
+        print("Saved to:", spanliftname + f"-{case_num}.pdf")
         plt.close()
+
 
 def plot_dragbuildupcomp():
     fname = f"drag_buildup_{args.name}-vs-{args.base}.pdf"
@@ -898,9 +896,9 @@ if __name__ == "__main__":
     # ************************************************
     #     Spanwise history too
     # ************************************************
-    if not args.flutter and not args.forced:
-        plot_spanwise()
-        plot_spanwiseperiter(args.name)
+    # if not args.flutter and not args.forced:
+    plot_spanwise()
+    plot_spanwiseperiter(args.name)
 
     #     # ************************************************
     #     #     Also plot drag breakdown vs. iteration
@@ -910,230 +908,254 @@ if __name__ == "__main__":
     # ************************************************
     #     Compare drag buildup with base case
     # ************************************************
-    if not args.flutter and not args.forced:
-        plot_dragbuildupcomp()
-
-    # Input data read directory
-    caseDirs = []
-    if args.cases is not None:
-        for case in args.cases:
-            for ptName in probList:
-                caseDirs.append(dataDir + case + f"/{ptName}")
-    else:
-        raise ValueError("Please specify a case to run postprocessing on")
+    # if not args.flutter and not args.forced:
+    plot_dragbuildupcomp()
 
     if args.flutter:
-        # ************************************************
-        #     Read in data
-        # ************************************************
-        print("Reading in flutter data...")
+        if args.cases is not None:
+            for ptName in probList:
+                # Input data read directory
+                caseDirs = []
+                for case in args.cases:
+                    caseDirs.append(dataDir + case + f"/{ptName}")
 
-        flutterSolDict = {}
-        instabPtsDict = {}
-        for ii, caseDir in enumerate(caseDirs):
-            key = args.cases[ii]
-            # Remember to transpose data since Julia stores in column major order
-            eigs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_i.jld2")["data"]).T / (
-                2 * np.pi
-            )  # put in units of Hz
-            eigs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_r.jld2")["data"]).T / (
-                2 * np.pi
-            )  # put in units of Hz
-            evecs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_i.jld2")["data"]).T
-            evecs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_r.jld2")["data"]).T
-            flowHistory = np.asarray(load_jld(f"{caseDir}/pkFlutter/flowHistory.jld2")["data"]).T
-            iblank = np.asarray(load_jld(f"{caseDir}/pkFlutter/iblank.jld2")["data"]).T
+                # ************************************************
+                #     Read in data
+                # ************************************************
+                print(f"Reading in flutter data for {ptName}...")
 
-            # --- Post process the solution ---
-            flutterSolDict[key] = postprocess_flutterevals(
-                iblank,
-                flowHistory[:, 1],
-                flowHistory[:, 0],
-                flowHistory[:, 2],
-                eigs_r,
-                eigs_i,
-                R_r=evecs_r,
-                R_i=evecs_i,
-            )
-            # You only need to know the stability point on one processor really
-            instabPtsDict[key] = find_DivAndFlutterPoints(flutterSolDict[key], "pvals_r", "U", altKey="pvals_i")
-        # ************************************************
-        #       Standard v-g, v-f, R-L plots
-        # ************************************************
-        # --- File name ---
-        fname = f"{outputDir}/vg-vf-rl.pdf"
+                flutterSolDict = {}
+                instabPtsDict = {}
+                for ii, caseDir in enumerate(caseDirs):
+                    if not os.path.exists(caseDir):
+                        print(f"Case directory {caseDir} does not exist. Skipping...")
+                        continue
+                    else:
+                        print(f"Processing case directory: {caseDir}")
+                        key = args.cases[ii]
+                        # Remember to transpose data since Julia stores in column major order
+                        eigs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_i.jld2")["data"]).T / (
+                            2 * np.pi
+                        )  # put in units of Hz
+                        eigs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigs_r.jld2")["data"]).T / (
+                            2 * np.pi
+                        )  # put in units of Hz
+                        evecs_i = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_i.jld2")["data"]).T
+                        evecs_r = np.asarray(load_jld(f"{caseDir}/pkFlutter/eigenvectors_r.jld2")["data"]).T
+                        flowHistory = np.asarray(load_jld(f"{caseDir}/pkFlutter/flowHistory.jld2")["data"]).T
+                        iblank = np.asarray(load_jld(f"{caseDir}/pkFlutter/iblank.jld2")["data"]).T
 
-        # --- Create figure object ---
-        fact = 0.85  # scale size
-        figsize = (18 * fact, 13 * fact)
-        fig, axes = plt.subplots(
-            nrows=2,
-            ncols=2,
-            sharex="col",
-            sharey="row",
-            constrained_layout=True,
-            figsize=figsize,
-        )
+                        # --- Post process the solution ---
+                        flutterSolDict[key] = postprocess_flutterevals(
+                            iblank,
+                            flowHistory[:, 1],
+                            flowHistory[:, 0],
+                            flowHistory[:, 2],
+                            eigs_r,
+                            eigs_i,
+                            R_r=evecs_r,
+                            R_i=evecs_i,
+                        )
+                        # You only need to know the stability point on one processor really
+                        instabPtsDict[key] = find_DivAndFlutterPoints(
+                            flutterSolDict[key], "pvals_r", "U", altKey="pvals_i"
+                        )
+                # ************************************************
+                #       Standard v-g, v-f, R-L plots
+                # ************************************************
+                # --- File name ---
+                fname = f"{outputDir}/vg-vf-rl-{ptName}.pdf"
 
-        instabSpeedTicks = []
-        instabFreqTicks = []
-        units = "kts"
-        units = "m/s"
-        for ii, key in enumerate(args.cases):
-            if ii == 0:
-                annotateModes = True
-            else:
-                annotateModes = False
+                # --- Create figure object ---
+                fact = 0.85  # scale size
+                figsize = (18 * fact, 13 * fact)
+                fig, axes = plt.subplots(
+                    nrows=2,
+                    ncols=2,
+                    sharex="col",
+                    sharey="row",
+                    constrained_layout=True,
+                    figsize=figsize,
+                )
 
-            # # can force to see modes in legend label
-            # annotateModes = False
+                instabSpeedTicks = []
+                instabFreqTicks = []
+                units = "kts"
+                units = "m/s"
+                for ii, key in enumerate(args.cases):
+                    if ii == 0:
+                        annotateModes = True
+                    else:
+                        annotateModes = False
 
-            # --- Plot ---
-            fig, axes = plot_vg_vf_rl(
-                fig,
-                axes,
-                flutterSol=flutterSolDict[key],
-                cm=cm,
-                ls=linestyles[ii],
-                alpha=alphas[ii],
-                units=units,
-                # marker="o",
-                showRLlabels=True,
-                annotateModes=annotateModes,
-                # nShift=62,
-                instabPts=instabPtsDict[key],
-            )
-            if units == "kts":
-                unitFactor = 1.9438
-            else:
-                unitFactor = 1.0
+                    # # can force to see modes in legend label
+                    # annotateModes = False
 
-            if len(instabPtsDict[key]) != 0:
-                instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
-                instabFreqTicks.append(instabPtsDict[key][0][-1])
+                    # --- Plot ---
+                    fig, axes = plot_vg_vf_rl(
+                        fig,
+                        axes,
+                        flutterSol=flutterSolDict[key],
+                        cm=cm,
+                        ls=linestyles[ii],
+                        alpha=alphas[ii],
+                        units=units,
+                        # marker="o",
+                        showRLlabels=True,
+                        annotateModes=annotateModes,
+                        # nShift=62,
+                        instabPts=instabPtsDict[key],
+                    )
+                    if units == "kts":
+                        unitFactor = 1.9438
+                    else:
+                        unitFactor = 1.0
 
-        # --- Set limits ---
-        # axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
-        # axes[1, 0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
+                    if len(instabPtsDict[key]) != 0:
+                        instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
+                        instabFreqTicks.append(instabPtsDict[key][0][-1])
 
-        # axes[0, 0].set_ylim(top=30, bottom=-400)
-        # axes[1, 0].set_ylim(top=0.005, bottom=0)
-        # axes[0, 0].set_xlim(left=160, right=175)
+                # --- Set limits ---
+                # axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
+                # axes[1, 0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
 
-        dosave = not not fname
-        plt.show(block=(not dosave))
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+                # axes[0, 0].set_ylim(top=30, bottom=-400)
+                # axes[1, 0].set_ylim(top=0.005, bottom=0)
+                # axes[0, 0].set_xlim(left=160, right=175)
 
-        # ************************************************
-        #     Damping loss plots
-        # ************************************************
-        # --- File name ---
-        fname = f"{outputDir}/dlf.pdf"
+                dosave = not not fname
+                plt.show(block=(not dosave))
+                if dosave:
+                    plt.savefig(fname, format="pdf")
+                    print("Saved to:", fname)
+                plt.close()
 
-        # --- Create figure ---
-        fact = 0.85  # scale size
-        figsize = (18 * fact, 6 * fact)
-        fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
-        for ii, key in enumerate(args.cases):
-            # --- Plot ---
-            fig, axes = plot_dlf(
-                fig,
-                axes,
-                flutterSol=flutterSolDict[key],
-                cm=cm,
-                semichord=0.5 * meanChord,
-                sweepAng=sweepAng,
-                ls=linestyles[ii],
-                units="kts",
-                nShift=500,
-            )
-            axes[0].set_ylim(-0.1, 0.8)
-            axes[0].set_xlim(right=50, left=5)
-            # axes[1].set_ylim(-0.1, 1.2)
-            # axes[1].set_xlim(left=10)
+                # # ************************************************
+                # #     Damping loss plots
+                # # ************************************************
+                # # --- File name ---
+                # fname = f"{outputDir}/dlf.pdf"
 
-        dosave = not not fname
-        plt.show(block=(not dosave))
-        if dosave:
-            plt.savefig(fname, format="pdf")
-            print("Saved to:", fname)
-        plt.close()
+                # # --- Create figure ---
+                # fact = 0.85  # scale size
+                # figsize = (18 * fact, 6 * fact)
+                # fig, axes = plt.subplots(nrows=1, ncols=2, sharex="col", constrained_layout=True, figsize=figsize)
+                # for ii, key in enumerate(args.cases):
+                #     # --- Plot ---
+                #     fig, axes = plot_dlf(
+                #         fig,
+                #         axes,
+                #         flutterSol=flutterSolDict[key],
+                #         cm=cm,
+                #         semichord=0.5 * meanChord,
+                #         sweepAng=sweepAng,
+                #         ls=linestyles[ii],
+                #         units="kts",
+                #         nShift=500,
+                #     )
+                #     axes[0].set_ylim(-0.1, 0.8)
+                #     axes[0].set_xlim(right=50, left=5)
+                #     # axes[1].set_ylim(-0.1, 1.2)
+                #     # axes[1].set_xlim(left=10)
+
+                # dosave = not not fname
+                # plt.show(block=(not dosave))
+                # if dosave:
+                #     plt.savefig(fname, format="pdf")
+                #     print("Saved to:", fname)
+                # plt.close()
 
     if args.forced:
+
         print("Reading in forced vibration data")
-        for ii, caseDir in enumerate(caseDirs):
-            key = args.cases[ii]
+        raoDict = {}
+        deflectionRAODict = {}
+        dynLiftRAODict = {}
+        dynMomentRAODict = {}
+        if args.cases is not None:
+            for ptName in probList:
+                # Input data read directory
+                caseDirs = []
+                for case in args.cases:
+                    caseDirs.append(dataDir + case + f"/{ptName}")
 
-            # --- Read frequencies ---
-            fExtSweep = np.loadtxt(f"{caseDir}/forced/freqSweep.dat")
+                for ii, caseDir in enumerate(caseDirs):
+                    key = args.cases[ii]
 
-            # --- Read tip bending ---
-            dynTipBending = np.asarray(load_jld(f"{caseDir}/forced/tipBendDyn.jld2")["data"]).T
+                    # --- Read frequencies ---
+                    fExtSweep = np.loadtxt(f"{caseDir}/forced/freqSweep.dat")
 
-            # --- Read tip twisting ---
-            dynTipTwisting = np.rad2deg(np.asarray(load_jld(f"{caseDir}/forced/tipTwistDyn.jld2")["data"]).T)
+                    # --- Read tip bending ---
+                    dynTipBending = np.asarray(load_jld(f"{caseDir}/forced/tipBendDyn.jld2")["data"]).T
 
-            # --- Read lift ---
-            dynLiftRAO = np.asarray(load_jld(f"{caseDir}/forced/totalLiftRAO.jld2")["data"]).T
+                    # --- Read tip twisting ---
+                    dynTipTwisting = np.rad2deg(np.asarray(load_jld(f"{caseDir}/forced/tipTwistDyn.jld2")["data"]).T)
 
-            # --- Read moment ---
-            dynMomentRAO = np.asarray(load_jld(f"{caseDir}/forced/totalMomentRAO.jld2")["data"]).T
+                    # --- Read lift ---
+                    dynLiftRAO = np.asarray(load_jld(f"{caseDir}/forced/totalLiftRAO.jld2")["data"]).T
 
-            # --- Read wave amp ---
-            waveAmpSpectrum = np.asarray(load_jld(f"{caseDir}/forced/waveAmpSpectrum.jld2")["data"]).T
+                    # --- Read moment ---
+                    dynMomentRAO = np.asarray(load_jld(f"{caseDir}/forced/totalMomentRAO.jld2")["data"]).T
 
-            # --- Read RAO (general xfer fcn for deflections) ---
-            rao = np.asarray(load_jld(f"{caseDir}/forced/GenXferFcn.jld2")["data"]).T
-            deflectionRAO = np.asarray(load_jld(f"{caseDir}/forced/deflectionRAO.jld2")["data"]).T
+                    # --- Read wave amp ---
+                    waveAmpSpectrum = np.asarray(load_jld(f"{caseDir}/forced/waveAmpSpectrum.jld2")["data"]).T
 
-            # ************************************************
-            #     Plot the frequency spectra
-            # ************************************************
-            fname = f"{outputDir}/forced-dynamics.pdf"
+                    # --- Read RAO (general xfer fcn for deflections) ---
+                    rao = np.asarray(load_jld(f"{caseDir}/forced/GenXferFcn.jld2")["data"]).T
+                    deflectionRAO = np.asarray(load_jld(f"{caseDir}/forced/deflectionRAO.jld2")["data"]).T
 
-            # Create figure object
-            nrows = 2
-            ncols = 4
-            figsize = (20 * ncols, 4 * nrows)
-            fig, axes = plt.subplots(
-                nrows=nrows,
-                ncols=ncols,
-                sharex="col",
-                constrained_layout=True,
-                figsize=figsize,
-            )
+                    raoDict[key] = rao
+                    deflectionRAODict[key] = deflectionRAO
+                    dynLiftRAODict[key] = dynLiftRAO
+                    dynMomentRAODict[key] = dynMomentRAO
 
-            # fiberAngle = np.rad2deg(DVDictDict[key]["theta_f"])
-            # flowSpeed = SolverOptions[key]["Uinf"]
-            # --- Plot ---
-            fig, axes = plot_forced(
-                fig,
-                axes,
-                fExtSweep,
-                waveAmpSpectrum,
-                deflectionRAO,
-                dynLiftRAO,
-                dynMomentRAO,
-                rao,
-                boatSpds[ptName],
-                fs_lgd,
-                cm,
-            )
+                # ************************************************
+                #     Plot the frequency spectra
+                # ************************************************
 
-            fig.suptitle("Frequency response spectra")
+                # Create figure object
+                nrows = 2
+                ncols = 4
+                figsize = (40 * ncols, 4 * nrows)
 
-            for ax in axes.flatten():
-                ax.set_xlim(left=0.0)
+                fname = f"{outputDir}/forced-dynamics-{ptName}.pdf"
 
-            for ax in axes[0, :].flatten():
-                ax.set_ylim(bottom=0.0)
+                fig, axes = plt.subplots(
+                    nrows=nrows,
+                    ncols=ncols,
+                    sharex="col",
+                    constrained_layout=True,
+                    figsize=figsize,
+                )
 
-            dosave = not not fname
-            plt.show(block=(not dosave))
-            if dosave:
-                plt.savefig(fname, format="pdf")
-                print("Saved to:", fname)
-            plt.close()
+                for ii, key in enumerate(args.cases):
+                    # --- Plot ---
+                    fig, axes = plot_forced(
+                        fig,
+                        axes,
+                        fExtSweep,
+                        waveAmpSpectrum,
+                        deflectionRAODict[key],
+                        dynLiftRAODict[key],
+                        dynMomentRAODict[key],
+                        raoDict[key],
+                        boatSpds[ptName],
+                        fs_lgd,
+                        cm,
+                        alphas[ii],
+                    )
+
+                fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
+
+                for ax in axes.flatten():
+                    ax.set_xlim(left=0.0)
+
+                for ax in axes[0, :].flatten():
+                    ax.set_ylim(bottom=0.0)
+
+                dosave = not not fname
+                plt.show(block=(not dosave))
+                if dosave:
+                    plt.savefig(fname, format="pdf")
+                    print("Saved to:", fname)
+                plt.close()
