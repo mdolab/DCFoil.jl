@@ -35,8 +35,8 @@ class CoupledAnalysis(om.Group):
     def initialize(self):
         # define all options and defaults
         self.options.declare("analysis_mode", values=["struct", "flow", "coupled"], desc="Analysis mode")
-        self.options.declare("include_flutter", default=True, desc="Include flutter analysis")
-        self.options.declare("include_forced", default=True, desc="Include forced vibration analysis")
+        self.options.declare("include_flutter", default=False, desc="Include flutter analysis")
+        self.options.declare("include_forced", default=False, desc="Include forced vibration analysis")
         self.options.declare("ptVec_init", types=np.ndarray, desc="Initial value of the point vector")
         self.options.declare("npt_wing", default=0, desc="Number of flow collocation points for full or half wing")
         self.options.declare("n_node", default=0, desc="Number of FEM nodes for full or half wing")

@@ -82,12 +82,13 @@ case_name = "embedding"
 # LEcoords = XCoords[:nnodes]
 # TEcoords = XCoords[nnodes:]
 
+nTwist = 8 // 2 + 2
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
         "upper": 15.0,
         "scale": 1.0,
-        "value": np.zeros(8 // 2),
+        "value": np.zeros(nTwist),
     },
     "sweep": {
         "lower": 0.0,
@@ -209,7 +210,6 @@ if __name__ == "__main__":
         #   TWIST
         # ---------------------------
         if "t" in args.geovar:
-            nTwist = 8 // 2
             print("+", 20 * "-", "Demo twist", 20 * "-", "+")
             dirName = f"{outputDir}/demo_twist/"
             # if comm.rank == 0:
@@ -372,7 +372,7 @@ if __name__ == "__main__":
             span_mag = 0.2
 
             i_frame = 0
-            
+
             # --- SPAN ---
             # wave = np.sin(np.linspace(0, np.pi, n_all))
             for ind, val in enumerate(wave):
@@ -468,8 +468,6 @@ if __name__ == "__main__":
                 # DVGeo.writePointSet(ptSetName, f"{dirName}/all_{i_frame:03d}", solutionTime=i_frame)
 
                 i_frame += 1
-
-            
 
     # ************************************************
     #     Check partials

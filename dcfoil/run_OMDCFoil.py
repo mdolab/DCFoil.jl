@@ -303,7 +303,7 @@ class Top(Multipoint):
                 # scaler=1e-3, # had this before
                 # scaler=1e-4, # WORKS AND GIVES 0/1
                 # scaler=5e-5, # 60/63 with drag
-                scaler=1 / (Fliftstars[ptName] * 10),  #
+                scaler=1 / (Fliftstars[ptName] * 50),  # try 50 next
             )  # lift constraint [N]
 
             if args.task != "trim":
@@ -474,7 +474,7 @@ if __name__ == "__main__":
             "twist": dvDictInfo["twist"],
             # "sweep": dvDictInfo["sweep"],
             # "taper": dvDictInfo["taper"],
-            # "span": dvDictInfo["span"],
+            "span": dvDictInfo["span"],
             "sweep": {
                 "lower": 0.0,
                 "upper": 0.0,
@@ -487,33 +487,13 @@ if __name__ == "__main__":
                 "scale": 1.0,
                 "value": np.ones(2) * 1.0,
             },
-            "span": {
-                "lower": 0.0,
-                "upper": 0.0,
-                "scale": 1,
-                "value": 0.0,
-            },
+            # "span": {
+            #     "lower": 0.0,
+            #     "upper": 0.0,
+            #     "scale": 1,
+            #     "value": 0.0,
+            # },
         }
-        # otherDVs = {
-        #     "alfa0": {
-        #         "lower": otherDVs["alfa0"]["lower"],
-        #         "upper":otherDVs["alfa0"]["upper"],
-        #         "scale": otherDVs["alfa0"]["scale"],  # the scale was messing with the DV bounds
-        #         "value": otherDVs["alfa0"]["value"],
-        #     },
-        #     "toc": {
-        #         "lower": appendageParams["toc"],
-        #         "upper": appendageParams["toc"],
-        #         "scale": 1.0,
-        #         "value": appendageParams["toc"],
-        #     },
-        #     "theta_f": {
-        #         "lower": np.deg2rad(0),
-        #         "upper": np.deg2rad(0),
-        #         "scale": 1.0,
-        #         "value": 0.0,
-        #     },
-        # }
 
     prob = om.Problem()
     prob.model = Top()
