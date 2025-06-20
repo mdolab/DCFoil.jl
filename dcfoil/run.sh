@@ -50,7 +50,7 @@ set -e #
 # python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart dcfoil-trim1MP --pts 3 --name opt1-novent #   [??]
 # python run_OMDCFoil.py --foil amcfull --task opt --fixHydro --noVent --restart dcfoil-trim1MP --pts 3 --name opt1-novent-fixHydro #   [0/1 so some hydro variable is breaking this]
 python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1-novent-debug --debug_opt #   [??TODO PICKUP HERE tomorrow if the multipoint fails]
-python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1 #   [??]
+# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1 #   [??]
 # python run_OMDCFoil.py --foil amcfull --task opt --fixHydro --noVent --restart dcfoil-trim1MP --pts 123 --name opt1MP-novent # multipoint  []
 # python run_OMDCFoil.py --foil amcfull --task opt --fixStruct --noVent --restart dcfoil-trim1MP --pts 123 --name opt1MP-novent-fixStruct # multipoint  []
 # python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart dcfoil-trim1MP-fs --pts 123 --freeSurf --name opt1MP-novent-fs # multipoint []

@@ -533,8 +533,8 @@ if __name__ == "__main__":
     )
     prob.driver.options["hist_file"] = "dcfoil.hst"
     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
-    if args.flutter or args.forced:
-        prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
+    # if args.flutter or args.forced:
+    #     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
 
     outputDir = case_name
     optOptions = setup_opt.setup(args, outputDir)
