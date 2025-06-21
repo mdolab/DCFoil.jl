@@ -30,6 +30,8 @@ output_dir = f"./"
 n_chord = 2
 n_span = 5
 n_buffer = 2
+n_buffer = 1
+# n_buffer = 0 # does not currently work
 # n_span = 5 + n_buffer # add 2 to root
 # ==============================================================================
 #                         MAIN DRIVER

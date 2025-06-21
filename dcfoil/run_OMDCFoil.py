@@ -84,11 +84,14 @@ files["gridFile"] = [
     f"../INPUT/{args.foil}_foil_port_mesh.dcf",
 ]
 FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
+FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
 files["FFDFile"] = FFDFile
 
 nNodes = 10
 nNodesStrut = 3
 nTwist = 8 // 2 + 1
+if "1buffer" in FFDFile:
+    nTwist = 8 // 2 
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -5.0,
@@ -589,9 +592,12 @@ if __name__ == "__main__":
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
                 scale = dvDictInfo[dv]["scale"]
-                if dv != "twist":
-                    print(f"Setting {dv} to {val} but scaled by {scale}")
+                # if dv != "twist":
+                print(f"Setting {dv} to {val} but scaled by {scale}")
+                try:
                     prob.set_val(dv, val / scale)
+                except Exception:
+                    print(f"{dv} could not be set. Skipping...")
             elif dv in otherDVs:
                 try:
                     scale = otherDVs[dv]["scale"]

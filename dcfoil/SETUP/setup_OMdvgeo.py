@@ -32,7 +32,6 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     if "t" in args.geovar:
         # nSkip = 2
-        # nTwist = nRefAxPts // 2 - nSkip
         nSkip = 1
         # nSkip = 0
         nTwist = nRefAxPts // 2 - nSkip
@@ -44,7 +43,7 @@ def setup(args, model, comm, files: dict):
             """
             val array has length of semi-span FFDs only. It's mirrored to the full config
             """
-            nSkip = 2
+            # nSkip = 2
             nSkip = 1
             # nSkip = 0
             for ii in range(nTwist):
@@ -64,6 +63,8 @@ def setup(args, model, comm, files: dict):
     if "w" in args.geovar:
         # Determine the number of sections that have sweep control
         nSkip = 2
+        if "1buffer" in files["FFDFile"]:
+            nSkip = 1
         nSweep = nRefAxPts // 2 - nSkip
 
         print(f"{nSweep} foil sweep vars", flush=True)
@@ -71,6 +72,8 @@ def setup(args, model, comm, files: dict):
 
         def sweep_rot_func(inval, geo):
             nSkip = 2
+            if "1buffer" in files["FFDFile"]:
+                nSkip = 1
             # REVERSE OF RH RULE FOR DCFOIL
             val = -inval
 
@@ -207,10 +210,14 @@ def setup(args, model, comm, files: dict):
     if "p" in args.geovar:
         # nSpan = nRefAxPts
         nSkip = 2
+        if "1buffer" in files["FFDFile"]:
+            nSkip = 1
         nSpan = nRefAxPts // 2 - nSkip
 
         def span(val, geo):
             nSkip = 2
+            if "1buffer" in files["FFDFile"]:
+                nSkip = 1
             C = geo.extractCoef("global")
             s = geo.extractS("global")
 
