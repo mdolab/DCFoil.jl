@@ -131,7 +131,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
     #     For every frequency, solve the system
     # ************************************************
     ChainRulesCore.ignore_derivatives() do
-        print_vibration_text(1, 1, 1, 0, 0, 0, 0; printHeader=true)
+        print_vibration_text(1, 1, 1, 1, 0, 0, 0, 0; printHeader=true)
     end
     FSTOP = length(fSweep) - 10 # stop condition for the loop
     for (f_ctr, f) in enumerate(fSweep)
@@ -197,7 +197,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             MomDyn_z[f_ctr] = M̃
 
             if f_ctr % 10 == 1 # header every 10 iterations
-                print_vibration_text(f_ctr, f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
+                print_vibration_text(f_ctr, Aw[f_ctr], f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
             end
         end
 
@@ -232,13 +232,13 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
     return SOL
 end
 
-function print_vibration_text(f_ctr, freq, k0, Lmag, Mmag, tipBend, tipTwist; printHeader=false)
+function print_vibration_text(f_ctr, Aw, freq, k0, Lmag, Mmag, tipBend, tipTwist; printHeader=false)
     if printHeader
-        println("+-------+-------------+--------------+-------------+-------------+-------------+-------------+")
-        println("| nIter | freq_0 [Hz] | Red. freq k0 | mag L̃ (self)| mag M̃ (self)|   w tip [m] | θ tip [rad] |")
-        println("+-------+-------------+--------------+-------------+-------------+-------------+-------------+")
+        println("+-------+----------+-------------+--------------+-------------+-------------+-------------+-------------+")
+        println("| nIter |   ζ [m]  | freq_0 [Hz] | Red. freq k0 | mag L̃ (self)| mag M̃ (self)|   w tip [m] | θ tip [rad] |")
+        println("+-------+----------+-------------+--------------+-------------+-------------+-------------+-------------+")
     else
-        println(@sprintf("|  %04d |   %1.3e | %12.6f | %1.5e | %1.5e | %1.5e | %1.5e |", f_ctr, freq, k0, Lmag, Mmag, tipBend, tipTwist))
+        println(@sprintf("|  %04d | %8.5f |   %1.3e | %12.6f | %1.5e | %1.5e | %1.5e | %1.5e |", f_ctr, Aw, freq, k0, Lmag, Mmag, tipBend, tipTwist))
     end
 end
 
@@ -470,7 +470,7 @@ function evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, so
             println("perturbed obj", f_f)
             println("deriv wrt theta", dfdx)
         end
-        
+
     else
         error("Mode $(mode) not implemented")
     end

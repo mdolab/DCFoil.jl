@@ -97,6 +97,9 @@ function OpenMDAOCore.compute!(self::OMForced, inputs, outputs)
     appendageParams["theta_f"] = theta_f
     appendageParams["toc"] = toc
     appendageParams["alfa0"] = alfa0
+    println("=============================")
+    println("Forced vibration alfa0 = $(alfa0) deg")
+    println("=============================")
 
     obj, VIBSOL = SolveForced.compute_funcsFromDVsOM(ptVec, nodeConn, displacements_col, cla, theta_f, toc, alfa0, appendageParams, solverOptions; return_all=true)
 

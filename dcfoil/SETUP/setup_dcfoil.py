@@ -27,10 +27,18 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         "nNodes": nNodes,
         "nNodeStrut": nNodesStrut,
         "use_tipMass": False,
+        # "use_tipMass": True,
+        "tipMass": 50, # [kg]
+        "tipInertia": 10, # [kg*m²] # increasing this helps
+        "tipOffset": 0.3, # [m]
         # "xMount": 3.355,
         "xMount": 0.0,
-        "material": "cfrp",
-        "strut_material": "cfrp",
+        # "material": "cfrp",
+        # "strut_material": "cfrp",
+        # "material": "pmc",
+        # "strut_material": "pmc",
+        "material": "gfrp",
+        "strut_material": "gfrp",
         "path_to_geom_props": "./INPUT/1DPROPS/",
         "path_to_struct_props": None,
         "path_to_geom_props": None,
@@ -110,7 +118,9 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
     # Need to set struct damping once at the beginning to avoid optimization taking advantage of changing beta
     ptVec, m, n = jl.FEMMethods.unpack_coords(Grid.LEMesh, Grid.TEMesh)
     nodeConn = np.array(Grid.nodeConn)
-    solverOptions = jl.FEMMethods.set_structDamping(ptVec, nodeConn, appendageParams, solverOptions, appendageList[0])
+    solverOptions = jl.FEMMethods.set_structDamping(
+        ptVec, nodeConn, appendageParams, solverOptions, appendageList[0]
+    )
 
     # number of strips and FEM nodes
     if appendageOptions["config"] == "full-wing":
@@ -127,7 +137,25 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         n_node = nNodes
 
     if args.foil == "amcfull":
-        appendageParams["abar"] = -0.0464 * 2.0 * np.ones(nNodes)  # she nondimensionalized by chord, not semichord
-        print("Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper")
+        appendageParams["abar"] = (
+            -0.0464 * 2.0 * np.ones(nNodes)
+        )  # she nondimensionalized by chord, not semichord
+        # appendageParams["abar"] = (
+        #     -0.25 * np.ones(nNodes)
+        # )  # contrived??
+        print(
+            "Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper"
+        )
+        # appendageParams["x_a"] = 0.5 * np.ones(nNodes)
+        # print("Setting static imbalance offset for CFRP NACA0009 arbitrarily")
 
-    return ptVec, nodeConn, appendageParams, appendageOptions, solverOptions, npt_wing, npt_wing_full, n_node
+    return (
+        ptVec,
+        nodeConn,
+        appendageParams,
+        appendageOptions,
+        solverOptions,
+        npt_wing,
+        npt_wing_full,
+        n_node,
+    )

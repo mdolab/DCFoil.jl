@@ -30,6 +30,20 @@ function return_constitutive(materialName::String)
         ν₁₂ = 0.25
         constitutive = "orthotropic"
 
+    elseif (materialName == "pmc")
+        ρₛ = 1800.0
+        E₁ = 39.3e9
+        E₂ = 4.47e9
+        G₁₂ = 1.3e9
+        ν₁₂ = 0.25
+        constitutive = "orthotropic"
+    elseif (materialName == "gfrp")
+        ρₛ = 1830.0
+        E₁ = 13.09e9
+        E₂ = 1.49e9
+        G₁₂ = 0.43e9
+        ν₁₂ = 0.25
+        constitutive = "orthotropic"
     elseif (materialName == "test-comp")
         # TODO: will need to retrain these tests
         ρₛ = 1590.0

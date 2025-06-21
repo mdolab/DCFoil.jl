@@ -101,14 +101,7 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
     #   Add any discrete masses
     # ---------------------------
     if tipMass
-        bulbMass = 2200 #[kg]
-        bulbInertia = 900 #[kg-m²]
-        x_αbBulb = -0.1 # [m]
-        dR = (structMesh[end, :] - structMesh[end-1, :])
-        elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
-        # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
-        transMat = get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
-        globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
+        globalMs = apply_tipMass(globalMs, FEMESH.mesh, appendageOptions["tipMass"], appendageOptions["tipInertia"], appendageOptions["tipOffset"])
     end
 
     alphaCorrection = 0.0
@@ -119,3 +112,22 @@ function setup_solverOM(displCol, LECoords, TECoords, nodeConn, appendageParams,
     return FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, LLSystem.sweepAng, WingStructModel, dim, N_R, N_MAX_Q_ITER, nModes, SOLVERPARAMS, debug
 end
 
+function apply_tipMass(globalMs, structMesh, bulbMass=2200, bulbInertia=900, x_αbBulb=-0.1)
+    """
+        bulbMass = 2200 #[kg]
+        bulbInertia = 900 #[kg-m²]
+        x_αbBulb = -0.1 # [m]
+    """
+
+    dR = (structMesh[end, :] - structMesh[end-1, :])
+
+    elemLength = √(dR[XDIM]^2 + dR[YDIM]^2 + dR[ZDIM]^2)
+
+    # transMat = SolverRoutines.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength, ELEMTYPE)
+
+    transMat = FEMMethods.get_transMat(dR[XDIM], dR[YDIM], dR[ZDIM], elemLength)
+
+    globalMs = FEMMethods.apply_tip_mass(globalMs, bulbMass, bulbInertia, elemLength, x_αbBulb, transMat, ELEMTYPE)
+
+    return globalMs
+end

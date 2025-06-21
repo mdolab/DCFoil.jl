@@ -666,6 +666,34 @@ def plot_forced(
     # ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     # # ax.set_xlabel(xLabel)
 
+
+    # ************************************************
+    #     What is happening at the tip?
+    # ************************************************
+    ax = axes[-1, 0]
+    ylabel = r"$\frac{|{w}_{tip}|}{\zeta}$"
+    M_wRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(fExtSweep):
+        ndef = len(deflectionRAO[ii, 2::9])
+        bendingRAO = deflectionRAO[ii, 2::9]
+
+        M_wRAO[ii] = np.sqrt(bendingRAO[-1][0] ** 2 + bendingRAO[-1][1] ** 2)
+
+    ax.plot(fExtSweep, M_wRAO, color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
+
+    ax = axes[-1, 1]
+    ylabel = r"$\frac{|\vartheta_{tip}|}{\zeta}$ [$^\circ$/m]"
+    M_thetaRAO = np.zeros_like(fExtSweep)
+    for ii, entry in enumerate(fExtSweep):
+        ndef = len(deflectionRAO[ii, 4::9])
+        twistingRAO = deflectionRAO[ii, 4::9]
+
+        M_thetaRAO[ii] = np.sqrt(twistingRAO[-1][0] ** 2 + twistingRAO[-1][1] ** 2)
+
+    ax.plot(fExtSweep, np.rad2deg(M_thetaRAO), color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
+
     for ax in axes[1, :].flatten():
         ax.set_xlabel(xLabel)
     for ax in axes.flatten():
