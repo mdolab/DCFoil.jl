@@ -83,14 +83,16 @@ files["gridFile"] = [
     f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
     f"../INPUT/{args.foil}_foil_port_mesh.dcf",
 ]
-FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
-FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
+if "moth" in args.foil:
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
+else:
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
 files["FFDFile"] = FFDFile
 
 nNodes = 10
 nNodesStrut = 3
 nTwist = 8 // 2 + 1
-if "1buffer" in FFDFile:
+if "1buffer" in FFDFile or "moth" in FFDFile:
     nTwist = 8 // 2 
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
@@ -129,19 +131,19 @@ otherDVs = {
         "lower": -10.0,
         "upper": 10.0,
         "scale": 1.0 / 10,
-        "value": 3.0,
+        "value": 2.0,
     },
     "toc": {
         "lower": 0.09,
         "upper": 0.18,
         "scale": 1.0,
-        "value": 0.09 * np.ones(nNodes),
+        "value": 0.12 * np.ones(nNodes),
     },
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
         "scale": 1.0,
-        "value": np.deg2rad(0.0),
+        "value": np.deg2rad(15.0),
     },
 }
 
@@ -306,7 +308,8 @@ class Top(Multipoint):
                 # scaler=1e-3, # had this before
                 # scaler=1e-4, # WORKS AND GIVES 0/1
                 # scaler=5e-5, # 60/63 with drag
-                scaler=1 / (Fliftstars[ptName] * 50),  # try 50 next
+                # scaler=1 / (Fliftstars[ptName] * 50),  # try 50 next
+                scaler=1 / (Fliftstars[ptName] * 10), 
             )  # lift constraint [N]
 
             if args.task != "trim":
@@ -374,11 +377,11 @@ if __name__ == "__main__":
         npt_wing,
         npt_wing_full,
         n_node,
-    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, boatSpds["f1"], case_name)
+    ) = setup_dcfoil.setup(otherDVs["toc"]["value"],otherDVs["theta_f"]["value"], nNodes, nNodesStrut, args, None, files, boatSpds["f1"], case_name)
 
     # --- Trim only case ---
     if args.task == "trim":
-        thetaStart = np.deg2rad(0.0)
+        thetaStart = otherDVs["theta_f"]["value"]
         dvDictInfo = {  # dictionary of design variable parameters
             "sweep": {
                 "lower": 0.0,
@@ -421,7 +424,7 @@ if __name__ == "__main__":
             },
         }
     if args.fixStruct:
-        thetaStart = np.deg2rad(0.0)
+        thetaStart = otherDVs["theta_f"]["value"]
         otherDVs = {
             "alfa0": {
                 "lower": -10.0,
@@ -475,21 +478,21 @@ if __name__ == "__main__":
         # Free the DVs that seem to be giving problems for the flutter optimization
         dvDictInfo = {
             "twist": dvDictInfo["twist"],
-            # "sweep": dvDictInfo["sweep"],
+            "sweep": dvDictInfo["sweep"],
             # "taper": dvDictInfo["taper"],
             "span": dvDictInfo["span"],
-            "sweep": {
-                "lower": 0.0,
-                "upper": 0.0,
-                "scale": 1.0,
-                "value": 0.0,
-            },
-            "taper": {  # the tip chord can change, but not the root
-                "lower": [1.0, 1.0],
-                "upper": [1.0, 1.0],
-                "scale": 1.0,
-                "value": np.ones(2) * 1.0,
-            },
+            # "sweep": {
+            #     "lower": 0.0,
+            #     "upper": 0.0,
+            #     "scale": 1.0,
+            #     "value": 0.0,
+            # },
+            # "taper": {  # the tip chord can change, but not the root
+            #     "lower": [1.0, 1.0],
+            #     "upper": [1.0, 1.0],
+            #     "scale": 1.0,
+            #     "value": np.ones(2) * 1.0,
+            # },
             # "span": {
             #     "lower": 0.0,
             #     "upper": 0.0,
@@ -548,12 +551,12 @@ if __name__ == "__main__":
     # ************************************************
     #     Set starting values
     # ************************************************
-    # prob.set_val("theta_f", np.deg2rad(0.0))  # this is defined in [rad] in the julia wrapper layer
+    # prob.set_val("theta_f", np.deg2rad(15.0))  # this is defined in [rad] in the julia wrapper layer
     # for ptName in probList:
     #     prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
-    # # set thickness-to-chord (NACA0009)
-    # prob.set_val("toc", 0.09 * np.ones(nNodes))
+    # set thickness-to-chord (NACA0009)
+    prob.set_val("toc", 0.12 * np.ones(nNodes))
 
     # initialization needed for solvers
     displacementsCol = np.zeros((6, npt_wing_full))
@@ -627,10 +630,10 @@ if __name__ == "__main__":
     #     OPTIMIZATION
     # ************************************************
     if args.task in ["opt", "trim"]:
-        print("=" * 60, flush=True)
-        print("First running model...", flush=True)
-        print("=" * 60, flush=True)
-        prob.run_model()
+        # print("=" * 60, flush=True)
+        # print("First running model...", flush=True)
+        # print("=" * 60, flush=True)
+        # prob.run_model()
         # print("=" * 60)
         # print("Now computing derivative...", flush=True)
         # print("=" * 60)

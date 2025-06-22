@@ -757,7 +757,7 @@ if __name__ == "__main__":
         npt_wing,
         npt_wing_full,
         n_node,
-    ) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, [0.5, 1.0], None)
+    ) = setup_dcfoil.setup(0.012*np.ones(nNodes), 0.0, nNodes, nNodesStrut, args, None, files, [0.5, 1.0], None)
 
     # datafname = f"../dcfoil/run_OMDCfoil_out/{args.name}.sql"
     datafname = f"../dcfoil/OUTPUT/{args.cases[0]}/{args.name}.sql"

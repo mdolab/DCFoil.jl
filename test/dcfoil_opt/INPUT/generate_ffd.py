@@ -31,7 +31,7 @@ n_chord = 2
 n_span = 5
 n_buffer = 2
 n_buffer = 1
-# n_buffer = 0 # does not currently work
+n_buffer = 0 # does not currently work
 # n_span = 5 + n_buffer # add 2 to root
 # ==============================================================================
 #                         MAIN DRIVER
@@ -139,18 +139,23 @@ if __name__ == "__main__":
                 upper[0] += xmargin
 
             print(lower)
-            FFDbox[ii, jj + n_span + 2 * n_buffer - 1, 0, :] = lower
-            FFDbox[ii, jj + n_span + 2 * n_buffer - 1, 1, :] = upper
+            if n_buffer == 0:
+                FFDbox[ii, jj + n_span - 1, 0, :] = lower
+                FFDbox[ii, jj + n_span - 1, 1, :] = upper
+            else:
+                FFDbox[ii, jj + n_span + 2 * n_buffer - 1, 0, :] = lower
+                FFDbox[ii, jj + n_span + 2 * n_buffer - 1, 1, :] = upper
             # FFDbox[ii, jj + n_span, 0, :] = lower
             # FFDbox[ii, jj + n_span, 1, :] = upper
 
-    # --- Fill in buffer! ---
-    spaces = np.linspace(-0.05 * SPAN, 0.05 * SPAN, len(np.arange(n_span - 1, n_span + n_buffer * 2)))
-    for inum, jj in enumerate(np.arange(n_span - 1, n_span + n_buffer * 2)):
-        FFDbox[0, jj, 0, :] = np.array([-args.rootChord * 0.5, spaces[inum], -zmargin])
-        FFDbox[0, jj, 1, :] = np.array([-args.rootChord * 0.5, spaces[inum], zmargin])
-        FFDbox[1, jj, 0, :] = np.array([args.rootChord * 0.5, spaces[inum], -zmargin])
-        FFDbox[1, jj, 1, :] = np.array([args.rootChord * 0.5, spaces[inum], zmargin])
+    if n_buffer != 0:
+        # --- Fill in buffer! ---
+        spaces = np.linspace(-0.05 * SPAN, 0.05 * SPAN, len(np.arange(n_span - 1, n_span + n_buffer * 2)))
+        for inum, jj in enumerate(np.arange(n_span - 1, n_span + n_buffer * 2)):
+            FFDbox[0, jj, 0, :] = np.array([-args.rootChord * 0.5, spaces[inum], -zmargin])
+            FFDbox[0, jj, 1, :] = np.array([-args.rootChord * 0.5, spaces[inum], zmargin])
+            FFDbox[1, jj, 0, :] = np.array([args.rootChord * 0.5, spaces[inum], -zmargin])
+            FFDbox[1, jj, 1, :] = np.array([args.rootChord * 0.5, spaces[inum], zmargin])
 
     # ---------------------------
     #   Write to file

@@ -17,7 +17,7 @@ jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 
 
-def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
+def setup(toc_init,theta_f_init, nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
     Grid = jl.DCFoil.add_meshfiles(files["gridFile"], {"junction-first": True})
     # This chunk of code is just to initialize DCFoil properly. If you want to change DVs for the code, do it via OpenMDAO
     appendageOptions = {
@@ -26,16 +26,16 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         "config": "wing",
         "nNodes": nNodes,
         "nNodeStrut": nNodesStrut,
-        "use_tipMass": False,
-        # "use_tipMass": True,
-        "tipMass": 50, # [kg]
-        "tipInertia": 10, # [kg*m²] # increasing this helps
-        "tipOffset": 0.3, # [m]
+        # "use_tipMass": False,
+        "use_tipMass": True,
+        "tipMass": 0.5, # [kg]
+        "tipInertia": 0.25, # [kg*m²] # increasing this helps a lot
+        "tipOffset": 0.1, # [m] from 0.2
         # "xMount": 3.355,
         "xMount": 0.0,
         # "material": "cfrp",
         # "strut_material": "cfrp",
-        # "material": "pmc",
+        # "material": "pmc", # not soft enough to flutter
         # "strut_material": "pmc",
         "material": "gfrp",
         "strut_material": "gfrp",
@@ -99,10 +99,10 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
     appendageParams = {
         "alfa0": 6.0,  # initial angle of attack [deg]
         "zeta": 0.04,  # modal damping ratio at first 2 modes
-        "toc": 0.09 * np.ones(nNodes),  # thickness-to-chord ratio
+        "toc": toc_init,  # thickness-to-chord ratio
         "abar": 0 * np.ones(nNodes),  # nondim dist from midchord to EA
         "x_a": 0 * np.ones(nNodes),  # nondim static imbalance
-        "theta_f": np.deg2rad(5.0),  # fiber angle global [rad]
+        "theta_f": theta_f_init,  # fiber angle global [rad]
         # --- Strut vars ---
         "depth0": 0.4,  # submerged depth of strut [m] # from Yingqian
         "rake": 0.0,  # rake angle about top of strut [deg]
@@ -140,14 +140,11 @@ def setup(nNodes, nNodesStrut, args, comm, files, flutterSpeed, outputDir: str):
         appendageParams["abar"] = (
             -0.0464 * 2.0 * np.ones(nNodes)
         )  # she nondimensionalized by chord, not semichord
-        # appendageParams["abar"] = (
-        #     -0.25 * np.ones(nNodes)
-        # )  # contrived??
-        print(
-            "Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper"
-        )
-        # appendageParams["x_a"] = 0.5 * np.ones(nNodes)
-        # print("Setting static imbalance offset for CFRP NACA0009 arbitrarily")
+        print(            "Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper"        )
+        #  I tried these settings and basically negative ab delays static divergence. X_a seems to matter only when the nose-down bendtwist coupling happens
+    appendageParams["x_a"] = 0.05 * np.ones(nNodes)
+    print("Setting static imbalance offset arbitrarily")
+    appendageParams["abar"] = (-0.05 * np.ones(nNodes))  # contrived?? 
 
     return (
         ptVec,

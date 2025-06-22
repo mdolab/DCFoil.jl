@@ -27,13 +27,15 @@ def setup(args, model, comm, files: dict):
     # ==============================================================================
     #                         DVS
     # ==============================================================================
+    is_origFFD = "moth" in files["FFDFile"]
     # ---------------------------
     #   TWIST
     # ---------------------------
     if "t" in args.geovar:
         # nSkip = 2
         nSkip = 1
-        # nSkip = 0
+        if is_origFFD:
+            nSkip = 0
         nTwist = nRefAxPts // 2 - nSkip
         print(f"{nTwist} foil twist vars", flush=True)
 
@@ -45,11 +47,16 @@ def setup(args, model, comm, files: dict):
             """
             # nSkip = 2
             nSkip = 1
-            # nSkip = 0
+            if is_origFFD:
+                nSkip = 0
             for ii in range(nTwist):
                 # geo.rot_y[twistAxis].coef[ii] = val[ii]
-                geo.rot_y[twistAxis].coef[-ii + nTwist - 1] = val[ii]
-                geo.rot_y[twistAxis].coef[nRefAxPts // 2 + nSkip + ii + 1] = val[ii]
+                if is_origFFD:
+                    geo.rot_y[twistAxis].coef[nSkip - ii + nTwist - 1] = val[ii]
+                    geo.rot_y[twistAxis].coef[nTwist + ii + nSkip + 1] = val[ii]
+                else:
+                    geo.rot_y[twistAxis].coef[-ii + nTwist - 1] = val[ii]
+                    geo.rot_y[twistAxis].coef[nRefAxPts // 2 + nSkip + ii + 1] = val[ii]
 
         model.geometry.nom_addGlobalDV(
             "twist",
@@ -65,6 +72,8 @@ def setup(args, model, comm, files: dict):
         nSkip = 2
         if "1buffer" in files["FFDFile"]:
             nSkip = 1
+        if is_origFFD:
+            nSkip = 0
         nSweep = nRefAxPts // 2 - nSkip
 
         print(f"{nSweep} foil sweep vars", flush=True)
@@ -74,6 +83,8 @@ def setup(args, model, comm, files: dict):
             nSkip = 2
             if "1buffer" in files["FFDFile"]:
                 nSkip = 1
+            if is_origFFD:
+                nSkip = 0
             # REVERSE OF RH RULE FOR DCFOIL
             val = -inval
 
@@ -116,19 +127,21 @@ def setup(args, model, comm, files: dict):
                 # # need to now rotate this by the sweep angle and add back the wing root loc
                 # C[ii + nSweep + 1, :] = sweep_ref_pt + rot_mtx @ vec
 
-                # # --- Rotate about wing root ---
-                # vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt
-                # C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt + rot_mtx @ vec
+                if is_origFFD:
+                    # --- Rotate about wing root ---
+                    vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt
+                    C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt + rot_mtx @ vec
 
-                # vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt
-                # C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt + rot_mtxnew @ vec
+                    vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt
+                    C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt + rot_mtxnew @ vec
 
-                # --- Alternative sweep about offset root (much better) ---
-                vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt_port
-                C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt_port + rot_mtx @ vec
+                else:
+                    # --- Alternative sweep about offset root (much better) ---
+                    vec = C[-ii + nSweep + nSkip - (nSkip + 1), :] - sweep_ref_pt_port
+                    C[-ii + nSweep + nSkip - (nSkip + 1), :] = sweep_ref_pt_port + rot_mtx @ vec
 
-                vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt_stbd
-                C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt_stbd + rot_mtxnew @ vec
+                    vec = C[nSweep + nSkip + ii + (nSkip + 1), :] - sweep_ref_pt_stbd
+                    C[nSweep + nSkip + ii + (nSkip + 1), :] = sweep_ref_pt_stbd + rot_mtxnew @ vec
 
             # use the restoreCoef method to put the control points back in the right place
             geo.restoreCoef(C, sweepAxis)
@@ -185,6 +198,8 @@ def setup(args, model, comm, files: dict):
     # ---------------------------
     if "r" in args.geovar:
         nSkip = 4 + 2
+        if is_origFFD:
+            nSkip = 4
 
         nTaper = nRefAxPts // 2 + 1
 
@@ -212,12 +227,16 @@ def setup(args, model, comm, files: dict):
         nSkip = 2
         if "1buffer" in files["FFDFile"]:
             nSkip = 1
+        if is_origFFD:
+            nSkip = 0
         nSpan = nRefAxPts // 2 - nSkip
 
         def span(val, geo):
             nSkip = 2
             if "1buffer" in files["FFDFile"]:
                 nSkip = 1
+            if is_origFFD:
+                nSkip = 0
             C = geo.extractCoef("global")
             s = geo.extractS("global")
 
