@@ -141,7 +141,7 @@ otherDVs = {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
         "scale": 1.0,
-        "value": 0.0,
+        "value": np.deg2rad(0.0),
     },
 }
 
@@ -410,13 +410,13 @@ if __name__ == "__main__":
             "toc": {
                 "lower": otherDVs["toc"]["value"][0],
                 "upper": otherDVs["toc"]["value"][0],
-                "scale": 1.0,
+                "scale": otherDVs["toc"]["scale"],
                 "value": otherDVs["toc"]["value"],
             },
             "theta_f": {
                 "lower": thetaStart,
                 "upper": thetaStart,
-                "scale": 1.0,
+                "scale": otherDVs["theta_f"]["scale"],
                 "value": thetaStart,
             },
         }
@@ -592,12 +592,14 @@ if __name__ == "__main__":
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
                 scale = dvDictInfo[dv]["scale"]
-                # if dv != "twist":
-                print(f"Setting {dv} to {val} but scaled by {scale}")
-                try:
+                if dv != "twist":
+                    print(f"Setting {dv} to {val} but scaled by {scale}")
                     prob.set_val(dv, val / scale)
-                except Exception:
-                    print(f"{dv} could not be set. Skipping...")
+                else:
+                    if len(val) == nTwist:
+                        prob.set_val(dv, val / scale)
+                    else:
+                        print(f"{dv} could not be set. Skipping...")
             elif dv in otherDVs:
                 try:
                     scale = otherDVs[dv]["scale"]
@@ -625,18 +627,18 @@ if __name__ == "__main__":
     #     OPTIMIZATION
     # ************************************************
     if args.task in ["opt", "trim"]:
-        print("=" * 60)
+        print("=" * 60, flush=True)
         print("First running model...", flush=True)
-        print("=" * 60)
+        print("=" * 60, flush=True)
         prob.run_model()
         # print("=" * 60)
         # print("Now computing derivative...", flush=True)
         # print("=" * 60)
         # totals = prob.compute_totals()
         # print("Total derivatives computed:", totals)
-        print("=" * 60)
+        print("=" * 60, flush=True)
         print("Running optimization...", flush=True)
-        print("=" * 60)
+        print("=" * 60, flush=True)
         prob.run_driver()
         prob.record("final_state")
         # breakpoint()
