@@ -120,8 +120,8 @@ dvDictInfo = {  # dictionary of design variable parameters
         "value": np.ones(2) * 1.0,
     },
     "span": {
-        "lower": -0.2,
-        "upper": 0.2,
+        "lower": -0.1,
+        "upper": 0.1,
         "scale": 1.0,
         "value": 0.0,
     },
@@ -134,7 +134,7 @@ otherDVs = {
         "value": 2.0,
     },
     "toc": {
-        "lower": 0.09,
+        "lower": 0.12,
         "upper": 0.18,
         "scale": 1.0,
         "value": 0.12 * np.ones(nNodes),

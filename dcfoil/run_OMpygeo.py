@@ -59,7 +59,10 @@ files["gridFile"] = [
     f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
     f"../INPUT/{args.foil}_foil_port_mesh.dcf",
 ]
-FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
+if "moth" in args.foil:
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
+else:
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
 files["FFDFile"] = FFDFile
 
 
@@ -83,6 +86,7 @@ case_name = "embedding"
 # TEcoords = XCoords[nnodes:]
 
 nTwist = 8 // 2 + 2
+nTwist = 8 // 2 # with 1 buffer 
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,

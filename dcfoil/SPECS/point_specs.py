@@ -14,8 +14,8 @@ Fliftstars = {
 
 opdepths = {
     "p1": 0.1,
-    "p2": 0.1,
-    "p3": 0.1,
+    "p2": 0.2,
+    "p3": 0.4,
 }
 
 # CFRP THING

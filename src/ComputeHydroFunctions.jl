@@ -323,7 +323,7 @@ end
 function compute_cl_ventilation(Fnh, rhof, Uinf, pcav)
     """
     Compute critical c_l for ventilation inception
-    
+
     I'm still not able to recreate the subatmospheric curve, but the atmospheric one uses pvap as the p_cav
 
     Parameters
@@ -347,7 +347,7 @@ function compute_cl_ventilation(Fnh, rhof, Uinf, pcav)
     # σv = (pred - pvap) / (0.5 * rhof * Uinf^2) # Swales et al. 1974 conducted experiments at 35 torr ambient
 
     # println(σv)
-    # println("critical cl_in",clvent)
+    # println("critical cl_in: ", clvent)
 
     return clvent
 end
