@@ -7,9 +7,9 @@ boatSpds = {  # boat speeds [m/s]
 }
 
 Fliftstars = {
-    "p1": 2500,
-    "p2": 2500,
-    "p3": 2500,
+    "p1": 1250,
+    "p2": 1250,
+    "p3": 1250,
 }
 
 opdepths = {
@@ -38,10 +38,16 @@ opdepths = {
 #     "p3": 0.3,
 # }
 
+# ptWeights = {
+#     "p1": 0.3,
+#     "p2": 0.6,
+#     "p3": 0.1,
+# }
+
 ptWeights = {
-    "p1": 0.3,
+    "p1": 0.15,
     "p2": 0.6,
-    "p3": 0.1,
+    "p3": 0.25,
 }
 
 # boatSpds = {  # boat speeds [m/s]
