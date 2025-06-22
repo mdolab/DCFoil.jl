@@ -63,6 +63,7 @@ parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix
 parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
 parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
 parser.add_argument("--debug_opt", action="store_true", default=False, help="Debug the optimization")
+parser.add_argument("--noTwist", action="store_true", default=False, help="Turn off the twist DV because it's breaking")
 parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
 parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
 args = parser.parse_args()
@@ -94,10 +95,15 @@ nNodesStrut = 3
 nTwist = 8 // 2 + 1
 if "1buffer" in FFDFile or "moth" in FFDFile:
     nTwist = 8 // 2 
+if args.noTwist:
+    twistUpper = 0.0
+    print("WARNING: No twist design variable will be used in the optimization", flush=True)
+else:
+    twistUpper = 5.0
 dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
-        "lower": -5.0,
-        "upper": 5.0,
+        "lower": -twistUpper,
+        "upper": twistUpper,
         "scale": 1.0 / 10.0,
         "value": np.zeros(nTwist),
     },
@@ -184,6 +190,7 @@ class Top(Multipoint):
             flowOptions = {
                 "Uinf": Uinf,
                 "depth0": depth,
+                "depth0_flutter": opdepths["f1"],  # depth for flutter analysis [m]
                 "alfa0_flutter": alfa0,  # angle of attack for flutter analysis [deg]
                 "outputDir": f"{case_name}/{ptName}",  # add the point name to the output directory
             }
@@ -317,7 +324,7 @@ class Top(Multipoint):
                 if args.noVent:
                     upperVent = 0.2
                 else:
-                    upperVent = 0.02
+                    upperVent = 0.00
                 self.add_constraint(
                     f"dcfoil_{ptName}.ksvent", upper=upperVent
                 )  # ventilation constraint loosened by cl 0.02 so p3 isn't a problem
