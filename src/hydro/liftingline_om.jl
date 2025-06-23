@@ -151,9 +151,14 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
     ux, uy, uz = FlowCond.uvec
     span = LLMesh.span
     ctrl_pts = LLMesh.collocationPts
+
+    # println("ctrl pts: ", (ctrl_pts[YDIM, :])) # with the load and displacement transfer, sometimes the ctrl points move a little too much outwards to the negative x direction
+    # This results in a negative argument to the g0 computation!! we fixed this to avoid the error
+    # println("prob: ", (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2)
+
     g0 = 0.5 * c_r * clα * cos(sweepAng) *
          (uz / ux - αL0) *
-         (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
+         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.5)
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 
@@ -354,7 +359,7 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     ctrl_pts = LLMesh.collocationPts
     g0 = 0.5 * c_r * clα * cos(sweepAng) *
          (uz / ux - αL0) *
-         (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
+         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.5)
 
     # ************************************************
     #     Set the initial guess

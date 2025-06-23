@@ -68,20 +68,24 @@ class CoupledAnalysis(om.Group):
         # TODO: move these into setup method?
 
         impcomp_struct_solver = JuliaImplicitComp(
-            jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions)
+            jlcomp=jl.OMFEBeam(nodeConn, appendageParams, appendageOptions, solverOptions),
+            noisy_julia_domain_error=True
         )
         expcomp_struct_func = JuliaExplicitComp(
-            jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions)
+            jlcomp=jl.OMFEBeamFuncs(nodeConn, appendageParams, appendageOptions, solverOptions),
+            noisy_julia_domain_error=True
         )
         impcomp_LL_solver = JuliaImplicitComp(
             jlcomp=jl.OMLiftingLine(
                 nodeConn, appendageParams, appendageOptions, solverOptions, flowOptions["Uinf"], flowOptions["depth0"]
-            )
+            ),
+            noisy_julia_domain_error=True
         )
         expcomp_LL_func = JuliaExplicitComp(
             jlcomp=jl.OMLiftingLineFuncs(
                 nodeConn, appendageParams, appendageOptions, solverOptions, flowOptions["Uinf"], flowOptions["depth0"]
-            )
+            ),
+            noisy_julia_domain_error=True
         )
         # --- Make it so AoA is set for flutter solver ---
         appendageParamsCopy = appendageParams.copy()
@@ -90,11 +94,13 @@ class CoupledAnalysis(om.Group):
         solverOptionsCopy = solverOptions.copy()
         solverOptionsCopy["outputDir"] = flowOptions["outputDir"]  # make sure output dir is set for dynamic solvers
         expcomp_flutter = JuliaExplicitComp(
-            jlcomp=jl.OMFlutter(nodeConn, appendageParamsCopy, appendageOptions, solverOptionsCopy)
+            jlcomp=jl.OMFlutter(nodeConn, appendageParamsCopy, appendageOptions, solverOptionsCopy),
+            noisy_julia_domain_error=True
         )
 
         expcomp_forced = JuliaExplicitComp(
-            jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptionsCopy)
+            jlcomp=jl.OMForced(nodeConn, appendageParams, appendageOptions, solverOptionsCopy),
+            noisy_julia_domain_error=True
         )
 
         # ************************************************

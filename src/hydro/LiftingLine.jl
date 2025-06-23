@@ -826,7 +826,7 @@ function compute_solution(FlowCond, LLMesh, LLHydro, Airfoils, AirfoilInfluences
     dAi = reshape(LLMesh.sectionAreas, 1, size(LLMesh.sectionAreas)...)
     g0 = 0.5 * c_r * clα * cos(Λ) *
          (uz / ux - αL0) *
-         (1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ (0.25)
+         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.5)
 
 
     # --- Pack up parameters for the NL solve ---

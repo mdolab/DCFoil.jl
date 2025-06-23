@@ -297,8 +297,8 @@ class Top(Multipoint):
         self.add_objective(
             "Dtot",
             #    scaler=1e-2,  # 60/63 because it could not meet feasibility or optimality
-            #    scaler=1e-3, # not working
-               scaler=1e-4, # WORKS AND GIVES 0/1
+               scaler=1e-3, # crank it on after fixing aoa problem
+            #    scaler=1e-4, # WORKS AND GIVES 0/1
             # scaler=5e-5,  #
         )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
 
@@ -315,7 +315,7 @@ class Top(Multipoint):
                 # scaler=1e-3, # had this before
                 # scaler=1e-4, # WORKS AND GIVES 0/1
                 # scaler=5e-5, # 60/63 with drag
-                scaler=1 / (Fliftstars[ptName] * 80),  # try 50 next
+                scaler=1 / (Fliftstars[ptName] * 50),  # try 50 next
                 # scaler=1 / (Fliftstars[ptName] * 10), 
             )  # lift constraint [N]
 
