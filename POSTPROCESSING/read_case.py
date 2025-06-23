@@ -106,6 +106,8 @@ spanliftname = f"spanwise_properties"
 density = 1025.0
 semispan = SEMISPAN
 nCol = 40  # number of collocation points in code
+chordlength_yticks = [0.36, 0.18]
+
 
 forceScale = 1e5
 
@@ -121,7 +123,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "twist": {
         "lower": -15.0,
         "upper": 15.0,
-        "scale": 1.0,
+        "scale": 1.0 / 10,
         "value": np.zeros(8 // 2),
     },
     "sweep": {
@@ -153,7 +155,7 @@ otherDVs = {
     "alfa0": {
         "lower": -10.0,
         "upper": 10.0,
-        "scale": 1.0,
+        "scale": 1.0 / 10,
         "value": 4.0,
     },
     "toc": {
@@ -312,6 +314,7 @@ def plot_spanwise():
         ax = axes.flatten()[0]
         
         ytextht = 0.45
+        xtext = 0.1
         ax.annotate(
             # f"{case.split('-')[-2]+ case.split('-')[-1]}",
             f"{args.shorternames[icase]}",
@@ -379,10 +382,11 @@ def plot_spanwise():
             # annoteTxt = f"{TotalLift[0]:.0f} N\t$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
             thetaf = np.rad2deg(design_vars["theta_f"].item())
             sweepAng = design_vars["sweep"].item()
-            annoteTxt = f"$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
+            alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
+            annoteTxt = f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
             ax.annotate(
                 annoteTxt,
-                xy=(0.2, ytextht - 0.13 * icase),
+                xy=(xtext, ytextht - 0.13 * icase),
                 xycoords="axes fraction",
                 color=cm[icase],
                 ha="left",
@@ -500,14 +504,14 @@ def plot_spanwise():
             except IndexError:
                 ax = axes[5]
             
-            ax.plot(midchords[1, :idxTip], chordLengths[:idxTip], c=cm[icase])
+            ax.plot(femNodesXYZ[:,1], chordLengths, c=cm[icase])
             if ii == 0:
                 ax.set_ylabel("$c$ [m]", rotation="horizontal", ha="right", va="center")
-            ax.set_yticks([0.14,0.095,0])
+            ax.set_yticks(chordlength_yticks)
 
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
-        ax.set_xticks([0.0, 0.333, 0.37])
+        ax.set_xticks([0.0, SEMISPAN])
     try:
         for ax in axes[-1, :]:
             ax.set_xlabel("Spanwise position [m]")
@@ -538,6 +542,7 @@ def plot_spanwiseperiter(case):
 
     driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
 
+    xtext = 0.4
     for case_num, case_id in enumerate(dcfoil_cases[:-1]):
         
         curr_case = cr.get_case(driver_cases[case_num])
@@ -589,10 +594,12 @@ def plot_spanwiseperiter(case):
         except IndexError:
             ax = axes[0]
         thetaf = np.rad2deg(design_vars["theta_f"].item())
-        annoteTxt = f"$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={design_vars['sweep'].item():.1f}^\\circ$"
+        sweepAng = design_vars["sweep"].item()
+        alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
+        annoteTxt = f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
         ax.annotate(
             annoteTxt,
-            xy=(0.5, 0.3 - 0.13 * 0),
+            xy=(xtext, 0.3 - 0.13 * 0),
             xycoords="axes fraction",
             color=cm[0],
             ha="left",
