@@ -205,29 +205,29 @@ def find_DivAndFlutterPoints(data: dict, xKey: str, yKey: str, altKey=None, debu
 
         asign = np.sign(x)
         # Search for the first sign change since that indicates the flutter point
-        for i in range(len(asign) - 1):
-            if asign[i] != asign[i + 1]:
+        for ii in range(len(asign) - 1):
+            if asign[ii] != asign[ii + 1]:
                 if debug:
                     print("")
-                    print(asign[i])
-                    print(asign[i + 1])
-                    print(x[i])
-                    print(x[i + 1])
+                    print(asign[ii])
+                    print(asign[ii + 1])
+                    print(x[ii])
+                    print(x[ii + 1])
 
                 # Interpolate the value at x=0 or zero damping since that is the accurate crossing
                 xInt = 0.0
-                yInt = (y[i + 1] - y[i]) / (x[i + 1] - x[i]) * (xInt - x[i]) + y[i]
+                yInt = (y[ii + 1] - y[ii]) / (x[ii + 1] - x[ii]) * (xInt - x[ii]) + y[ii]
 
                 if altKey is not None:
-                    xaltInt = (xalt[i + 1] - xalt[i]) / (x[i + 1] - x[i]) * (xInt - x[i]) + xalt[i]
+                    xaltInt = (xalt[ii + 1] - xalt[ii]) / (x[ii + 1] - x[ii]) * (xInt - x[ii]) + xalt[ii]
                 else:
                     xaltInt = 0.0
                 # # Check what kind of processing is done
                 # if xKey.lower() is "pmg" and useSW:
                 #     print("HELLO")
 
-                print(f"Found crossing between {i} and {i+1} at U = {yInt} m/s ({yInt*1.9438:.3f} kts)", end="")
-                instabPts.append([yInt, xInt, k, i, xaltInt])
+                print(f"Found crossing between q iteration {ii} and {ii+1} at U = {yInt} m/s ({yInt*1.9438:.3f} kts)", end="")
+                instabPts.append([yInt, xInt, k, ii, xaltInt])
                 break
         # Print new line to close
         print("")

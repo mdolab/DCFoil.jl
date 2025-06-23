@@ -101,10 +101,13 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
 
     # --- Write solution file ---
     SolveFlutter.write_sol(FLUTTERSOL, solverOptions["outputDir"])
-
+    
     # --- Repack mesh for LiftingLine ---
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
-    SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+    FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solverOM(displacements_col, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+    outputDir = solverOptions["outputDir"] * "/pkFlutter/"
+    SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 
     return nothing
 end

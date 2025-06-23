@@ -465,6 +465,15 @@ function write_1Dfemmesh(io, FEMESH)
 
 end
 
+function write_modeheader(io, frequency, nNode)
+    write(io, @sprintf("TITLE = \"MODE SHAPE %.8f HZ\"\n", frequency))
+    write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
+    write(io, "ZONE T = \"1D BEAM\" \n")
+    write(io, @sprintf("NODES = %d, ", nNode))
+    write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
+    write(io, "DATAPACKING = POINT\n")
+end
+
 function write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir::String, basename="mode"; appendageOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
@@ -501,13 +510,8 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir::St
                 # ************************************************
                 #     Header
                 # ************************************************
-                write(io, @sprintf("TITLE = \"MODE SHAPE %.8f HZ\"\n", true_eigs_i[mm, qq] / (2 * pi)))
-                write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
-                write(io, "ZONE T = \"1D BEAM\" \n")
-                write(io, @sprintf("NODES = %d, ", nNode))
-                write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
-                write(io, "DATAPACKING = POINT\n")
-
+                write_modeheader(io, true_eigs_i[mm, qq] / (2 * pi), nNode)
+                
                 # ************************************************
                 #     Write contents
                 # ************************************************
@@ -600,12 +604,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # ************************************************
         #     Header
         # ************************************************
-        write(io, @sprintf("TITLE = \"MODE SHAPE %.8f HZ\"\n", structNatFreqs[mm]))
-        write(io, "VARIABLES = \"X\" \"Y\" \"Z\" \"u\" \"v\" \"w\" \"phi\" \"theta\" \"psi\"\n")
-        write(io, "ZONE T = \"1D BEAM\" \n")
-        write(io, @sprintf("NODES = %d, ", nNode))
-        write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nNode - 1))
-        write(io, "DATAPACKING = POINT\n")
+        write_modeheader(io, structNatFreqs[mm], nNode)
 
         # ************************************************
         #     Write contents
