@@ -32,6 +32,7 @@ function return_constitutive(materialName::String)
 
     elseif (materialName == "pmc")
         ρₛ = 1800.0
+        # ρₛ = 1590.0 # idealized matching cfrp made like no difference to flutter
         E₁ = 39.3e9
         E₂ = 4.47e9
         G₁₂ = 1.3e9

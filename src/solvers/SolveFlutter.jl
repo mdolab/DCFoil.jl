@@ -9,6 +9,9 @@
                 1. starting k guess
                 2. tolerance on real root in 'extract_kCrossings()'
                 3. maxK in the 'compute_pkFlutterAnalysis()' 
+            Tips on reducing cost:
+                1. reduce maxK
+                2. reduce N_MAX_Q_ITER in settings (only memory saving on the arrays)
 """
 
 module SolveFlutter
@@ -895,7 +898,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     nK::Int64 = 22 # number of k values to sweep
     maxK = 3.5 # max reduced frequency k to search # this is too low for low speed analysis
     maxK = 30.0 # max reduced frequency k to search
-    maxK = 60.0 # max reduced frequency k to search
+    # maxK = 50.0 # max reduced frequency k to search
     # maxK = 90.0 # max reduced frequency k to search
     # maxK = 180.0 # max reduced frequency k to search (pesky moth and 0.9m semispan case with high k
 
@@ -1043,7 +1046,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
                         println("INFO - pkFlutterAnalysis : Mode disappeared")
                     end
 
-                    if nCorr == NTotalModesFound
+                    if nCorr == NTotalModesFound && 0.5 * FlowCond.rhof * U∞^2 < dynPMax
                         ChainRulesCore.ignore_derivatives() do
                             println("INFO - pkFlutterAnalysis : Mode disappeared but all modes found are correlated. Failing")
                         end

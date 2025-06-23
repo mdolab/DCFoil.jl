@@ -1121,7 +1121,7 @@ if __name__ == "__main__":
             fname = f"{outputDir}/forced-dynamics-allpts.pdf"
 
             # Create figure object
-            nrows = 2
+            nrows = 3
             ncols = 4
             figsize = (8 * ncols, 4 * nrows)
             fig, axes = plt.subplots(

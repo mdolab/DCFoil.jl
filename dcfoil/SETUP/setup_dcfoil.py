@@ -28,9 +28,9 @@ def setup(toc_init,theta_f_init, nNodes, nNodesStrut, args, comm, files, flutter
         "nNodeStrut": nNodesStrut,
         # "use_tipMass": False,
         "use_tipMass": True,
-        "tipMass": 0.5, # [kg]
-        "tipInertia": 0.25, # [kg*m²] # increasing this helps a lot
-        "tipOffset": 0.1, # [m] from 0.2
+        "tipMass": 4.0, # [kg]
+        "tipInertia": 2.0, # [kg*m²] # increasing this helps a lot
+        "tipOffset": 0.2, # [m] from 0.2
         # "xMount": 3.355,
         "xMount": 0.0,
         # "material": "cfrp",
@@ -92,7 +92,7 @@ def setup(toc_init,theta_f_init, nNodes, nNodesStrut, args, comm, files, flutter
         "nModes": 4,
         "uRange": flutterSpeed,  # [m/s] # just throttle this to get convergent results
         # "uRange": [10.0 / 1.9438, 15.0 / 1.9438],  # [kts -> m/s]
-        "maxQIter": 100,  # that didn't fix the slow run time...
+        "maxQIter": 80,  # that didn't fix the slow run time...
         "rhoKS": 500.0,
     }
 
@@ -142,7 +142,8 @@ def setup(toc_init,theta_f_init, nNodes, nNodesStrut, args, comm, files, flutter
         )  # she nondimensionalized by chord, not semichord
         print("Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper")
         #  I tried these settings and basically negative ab delays static divergence. X_a seems to matter only when the nose-down bendtwist coupling happens
-        appendageParams["x_a"] = 0.05 * np.ones(nNodes)
+        appendageParams["x_a"] = 0.0464 * 2.0 * np.ones(nNodes)
+        # appendageParams["x_a"] = 0.5 * np.ones(nNodes) # does nothing
         print("Setting static imbalance offset arbitrarily")
     else:
         appendageParams["x_a"] = 0.05 * np.ones(nNodes)

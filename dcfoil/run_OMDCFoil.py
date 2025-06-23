@@ -570,7 +570,7 @@ if __name__ == "__main__":
     #     prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
-    prob.set_val("toc", 0.12 * np.ones(nNodes))
+    prob.set_val("toc", otherDVs["toc"]["value"])
 
     # initialization needed for solvers
     displacementsCol = np.zeros((6, npt_wing_full))
