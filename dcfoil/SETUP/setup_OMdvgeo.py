@@ -32,8 +32,8 @@ def setup(args, model, comm, files: dict):
     #   TWIST
     # ---------------------------
     if "t" in args.geovar:
-        # nSkip = 2
-        nSkip = 1
+        nSkip = 2
+        # nSkip = 1
         if is_origFFD:
             nSkip = 0
         nTwist = nRefAxPts // 2 - nSkip
@@ -45,8 +45,8 @@ def setup(args, model, comm, files: dict):
             """
             val array has length of semi-span FFDs only. It's mirrored to the full config
             """
-            # nSkip = 2
-            nSkip = 1
+            nSkip = 2
+            # nSkip = 1
             if is_origFFD:
                 nSkip = 0
             for ii in range(nTwist):

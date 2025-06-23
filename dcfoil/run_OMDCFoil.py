@@ -27,7 +27,7 @@ from tabulate import tabulate
 # Extension modules
 # ==============================================================================
 from SETUP import setup_OMdvgeo, setup_dcfoil, setup_opt
-from SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0, ptWeights
+from SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0, ptWeights, SEMISPAN
 from pygeo.mphys import OM_DVGEOCOMP
 import openmdao.api as om
 from multipoint import Multipoint
@@ -84,7 +84,7 @@ files["gridFile"] = [
     f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
     f"../INPUT/{args.foil}_foil_port_mesh.dcf",
 ]
-if "moth" in args.foil:
+if "moth" in args.foil or "amc" in args.foil:
     FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
 else:
     FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
@@ -93,7 +93,7 @@ files["FFDFile"] = FFDFile
 nNodes = 10
 nNodesStrut = 3
 nTwist = 8 // 2 + 1
-if "1buffer" in FFDFile or "moth" in FFDFile:
+if "1buffer" in FFDFile or "moth" in FFDFile or "amc" in FFDFile:
     nTwist = 8 // 2 
 if args.noTwist:
     twistUpper = 0.0
@@ -140,11 +140,17 @@ otherDVs = {
         "value": 3.0,
     },
     "toc": {
-        "lower": 0.12,
+        "lower": 0.09,
         "upper": 0.18,
         "scale": 1.0,
-        "value": 0.12 * np.ones(nNodes),
+        "value": 0.09 * np.ones(nNodes),
     },
+    # "toc": {
+    #     "lower": 0.12,
+    #     "upper": 0.18,
+    #     "scale": 1.0,
+    #     "value": 0.12 * np.ones(nNodes),
+    # },
     "theta_f": {
         "lower": np.deg2rad(-30),
         "upper": np.deg2rad(30),
@@ -296,8 +302,8 @@ class Top(Multipoint):
         # self.add_objective("CD")
         self.add_objective(
             "Dtot",
-            #    scaler=1e-2,  # 60/63 because it could not meet feasibility or optimality
-               scaler=1e-3, # crank it on after fixing aoa problem
+               scaler=1e-2,  # does this work?
+            #    scaler=1e-3, # WORKS
             #    scaler=1e-4, # WORKS AND GIVES 0/1
             # scaler=5e-5,  #
         )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
@@ -315,12 +321,12 @@ class Top(Multipoint):
                 # scaler=1e-3, # had this before
                 # scaler=1e-4, # WORKS AND GIVES 0/1
                 # scaler=5e-5, # 60/63 with drag
-                scaler=1 / (Fliftstars[ptName] * 50),  # try 50 next
+                scaler=1 / (Fliftstars[ptName] * 50),  # Works
                 # scaler=1 / (Fliftstars[ptName] * 10), 
             )  # lift constraint [N]
 
             if args.task != "trim":
-                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
+                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * SEMISPAN)  # tip defl con (5% of baseline semispan)
                 if args.noVent:
                     upperVent = 0.2
                 else:

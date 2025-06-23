@@ -52,7 +52,7 @@ current = os.path.dirname(os.path.realpath(__file__))  # Getting the parent dire
 # adding the parent directory to the sys. path.
 sys.path.append(os.path.dirname(current))
 from dcfoil.SETUP import setup_dcfoil
-from dcfoil.SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0
+from dcfoil.SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0, SEMISPAN
 
 
 # ==============================================================================
@@ -104,7 +104,7 @@ dragplotname = f"drag_hist.pdf"
 spanliftname = f"spanwise_properties"
 
 density = 1025.0
-semispan = 0.333
+semispan = SEMISPAN
 nCol = 40  # number of collocation points in code
 
 forceScale = 1e5

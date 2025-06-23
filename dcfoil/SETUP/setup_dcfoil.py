@@ -35,10 +35,10 @@ def setup(toc_init,theta_f_init, nNodes, nNodesStrut, args, comm, files, flutter
         "xMount": 0.0,
         # "material": "cfrp",
         # "strut_material": "cfrp",
-        # "material": "pmc", # not soft enough to flutter
-        # "strut_material": "pmc",
-        "material": "gfrp",
-        "strut_material": "gfrp",
+        "material": "pmc", # not soft enough to flutter for moth, works for amc
+        "strut_material": "pmc",
+        # "material": "gfrp",
+        # "strut_material": "gfrp",
         "path_to_geom_props": "./INPUT/1DPROPS/",
         "path_to_struct_props": None,
         "path_to_geom_props": None,
@@ -140,11 +140,14 @@ def setup(toc_init,theta_f_init, nNodes, nNodesStrut, args, comm, files, flutter
         appendageParams["abar"] = (
             -0.0464 * 2.0 * np.ones(nNodes)
         )  # she nondimensionalized by chord, not semichord
-        print(            "Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper"        )
+        print("Setting elastic axis offset for CFRP NACA0009 from Julie's JFM part III paper")
         #  I tried these settings and basically negative ab delays static divergence. X_a seems to matter only when the nose-down bendtwist coupling happens
-    appendageParams["x_a"] = 0.05 * np.ones(nNodes)
-    print("Setting static imbalance offset arbitrarily")
-    appendageParams["abar"] = (-0.05 * np.ones(nNodes))  # contrived?? 
+        appendageParams["x_a"] = 0.05 * np.ones(nNodes)
+        print("Setting static imbalance offset arbitrarily")
+    else:
+        appendageParams["x_a"] = 0.05 * np.ones(nNodes)
+        print("Setting static imbalance offset arbitrarily")
+        appendageParams["abar"] = (-0.05 * np.ones(nNodes))  # contrived?? 
 
     return (
         ptVec,
