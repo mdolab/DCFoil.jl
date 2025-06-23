@@ -24,7 +24,7 @@ set -e #
 # These are opt3
 # python run_OMDCFoil.py --task opt --flutter --restart dcfoil-trim --name opt5 # static and dynamic optimization [0/1] after increasing major step limit
 # 2025-06-04 tweaking step limit size and scaling
-# python run_OMDCFoil.py --task opt --flutter --freeSurf --restart dcfoil-trim --pts 3 --name opt5-fs # static and dynamic optimization [TODO NEXT GGGGGGGGGGGGGGGGGGGG randomly died probably due to memory issues] 
+# python run_OMDCFoil.py --task opt --flutter --freeSurf --restart dcfoil-trim --pts 3 --name opt5-fs # static and dynamic optimization
 
 # --- 2025-06-02 ---
 # Test multipoint
@@ -41,8 +41,8 @@ set -e #
 # ==============================================================================
 #                             Switching to AMC full scale
 # ==============================================================================
-# python run_OMDCFoil.py --foil amcfull --task trim --pts 123 --name trimMP # multipoint [0/1]
-# python run_OMDCFoil.py --foil amcfull --task trim --freeSurf --pts 123 --name trimMP-fs # multipoint [0/1]
+# python run_OMDCFoil.py --foil amcfull --task trim --pts 123 --name amctrimMP # multipoint [0/1]
+# python run_OMDCFoil.py --foil amcfull --task trim  --freeSurf --pts 123 --name amctrimMP-fs # multipoint [0/1]
 
 # echo "Running trim1MP"
 # # 2025-06-09-trim-p123-trim1MP
@@ -50,15 +50,17 @@ set -e #
 # echo "Running trim1MP-fs"
 # python run_OMDCFoil.py --foil amcfull --task trim  --restart dcfoil-trim1MP --freeSurf --pts 123 --name trim1MP-fs # multipoint [0/1]
 
-# python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1-novent-debug --debug_opt #   [??TODO PICKUP HERE tomorrow if the multipoint fails]
-# echo "----------------------"
-# echo "--- Running opt1MP ---"
-# echo "----------------------"
-# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP --pts 123 --name opt1MP # multipoint  []
-# echo "----------------------"
-# echo "--- Running opt1MP-fs ---"
-# echo "----------------------"
-# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP-fs --pts 123 --freeSurf --name opt1MP-fs # multipoint []
+# python run_OMDCFoil.py --foil amcfull --task opt --noVent --restart 2025-06-15-dcfoil-trim1MP --pts 3 --name opt1-novent-debug --debug_opt # 
+echo "----------------------"
+echo "--- Running opt1MP ---"
+echo "----------------------"
+python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-23-dcfoil-amctrimMP --pts 3 --name opt1 # multipoint  []
+# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-23-dcfoil-amctrimMP --pts 123 --name opt1MP # multipoint  []
+echo "----------------------"
+echo "--- Running opt1MP-fs ---"
+echo "----------------------"
+python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-23-dcfoil-amctrimMP-fs --pts 3 --freeSurf --name opt1-fs # multipoint []
+# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-23-dcfoil-amctrimMP-fs --pts 123 --freeSurf --name opt1MP-fs # multipoint []
 
 # echo "+--------------------+"
 # echo "| Running opt2-fs    |"
@@ -93,11 +95,11 @@ set -e #
 # echo "----------------------"
 # echo "--- Running opt1MP-fs ---"
 # echo "----------------------"
-# python run_OMDCFoil.py --foil mothrudder --task opt --pts 3 --freeSurf --name moth-opt1MP-fs # multipoint [0/1]
+# python run_OMDCFoil.py --foil mothrudder --task opt --pts 3 --freeSurf --name moth-opt1MP-fs --restart 2025-06-22-dcfoil-moth-opt1MP-copy # multipoint [0/1]
 # python run_OMDCFoil.py --foil mothrudder --task run --pts 3 --name moth-opt1MP-fs --freeSurf --restart 2025-06-22-opt-p3-moth-opt1MP-fs --flutter --forced   # multipoint  []
 
 # echo "----------------------"
 # echo "--- Running opt2MP ---"
 # echo "----------------------"
-python run_OMDCFoil.py --foil mothrudder --task opt --pts 3 --name moth-opt2MP --flutter --forced # multipoint  []
-python run_OMDCFoil.py --foil mothrudder --task opt --pts 3 --name moth-opt2MP-fs --flutter --forced --freeSurf # multipoint  []
+# python run_OMDCFoil.py --foil mothrudder --task opt --pts 3 --name moth-opt2MP --flutter --forced # multipoint  []
+# python run_OMDCFoil.py --foil mothrudder --task opt --pts 3 --name moth-opt2MP-fs --flutter --forced --freeSurf # multipoint  []
