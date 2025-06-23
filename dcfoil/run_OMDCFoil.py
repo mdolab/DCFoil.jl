@@ -137,7 +137,7 @@ otherDVs = {
         "lower": -10.0,
         "upper": 10.0,
         "scale": 1.0 / 10,
-        "value": 2.0,
+        "value": 3.0,
     },
     "toc": {
         "lower": 0.12,
@@ -298,8 +298,8 @@ class Top(Multipoint):
             "Dtot",
             #    scaler=1e-2,  # 60/63 because it could not meet feasibility or optimality
             #    scaler=1e-3, # not working
-            #    scaler=1e-4, # WORKS AND GIVES 0/1
-            scaler=5e-5,  #
+               scaler=1e-4, # WORKS AND GIVES 0/1
+            # scaler=5e-5,  #
         )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
 
         # ************************************************
@@ -315,12 +315,12 @@ class Top(Multipoint):
                 # scaler=1e-3, # had this before
                 # scaler=1e-4, # WORKS AND GIVES 0/1
                 # scaler=5e-5, # 60/63 with drag
-                # scaler=1 / (Fliftstars[ptName] * 50),  # try 50 next
-                scaler=1 / (Fliftstars[ptName] * 10), 
+                scaler=1 / (Fliftstars[ptName] * 80),  # try 50 next
+                # scaler=1 / (Fliftstars[ptName] * 10), 
             )  # lift constraint [N]
 
             if args.task != "trim":
-                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.9)  # tip defl con (5% of baseline semispan)
+                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * 0.333)  # tip defl con (5% of baseline semispan)
                 if args.noVent:
                     upperVent = 0.2
                 else:
@@ -349,6 +349,7 @@ def print_drags():
         print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
         print("Dtot", prob.get_val("Dtot"))
         print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
+        print("Flift", prob.get_val(f"dcfoil_{ptName}.Flift"))
         print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
         print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
 
@@ -602,14 +603,14 @@ if __name__ == "__main__":
         for dv, val in design_vars.items():
             if dv in dvDictInfo:
                 scale = dvDictInfo[dv]["scale"]
-                if dv != "twist":
-                    print(f"Setting {dv} to {val} but scaled by {scale}")
-                    prob.set_val(dv, val / scale)
-                else:
-                    if len(val) == nTwist:
-                        prob.set_val(dv, val / scale)
-                    else:
-                        print(f"{dv} could not be set. Skipping...")
+                # if dv != "twist":
+                print(f"Setting {dv} to {val} but scaled by {scale}")
+                prob.set_val(dv, val / scale)
+                # else:
+                    # if len(val) == nTwist:
+                        # prob.set_val(dv, val / scale)
+                    # else:
+                    #     print(f"{dv} could not be set. Skipping...")
             elif dv in otherDVs:
                 try:
                     scale = otherDVs[dv]["scale"]
@@ -637,7 +638,7 @@ if __name__ == "__main__":
     #     OPTIMIZATION
     # ************************************************
     if args.task in ["opt", "trim"]:
-        # print("=" * 60, flush=True)
+        # print("=" * 60, flush=True) #DON"T RUN FIRST. THIS STUFF CAN BREAK IT
         # print("First running model...", flush=True)
         # print("=" * 60, flush=True)
         # prob.run_model()
@@ -700,19 +701,19 @@ if __name__ == "__main__":
         print("=" * 60)
         prob.run_model()
 
-        print("=" * 20)
-        print("Objectives:")
-        print("=" * 20)
-        obj = prob.driver.get_objective_values()
-        for objName, value in obj.items():
-            print(f"{objName}: {value}")
+        # print("=" * 20)
+        # print("Objectives:")
+        # print("=" * 20)
+        # obj = prob.driver.get_objective_values()
+        # for objName, value in obj.items():
+        #     print(f"{objName}: {value}")
 
-        print("=" * 20)
-        print("Constraints:")
-        print("=" * 20)
-        con = prob.driver.get_constraint_values()
-        for conName, value in con.items():
-            print(f"{conName}: {value}")
+        # print("=" * 20)
+        # print("Constraints:")
+        # print("=" * 20)
+        # con = prob.driver.get_constraint_values()
+        # for conName, value in con.items():
+        #     print(f"{conName}: {value}")
 
         # I also want to know the drag components
         print("=" * 20)
@@ -738,18 +739,18 @@ if __name__ == "__main__":
         prob.run_model()
         fileName = "derivative-check-full.out"
         f = open(fileName, "w")
-        # print("Checking totals...")
-        # f.write("TOTALS\n")
-        # prob.check_totals(out_stream=f, method="fd", compact_print=True)
+        print("Checking totals...")
+        f.write("TOTALS\n")
+        prob.check_totals(out_stream=f, method="fd", compact_print=True)
         # prob.check_totals(out_stream=f, method="fd", step=1e-3)
 
-        print("Checking partials...")
-        f.write("PARTIALS\n")
-        # prob.model.dcfoil_p3.hydroelastic.liftingline_funcs.set_check_partial_options(wrt=["toc"])
-        # prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
-        # prob.check_partials(method="fd", includes=["liftingline_funcs"])
-        prob.check_partials(
-            out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"], compact_print=True
-        )
-        prob.check_partials(out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"])
-        f.close()
+        # print("Checking partials...")
+        # f.write("PARTIALS\n")
+        # # prob.model.dcfoil_p3.hydroelastic.liftingline_funcs.set_check_partial_options(wrt=["toc"])
+        # # prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
+        # # prob.check_partials(method="fd", includes=["liftingline_funcs"])
+        # prob.check_partials(
+        #     out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"], compact_print=True
+        # )
+        # prob.check_partials(out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"])
+        # f.close()

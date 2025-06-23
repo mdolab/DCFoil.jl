@@ -503,7 +503,7 @@ function write_modalsol(structNatFreqs, structModeShapes, wetNatFreqs, wetModeSh
     """
 
     # Store solutions here
-    workingOutput = outputDir * "modal/"
+    workingOutput = outputDir * "/modal/"
     mkpath(workingOutput)
 
     # --- Store structural dynamics analysis ---

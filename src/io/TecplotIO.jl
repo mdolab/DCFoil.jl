@@ -26,7 +26,7 @@ function write_structmesh(FEMESHLIST, solverOptions::AbstractDict, outputDir::St
     Top level routine to write the structural mesh file
     """
 
-    outfile = @sprintf("%s%s", outputDir, fname)
+    outfile = @sprintf("%s/%s", outputDir, fname)
     @printf("Writing struct mesh file %s...\n", outfile)
 
     io = open(outfile, "w")
@@ -54,7 +54,7 @@ function write_hydromesh(LLMesh, uvec, outputDir::String, fname="hydromesh.dat")
     """
     Write the lifting line mesh to a tecplot file
     """
-    outfile = @sprintf("%s%s", outputDir, fname)
+    outfile = @sprintf("%s/%s", outputDir, fname)
     @printf("Writing hydro mesh file %s...\n", outfile)
 
     io = open(outfile, "w")
@@ -592,7 +592,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
     basename = "drymode"
     @printf("Writing natural mode shape files for %i modes to %s/%s_<>.dat\n", nModes, outputDir, basename)
     for mm in 1:nModes
-        outfile = @sprintf("%s%s_m%03i.dat", outputDir, basename, mm)
+        outfile = @sprintf("%s/%s_m%03i.dat", outputDir, basename, mm)
         io = open(outfile, "w")
 
         modeShape = structModeShapes[:, mm]
@@ -648,7 +648,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
     basename = "wetmode"
     @printf("Writing natural mode shape files for %i modes to %s_<>.dat\n", nModes, basename)
     for mm in 1:nModes
-        outfile = @sprintf("%s%s_m%03i.dat", outputDir, basename, mm)
+        outfile = @sprintf("%s/%s_m%03i.dat", outputDir, basename, mm)
         io = open(outfile, "w")
 
         modeShape = wetModeShapes[:, mm]

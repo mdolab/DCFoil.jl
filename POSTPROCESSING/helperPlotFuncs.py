@@ -462,6 +462,7 @@ def plot_forced(
     cm,
     alpha,
     elem=1,
+    case_num=0
 ):
     """
     Plot harmonically forced response of the tip of the wing
@@ -563,7 +564,11 @@ def plot_forced(
 
         M_wRAO[ii] = meanDef
 
-    ax.plot(fExtSweep, M_wRAO, color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    if case_num == 0:
+        label = "$U_{\infty}=$%.1f m/s" % (flowSpeed)
+    else:
+        label = None
+    ax.plot(fExtSweep, M_wRAO, color=cm, alpha=alpha, label=label)
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 0]
@@ -1252,8 +1257,8 @@ def plot_vg_vf_rl(
     # ax.set_xlim(vSweep[0] * 0.99, vSweep[-1] * 1.01)
     ax.set_xlabel(xlabel)
 
-    if not annotateModes:
-        ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
+    # if not annotateModes:
+    #     ax.legend(fontsize=legfs * 0.5, labelcolor="linecolor", loc="best", frameon=False)
 
     # ************************************************
     #     Root-locus diagram
@@ -1341,21 +1346,21 @@ def plot_vg_vf_rl(
                     va="top",
                 )
 
-            # --- Add arror pointing in speed ---
-            nmid = int(len(vSweep) // 4)
-            ax.annotate(
-                "",
-                xytext=(np.array([gSweep[-nmid - 1], fSweep[-nmid - 1]])),  # arrow start
-                xy=(np.array([gSweep[-nmid], fSweep[-nmid]])),  # arrow end
-                arrowprops=dict(
-                    # arrowstyle="->",
-                    arrowstyle="fancy",
-                    # shrinkA=2,
-                    color=cm[iic],
-                    alpha=0.5,
-                    # headwidth=0.3, # does not work
-                ),
-            )
+                # --- Add arror pointing in speed ---
+                nmid = int(len(vSweep) // 4)
+                ax.annotate(
+                    "",
+                    xytext=(np.array([gSweep[-nmid - 1], fSweep[-nmid - 1]])),  # arrow start
+                    xy=(np.array([gSweep[-nmid], fSweep[-nmid]])),  # arrow end
+                    arrowprops=dict(
+                        # arrowstyle="->",
+                        arrowstyle="fancy",
+                        # shrinkA=2,
+                        color=cm[iic],
+                        alpha=0.5,
+                        # headwidth=0.3, # does not work
+                    ),
+                )
 
             yticks.append(fSweep[0])
         except Exception:
@@ -1374,18 +1379,19 @@ def plot_vg_vf_rl(
         # label="Flutter boundary",
         color=flutterColor,
         ls="-",
+        lw=0.5,
         alpha=0.5,
         # path_effects=[patheffects.withTickedStroke()], # ugly
     )
-    ax.annotate(
-        "Hydroelastic\ninstability",
-        xy=(0.85, 0.5),
-        ha="left",
-        xycoords="axes fraction",
-        size=legfs,
-        color=flutterColor,
-        alpha=0.5,
-    )
+    # ax.annotate(
+    #     "Hydroelastic\ninstability",
+    #     xy=(0.85, 0.5),
+    #     ha="left",
+    #     xycoords="axes fraction",
+    #     size=legfs,
+    #     color=flutterColor,
+    #     alpha=0.5,
+    # )
 
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)

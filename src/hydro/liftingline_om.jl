@@ -179,6 +179,12 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
         outputs["gammas_d"][ii] = gamma
     end
 
+    # println("="^50)
+    # println("Lifting line inputs:")
+    # println("="^50)
+    # println("gammas: ", outputs["gammas"])
+    # println("gammas_d: ", outputs["gammas_d"])
+
     return nothing
 end
 
@@ -186,6 +192,7 @@ function OpenMDAOCore.linearize!(self::OMLiftingLine, inputs, outputs, partials)
     """
     This defines the derivatives of outputs
     """
+    println("Computing lifting line implicit partials...")
 
     ptVec = inputs["ptVec"]
     alfa0 = inputs["alfa0"][1]
@@ -690,31 +697,33 @@ function OpenMDAOCore.compute!(self::OMLiftingLineFuncs, inputs, outputs)
     outputs["cla_col"][:] = cla[START:STOP]
 
 
-    # Print out every single output
-    println("This is every single lifting line output")
-    println("CL: ", outputs["CL"][1])
-    println("CDi: ", outputs["CDi"][1])
-    println("CS: ", outputs["CS"][1])
-    println("Fdrag: ", outputs["Fdrag"][1])
-    println("Fside: ", outputs["Fside"][1])
-    println("Flift: ", outputs["Flift"][1])
-    println("forces_dist: ", outputs["forces_dist"])
-    println("M_x: ", outputs["M_x"][1])
-    println("M_y: ", outputs["M_y"][1])
-    println("M_z: ", outputs["M_z"][1])
-    println("moments_dist: ", outputs["moments_dist"])
-    println("collocationPts: ", outputs["collocationPts"])
-    println("cl: ", outputs["cl"])
-    println("ksvent: ", outputs["ksvent"][1])
-    println("CDw: ", outputs["CDw"][1])
-    println("CDpr: ", outputs["CDpr"][1])
-    println("CDj: ", outputs["CDj"][1])
-    println("CDs: ", outputs["CDs"][1])
-    println("Dw: ", outputs["Dw"][1])
-    println("Dpr: ", outputs["Dpr"][1])
-    println("Dj: ", outputs["Dj"][1])
-    println("Ds: ", outputs["Ds"][1])
-    println("cla_col: ", outputs["cla_col"][:])
+    # # Print out every single output # These are good
+    # println("="^50)
+    # println("This is every explicit lifting line output")
+    # println("="^50)
+    # println("CL: ", outputs["CL"][1])
+    # println("CDi: ", outputs["CDi"][1])
+    # println("CS: ", outputs["CS"][1])
+    # println("Fdrag: ", outputs["Fdrag"][1])
+    # println("Fside: ", outputs["Fside"][1])
+    # println("Flift: ", outputs["Flift"][1])
+    # println("forces_dist: ", outputs["forces_dist"])
+    # println("M_x: ", outputs["M_x"][1])
+    # println("M_y: ", outputs["M_y"][1])
+    # println("M_z: ", outputs["M_z"][1])
+    # println("moments_dist: ", outputs["moments_dist"])
+    # println("collocationPts: ", outputs["collocationPts"])
+    # println("cl: ", outputs["cl"])
+    # println("ksvent: ", outputs["ksvent"][1])
+    # println("CDw: ", outputs["CDw"][1])
+    # println("CDpr: ", outputs["CDpr"][1])
+    # println("CDj: ", outputs["CDj"][1])
+    # println("CDs: ", outputs["CDs"][1])
+    # println("Dw: ", outputs["Dw"][1])
+    # println("Dpr: ", outputs["Dpr"][1])
+    # println("Dj: ", outputs["Dj"][1])
+    # println("Ds: ", outputs["Ds"][1])
+    # println("cla_col: ", outputs["cla_col"][:])
 
     # outputDir = "./"
     # write_hydromesh(LLNLParams.LLSystem, FlowCond.uvec, outputDir)
@@ -725,6 +734,8 @@ end
 function OpenMDAOCore.compute_partials!(self::OMLiftingLineFuncs, inputs, partials)
     """
     """
+
+    println("Computing lifting line explicit partials...")
 
     Gconv = inputs["gammas"]
     Gconv_d = inputs["gammas_d"]

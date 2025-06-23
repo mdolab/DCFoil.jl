@@ -102,6 +102,10 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
     # --- Write solution file ---
     SolveFlutter.write_sol(FLUTTERSOL, solverOptions["outputDir"])
 
+    # --- Repack mesh for LiftingLine ---
+    LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+    SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+
     return nothing
 end
 

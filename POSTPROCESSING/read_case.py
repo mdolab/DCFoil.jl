@@ -61,6 +61,7 @@ from dcfoil.SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0
 parser = argparse.ArgumentParser()
 parser.add_argument("--use_serif", help="use serif", action="store_true", default=False)
 parser.add_argument("--name", type=str, default=None, help="Name of the case to read .sql file")
+parser.add_argument("--shorternames", type=str, default=[],nargs="+", help="Label")
 parser.add_argument(
     "--base", type=str, default=None, help="Name of the base case to read .sql file and compare against"
 )
@@ -103,7 +104,7 @@ dragplotname = f"drag_hist.pdf"
 spanliftname = f"spanwise_properties"
 
 density = 1025.0
-semispan = 0.9
+semispan = 0.333
 nCol = 40  # number of collocation points in code
 
 forceScale = 1e5
@@ -299,7 +300,8 @@ def plot_spanwise():
         drag_vals[f"CDi_{ptName}"] = []
 
     # Create figure object
-    fig, axes = plt.subplots(nrows=5, ncols=npts, sharex="col", constrained_layout=True, figsize=(10 * npts, 16))
+    nrows = 6
+    fig, axes = plt.subplots(nrows=nrows, ncols=npts, sharex="col", constrained_layout=True, figsize=(10 * npts, 3.2*nrows))
 
     for icase, case in enumerate(args.cases):
         datafname = f"../dcfoil/OUTPUT/{case}/{case}.sql"
@@ -308,9 +310,12 @@ def plot_spanwise():
 
         # ax = axes[0, 0]
         ax = axes.flatten()[0]
+        
+        ytextht = 0.45
         ax.annotate(
-            f"{case}",
-            xy=(0.0, 0.3 - 0.13 * icase),
+            # f"{case.split('-')[-2]+ case.split('-')[-1]}",
+            f"{args.shorternames[icase]}",
+            xy=(0.0, ytextht - 0.13 * icase),
             xycoords="axes fraction",
             color=cm[icase],
             ha="left",
@@ -332,6 +337,10 @@ def plot_spanwise():
             case_num = -1
             dcfoil_case = cr.get_case(case_id)
 
+            driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
+            last_case = cr.get_case(driver_cases[-1])
+            design_vars = last_case.get_design_vars()
+            # breakpoint() #SEE DVS
             # dcfoil_case.inputs
 
             waveDrag = dcfoil_case.outputs[f"{systemName}.Dw"]
@@ -358,17 +367,22 @@ def plot_spanwise():
 
             # --- Lift distribution ---
             try:
-                spanVal = design_vars_vals["span"][case_num] / dvDictInfo["span"]["scale"]
+                spanVal = design_vars["span"] / dvDictInfo["span"]["scale"]
             except KeyError:
                 spanVal = 0.0
             TotalLift = dcfoil_case.outputs[f"{systemName}.Flift"]
+            TotalDrag = dcfoil_case.outputs[f"{systemName}.Fdrag"]
             try:
                 ax = axes[0, ii]
             except IndexError:
                 ax = axes[0]
+            # annoteTxt = f"{TotalLift[0]:.0f} N\t$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
+            thetaf = np.rad2deg(design_vars["theta_f"].item())
+            sweepAng = design_vars["sweep"].item()
+            annoteTxt = f"$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
             ax.annotate(
-                f"{TotalLift[0]:.0f} N\n$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
-                xy=(0.5, 0.3 - 0.13 * icase),
+                annoteTxt,
+                xy=(0.2, ytextht - 0.13 * icase),
                 xycoords="axes fraction",
                 color=cm[icase],
                 ha="left",
@@ -376,6 +390,7 @@ def plot_spanwise():
             )
             print("Total lift:", TotalLift)
             print("Span value:", spanVal)
+            print("Total drag:", TotalDrag)
             actualSpan = aeroNodesXYZ[1, -1]
             print("Actual span:", actualSpan)
             spanXYZ = aeroNodesXYZ[:, -1]
@@ -385,7 +400,8 @@ def plot_spanwise():
             sloc, Lprime, gamma_s = compute_elliptical(TotalLift, Uinf, actualSpan, density)
 
             rhoU = density * Uinf  # rho * U
-            ax.plot(sloc, Lprime, "-", c="k", alpha=0.5, label="Elliptical  distribution")
+            if icase == 0:
+                ax.plot(sloc, Lprime, "-", c="k", alpha=0.5, label="Elliptical  distribution")
             ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf * rhoU, c=cm[icase])
             # ax.plot(sloc, gamma_s, "-", c="k", alpha=0.5, label="Elliptical lift distribution")
             # ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf, "-")
@@ -404,9 +420,9 @@ def plot_spanwise():
                 ax = axes[1]
             ax.plot(aeroNodesXYZ[1, :], spanwise_cl, c=cm[icase])
             # plot horizontal line for cl_in
-            ax.axhline(np.max(spanwise_cl - ventilationCon) + 0.01, ls="--", label="cl Ventilation", color="magenta")
+            ax.axhline(np.max(spanwise_cl - ventilationCon), ls="--", label="cl Ventilation", color="magenta")
             ax.annotate(
-                "$c_{\ell_{in}}=$" + f"${np.max(spanwise_cl - ventilationCon)+0.01:.2f}$",
+                "$c_{\ell_{in}}=$" + f"${np.max(spanwise_cl - ventilationCon):.2f}$",
                 xy=(0.85, 0.99),
                 xycoords="axes fraction",
                 color="magenta",
@@ -431,7 +447,7 @@ def plot_spanwise():
             )  # repack the ptVec to a 3D array
             idxTip = jl.LiftingLine.get_tipnode(LECoords)
 
-            midchords, _, _, _, pretwistDist = jl.LiftingLine.compute_1DPropsFromGrid(
+            midchords, chordLengths, _, _, pretwistDist = jl.LiftingLine.compute_1DPropsFromGrid(
                 LECoords,
                 TECoords,
                 Grid.nodeConn,
@@ -456,7 +472,7 @@ def plot_spanwise():
                 ax.set_ylabel("Twist [deg]", rotation="horizontal", ha="right", va="center")
             ax.set_ylim(bottom=-3.0, top=8.0)
             if icase == len(args.cases) - 1:
-                ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+                ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=len(args.cases))
 
             try:
                 ax = axes[3, ii]
@@ -467,11 +483,9 @@ def plot_spanwise():
                 ax.set_ylabel("OOP bending [m]", rotation="horizontal", ha="right", va="center")
             tipConstraint = semispan * 0.05
             ax.axhline(tipConstraint, ls="--", color="magenta")
-            ax.set_ylim(top=tipConstraint * 1.1)
             ax.annotate("$\\delta_{\\textrm{max}}$", xy=(0.92, 0.99), xycoords="axes fraction", color="magenta")
-            ax.set_yticks(np.arange(0, 0.05, 0.025).tolist() + [tipConstraint])
-            ax.set_xticks([0.0, semispan, semispan + spanVal.item()])
-            ax.set_xticks([0.0, semispan, actualSpan])
+            ax.set_yticks(np.arange(0, 0.05, 0.03).tolist() + [tipConstraint])
+            ax.set_ylim(top=tipConstraint * 1.1)
 
             try:
                 ax = axes[4, ii]
@@ -481,8 +495,19 @@ def plot_spanwise():
             if ii == 0:
                 ax.set_ylabel("$t/c$", rotation="horizontal", ha="right", va="center")
 
+            try:
+                ax = axes[5, ii]
+            except IndexError:
+                ax = axes[5]
+            
+            ax.plot(midchords[1, :idxTip], chordLengths[:idxTip], c=cm[icase])
+            if ii == 0:
+                ax.set_ylabel("$c$ [m]", rotation="horizontal", ha="right", va="center")
+            ax.set_yticks([0.14,0.095,0])
+
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
+        ax.set_xticks([0.0, 0.333, 0.37])
     try:
         for ax in axes[-1, :]:
             ax.set_xlabel("Spanwise position [m]")
@@ -510,7 +535,14 @@ def plot_spanwiseperiter(case):
 
     systemName = f"dcfoil_{probList[0]}"
     dcfoil_cases = cr.list_cases(f"root.{systemName}", recurse=False)
+
+    driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
+
     for case_num, case_id in enumerate(dcfoil_cases[:-1]):
+        
+        curr_case = cr.get_case(driver_cases[case_num])
+        design_vars = curr_case.get_design_vars()
+
         # Create figure object
         fig, axes = plt.subplots(nrows=5, ncols=npts, sharex="col", constrained_layout=True, figsize=(10 * npts, 16))
         dcfoil_case = cr.get_case(case_id)
@@ -556,8 +588,10 @@ def plot_spanwiseperiter(case):
             ax = axes[0, ii]
         except IndexError:
             ax = axes[0]
+        thetaf = np.rad2deg(design_vars["theta_f"].item())
+        annoteTxt = f"$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={design_vars['sweep'].item():.1f}^\\circ$"
         ax.annotate(
-            f"{TotalLift[0]:.0f} N\n$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
+            annoteTxt,
             xy=(0.5, 0.3 - 0.13 * 0),
             xycoords="axes fraction",
             color=cm[0],
@@ -650,9 +684,9 @@ def plot_spanwiseperiter(case):
             ax.set_ylabel("OOP bending [m]", rotation="horizontal", ha="right", va="center")
         tipConstraint = semispan * 0.05
         ax.axhline(tipConstraint, ls="--", color="magenta")
-        ax.set_ylim(top=tipConstraint * 1.1)
         ax.annotate("$\\delta_{\\textrm{max}}$", xy=(0.92, 0.99), xycoords="axes fraction", color="magenta")
-        ax.set_yticks(np.arange(0, 0.05, 0.025).tolist() + [tipConstraint])
+        ax.set_yticks(np.arange(0, 0.05, 0.03).tolist() + [tipConstraint])
+        ax.set_ylim(top=tipConstraint * 1.1)
         ax.set_xticks([0.0, semispan, semispan + spanVal.item()])
         ax.set_xticks([0.0, semispan, actualSpan])
 
@@ -725,7 +759,7 @@ def plot_dragbuildupcomp():
 
         includes = ["Dpr", "Di", "Dw"]
         fig, axes = plot_dimdragbuildup(
-            fig, axes, basedragfuncs, f"Drag breakdown", f"{case} ($D={Dtotal:.1f}$)", cm, 15, icase, includes=includes
+            fig, axes, basedragfuncs, f"Drag breakdown", f"{args.shorternames[icase]} ($D={Dtotal:.1f}$N)", cm, 15, icase, includes=includes
         )
 
         # axes.annotate(f"$D={Dtotalbase:.1f}$", xy=(axes-fractions), xycoords="axes fraction")
@@ -912,7 +946,7 @@ if __name__ == "__main__":
         # if not args.flutter and not args.forced:
         plot_dragbuildupcomp()
 
-    except Exception:
+    except FileNotFoundError:
         print("No case file found")
 
     if args.flutter:
@@ -1007,7 +1041,7 @@ if __name__ == "__main__":
                             alpha=alphas[ii],
                             units=units,
                             # marker="o",
-                            showRLlabels=True,
+                            showRLlabels=False,
                             annotateModes=annotateModes,
                             # nShift=62,
                             instabPts=instabPtsDict[key],
@@ -1018,16 +1052,18 @@ if __name__ == "__main__":
                             unitFactor = 1.0
 
                         if len(instabPtsDict[key]) != 0:
-                            instabSpeedTicks.append(instabPtsDict[key][0][0] * unitFactor)
-                            instabFreqTicks.append(instabPtsDict[key][0][-1])
+                            for instabPt in instabPtsDict[key]:
+                                instabSpeedTicks.append(instabPt[0] * unitFactor)
+                                instabFreqTicks.append(instabPt[-1])
 
                     # --- Set limits ---
-                    # axes[0, 0].set_xticks([10, 60] + instabSpeedTicks)
-                    # axes[1, 0].set_yticks([0, 200, 400, 600, 800] + instabFreqTicks)
+                    axes[0, 0].set_xticks([5] + instabSpeedTicks)
+                    axes[1, 0].set_yticks([50, 100, 200] + instabFreqTicks)
 
-                    # axes[0, 0].set_ylim(top=30, bottom=-400)
-                    # axes[1, 0].set_ylim(top=0.005, bottom=0)
+                    axes[0, 0].set_ylim(top=1, bottom=-10)
                     # axes[0, 0].set_xlim(left=160, right=175)
+                    axes[1, 0].set_ylim(top=50, bottom=0)
+                    axes[1,1].set_xlim(left=-20, right=5)
 
                     dosave = not not fname
                     plt.show(block=(not dosave))
@@ -1161,6 +1197,7 @@ if __name__ == "__main__":
                         fs_lgd,
                         cm[jj],
                         alphas[ii],
+                        case_num=ii
                     )
 
                 # fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))

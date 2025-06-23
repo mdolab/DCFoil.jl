@@ -105,7 +105,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMFEBeam, inputs, outputs)
     outputs["deflections"][:] = uSol
 
 
-    # println("states" , outputs["deflections"][:]) # OK
+    # println("deflections from beam om:", outputs["deflections"][:]) # OK
     # --- Also write out solution ---
     # SOLVERPARAMS = 
     # STATSOL = FEMMethods.StaticSolution(uSol, traction_forces, FEMESH, SOLVERPARAMS, FOIL, STRUT)
@@ -118,6 +118,8 @@ function OpenMDAOCore.linearize!(self::OMFEBeam, inputs, outputs, partials)
     """
     This defines the derivatives of outputs
     """
+
+    println("Computing beam implicit partials...")
 
     ptVec = inputs["ptVec"]
     traction_forces = inputs["traction_forces"]
@@ -287,10 +289,21 @@ function OpenMDAOCore.compute!(self::OMFEBeamFuncs, inputs, outputs)
     outputs["nodes"][:, :] = FEMESH.mesh
     outputs["elemConn"][:, :] = FEMESH.elemConn
 
+    # println("="^50)
+    # println("beam functions outputs")
+    # println("="^50)
+    # println("wtip:", outputs["wtip"][1])
+    # println("thetatip:", outputs["thetatip"][1])
+    # println("nodes", outputs["nodes"][:])
+    # println("elemConn", outputs["elemConn"][:])
+
     return nothing
 end
 
 function OpenMDAOCore.compute_partials!(self::OMFEBeamFuncs, inputs, partials)
+    
+    println("Computing beam explicit partials...")
+
     # states = inputs["deflections"]
     ptVec = inputs["ptVec"]
     # theta_f = inputs["theta_f"][1]

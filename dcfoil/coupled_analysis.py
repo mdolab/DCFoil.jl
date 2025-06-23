@@ -86,6 +86,7 @@ class CoupledAnalysis(om.Group):
         # --- Make it so AoA is set for flutter solver ---
         appendageParamsCopy = appendageParams.copy()
         appendageParamsCopy["alfa0"] = flowOptions["alfa0_flutter"]
+        appendageParamsCopy["depth0"] = flowOptions["depth0_flutter"]
         solverOptionsCopy = solverOptions.copy()
         solverOptionsCopy["outputDir"] = flowOptions["outputDir"]  # make sure output dir is set for dynamic solvers
         expcomp_flutter = JuliaExplicitComp(

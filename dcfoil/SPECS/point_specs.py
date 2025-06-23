@@ -7,16 +7,16 @@ boatSpds = {  # boat speeds [m/s]
 }
 
 Fliftstars = {
-    "p1": 1250,
-    "p2": 1250,
-    "p3": 1250,
+    "p1": 1300,
+    "p2": 1300,
+    "p3": 1300,
 }
 
 opdepths = {
     "p1": 0.1,
     "p2": 0.2,
     "p3": 0.4,
-    "f1": 0.1,
+    "f1": 0.4,
 }
 
 # CFRP THING
