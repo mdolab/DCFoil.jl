@@ -63,6 +63,7 @@ if "moth" in args.foil:
     FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
 else:
     FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
 files["FFDFile"] = FFDFile
 
 
@@ -78,7 +79,7 @@ case_name = "embedding"
     npt_wing,
     npt_wing_full,
     n_node,
-) = setup_dcfoil.setup(nNodes, nNodesStrut, args, None, files, [0.01, 1.0], case_name)
+) = setup_dcfoil.setup(0.12*np.ones(nNodes), 0.0,nNodes, nNodesStrut, args, None, files, [0.01, 1.0], case_name)
 
 # nnodes = len(ptVec) // 3 // 2
 # XCoords = ptVec.reshape(-1, 3)

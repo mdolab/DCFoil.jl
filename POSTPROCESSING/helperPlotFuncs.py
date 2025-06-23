@@ -462,7 +462,7 @@ def plot_forced(
     cm,
     alpha,
     elem=1,
-    case_num=0
+    case_num=0,
 ):
     """
     Plot harmonically forced response of the tip of the wing
@@ -670,7 +670,6 @@ def plot_forced(
     # ax.plot(fExtSweep, waveAmpSpectrum, color=cm)
     # ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     # # ax.set_xlabel(xLabel)
-
 
     # ************************************************
     #     What is happening at the tip?

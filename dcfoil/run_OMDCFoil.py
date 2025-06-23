@@ -128,7 +128,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "span": {
         "lower": -0.1,
         "upper": 0.1,
-        "scale": 1.0,
+        "scale": 1.0 / 0.1,
         "value": 0.0,
     },
 }
@@ -418,7 +418,7 @@ if __name__ == "__main__":
             "span": {
                 "lower": 0.0,
                 "upper": 0.0,
-                "scale": 1,
+                "scale": dvDictInfo["span"]["scale"],
                 "value": 0.0,
             },
         }

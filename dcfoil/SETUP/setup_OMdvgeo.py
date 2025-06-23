@@ -230,6 +230,7 @@ def setup(args, model, comm, files: dict):
         if is_origFFD:
             nSkip = 0
         nSpan = nRefAxPts // 2 - nSkip
+        nHalfSpan = nRefAxPts // 2
 
         def span(val, geo):
             nSkip = 2
@@ -238,13 +239,13 @@ def setup(args, model, comm, files: dict):
             if is_origFFD:
                 nSkip = 0
             C = geo.extractCoef("global")
-            s = geo.extractS("global")
+            s = geo.extractS("global") # parametric position of coords
 
             for ii in range(nSpan):
                 # stbd wing
-                C[nRefAxPts // 2 + ii + nSkip + 1, 1] += val.item() * s[ii + nSpan - 1]
+                C[nRefAxPts // 2 + ii + nSkip + 1, 1] += val.item() * s[ii + nHalfSpan + nSkip + 1]
                 # port
-                C[-ii + nSpan - 1, 1] += -val.item() * s[ii + nSpan - 1]
+                C[-ii + nSpan - 1, 1] += -val.item() * s[ii + nHalfSpan + nSkip + 1]
             geo.restoreCoef(C, "global")
 
         model.geometry.nom_addGlobalDV(dvName="span", value=0.0, func=span)

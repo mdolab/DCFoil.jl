@@ -61,7 +61,7 @@ from dcfoil.SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0, SEMI
 parser = argparse.ArgumentParser()
 parser.add_argument("--use_serif", help="use serif", action="store_true", default=False)
 parser.add_argument("--name", type=str, default=None, help="Name of the case to read .sql file")
-parser.add_argument("--shorternames", type=str, default=[],nargs="+", help="Label")
+parser.add_argument("--shorternames", type=str, default=[], nargs="+", help="Label")
 parser.add_argument(
     "--base", type=str, default=None, help="Name of the base case to read .sql file and compare against"
 )
@@ -303,7 +303,9 @@ def plot_spanwise():
 
     # Create figure object
     nrows = 6
-    fig, axes = plt.subplots(nrows=nrows, ncols=npts, sharex="col", constrained_layout=True, figsize=(10 * npts, 3.2*nrows))
+    fig, axes = plt.subplots(
+        nrows=nrows, ncols=npts, sharex="col", constrained_layout=True, figsize=(10 * npts, 3.2 * nrows)
+    )
 
     for icase, case in enumerate(args.cases):
         datafname = f"../dcfoil/OUTPUT/{case}/{case}.sql"
@@ -312,7 +314,7 @@ def plot_spanwise():
 
         # ax = axes[0, 0]
         ax = axes.flatten()[0]
-        
+
         ytextht = 0.45
         xtext = 0.1
         ax.annotate(
@@ -370,7 +372,7 @@ def plot_spanwise():
 
             # --- Lift distribution ---
             try:
-                spanVal = design_vars["span"] / dvDictInfo["span"]["scale"]
+                spanVal = design_vars["span"].item() / dvDictInfo["span"]["scale"]
             except KeyError:
                 spanVal = 0.0
             TotalLift = dcfoil_case.outputs[f"{systemName}.Flift"]
@@ -383,7 +385,9 @@ def plot_spanwise():
             thetaf = np.rad2deg(design_vars["theta_f"].item())
             sweepAng = design_vars["sweep"].item()
             alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
-            annoteTxt = f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
+            annoteTxt = (
+                f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
+            )
             ax.annotate(
                 annoteTxt,
                 xy=(xtext, ytextht - 0.13 * icase),
@@ -495,16 +499,17 @@ def plot_spanwise():
                 ax = axes[4, ii]
             except IndexError:
                 ax = axes[4]
-            ax.plot(femNodesXYZ[:, 1], design_vars_vals["toc"][case_num, :], c=cm[icase])
+            ax.plot(femNodesXYZ[:, 1], design_vars["toc"], c=cm[icase])
             if ii == 0:
                 ax.set_ylabel("$t/c$", rotation="horizontal", ha="right", va="center")
+            ax.set_yticks([design_vars["toc"][0], 0.09, 0])
 
             try:
                 ax = axes[5, ii]
             except IndexError:
                 ax = axes[5]
-            
-            ax.plot(femNodesXYZ[:,1], chordLengths, c=cm[icase])
+
+            ax.plot(femNodesXYZ[:, 1], chordLengths, c=cm[icase])
             if ii == 0:
                 ax.set_ylabel("$c$ [m]", rotation="horizontal", ha="right", va="center")
             ax.set_yticks(chordlength_yticks)
@@ -512,6 +517,7 @@ def plot_spanwise():
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
         ax.set_xticks([0.0, SEMISPAN])
+
     try:
         for ax in axes[-1, :]:
             ax.set_xlabel("Spanwise position [m]")
@@ -544,7 +550,7 @@ def plot_spanwiseperiter(case):
 
     xtext = 0.4
     for case_num, case_id in enumerate(dcfoil_cases[:-1]):
-        
+
         curr_case = cr.get_case(driver_cases[case_num])
         design_vars = curr_case.get_design_vars()
 
@@ -596,7 +602,9 @@ def plot_spanwiseperiter(case):
         thetaf = np.rad2deg(design_vars["theta_f"].item())
         sweepAng = design_vars["sweep"].item()
         alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
-        annoteTxt = f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
+        annoteTxt = (
+            f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
+        )
         ax.annotate(
             annoteTxt,
             xy=(xtext, 0.3 - 0.13 * 0),
@@ -766,7 +774,15 @@ def plot_dragbuildupcomp():
 
         includes = ["Dpr", "Di", "Dw"]
         fig, axes = plot_dimdragbuildup(
-            fig, axes, basedragfuncs, f"Drag breakdown", f"{args.shorternames[icase]} ($D={Dtotal:.1f}$N)", cm, 15, icase, includes=includes
+            fig,
+            axes,
+            basedragfuncs,
+            f"Drag breakdown",
+            f"{args.shorternames[icase]} ($D={Dtotal:.1f}$N)",
+            cm,
+            15,
+            icase,
+            includes=includes,
         )
 
         # axes.annotate(f"$D={Dtotalbase:.1f}$", xy=(axes-fractions), xycoords="axes fraction")
@@ -798,7 +814,7 @@ if __name__ == "__main__":
         npt_wing,
         npt_wing_full,
         n_node,
-    ) = setup_dcfoil.setup(0.012*np.ones(nNodes), 0.0, nNodes, nNodesStrut, args, None, files, [0.5, 1.0], None)
+    ) = setup_dcfoil.setup(0.012 * np.ones(nNodes), 0.0, nNodes, nNodesStrut, args, None, files, [0.5, 1.0], None)
 
     # datafname = f"../dcfoil/run_OMDCfoil_out/{args.name}.sql"
     datafname = f"../dcfoil/OUTPUT/{args.cases[0]}/{args.name}.sql"
@@ -869,7 +885,9 @@ if __name__ == "__main__":
         # Create figure object
         nrows = np.max([NDV, NCON + 1])
         # fig, opthistaxes = plt.subplots(nrows=nrows, ncols=2, sharex=True, constrained_layout=True, figsize=(16, 3 * nrows))
-        fig, opthistaxes = plt.subplots(nrows=2, ncols=nrows, sharex=True, constrained_layout=True, figsize=(5 * nrows, 8))
+        fig, opthistaxes = plt.subplots(
+            nrows=2, ncols=nrows, sharex=True, constrained_layout=True, figsize=(5 * nrows, 8)
+        )
 
         for ii, dv in enumerate(design_vars_vals):
             # ax = opthistaxes[ii, 0]
@@ -940,7 +958,10 @@ if __name__ == "__main__":
         # ************************************************
         # if not args.flutter and not args.forced:
         plot_spanwise()
-        plot_spanwiseperiter(args.name)
+        try:
+            plot_spanwiseperiter(args.name)
+        except Exception as e:
+            print(f"Error plotting spanwise per iteration: {e}")
 
         #     # ************************************************
         #     #     Also plot drag breakdown vs. iteration
@@ -1005,7 +1026,7 @@ if __name__ == "__main__":
                         instabPtsDict[key] = find_DivAndFlutterPoints(
                             flutterSolDict[key], "pvals_r", "U", altKey="pvals_i"
                         )
-                
+
                 if os.path.exists(caseDirs[0] + "/pkFlutter"):
                     # ************************************************
                     #       Standard v-g, v-f, R-L plots
@@ -1070,7 +1091,7 @@ if __name__ == "__main__":
                     axes[0, 0].set_ylim(top=1, bottom=-10)
                     # axes[0, 0].set_xlim(left=160, right=175)
                     axes[1, 0].set_ylim(top=50, bottom=0)
-                    axes[1,1].set_xlim(left=-20, right=5)
+                    axes[1, 1].set_xlim(left=-20, right=5)
 
                     dosave = not not fname
                     plt.show(block=(not dosave))
@@ -1124,7 +1145,7 @@ if __name__ == "__main__":
         dynLiftRAODict = {}
         dynMomentRAODict = {}
         if args.cases is not None:
-            
+
             fname = f"{outputDir}/forced-dynamics-allpts.pdf"
 
             # Create figure object
@@ -1178,7 +1199,6 @@ if __name__ == "__main__":
                 #     Plot the frequency spectra
                 # ************************************************
 
-
                 # fname = f"{outputDir}/forced-dynamics-{ptName}.pdf"
 
                 # fig, axes = plt.subplots(
@@ -1204,12 +1224,12 @@ if __name__ == "__main__":
                         fs_lgd,
                         cm[jj],
                         alphas[ii],
-                        case_num=ii
+                        case_num=ii,
                     )
 
                 # fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
             fig.suptitle("Frequency response spectra")
-            axes[0,0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+            axes[0, 0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
             for ax in axes.flatten():
                 ax.set_xlim(left=0.0)
 

@@ -226,7 +226,10 @@ def find_DivAndFlutterPoints(data: dict, xKey: str, yKey: str, altKey=None, debu
                 # if xKey.lower() is "pmg" and useSW:
                 #     print("HELLO")
 
-                print(f"Found crossing between q iteration {ii} and {ii+1} at U = {yInt} m/s ({yInt*1.9438:.3f} kts)", end="")
+                print(
+                    f"Found crossing between q iteration {ii} and {ii+1} at U = {yInt} m/s ({yInt*1.9438:.3f} kts)",
+                    end="",
+                )
                 instabPts.append([yInt, xInt, k, ii, xaltInt])
                 break
         # Print new line to close
