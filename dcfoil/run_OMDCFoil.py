@@ -565,9 +565,14 @@ if __name__ == "__main__":
     # ************************************************
     #     Set starting values
     # ************************************************
-    # prob.set_val("theta_f", np.deg2rad(15.0))  # this is defined in [rad] in the julia wrapper layer
-    # for ptName in probList:
-    #     prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
+    prob.set_val("theta_f", otherDVs["theta_f"]["value"])  # this is defined in [rad] in the julia wrapper layer
+    for ptName in probList:
+        if ptName == "p2":
+            prob.set_val(f"alfa0_{ptName}", 2.)  # this is defined in [deg] in the julia wrapper layer
+        if ptName == "p1":
+            prob.set_val(f"alfa0_{ptName}", 2.)  # this is defined in [deg] in the julia wrapper layer
+        # else:
+            # prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
 
     # set thickness-to-chord (NACA0009)
     prob.set_val("toc", otherDVs["toc"]["value"])

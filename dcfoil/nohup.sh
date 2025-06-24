@@ -62,11 +62,11 @@ echo "----------------------"
 python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-23-dcfoil-amctrimMP-fs --pts 3 --freeSurf --name opt1-fs # multipoint []
 # python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-23-dcfoil-amctrimMP-fs --pts 123 --freeSurf --name opt1MP-fs # multipoint []
 
-# echo "+--------------------+"
-# echo "| Running opt2-fs    |"
-# echo "+--------------------+"
-# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP-fs --flutter --freeSurf --pts 3 --name opt2-fs # static and dynamic optimization []
-# python run_OMDCFoil.py --foil amcfull --task opt --restart 2025-06-15-dcfoil-trim1MP --flutter --pts 3 --name opt2 # static and dynamic optimization []
+echo "+--------------------+"
+echo "| Running opt2-fs    |"
+echo "+--------------------+"
+python run_OMDCFoil.py --foil amcfull --task opt --flutter --freeSurf --pts 3 --name opt2-fs # static and dynamic optimization []
+python run_OMDCFoil.py --foil amcfull --task opt  --flutter --pts 3 --name opt2 # static and dynamic optimization []
 
 
 # echo "----------------------"

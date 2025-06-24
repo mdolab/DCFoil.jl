@@ -370,7 +370,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # if abs_cs_safe(sweepAng) > 0.0 # actually I think this introduces discontinuity wrt sweep angle derivative
     # θ_bound = PREFOIL.sampling.cosine(start, stop, npt_wing * 2 + 1, 2π)
     # println("θ_bound: $(θ_bound)")
-    θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    # θ_bound = LinRange(0.0, 2π, npt_wing * 2 + 1)
+    θ_bound = collect(LinRange(0.0, 2π, npt_wing * 2 + 1)) # that fixed something
     wing_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[1:2:end]], 1, npt_wing + 1)
     wing_ctrl_xyz_ycomp = reshape([sign(θ - π) * 0.25 * aeroWingSpan * (1 + cos(θ)) for θ in θ_bound[2:2:end]], 1, npt_wing)
     # end

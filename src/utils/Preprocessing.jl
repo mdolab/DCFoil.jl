@@ -175,7 +175,9 @@ function ChainRulesCore.rrule(::typeof(compute_chordLengths), xLE, xTE, yLE, yTE
         """
 
         # ∂Chordlength∂LECoords -->
-        NPT = length(ȳ)
+        ȳ_raw = ChainRulesCore.unthunk(ȳ) # make sure ȳ is a vector and we get the raw array values...not the AD type
+        NPT = length(ȳ_raw) # you can only use array commands on raw arrays so unthunk extracts the actual value.
+        # NPT = length(ȳ)
         dydxLE = zeros(NPT, NPT)
         dydxTE = zeros(NPT, NPT)
         dydyLE = zeros(NPT, NPT)

@@ -1088,9 +1088,9 @@ if __name__ == "__main__":
                     axes[0, 0].set_xticks([5] + instabSpeedTicks)
                     axes[1, 0].set_yticks([50, 100, 200] + instabFreqTicks)
 
-                    axes[0, 0].set_ylim(top=1, bottom=-10)
+                    axes[0, 0].set_ylim(top=1, bottom=-15)
                     # axes[0, 0].set_xlim(left=160, right=175)
-                    axes[1, 0].set_ylim(top=50, bottom=0)
+                    axes[1, 0].set_ylim(top=60, bottom=0)
                     axes[1, 1].set_xlim(left=-20, right=5)
 
                     dosave = not not fname
