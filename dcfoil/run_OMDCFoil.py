@@ -110,7 +110,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "sweep": {
         "lower": 0.0,
         "upper": 30.0,
-        "scale": 1.0,
+        "scale": 1.0 / 30,
         "value": 0.0,
     },
     # "dihedral": { # THIS DOES NOT WORK

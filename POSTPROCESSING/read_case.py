@@ -315,17 +315,18 @@ def plot_spanwise():
         # ax = axes[0, 0]
         ax = axes.flatten()[0]
 
-        ytextht = 0.45
+        ytextht = 0.1
         xtext = 0.1
-        ax.annotate(
-            # f"{case.split('-')[-2]+ case.split('-')[-1]}",
-            f"{args.shorternames[icase]}",
-            xy=(0.0, ytextht - 0.13 * icase),
+        if icase == 0:
+            ax.annotate(
+            f"$\\alpha$\n$\\theta_f$\n$\Lambda$",
+            xy=(xtext, ytextht),
             xycoords="axes fraction",
-            color=cm[icase],
+            color="k",
             ha="left",
+            va="bottom",
             fontsize=fs_lgd,
-        )
+            )
 
         for ii, ptName in enumerate(probList):
             systemName = f"dcfoil_{ptName}"
@@ -386,14 +387,15 @@ def plot_spanwise():
             sweepAng = design_vars["sweep"].item()
             alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
             annoteTxt = (
-                f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
+                f"{args.shorternames[icase]}\n${alfaAng:3.2f}^\\circ$\n${thetaf:3.1f}^\\circ$\n${sweepAng:3.1f}^\\circ$"
             )
             ax.annotate(
                 annoteTxt,
-                xy=(xtext, ytextht - 0.13 * icase),
+                xy=(xtext+0.1 + 0.12*icase, ytextht),
                 xycoords="axes fraction",
                 color=cm[icase],
                 ha="left",
+                va="bottom",
                 fontsize=fs_lgd,
             )
             print("Total lift:", TotalLift)
@@ -502,7 +504,7 @@ def plot_spanwise():
             ax.plot(femNodesXYZ[:, 1], design_vars["toc"], c=cm[icase])
             if ii == 0:
                 ax.set_ylabel("$t/c$", rotation="horizontal", ha="right", va="center")
-            ax.set_yticks([design_vars["toc"][0], 0.09, 0])
+            ax.set_yticks([0.18, 0.12, 0.09, 0])
 
             try:
                 ax = axes[5, ii]
@@ -513,10 +515,11 @@ def plot_spanwise():
             if ii == 0:
                 ax.set_ylabel("$c$ [m]", rotation="horizontal", ha="right", va="center")
             ax.set_yticks(chordlength_yticks)
+            ax.set_ylim(bottom=0.0)
 
     for ax in axes.flatten():
         nplt.adjust_spines(ax, outward=True)
-        ax.set_xticks([0.0, SEMISPAN])
+        ax.set_xticks([0.0, SEMISPAN, 1.0])
 
     try:
         for ax in axes[-1, :]:
@@ -729,7 +732,7 @@ def plot_spanwiseperiter(case):
 def plot_dragbuildupcomp():
     fname = f"drag_buildup_{args.name}-vs-{args.base}.pdf"
     # Create figure object
-    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(14, 10))
+    fig, axes = plt.subplots(nrows=1, sharex=True, constrained_layout=True, figsize=(12, 8))
     for icase, case in enumerate(args.cases):
         # basename = f"../dcfoil/run_OMDCfoil_out/{case}.sql"
         basename = f"../dcfoil/OUTPUT/{case}/{case}.sql"
@@ -780,7 +783,7 @@ def plot_dragbuildupcomp():
             f"Drag breakdown",
             f"{args.shorternames[icase]} ($D={Dtotal:.1f}$N)",
             cm,
-            15,
+            fs_lgd,
             icase,
             includes=includes,
         )
@@ -1065,7 +1068,7 @@ if __name__ == "__main__":
                             axes,
                             flutterSol=flutterSolDict[key],
                             cm=cm,
-                            ls=linestyles[ii],
+                            # ls=linestyles[ii],
                             alpha=alphas[ii],
                             units=units,
                             # marker="o",
@@ -1085,13 +1088,15 @@ if __name__ == "__main__":
                                 instabFreqTicks.append(instabPt[-1])
 
                     # --- Set limits ---
-                    axes[0, 0].set_xticks([5] + instabSpeedTicks)
+                    axes[0, 0].set_xticks([5,25] + instabSpeedTicks)
                     axes[1, 0].set_yticks([50, 100, 200] + instabFreqTicks)
 
-                    axes[0, 0].set_ylim(top=1, bottom=-15)
+                    gmin = -10
+                    gmax = 2
+                    axes[0, 0].set_ylim(top=gmax, bottom=gmin)
                     # axes[0, 0].set_xlim(left=160, right=175)
                     axes[1, 0].set_ylim(top=60, bottom=0)
-                    axes[1, 1].set_xlim(left=-20, right=5)
+                    axes[1, 1].set_xlim(left=gmin, right=gmax)
 
                     dosave = not not fname
                     plt.show(block=(not dosave))
@@ -1151,7 +1156,7 @@ if __name__ == "__main__":
             # Create figure object
             nrows = 3
             ncols = 4
-            figsize = (8 * ncols, 4 * nrows)
+            figsize = (10 * ncols, 4 * nrows)
             fig, axes = plt.subplots(
                 nrows=nrows,
                 ncols=ncols,
@@ -1229,10 +1234,12 @@ if __name__ == "__main__":
 
                 # fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
             fig.suptitle("Frequency response spectra")
-            axes[0, 0].legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+            axes[0, 0].legend(fontsize=fs_lgd*0.8, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
             for ax in axes.flatten():
-                ax.set_xlim(left=0.0)
+                ax.set_xlim(left=0.0, right=0.2)
 
+            axes[0,0].set_ylim(top=0.004)
+            axes[0,1].set_ylim(top=0.3)
             for ax in axes[0, :].flatten():
                 ax.set_ylim(bottom=0.0)
 

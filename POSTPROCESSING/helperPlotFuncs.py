@@ -403,7 +403,7 @@ def plot_dimdragbuildup(
 
     xticks = np.arange(len(labels))
     axes.set_xticks(xticks)
-    width = 0.4
+    width = 0.45
     # costData = [funcs["cdpr"], funcs["cdi"], funcs["cds"], funcs["cdj"]]
 
     def absolute_value(val):
@@ -435,7 +435,7 @@ def plot_dimdragbuildup(
         ax.text(
             xticks[ii] + offset,
             cost,
-            f"{cost/np.array(costData).sum()*100:.2f}\%",
+            f"{cost:.0f} ({cost/np.array(costData).sum()*100:.1f}\%)",
             ha="center",
             va="bottom",
             fontsize=fs_lgd,
@@ -698,7 +698,7 @@ def plot_forced(
     ax.plot(fExtSweep, np.rad2deg(M_thetaRAO), color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
-    for ax in axes[1, :].flatten():
+    for ax in axes[0, :].flatten():
         ax.set_xlabel(xLabel)
     for ax in axes.flatten():
         # ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False)
