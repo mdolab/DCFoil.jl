@@ -158,7 +158,7 @@ function OpenMDAOCore.solve_nonlinear!(self::OMLiftingLine, inputs, outputs)
 
     g0 = 0.5 * c_r * clα * cos(sweepAng) *
          (uz / ux - αL0) *
-         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.5)
+         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.125)
 
     LLNLParams = LiftingLineNLParams(TV_influence, LLMesh, LLHydro, FlowCond, Airfoils, AirfoilInfluences)
 
@@ -359,7 +359,7 @@ function OpenMDAOCore.guess_nonlinear!(self::OMLiftingLine, inputs, outputs, res
     ctrl_pts = LLMesh.collocationPts
     g0 = 0.5 * c_r * clα * cos(sweepAng) *
          (uz / ux - αL0) *
-         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.5)
+         ((1.0 .- (2.0 * ctrl_pts[YDIM, :] / span) .^ 4) .^ 2) .^ (0.125)
 
     # ************************************************
     #     Set the initial guess
