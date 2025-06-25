@@ -85,6 +85,7 @@ print(30 * "-", flush=True)
 # ==============================================================================
 jl = juliacall.newmodule("DCFoil")
 jl.include("../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
+jl.include("../src/hydro/OceanWaves.jl")  # ocean wave spectra
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
 files = {
     "gridFile": [
@@ -129,7 +130,7 @@ dvDictInfo = {  # dictionary of design variable parameters
     "sweep": {
         "lower": 0.0,
         "upper": 30.0,
-        "scale": 1.0,
+        "scale": 1.0 / 30,
         "value": 0.0,
     },
     # "dihedral": { # THIS DOES NOT WORK
@@ -316,7 +317,7 @@ def plot_spanwise():
         ax = axes.flatten()[0]
 
         ytextht = 0.1
-        xtext = 0.1
+        xtext = 0.05
         if icase == 0:
             ax.annotate(
             f"$\\alpha$\n$\\theta_f$\n$\Lambda$",
@@ -384,14 +385,14 @@ def plot_spanwise():
                 ax = axes[0]
             # annoteTxt = f"{TotalLift[0]:.0f} N\t$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
             thetaf = np.rad2deg(design_vars["theta_f"].item())
-            sweepAng = design_vars["sweep"].item()
+            sweepAng = design_vars["sweep"].item() / dvDictInfo["sweep"]["scale"]
             alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
             annoteTxt = (
                 f"{args.shorternames[icase]}\n${alfaAng:3.2f}^\\circ$\n${thetaf:3.1f}^\\circ$\n${sweepAng:3.1f}^\\circ$"
             )
             ax.annotate(
                 annoteTxt,
-                xy=(xtext+0.1 + 0.12*icase, ytextht),
+                xy=(xtext+0.1 + 0.13*icase, ytextht),
                 xycoords="axes fraction",
                 color=cm[icase],
                 ha="left",
@@ -603,7 +604,7 @@ def plot_spanwiseperiter(case):
         except IndexError:
             ax = axes[0]
         thetaf = np.rad2deg(design_vars["theta_f"].item())
-        sweepAng = design_vars["sweep"].item()
+        sweepAng = design_vars["sweep"].item() / dvDictInfo["sweep"]["scale"]
         alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
         annoteTxt = (
             f"$\\alpha = {alfaAng:.2f}^\\circ$\t$\\theta_f={thetaf:.1f}^\\circ$\t$\Lambda={sweepAng:.1f}^\\circ$"
@@ -1149,6 +1150,8 @@ if __name__ == "__main__":
         deflectionRAODict = {}
         dynLiftRAODict = {}
         dynMomentRAODict = {}
+
+
         if args.cases is not None:
 
             fname = f"{outputDir}/forced-dynamics-allpts.pdf"
@@ -1203,6 +1206,8 @@ if __name__ == "__main__":
                 # ************************************************
                 #     Plot the frequency spectra
                 # ************************************************
+                if solverOptions["waveSpectrum"] == "ISSC":
+                    Swave = jl.compute_BSWaveSpectrum(solverOptions["Hsig"], solverOptions["omegaz"], fExtSweep* 2 * np.pi)
 
                 # fname = f"{outputDir}/forced-dynamics-{ptName}.pdf"
 
@@ -1226,7 +1231,7 @@ if __name__ == "__main__":
                         dynMomentRAODict[key],
                         raoDict[key],
                         boatSpds[ptName],
-                        fs_lgd,
+                        Swave,
                         cm[jj],
                         alphas[ii],
                         case_num=ii,
@@ -1234,12 +1239,16 @@ if __name__ == "__main__":
 
                 # fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
             fig.suptitle("Frequency response spectra")
-            axes[0, 0].legend(fontsize=fs_lgd*0.8, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+            # axes[0, 0].legend(fontsize=fs_lgd*0.8, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
             for ax in axes.flatten():
-                ax.set_xlim(left=0.0, right=0.2)
+                ax.set_xlim(left=0.0, right=0.5)
+                ax.set_xticks([0, 0.2, 0.5])
 
-            axes[0,0].set_ylim(top=0.004)
-            axes[0,1].set_ylim(top=0.3)
+            axes[0,0].set_ylim(top=0.03)
+            axes[0,1].set_ylim(top=1.6)
+            axes[1,0].set_ylim(top=3e-5)
+            axes[1,1].set_ylim(top=0.15)
+            axes[-1,0].set_xlabel("$f$ [Hz]")
             for ax in axes[0, :].flatten():
                 ax.set_ylim(bottom=0.0)
 

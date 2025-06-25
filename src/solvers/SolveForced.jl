@@ -262,6 +262,11 @@ function compute_fextwave(headingAngle, ωRange, AEROMESH, chordVec, clαVec, Fl
     stripWidths = .√(nVec[:, XDIM] .^ 2 + nVec[:, YDIM] .^ 2 + nVec[:, ZDIM] .^ 2) # length of elem
 
     fAey, mAey, Aw = compute_waveloads(chordVec, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, FlowCond.depth, stripWidths, clαVec)
+    
+    ChainRulesCore.ignore_derivatives() do
+        indx = argmax(abs.(fAey[:,1])) # find the max wave force
+        println("Max wave force at ω0 = $(ωRange[indx]/2π) Hz, fAey = $(abs.(fAey[indx,1])) N")
+    end
     extForceVec = zeros(ComplexF64, length(ωRange), length(spanLocs) * NDOF)
     extForceVec_z = Zygote.Buffer(extForceVec)
     extForceVec_z[:, :] = extForceVec
