@@ -10,7 +10,7 @@
 """
 
 
-struct AirfoilMesh{TI, T<:Number, TM<:AbstractMatrix}
+struct AirfoilMesh{TI,T<:Number,TM<:AbstractMatrix}
     """
     Struct to hold the airfoil geometry discretization
     """
@@ -123,7 +123,7 @@ function solve_VPM(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
     Γi = sum(0.5 * (γi[1:end-1] .+ γi[2:end]) .* Airfoil.panelLengths)
 
     # --- Correct to total section circulation via the FS effect ---
-    corrFactor = (1.0 + 16.0 * hcRatio^2) / (2.0 + 16.0 * hcRatio^2)
+    corrFactor = correct_FS(hcRatio)
     Γi *= corrFactor
 
     cℓ = 2.0 * Vinf * Γi / (chord * csweep * Vref^2)
@@ -155,6 +155,15 @@ function solve_VPM(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
 
     return cℓ, cm, Γi, cpDist
 end
+
+function correct_FS(hcRatio)
+    """Use a high Fn theoretical correction value to the section lift slope and lift based on Wadlin et al. 1955"""
+
+    hcTerm = 16.0 * hcRatio^2
+    corrFactor = (1.0 + hcTerm) / (2.0 + hcTerm)
+    return corrFactor
+end
+
 
 function compute_panelMatrix(Airfoil)
     """
