@@ -189,6 +189,8 @@ class DisplacementTransfer(om.JaxExplicitComponent):
             # for symmetry case, we still need to return disp_colloc for the full span
             disp_colloc = jnp.concatenate((disp_colloc[:, ::-1], disp_colloc), axis=1)
 
+        # print("Collocation points displacements (in disp transfer):", flush=True)
+        # print(disp_colloc, flush=True)
         return (disp_colloc,)
 
 
@@ -320,6 +322,8 @@ class LoadTransfer(om.JaxExplicitComponent):
 
         # flatten loads to 1D array
         loads_str = loads.flatten(order="F")
+        # print("Loads at FEM nodes (in load transfer):", flush=True)
+        # print(loads_str, flush=True)
         return (loads_str,)
 
 
@@ -364,6 +368,8 @@ class CLaInterpolation(om.JaxExplicitComponent):
     def compute_primal(self, CL_alpha, collocationPts, nodes):
         # spanwise linear interpolation of CL_alpha
         CL_alpha_node = jnp.interp(nodes[:, 1], collocationPts[1, :], CL_alpha, left="extrapolate", right="extrapolate")
+        # print("CL_alpha at FEM nodes (in CLaInterpolation):", flush=True)
+        # print(CL_alpha_node, flush=True)
         return (CL_alpha_node,)
 
 

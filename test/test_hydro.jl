@@ -577,18 +577,19 @@ function test_hydrofoilWaveLoads()
     # should be higher k
     # chord = 0.1 # m
     chord = 0.3 # m
-    depth = 0.5 # m
-    # depth = 1 # m
+    # depth = 0.5 # m
+    depth = 1.0 # m
     Uinf = 10.0 # m/s
     rho = 1000.0 # kg/m^3
-    Hsig = 1.0 # m
-    T_m = 6.1 # s , modal period
+    # Hsig = 0.8 # m
+    # T_m = 6.1 # s , modal period
     T_m = 5.0 # s , modal period Sea state 3
     ω_m = 2 * π / T_m # rad/s
     # --- Great Lakes typical seas ---
     T_z = 3.0 # s, significant period
-    ω_z = 2 * π / T_z # rad/s significant frequency
+    ω_z = 2π / T_z # rad/s significant frequency
     Hsig = 1.5 # m
+    Hsig = 0.8 # m
     omegaSweep::Vector = (0.05:0.05:3.0*2π) # rad/s
     β = deg2rad(180)
     we = compute_encounterFreq(β, omegaSweep, Uinf)
@@ -640,17 +641,17 @@ function test_hydrofoilWaveLoads()
     # println(Swave_bs)
     # println("Swave_pm")
     # println(Swave_pm)
-    p1 = plot(omegaSweep, Swave_bs, xlabel="ω [rad/s]", label="P-M")
-    p1 = plot!(omegaSweep, Swave_pm, xlabel="ω [rad/s]", ylabel="S(ω)", title="Wave Spectrum", label="Bretschneider")
-    p2 = plot(omegaSweep, HwSk, label="(Sears)")
-    p2 = plot!(omegaSweep, HwCk, label="(Theodorsen)")
-    p2 = plot!(omegaSweep, HwQS, xlabel="ω [rad/s]", ylabel="H(ω) = Lift / ζ_wave", title="Wave-induced load transfer function", label="(Quasisteady)")
-
-    p1 = plot(kRedSweep, Swave_bs, label="Bretschneider")
-    p1 = plot!(kRedSweep, Swave_pm, xlabel="Reduced frequency", ylabel="S(ω)", title="Wave Spectrum", label="P-M", xlims=(0, 0.3))
-    p2 = plot(kRedSweep, HwSk, label="Sears")
-    p2 = plot!(kRedSweep, HwCk, label="Theodorsen")
-    p2 = plot!(kRedSweep, HwQS, xlabel="Reduced frequency", ylabel="H(ω) = Lift / ζ_wave", title="Wave-induced load transfer function", label="Quasisteady", xlims=(0, 1))
+    p1 = plot(omegaSweep/2π, Swave_bs, xlabel="ω [rad/s]", label="P-M")
+    p1 = plot!(omegaSweep/2π, Swave_pm, xlabel="ω [rad/s]", ylabel="S(ω)", title="Wave Spectrum", label="Bretschneider")
+    p2 = plot(omegaSweep/2π, HwSk, label="(Sears)")
+    p2 = plot!(omegaSweep/2π, HwCk, label="(Theodorsen)")
+    p2 = plot!(omegaSweep/2π, HwQS, xlabel="ω [1/s]", ylabel="H(ω) = Lift / ζ_wave", title="Wave-induced load transfer function", label="(Quasisteady)")
+    xlims!(p2, 0, 1)
+    # p1 = plot(kRedSweep, Swave_bs, label="Bretschneider")
+    # p1 = plot!(kRedSweep, Swave_pm, xlabel="Reduced frequency", ylabel="S(ω)", title="Wave Spectrum", label="P-M", xlims=(0, 0.3))
+    # p2 = plot(kRedSweep, HwSk, label="Sears")
+    # p2 = plot!(kRedSweep, HwCk, label="Theodorsen")
+    # p2 = plot!(kRedSweep, HwQS, xlabel="Reduced frequency", ylabel="H(ω) = Lift / ζ_wave", title="Wave-induced load transfer function", label="Quasisteady", xlims=(0, 1))
     savefig("test_waveSpectrum.pdf")
 
     p3 = plot(omegaSweep, SliftSk, xlabel="ω [rad/s]", ylabel="S_lift(ω)", title="Lift response spectral density", label="(Sears)")
@@ -668,7 +669,7 @@ function test_hydrofoilWaveLoads()
     save("test_waveSpectrum.jld2", "omegaSweep", omegaSweep, "encounter", we, "k", kRedSweep, "HwSk", HwSk, "HwCk", HwCk, "HwQS", HwQS, "Swave_bs", Swave_bs, "Swave_pm", Swave_pm, "SliftSk", SliftSk, "SliftCk", SliftCk, "SliftQS", SliftQS)
 
 end
-
+using Zygote
 test_hydrofoilWaveLoads()
 # ==============================================================================
 #                         Test lifting line code

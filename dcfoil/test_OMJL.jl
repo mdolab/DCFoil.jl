@@ -370,7 +370,13 @@ elemConn = [[1 2]
 claVecMod = claVec[end-nNodes+1:end] .+ 1.1
 obj, SOL = SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true)
 SolveFlutter.write_sol(SOL, "./output/")
+FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solverOM(displacementsCol, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
+outputDir =  "./OUTPUT/"
+solverOptions["outputDir"] = outputDir
+SolveFlutter.write_tecplot(appendageParams, SOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
 evalFuncsSensList = ["ksflutter"]
+LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
+SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 dfdx_rad = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
 dfdx_fd = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")
 

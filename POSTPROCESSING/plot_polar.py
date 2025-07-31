@@ -430,7 +430,7 @@ if __name__ == "__main__":
     )
     axes[2].plot(AlfaList, CDDict["rigid"], c=cm[4])
 
-    axes[0].plot(CLCDX, CLCDY, "ko", label="Expt. (Ref. 1)")
+    axes[0].plot(CLCDX, CLCDY, "ko", label="Expt.")
     axes[0].set_xticks([cdtick, 0.1, 0.2, 0.3, 0.4, 0.5])
     axes[0].set_xlim(0.0, 0.2)
     axes[0].set_ylim(-0.15, 0.8)

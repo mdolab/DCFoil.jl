@@ -416,8 +416,8 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     translatDispl = cat(portTip, midVals, stbdTip, dims=2)
     if options["is_antisymmetry"]
         # TODO GGGGGGGGG
-        translatDisplCtrl[:,1:npt_wing÷2] *= -1.0 # flip 
-        rotationDisplacementsCtrl[:,1:npt_wing÷2] *= -1.0 # flip
+        translatDisplCtrl[:, 1:npt_wing÷2] *= -1.0 # flip 
+        rotationDisplacementsCtrl[:, 1:npt_wing÷2] *= -1.0 # flip
         # swap twists and displacements
         midVals = cat(
             -averages[:, 1:npt_wing÷2-1],
@@ -1179,6 +1179,9 @@ function compute_LLresiduals(G; solverParams=nothing)
     Ui = FlowCond.Uinf * (ui) # dimensionalize the local velocities
 
     hcRatio = FlowCond.depth ./ LLSystem.localChordsCtrl
+    # println("depth", FlowCond.depth)
+    # println("chords:", LLSystem.localChordsCtrl)
+    # println("hcRatio: ", hcRatio)
 
     c_l::Vector{Number} = [
         solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[1]

@@ -1327,6 +1327,10 @@ def plot_vg_vf_rl(
                 ha = "left"
                 va = "bottom"
                 xytext = (5, 5)
+            if ii + 1 == 1: # mode 1
+                va = "top"
+                xytext = (5, -5)
+            
 
             if annotateModes:
                 ax.annotate(
@@ -1334,9 +1338,10 @@ def plot_vg_vf_rl(
                     # xy=(end[0], end[1]),
                     xy=(start[0], start[1]),
                     ha=ha,
+                    va=va,
                     color=cm[iic],
                     fontsize=legfs,
-                    xytext=(5, 5),
+                    xytext=xytext,
                     textcoords="offset points",
                     # bbox=dict(boxstyle="round", ec="white", linewidth=0, fc="white", alpha=0.5),
                 )

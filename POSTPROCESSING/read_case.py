@@ -318,16 +318,6 @@ def plot_spanwise():
 
         ytextht = 0.1
         xtext = 0.05
-        if icase == 0:
-            ax.annotate(
-            f"$\\alpha$\n$\\theta_f$\n$\Lambda$",
-            xy=(xtext, ytextht),
-            xycoords="axes fraction",
-            color="k",
-            ha="left",
-            va="bottom",
-            fontsize=fs_lgd,
-            )
 
         for ii, ptName in enumerate(probList):
             systemName = f"dcfoil_{ptName}"
@@ -384,6 +374,16 @@ def plot_spanwise():
             except IndexError:
                 ax = axes[0]
             # annoteTxt = f"{TotalLift[0]:.0f} N\t$\Lambda={design_vars_vals['sweep'][-1].item():.1f}^\\circ$",
+            if icase == 0:
+                ax.annotate(
+                f"$\\alpha$\n$\\theta_f$\n$\Lambda$",
+                xy=(xtext, ytextht),
+                xycoords="axes fraction",
+                color="k",
+                ha="left",
+                va="bottom",
+                fontsize=fs_lgd,
+                )
             thetaf = np.rad2deg(design_vars["theta_f"].item())
             sweepAng = design_vars["sweep"].item() / dvDictInfo["sweep"]["scale"]
             alfaAng = design_vars[f"alfa0_{ptName}"].item() / otherDVs["alfa0"]["scale"]
@@ -417,6 +417,7 @@ def plot_spanwise():
             # ax.plot(sloc, gamma_s, "-", c="k", alpha=0.5, label="Elliptical lift distribution")
             # ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf, "-")
             if icase == 0:
+                # ax.set_ylim(bottom=0.0, top=18000)
                 ax.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
 
             # ax.set_ylabel("Lift [N]", rotation="horizontal", ha="right", va="center")
@@ -742,6 +743,9 @@ def plot_dragbuildupcomp():
         Dtotal = 0
         Dtotalopt = 0
 
+        Dpr = 0
+        Di = 0
+        Dw = 0
         for ii, ptName in enumerate(probList):
             systemName = f"dcfoil_{ptName}"
             dcfoil_cases = cr.list_cases(f"root.{systemName}", recurse=False)
@@ -763,13 +767,16 @@ def plot_dragbuildupcomp():
                 "cdw": waveDrag_cd[0],
             }
 
+            Dpr += profileDrag[0]
+            Di += inducedDrag[0]
+            Dw += waveDrag[0]
             basedragfuncs = {
-                "Dpr": profileDrag[0],
-                "Di": inducedDrag[0],
-                "Dw": waveDrag[0],
+                "Dpr": Dpr,
+                "Di": Di,
+                "Dw": Dw,
             }
 
-            Dtotal += basedragfuncs["Dpr"] + basedragfuncs["Di"] + basedragfuncs["Dw"]
+            Dtotal += profileDrag[0] + inducedDrag[0] + waveDrag[0]
 
         includes = ["cdpr", "cdi", "cdw"]
 
@@ -793,6 +800,7 @@ def plot_dragbuildupcomp():
 
     axes.legend(fontsize=fs_lgd, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
     nplt.adjust_spines(axes, outward=True)
+
 
     if dosave:
         plt.savefig(fname, format="pdf")
@@ -896,7 +904,7 @@ if __name__ == "__main__":
         for ii, dv in enumerate(design_vars_vals):
             # ax = opthistaxes[ii, 0]
             ax = opthistaxes[0, ii]
-
+            yLabel = dv
             # Check if dv key is in dvDictInfo, if not use otherDVs
             if dv in dvDictInfo:
                 scaleFactor = 1 / dvDictInfo[dv]["scale"]
@@ -904,9 +912,12 @@ if __name__ == "__main__":
                 scaleFactor = 1 / otherDVs[dv]["scale"]
             elif "alfa0" in dv:
                 scaleFactor = 1 / otherDVs["alfa0"]["scale"]
+                yLabel = f"$\\alpha$ [$^\circ$]"
 
             if dv in ["theta_f"]:
                 design_vars_vals[dv] *= 180 / np.pi * scaleFactor  # convert to degrees
+                ax.set_ylim(bottom=0.0)
+                yLabel = f"$\\theta_f$ [$^\circ$]"
             if design_vars_vals[dv].ndim != 1:
                 for jj in range(design_vars_vals[dv].shape[1]):
                     ax.plot(
@@ -926,7 +937,7 @@ if __name__ == "__main__":
             else:
                 ax.plot(range(0, NITER), design_vars_vals[dv])
 
-            ax.set_ylabel(f"{dv}", rotation="horizontal", ha="right", va="center")
+            ax.set_ylabel(f"{yLabel}", rotation="horizontal", ha="right", va="center")
             # ax.set_ylim(bottom=0.0)
 
             # print(f"{dv} values:")
@@ -1090,13 +1101,13 @@ if __name__ == "__main__":
 
                     # --- Set limits ---
                     axes[0, 0].set_xticks([5,25] + instabSpeedTicks)
-                    axes[1, 0].set_yticks([50, 100, 200] + instabFreqTicks)
+                    axes[1, 0].set_yticks([10,50, 100, 200] + instabFreqTicks)
 
-                    gmin = -10
-                    gmax = 2
+                    gmin = -5
+                    gmax = 1
                     axes[0, 0].set_ylim(top=gmax, bottom=gmin)
                     # axes[0, 0].set_xlim(left=160, right=175)
-                    axes[1, 0].set_ylim(top=60, bottom=0)
+                    axes[1, 0].set_ylim(top=20, bottom=0)
                     axes[1, 1].set_xlim(left=gmin, right=gmax)
 
                     dosave = not not fname
@@ -1159,7 +1170,7 @@ if __name__ == "__main__":
             # Create figure object
             nrows = 3
             ncols = 4
-            figsize = (10 * ncols, 4 * nrows)
+            figsize = (12 * ncols, 4 * nrows)
             fig, axes = plt.subplots(
                 nrows=nrows,
                 ncols=ncols,
@@ -1239,15 +1250,15 @@ if __name__ == "__main__":
 
                 # fig.suptitle("Frequency response spectra $U_{\infty}=$%.1f m/s" % (boatSpds[ptName]))
             fig.suptitle("Frequency response spectra")
-            # axes[0, 0].legend(fontsize=fs_lgd*0.8, labelcolor="linecolor", loc="best", frameon=False, ncol=1)
+            axes[0, 0].legend(fontsize=fs_lgd*0.5, labelcolor="linecolor", loc="lower right", frameon=False, ncol=1)
             for ax in axes.flatten():
                 ax.set_xlim(left=0.0, right=0.5)
                 ax.set_xticks([0, 0.2, 0.5])
 
-            axes[0,0].set_ylim(top=0.03)
-            axes[0,1].set_ylim(top=1.6)
-            axes[1,0].set_ylim(top=3e-5)
-            axes[1,1].set_ylim(top=0.15)
+            # axes[0,0].set_ylim(top=0.03)
+            # axes[0,1].set_ylim(top=1.6)
+            # axes[1,0].set_ylim(top=3e-5)
+            # axes[1,1].set_ylim(top=0.15)
             axes[-1,0].set_xlabel("$f$ [Hz]")
             for ax in axes[0, :].flatten():
                 ax.set_ylim(bottom=0.0)
