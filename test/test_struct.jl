@@ -826,6 +826,7 @@ function test_FECOMP2()
         "c" => 1 * ones(nNodes), # chord length [m]
         "s" => 1.0, # semispan [m]
         "ab" => zeros(nNodes), # dist from midchord to EA [m]
+        "abar" => zeros(nNodes), # nondim dist from midchord to EA [-]
         "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
         "x_ab" => zeros(nNodes), # static imbalance [m]
         "theta_f" => deg2rad(15), # fiber angle global [rad]
