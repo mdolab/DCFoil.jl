@@ -829,6 +829,7 @@ function test_FECOMP2()
         "abar" => zeros(nNodes), # nondim dist from midchord to EA [-]
         "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
         "x_ab" => zeros(nNodes), # static imbalance [m]
+        "x_a" => zeros(nNodes), # nondim static imbalance []
         "theta_f" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
         "rake" => 0.0,
@@ -869,6 +870,7 @@ function test_FECOMP2()
         "abar" => zeros(nNodes), # nondim dist from midchord to EA [-]
         "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
         "x_ab" => zeros(nNodes), # static imbalance [m]
+        "x_a" => zeros(nNodes), # nondim static imbalance []
         "theta_f" => deg2rad(15), # fiber angle global [rad]
         # --- Strut vars ---
         "rake" => 0.0,
