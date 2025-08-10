@@ -414,19 +414,21 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
 
     # println("Stbd tip: $(stbdTip)")
     translatDispl = cat(portTip, midVals, stbdTip, dims=2)
-    if options["is_antisymmetry"]
-        # TODO GGGGGGGGG
-        translatDisplCtrl[:, 1:npt_wing÷2] *= -1.0 # flip 
-        rotationDisplacementsCtrl[:, 1:npt_wing÷2] *= -1.0 # flip
-        # swap twists and displacements
-        midVals = cat(
-            -averages[:, 1:npt_wing÷2-1],
-            zeros(3, 1),
-            averages[:, npt_wing÷2+1:end],
-            dims=2)
-        translatDispl = cat(-portTip, midVals, stbdTip, dims=2)
-        println("Using antisymmetry conditions")
-        show(stdout, "text/plain", translatDispl)
+    if !isnothing(options)
+        if options["is_antisymmetry"]
+            # TODO GGGGGGGGG
+            translatDisplCtrl[:, 1:npt_wing÷2] *= -1.0 # flip 
+            rotationDisplacementsCtrl[:, 1:npt_wing÷2] *= -1.0 # flip
+            # swap twists and displacements
+            midVals = cat(
+                -averages[:, 1:npt_wing÷2-1],
+                zeros(3, 1),
+                averages[:, npt_wing÷2+1:end],
+                dims=2)
+            translatDispl = cat(-portTip, midVals, stbdTip, dims=2)
+            println("Using antisymmetry conditions")
+            show(stdout, "text/plain", translatDispl)
+        end
     end
 
     # --- x shift setup ---
