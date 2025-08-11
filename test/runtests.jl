@@ -59,8 +59,10 @@ end
         "s" => 0.2438, # semispan [m]
         "zeta" => 0.04, # modal damping ratio at first 2 modes
         "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+        "abar" => 0 * ones(nNodes),
         "toc" => 0.03459 * ones(nNodes), # thickness-to-chord ratio
         "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+        "x_a" => 0 * ones(nNodes),
         "theta_f" => deg2rad(0), # fiber angle global [rad]
         # --- Strut vars ---
         "rake" => 0.0, # rake angle wrt flow [deg]
