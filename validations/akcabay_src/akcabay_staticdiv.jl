@@ -63,8 +63,10 @@ DVDict = Dict(
     "c" => 0.1 * ones(nNodes), # chord length [m]
     "s" => 0.3, # semispan [m]
     "ab" => 0 * ones(nNodes), # dist from midchord to EA [m]
+    "ab" => 0 * ones(nNodes), 
     "toc" => 0.12 * ones(nNodes), # thickness-to-chord ratio
     "x_ab" => 0 * ones(nNodes), # static imbalance [m]
+    "x_a" => 0 * ones(nNodes), 
     "theta_f" => deg2rad(-15), # fiber angle global [rad]
     "rake" => 0.0,
     # --- Strut vars ---
