@@ -1,0 +1,9 @@
+DCFoil.jl
+Copyright (C) 2023-2025 The Regents of the University of Michigan
+Additional copyright (C) 2023-2025 Galen W. Ng, Eirikur Jonsson, Shugo Kaneko, Sicheng He, and Joaquim R. R. A. Martins
+All rights reserved.
+
+This product uses OpenMDAO (Apache 2.0).
+
+This product uses OpenMDAO.jl (MIT License).
+* Copyright (c) 2023 Daniel Ingraham, Andrew Ning, Justin Gray and contributors.

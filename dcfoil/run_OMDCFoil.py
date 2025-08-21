@@ -1,0 +1,767 @@
+# --- Python 3.11 ---
+"""
+@File          :   run_OMDCFoil.py
+@Date created  :   2025-05-22
+@Last modified :   2025-05-30
+@Author        :   Galen Ng
+@Desc          :   Run and optimize composite hydrofoil using DCFoil and OpenMDAO.
+                   Requires pyGeo so you need to be in docker if on macOS
+"""
+
+# ==============================================================================
+# Standard Python modules
+# ==============================================================================
+import os
+import json
+import argparse
+from pathlib import Path
+from datetime import date
+
+# ==============================================================================
+# External Python modules
+# ==============================================================================
+import numpy as np
+from tabulate import tabulate
+
+# ==============================================================================
+# Extension modules
+# ==============================================================================
+from SETUP import setup_OMdvgeo, setup_dcfoil, setup_opt
+from SPECS.point_specs import boatSpds, Fliftstars, opdepths, alfa0, ptWeights, SEMISPAN
+from pygeo.mphys import OM_DVGEOCOMP
+import openmdao.api as om
+from multipoint import Multipoint
+
+# import top-level OpenMDAO group that contains all components
+from coupled_analysis import CoupledAnalysis
+
+# ==============================================================================
+#                         Command line arguments
+# ==============================================================================
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--task",
+    help="Check end of script for task type",
+    type=str,
+    default="run",
+)
+parser.add_argument(
+    "--geovar",
+    type=str,
+    default="trwpd",
+    help="Geometry variables to test twist (t), shape (s), taper/chord (r), sweep (w), span (p), dihedral (d)",
+)
+parser.add_argument("--name", type=str, default=None, help="Name of the problem to append to .sql recorder")
+parser.add_argument("--optimizer", type=str, default="SNOPT", help="What type of optimizer?")
+parser.add_argument("--restart", type=str, default=None, help="Restart from a previous case's DVs (w/o .sql extension)")
+parser.add_argument("--restart_num", type=int, default=-1, help="index of restart (-1 is last)")
+parser.add_argument("--freeSurf", action="store_true", default=False, help="Use free surface corrections")
+parser.add_argument("--noVent", action="store_true", default=False, help="Turn off ventilation constraints")
+parser.add_argument("--flutter", action="store_true", default=False, help="Run flutter analysis")
+parser.add_argument("--forced", action="store_true", default=False, help="Run forced vibration analysis")
+parser.add_argument("--fixStruct", action="store_true", default=False, help="Fix the structure design variables")
+parser.add_argument("--fixHydro", action="store_true", default=False, help="Fix the hydro design variables")
+parser.add_argument("--debug", action="store_true", default=False, help="Debug the flutter runs")
+parser.add_argument("--debug_opt", action="store_true", default=False, help="Debug the optimization")
+parser.add_argument("--noTwist", action="store_true", default=False, help="Turn off the twist DV because it's breaking")
+parser.add_argument("--pts", type=str, default="3", help="Performance point IDs to run, e.g., 3 is p3")
+parser.add_argument("--foil", type=str, default=None, help="Foil .dat coord file name w/o .dat")
+args = parser.parse_args()
+
+# --- Echo the args ---
+print(30 * "-")
+print("Arguments are", flush=True)
+for arg in vars(args):
+    print(f"{arg:<20}: {getattr(args, arg)}", flush=True)
+print(30 * "-", flush=True)
+
+# ==============================================================================
+#                         Settings
+# ==============================================================================
+
+files = {}
+files["gridFile"] = [
+    f"../INPUT/{args.foil}_foil_stbd_mesh.dcf",
+    f"../INPUT/{args.foil}_foil_port_mesh.dcf",
+]
+if "moth" in args.foil or "amc" in args.foil:
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}_ffd.xyz"
+else:
+    FFDFile = f"../test/dcfoil_opt/INPUT/{args.foil}-1buffer_ffd.xyz"
+files["FFDFile"] = FFDFile
+
+nNodes = 10
+nNodesStrut = 3
+nTwist = 8 // 2 + 1
+if "1buffer" in FFDFile or "moth" in FFDFile or "amc" in FFDFile:
+    nTwist = 8 // 2 
+if args.noTwist:
+    twistUpper = 0.0
+    print("WARNING: No twist design variable will be used in the optimization", flush=True)
+else:
+    twistUpper = 5.0
+dvDictInfo = {  # dictionary of design variable parameters
+    "twist": {
+        "lower": -twistUpper,
+        "upper": twistUpper,
+        "scale": 1.0 / 10.0,
+        "value": np.zeros(nTwist),
+    },
+    "sweep": {
+        "lower": 0.0,
+        "upper": 30.0,
+        "scale": 1.0 / 30,
+        "value": 0.0,
+    },
+    # "dihedral": { # THIS DOES NOT WORK
+    #     "lower": -5.0,
+    #     "upper": 5.0,
+    #     "scale": 1,
+    #     "value": 0.0,
+    # },
+    "taper": {  # the tip chord can change, but not the root
+        "lower": [1.0, 0.5],
+        "upper": [1.0, 1.4],
+        "scale": 1.0,
+        "value": np.ones(2) * 1.0,
+    },
+    "span": {
+        "lower": -0.1,
+        "upper": 0.1,
+        "scale": 1.0 / 0.1,
+        "value": 0.0,
+    },
+}
+otherDVs = {
+    "alfa0": {
+        "lower": -10.0,
+        "upper": 10.0,
+        "scale": 1.0 / 10,
+        "value": 3.0,
+    },
+    "toc": {
+        "lower": 0.09,
+        "upper": 0.18,
+        "scale": 1.0,
+        "value": 0.09 * np.ones(nNodes),
+    },
+    # "toc": {
+    #     "lower": 0.12,
+    #     "upper": 0.18,
+    #     "scale": 1.0,
+    #     "value": 0.12 * np.ones(nNodes),
+    # },
+    "theta_f": {
+        "lower": np.deg2rad(-30),
+        "upper": np.deg2rad(30),
+        "scale": 1.0,
+        "value": np.deg2rad(15.0),
+    },
+}
+
+
+# ==============================================================================
+#                         Helper functions
+# ==============================================================================
+class Top(Multipoint):
+    """
+    This class does all the problem setup for the OpenMDAO model
+    """
+
+    def setup(self):
+        # ************************************************
+        #     Add subsystems
+        # ************************************************
+        self.add_subsystem("dvs", om.IndepVarComp(), promotes=["*"])
+        self.add_subsystem("mesh", om.IndepVarComp())
+
+        self.add_subsystem(
+            "geometry",
+            OM_DVGEOCOMP(file=files["FFDFile"], type="ffd"),
+            promotes=["twist", "sweep", "dihedral", "taper", "span"],
+        )
+
+        # --- Add core physics engine for each flight point ---
+        for ptName in probList:
+            print(f"Adding point {ptName} to the problem", flush=True)
+
+            run_flutter = args.flutter and ptName == "p3"  # only run flutter for p3
+
+            Uinf = boatSpds[ptName]
+            depth = opdepths[ptName]
+            solverOptions["Uinf"] = Uinf
+            appendageParams["depth0"] = depth
+            solverOptions["outputDir"] = f"{case_name}/{ptName}"  # add the point name to the output directory
+            # print(f"Uinf: {Uinf}, depth: {depth}", flush=True)
+            flowOptions = {
+                "Uinf": Uinf,
+                "depth0": depth,
+                "depth0_flutter": opdepths["f1"],  # depth for flutter analysis [m]
+                "alfa0_flutter": alfa0,  # angle of attack for flutter analysis [deg]
+                "outputDir": f"{case_name}/{ptName}",  # add the point name to the output directory
+            }
+
+            physModel = CoupledAnalysis(
+                analysis_mode="coupled",
+                include_flutter=run_flutter,
+                include_forced=args.forced,
+                ptVec_init=np.array(ptVec),
+                npt_wing=npt_wing,
+                n_node=n_node,
+                appendageOptions=appendageOptions,
+                appendageParams=appendageParams,
+                nodeConn=nodeConn,
+                solverOptions=solverOptions,
+                flowOptions=flowOptions,
+            )
+            self.add_subsystem(f"dcfoil_{ptName}", physModel)
+
+        self.mesh.add_output("x_ptVec0", val=ptVec, distributed=True)
+
+        # --- Some post processing manipulation of cost functions ---
+        adder = om.AddSubtractComp()
+        cdCompsPt = ["CDi", "CDpr", "CDw"]
+        dragCompsPt = ["Di", "Dpr", "Dw"]
+        cdComps = []
+        dragComps = []
+        scaling_factors = []
+        for ptName in probList:  # loop through all the points so all drags are added
+            for cd in cdCompsPt:
+                cdComps.append(f"{cd}_{ptName}")
+            for drag in dragCompsPt:
+                dragComps.append(f"{drag}_{ptName}")
+            scaling_factors += [ptWeights[ptName]] * len(dragCompsPt)  # weight the drag components by the point weights
+        adder.add_equation("CD", input_names=cdComps, scaling_factors=scaling_factors)
+        adder.add_equation("Dtot", input_names=dragComps, scaling_factors=scaling_factors)
+        self.add_subsystem("objAdder", adder, promotes_outputs=["*"])
+
+        # ************************************************
+        #     Do connections
+        # ************************************************
+        self.connect("mesh.x_ptVec0", "geometry.x_ptVec_in")  # connect the mesh to the geometry parametrization
+
+        for ptName in probList:
+            self.connect(
+                "geometry.x_ptVec0", f"dcfoil_{ptName}.ptVec"
+            )  # connect the geometry to the core physics engine
+
+            # Connect nongeometry design variables to the core physics engine
+            for dvName, value in otherDVs.items():
+                if dvName == "alfa0":
+                    self.connect(f"{dvName}_{ptName}", f"dcfoil_{ptName}.{dvName}")
+                else:
+                    self.connect(dvName, f"dcfoil_{ptName}.{dvName}")
+
+            # Connect drag build up to total drag
+            for cdName in cdCompsPt:
+                self.connect(f"dcfoil_{ptName}.{cdName}", f"objAdder.{cdName}_{ptName}")
+            self.connect(f"dcfoil_{ptName}.Dpr", f"objAdder.Dpr_{ptName}")
+            self.connect(f"dcfoil_{ptName}.Dw", f"objAdder.Dw_{ptName}")
+            self.connect(f"dcfoil_{ptName}.Fdrag", f"objAdder.Di_{ptName}")
+
+    def configure(self):
+        """
+        This method configures the Multipoint problem
+        """
+
+        self.geometry.nom_add_discipline_coords("ptVec", np.array(ptVec))  # add the ptset
+
+        self = setup_OMdvgeo.setup(args, self, None, files)  # modify the model to have geometric design variables
+
+        for dvName, value in dvDictInfo.items():
+            self.dvs.add_output(dvName, val=value["value"])
+            self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+
+        for dvName, value in otherDVs.items():
+            if dvName == "alfa0":
+                for ptName in probList:
+                    self.dvs.add_output(f"{dvName}_{ptName}", val=value["value"])
+                    self.add_design_var(
+                        f"{dvName}_{ptName}", lower=value["lower"], upper=value["upper"], scaler=value["scale"]
+                    )
+            else:
+                self.dvs.add_output(dvName, val=value["value"])
+                self.add_design_var(dvName, lower=value["lower"], upper=value["upper"], scaler=value["scale"])
+
+        # ************************************************
+        #     Set flow conditions
+        # ************************************************
+        if "p1" in probList:
+            for key, value in self.dcfoil_p1.options["flowOptions"].items():
+                self.dcfoil_p1.options["solverOptions"][key] = value
+        if "p2" in probList:
+            for key, value in self.dcfoil_p2.options["flowOptions"].items():
+                self.dcfoil_p2.options["solverOptions"][key] = value
+        if "p3" in probList:
+            for key, value in self.dcfoil_p3.options["flowOptions"].items():
+                self.dcfoil_p3.options["solverOptions"][key] = value
+
+        # ************************************************
+        #     Objectives
+        # ************************************************
+        # self.add_objective("CD")
+        self.add_objective(
+            "Dtot",
+               scaler=1e-2,  # does this work?
+            #    scaler=1e-3, # WORKS
+            #    scaler=1e-4, # WORKS AND GIVES 0/1
+            # scaler=5e-5,  #
+        )  # total drag objective [N] scaled to 1e5 for optimization # TRY ALTERING THIS NEXT
+
+        # ************************************************
+        #     Constraints
+        # ************************************************
+        for ptName in probList:
+            # self.add_constraint("dcfoil.CL", lower=0.5, upper=0.5)  # lift constraint
+            self.add_constraint(
+                f"dcfoil_{ptName}.Flift",
+                lower=Fliftstars[ptName],
+                upper=Fliftstars[ptName],
+                # scaler=1e-2, # 60/63 because it could not meet feasibility or optimality
+                # scaler=1e-3, # had this before
+                # scaler=1e-4, # WORKS AND GIVES 0/1
+                # scaler=5e-5, # 60/63 with drag
+                scaler=1 / (Fliftstars[ptName] * 50),  # Works
+                # scaler=1 / (Fliftstars[ptName] * 10), 
+            )  # lift constraint [N]
+
+            if args.task != "trim":
+                self.add_constraint(f"dcfoil_{ptName}.wtip", upper=0.05 * SEMISPAN)  # tip defl con (5% of baseline semispan)
+                if args.noVent:
+                    upperVent = 0.2
+                else:
+                    upperVent = 0.00
+                self.add_constraint(
+                    f"dcfoil_{ptName}.ksvent", upper=upperVent
+                )  # ventilation constraint loosened by cl 0.02 so p3 isn't a problem
+
+            # self.add_constraint("dcfoil.vibareaw", upper=0.0) # bending vibration energy constraint
+
+            if args.flutter and ptName == "p3":
+                self.add_constraint(f"dcfoil_{ptName}.ksflutter", upper=0.0)  # flutter constraint only for p3
+            if args.forced:
+                INITVAL = vibareaw[ptName]
+                self.add_constraint(f"dcfoil_{ptName}.vibareaw", upper=0.9 * INITVAL)  # forced vibration constraint
+                self.add_constraint(f"dcfoil_{ptName}.ksbend", upper=0.9 * INITVAL)  # forced vibration constraint
+                self.add_constraint(f"dcfoil_{ptName}.kstwist", upper=0.9 * INITVAL)  # forced vibration constraint
+
+
+def print_drags():
+    for ptName in probList:
+        print(f"Point {ptName}:")
+        print("-" * 20)
+        print("CDi", prob.get_val(f"dcfoil_{ptName}.CDi"))
+        print("CDpr", prob.get_val(f"dcfoil_{ptName}.CDpr"))
+        print("CDw", prob.get_val(f"dcfoil_{ptName}.CDw"))
+        print("Dtot", prob.get_val("Dtot"))
+        print("Fdrag", prob.get_val(f"dcfoil_{ptName}.Fdrag"))
+        print("Flift", prob.get_val(f"dcfoil_{ptName}.Flift"))
+        print("Dpr", prob.get_val(f"dcfoil_{ptName}.Dpr"))
+        print("Dw", prob.get_val(f"dcfoil_{ptName}.Dw"))
+
+
+vibareaw = {
+    "p1": 1e-2,
+    "p2": 1e-2,
+    "p3": 1e-2,
+}
+# ==============================================================================
+#                         MAIN DRIVER
+# ==============================================================================
+if __name__ == "__main__":
+    probList = []
+    for pt in args.pts:
+        ptName = f"p{pt}"
+        probList.append(ptName)
+
+    # ==============================================================================
+    #                         DCFoil setup
+    # ==============================================================================
+    case_name = f"OUTPUT/{date.today().strftime('%Y-%m-%d')}-{args.task}-p{args.pts}"
+    if args.name is not None:
+        case_name += "-" + args.name
+    Path(case_name).mkdir(exist_ok=True, parents=True)
+
+    (
+        ptVec,
+        nodeConn,
+        appendageParams,
+        appendageOptions,
+        solverOptions,
+        npt_wing,
+        npt_wing_full,
+        n_node,
+    ) = setup_dcfoil.setup(otherDVs["toc"]["value"],otherDVs["theta_f"]["value"], nNodes, nNodesStrut, args, None, files, boatSpds["f1"], case_name)
+
+    # --- Trim only case ---
+    if args.task == "trim":
+        thetaStart = otherDVs["theta_f"]["value"]
+        dvDictInfo = {  # dictionary of design variable parameters
+            "sweep": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1.0,
+                "value": 0.0,
+            },
+            "twist": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1.0,
+                "value": np.zeros(nTwist),
+            },
+            "taper": {  # the tip chord can change, but not the root
+                "lower": [1.0, 1.0],
+                "upper": [1.0, 1.0],
+                "scale": 1.0,
+                "value": np.ones(2) * 1.0,
+            },
+            "span": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": dvDictInfo["span"]["scale"],
+                "value": 0.0,
+            },
+        }
+        otherDVs = {
+            "alfa0":  otherDVs["alfa0"],
+            "toc": {
+                "lower": otherDVs["toc"]["value"][0],
+                "upper": otherDVs["toc"]["value"][0],
+                "scale": otherDVs["toc"]["scale"],
+                "value": otherDVs["toc"]["value"],
+            },
+            "theta_f": {
+                "lower": thetaStart,
+                "upper": thetaStart,
+                "scale": otherDVs["theta_f"]["scale"],
+                "value": thetaStart,
+            },
+        }
+    if args.fixStruct:
+        thetaStart = otherDVs["theta_f"]["value"]
+        otherDVs = {
+            "alfa0": {
+                "lower": -10.0,
+                "upper": 10.0,
+                "scale": otherDVs["alfa0"]["scale"],  # the scale was messing with the DV bounds
+                "value": otherDVs["alfa0"]["value"],
+            },
+            "toc": {
+                "lower": appendageParams["toc"],
+                "upper": appendageParams["toc"],
+                "scale": 1.0,
+                "value": appendageParams["toc"],
+            },
+            "theta_f": {
+                "lower": np.deg2rad(-30),
+                "upper": np.deg2rad(30),
+                "scale": 1.0,
+                "value": thetaStart,
+            },
+        }
+    if args.fixHydro:
+        # Free the DVs that seem to be giving problems for the flutter optimization
+        print("WARNING: Fixing hydro design variables")
+        dvDictInfo = {
+            "twist": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1.0,
+                "value": np.zeros(nTwist),
+            },
+            "sweep": {
+                "lower": 0.0,
+                "upper": 30.0,
+                "scale": 1,
+                "value": 0.0,
+            },
+            "taper": {  # the tip chord can change, but not the root
+                "lower": [1.0, 1.0],
+                "upper": [1.0, 1.0],
+                "scale": 1.0,
+                "value": np.ones(2) * 1.0,
+            },
+            "span": {
+                "lower": 0.0,
+                "upper": 0.0,
+                "scale": 1,
+                "value": 0.0,
+            },
+        }
+    if args.debug_opt:
+        # Free the DVs that seem to be giving problems for the flutter optimization
+        dvDictInfo = {
+            "twist": dvDictInfo["twist"],
+            "sweep": dvDictInfo["sweep"],
+            # "taper": dvDictInfo["taper"],
+            "span": dvDictInfo["span"],
+            # "sweep": {
+            #     "lower": 0.0,
+            #     "upper": 0.0,
+            #     "scale": 1.0,
+            #     "value": 0.0,
+            # },
+            # "taper": {  # the tip chord can change, but not the root
+            #     "lower": [1.0, 1.0],
+            #     "upper": [1.0, 1.0],
+            #     "scale": 1.0,
+            #     "value": np.ones(2) * 1.0,
+            # },
+            # "span": {
+            #     "lower": 0.0,
+            #     "upper": 0.0,
+            #     "scale": 1,
+            #     "value": 0.0,
+            # },
+        }
+
+    prob = om.Problem()
+    prob.model = Top()
+
+    # ---------------------------
+    #   Opt setup
+    # ---------------------------
+    prob.driver = om.pyOptSparseDriver(
+        title=f"{args.name}",
+        optimizer="SNOPT",
+        print_results=True,
+        print_opt_prob=True,
+        output_dir=case_name,
+    )
+    prob.driver.options["hist_file"] = "dcfoil.hst"
+    prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs"]
+    # if args.flutter or args.forced:
+    #     prob.driver.options["debug_print"] = ["desvars", "ln_cons", "nl_cons", "objs", "totals"]
+
+    outputDir = case_name
+    optOptions = setup_opt.setup(args, outputDir)
+    for key, val in optOptions.items():
+        prob.driver.opt_settings[key] = val
+
+    prob.setup()
+    print("Problem setup complete!", flush=True)
+
+    # --- Recorder ---
+    recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil.sql"  # weird bug that OUTPUT can't be written into, but whatever
+    if args.name is not None:
+        recorderName = f"{Path(__file__).parent.resolve()}/run_OMDCFoil_out/{date.today().strftime('%Y-%m-%d')}-dcfoil-{args.name}.sql"  # weird bug that OUTPUT can't be written into, but whatever
+    print("=" * 60)
+    print(f"Saving recorder to {recorderName}", flush=True)
+    print("=" * 60)
+    recorder = om.SqliteRecorder(recorderName)  # create recorder
+    prob.add_recorder(recorder)  # attach recorder to the problem
+    prob.driver.add_recorder(recorder)  # attach recorder to the driver
+    model = prob.model
+    model.geometry.add_recorder(recorder)  # attach recorder to the geometry subsystem
+
+    # attach recorder to the subsystem of interest
+    if "p1" in probList:
+        model.dcfoil_p1.add_recorder(recorder)
+    if "p2" in probList:
+        model.dcfoil_p2.add_recorder(recorder)
+    if "p3" in probList:
+        model.dcfoil_p3.add_recorder(recorder)
+
+    # ************************************************
+    #     Set starting values
+    # ************************************************
+    prob.set_val("theta_f", otherDVs["theta_f"]["value"])  # this is defined in [rad] in the julia wrapper layer
+    for ptName in probList:
+        if ptName == "p2":
+            prob.set_val(f"alfa0_{ptName}", 2.)  # this is defined in [deg] in the julia wrapper layer
+        if ptName == "p1":
+            prob.set_val(f"alfa0_{ptName}", 2.)  # this is defined in [deg] in the julia wrapper layer
+        # else:
+            # prob.set_val(f"alfa0_{ptName}", alfa0)  # this is defined in [deg] in the julia wrapper layer
+
+    # set thickness-to-chord (NACA0009)
+    prob.set_val("toc", otherDVs["toc"]["value"])
+
+    # initialization needed for solvers
+    displacementsCol = np.zeros((6, npt_wing_full))
+    for ptName in probList:
+        prob.set_val(f"dcfoil_{ptName}.displacements_col", displacementsCol)
+        prob.set_val(f"dcfoil_{ptName}.gammas", np.zeros(npt_wing_full))
+        prob.set_val(f"dcfoil_{ptName}.gammas_d", np.zeros(npt_wing_full))
+
+    # ************************************************
+    #     Other stuff
+    # ************************************************
+    om.n2(prob, outfile=f"n2-{args.name}.html", show_browser=False)
+
+    # ==============================================================================
+    #                         Restart from an old case
+    # ==============================================================================
+    if args.restart is not None:
+        print("=" * 60)
+        print(f"Restarting from {args.restart}", flush=True)
+        print("=" * 60)
+        datafname = f"./run_OMDCFoil_out/{args.restart}.sql"
+        cr = om.CaseReader(datafname)
+
+        driver_cases = cr.list_cases("driver", recurse=False, out_stream=None)
+
+        # --- pickup last case ---
+        last_case = cr.get_case(driver_cases[args.restart_num])
+
+        objectives = last_case.get_objectives()
+        design_vars = last_case.get_design_vars()
+        constraints = last_case.get_constraints()
+        print("obj:\t", objectives["Dtot"])
+
+        # --- set all the design vars properly now ---
+        # Don't forget scales
+        for dv, val in design_vars.items():
+            if dv in dvDictInfo:
+                scale = dvDictInfo[dv]["scale"]
+                # if dv != "twist":
+                print(f"Setting {dv} to {val} but scaled by {scale}")
+                prob.set_val(dv, val / scale)
+                # else:
+                    # if len(val) == nTwist:
+                        # prob.set_val(dv, val / scale)
+                    # else:
+                    #     print(f"{dv} could not be set. Skipping...")
+            elif dv in otherDVs:
+                try:
+                    scale = otherDVs[dv]["scale"]
+                    print(f"Setting {dv} to {val} but scaled by {scale}")
+                    prob.set_val(dv, val / scale)
+                except Exception:
+                    print(f"WARNING: {dv} not found in prob, skipping...")
+            elif dv.startswith("alfa0_"):
+                try:
+                    scale = otherDVs["alfa0"]["scale"]
+                    # scale = 1/20
+                    # val = .28
+                    print(f"Setting {dv} to {val} but scaled by {scale}")
+                    prob.set_val(dv, val / scale)
+                except Exception:
+                    print(f"WARNING: {dv} not found in prob, skipping...")
+            else:
+                print(f"WARNING: {dv} not found in dvDictInfo or otherDVs, skipping...")
+
+    # ==============================================================================
+    #                         TASKS
+    # ==============================================================================
+
+    # ************************************************
+    #     OPTIMIZATION
+    # ************************************************
+    if args.task in ["opt", "trim"]:
+        # print("=" * 60, flush=True) #DON"T RUN FIRST. THIS STUFF CAN BREAK IT
+        # print("First running model...", flush=True)
+        # print("=" * 60, flush=True)
+        # prob.run_model()
+        # print("=" * 60)
+        # print("Now computing derivative...", flush=True)
+        # print("=" * 60)
+        # totals = prob.compute_totals()
+        # print("Total derivatives computed:", totals)
+        print("=" * 60, flush=True)
+        print("Running optimization...", flush=True)
+        print("=" * 60, flush=True)
+        prob.run_driver()
+        prob.record("final_state")
+        # breakpoint()
+
+        print("=" * 20)
+        print("Design variables:")
+        print("=" * 20)
+        dvs = prob.driver.get_design_var_values()
+        for dvName, value in dvs.items():
+            print(f"{dvName}: {value}")
+
+        print("=" * 20)
+        print("Objectives:")
+        print("=" * 20)
+        obj = prob.driver.get_objective_values()
+        for objName, value in obj.items():
+            print(f"{objName}: {value}")
+
+        print("=" * 20)
+        print("Constraints:")
+        print("=" * 20)
+        con = prob.driver.get_constraint_values()
+        for conName, value in con.items():
+            print(f"{conName}: {value}")
+
+        # I also want to know the drag components
+        print("=" * 20)
+        print("Drag components:")
+        print("=" * 20)
+        print_drags()
+
+        # ---------------------------
+        #   Write out FFD and shape too
+        # ---------------------------
+        DVGeo = prob.model.geometry.nom_getDVGeo()
+
+        # Write deformed FFD
+        DVGeo.writeTecplot(f"{outputDir}/final_ffd.dat")
+        DVGeo.writeRefAxes(f"{outputDir}/final_axes")
+
+        ptSetName = "x_ptVec0"
+        DVGeo.writePointSet(ptSetName, f"{outputDir}/final", solutionTime=0)
+
+        print(f"Writing ptSets to tecplot {outputDir}...")
+
+    if args.task in ["run"]:
+        print("=" * 60)
+        print("Running analysis...", flush=True)
+        print("=" * 60)
+        prob.run_model()
+
+        # print("=" * 20)
+        # print("Objectives:")
+        # print("=" * 20)
+        # obj = prob.driver.get_objective_values()
+        # for objName, value in obj.items():
+        #     print(f"{objName}: {value}")
+
+        # print("=" * 20)
+        # print("Constraints:")
+        # print("=" * 20)
+        # con = prob.driver.get_constraint_values()
+        # for conName, value in con.items():
+        #     print(f"{conName}: {value}")
+
+        # I also want to know the drag components
+        print("=" * 20)
+        print("Drag components:")
+        print("=" * 20)
+        print_drags()
+
+        # ---------------------------
+        #   Write out FFD and shape too
+        # ---------------------------
+        DVGeo = prob.model.geometry.nom_getDVGeo()
+
+        # Write deformed FFD
+        DVGeo.writeTecplot(f"{outputDir}/final_ffd.dat")
+        DVGeo.writeRefAxes(f"{outputDir}/final_axes")
+
+        ptSetName = "x_ptVec0"
+        DVGeo.writePointSet(ptSetName, f"{outputDir}/final", solutionTime=0)
+
+        print(f"Writing ptSets to tecplot {outputDir}...")
+
+    if args.task == "deriv":
+        prob.run_model()
+        fileName = "derivative-check-full.out"
+        f = open(fileName, "w")
+        print("Checking totals...")
+        f.write("TOTALS\n")
+        prob.check_totals(out_stream=f, method="fd", compact_print=True)
+        # prob.check_totals(out_stream=f, method="fd", step=1e-3)
+
+        # print("Checking partials...")
+        # f.write("PARTIALS\n")
+        # # prob.model.dcfoil_p3.hydroelastic.liftingline_funcs.set_check_partial_options(wrt=["toc"])
+        # # prob.check_partials(method="fd", includes=["liftingline_funcs"], compact_print=True)
+        # # prob.check_partials(method="fd", includes=["liftingline_funcs"])
+        # prob.check_partials(
+        #     out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"], compact_print=True
+        # )
+        # prob.check_partials(out_stream=f, method="fd", step=1e-4, includes=["dcfoil_p3.forced_funcs"])
+        # f.close()

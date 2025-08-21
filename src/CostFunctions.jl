@@ -1,0 +1,56 @@
+# --- Julia 1.9---
+"""
+@File    :   costFunctions.jl
+@Time    :   2024/04/02
+@Author  :   Galen Ng
+@Desc    :   Store all possible cost funcs, and also routines for computing the static ones
+"""
+
+module CostFunctions
+
+# --- Solver cost funcs ---
+const staticCostFuncs::Vector{String} = [
+    # functions depending on structstates
+    "psitip"
+    "wtip"
+    # functions depending on hydrodynamic states
+    "lift"
+    "moment"
+    "cl" # total lift coefficient
+    "cmy"
+    "kscl" # KS max of spanwise lift coefficient
+    # Centers
+    "cofz"
+    "comy"
+    # Total drag
+    "cd"
+    "drag"
+    # Lift-induced drag
+    "cdi"
+    "fxi"
+    # Junction drag (empirical relation interference)
+    "cdj"
+    "fxj"
+    # Spray drag
+    "cds"
+    "fxs"
+    # Profile drag
+    "cdpr"
+    "fxpr"
+]
+const forcedCostFuncs::Vector{String} = [
+    "kstheta" # maximum deformation amplitude (abs val) across forced frequency sweep
+    "ksbend"
+    "vibareapsi" # integrated deformations under the spectral curve (see Ng et al. 2022)
+    "vibareaw"
+]
+const flutterCostFuncs::Vector{String} = [
+    "ksflutter" # flutter value (damping)
+    "lockin" # lock-in value
+    "gap" # mode gap width
+]
+
+const allCostFuncs::Vector{String} = vcat(staticCostFuncs, forcedCostFuncs, flutterCostFuncs)
+
+
+end
