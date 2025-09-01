@@ -8,7 +8,6 @@
 ![Alt text](./media/logo.svg "logo-text")
 
 Copyright (C) 2023-2025 The Regents of the University of Michigan
-Additional copyright (C) 2025 Galen W. Ng, Eirikur Jonsson, Shugo Kaneko, Sicheng He, and Joaquim R. R. A. Martins
 All rights reserved.
 
 Dynamic Composite Foil (DCFoil.jl) is a composite marine appendage design optimization software written in Julia.
@@ -17,6 +16,14 @@ It analyzes the fluid-structure interaction of slender composite structures usin
 ## Documentation
 
 See the `docs/` directory to build the documentation.
+
+## Contributors
+
+Galen W. Ng (primary developer)
+Shugo Kaneko (load and displacement transfer scheme)
+Eirikur Jonsson (technical advice)
+Sicheng He (technical advice)
+Joaquim R. R. A. Martins (technical advice)
 
 ## Versions
 

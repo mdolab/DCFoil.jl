@@ -1,1 +1,0 @@
-This folder is for play-around scripts to generate training data for the tests
