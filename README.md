@@ -19,11 +19,11 @@ See the `docs/` directory to build the documentation.
 
 ## Contributors
 
-* Galen W. Ng (primary developer)
-* Shugo Kaneko (load and displacement transfer scheme)
-* Eirikur Jonsson (technical advice)
-* Sicheng He (technical advice)
-* Joaquim R. R. A. Martins (technical advice)
+Galen W. Ng (primary developer)
+Shugo Kaneko (load and displacement transfer scheme)
+Eirikur Jonsson (technical advice)
+Sicheng He (technical advice)
+Joaquim R. R. A. Martins (technical advice)
 
 ## Versions
 
