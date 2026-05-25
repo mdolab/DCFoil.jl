@@ -10,10 +10,10 @@
 """
 
 
+"""
+Struct to hold the airfoil geometry discretization
+"""
 struct AirfoilMesh{TI,T<:Number,TM<:AbstractMatrix}
-    """
-    Struct to hold the airfoil geometry discretization
-    """
     vortexXY::TM        # vortex points [x,y] for each panel, size [2, n] where n is the number of vertices
     controlXY::TM       # control points [x,y] for each panel, size [2, n-1] where n is the number of vertices
     panelLengths::AbstractVector    # panel lengths [m]
@@ -21,14 +21,14 @@ struct AirfoilMesh{TI,T<:Number,TM<:AbstractMatrix}
     sweep::T           # sweep angle [rad]
 end
 
-function setup_VPM(xx, yy, control_xy, sweep=0.0)
-    """
-    Discretize the airfoil into panels and setup the VPM linear systems to solve
+"""
+Discretize the airfoil into panels and setup the VPM linear systems to solve
 
-    xx: x-coordinates of the airfoil vertices
-    yy: y-coordinates of the airfoil vertices
-    control_xy: control points for the VPM (center of panels)
-    """
+xx: x-coordinates of the airfoil vertices
+yy: y-coordinates of the airfoil vertices
+control_xy: control points for the VPM (center of panels)
+"""
+function setup_VPM(xx, yy, control_xy, sweep=0.0)
 
     # Quick error check
     if size(control_xy)[1] != 2

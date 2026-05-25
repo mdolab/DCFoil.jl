@@ -65,19 +65,20 @@ function compute_BSWaveSpectrum(Hsig, ω_z, w)
     return S
 end
 
-function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears", debug=false) """
-    Compute wave loads on a submerged hydrofoil
+"""
+Compute wave loads on a submerged hydrofoil
 
-    Faltinsen Eqn 6.208 with modifications to strip theory and Sears function
+Faltinsen Eqn 6.208 with modifications to strip theory and Sears function
 
-    freqspan - frequency sweep [rad/s]
-    cbar - mean chord [m]
-    w_e - encounter frequency
-    waveamp - Aw [m] that you get from WMO sea state (is this significant wave height/amplitude?)
-    h - depth
-    span - full span of hydrofoil
-    claVec - lift slope
-    """
+freqspan - frequency sweep [rad/s]
+cbar - mean chord [m]
+w_e - encounter frequency
+waveamp - Aw [m] that you get from WMO sea state (is this significant wave height/amplitude?)
+h - depth
+span - full span of hydrofoil
+claVec - lift slope
+"""
+function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, stripWidths, claVec; method="Sears", debug=false)
 
     # ωpk = w_e # the peak frequency is the significant encounter frequency
     # println("ωpk: ", ωpk)
@@ -231,7 +232,7 @@ function compute_responseSpectralDensityFunc(Zω::AbstractVector{<:Complex}, wav
     waveEnergySpectrum : [m^2 - s] wave energy spectrum
     """
 
-    HωSquared = real.(Zω).^2 .+ imag.(Zω).^2 # square of the frequency response function
+    HωSquared = real.(Zω) .^ 2 .+ imag.(Zω) .^ 2 # square of the frequency response function
 
     S_R⁺ = HωSquared .* waveEnergySpectrum
 
