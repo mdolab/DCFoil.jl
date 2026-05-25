@@ -397,6 +397,10 @@ Specifically, we started from the python code from \citet{Reid2021}, and ported 
 
 The section solution in the nonlinear lifting line uses a vortex panel method.
 First, the airfoil is discretized.
+The length of each panel is
+\beq
+\ell_i = \sqrt{\Delta x^2 + \Delta y^2}
+\eeq
 \beq
 \mb{A} = \ell_i
 \eeq
@@ -2222,7 +2226,7 @@ You may need to type into the Pkg REPL
 
 Now you are ready to run the solver in the Julia REPL with
 \begin{lstlisting}
-	include("main.jl")
+	include(``main.jl'')
 \end{lstlisting}
 
 Since this is JIT, it will be slow the first time because it needs to compile stuff first.
@@ -2245,7 +2249,7 @@ Only use **parametric** types for structs.
 Concrete types in function arguments do not usually make the code faster; they only restrict usage (unless it is on purpose for multiple dispatch).
 However, you should declare the struct type argument in function signatures.
 The `DTYPE` constant in the code `RealOrComplex` should be used when structs are not used in the function
-https://docs.julialang.org/en/v1/manual/performance-tips/#Type-declarations
+https://docs.julialang.org/en/v1/manual/performance-tips/\#Type-declarations
 
 Data typing code that you will AD is very tricky.
 You do not want to be too specific.
