@@ -12,7 +12,7 @@
 \usepackage{indentfirst}
 \usepackage[compact]{titlesec}
 \usepackage{pdflscape}
-\usepackage[]{acronym} % provides \acronym 
+\usepackage[printonlyused]{acronym} % provides \acronym 
 \usepackage{enumitem}
 
 \graphicspath{{../figures/}}
@@ -379,6 +379,13 @@ Here's the digestion of the Julia code which does the numerical solution of Equa
 The lifting line of \citet{Phillips2000} is a generalization of Prandtl's lifting line theory~\cite{Prandtl1918a}.
 Specifically, we started from the python code from \citet{Reid2021}, and ported it over to Julia with modifications to support a discrete adjoint.
 
+The section solution in the nonlinear lifting line follows a vortex panel method.
+First, the airfoil is discretized.
+\beq
+\mb{A} = \ell
+\eeq
+
+
 \subsubsection{Flap effects}
 The effect of a flap comes from thin airfoil theory and is outlined in \citet{Glauert1924,Glauert1927}.
 A parameter $\phi = \cos^{-1}\left(\frac{c_f}{2} -1\right)$ is a parametric variable for flap angle accounting for the length of flap chord $c_f$
@@ -401,21 +408,7 @@ c_{mac_{\delta}} = -\frac{1}{4}\sin(\phi) \left( 1 - \cos(\phi)\right)
 		Flap diagram
 	}
 \end{figure}
-% NOT DOING THIS, DOUBLE CHECK MATH THOUGH
-% Finally, the hinge moment is
-% \be
-% & H & = k_H (Ec)^2 \rho \Uinf^2
-% \\
-% & k_H & = \frac{c_{mH_\alpha}}{c_{\ell_\alpha}} c_\ell
-% +
-% c_{mH_\delta} \delta
-% \\
-% & c_{mH_{\delta}} & = - \frac{\sin(\varphi) \left(1 - \cos(\varphi) \right)}{4 E^2}
-% \left(
-% \frac{\pi - \varphi}{\phi}
-% -\frac{\sin(\varphi)}{\pi}
-% \right)
-% \ee
+
 
 \subsubsection{Extension to unsteady frequency domain}
 % 
