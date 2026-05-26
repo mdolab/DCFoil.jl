@@ -55,19 +55,9 @@ function setup_VPM(xx, yy, control_xy, sweep=0.0)
     mat1 = (dx) .* P21 ./ (AIRFOIL.panelLengths)
     mat2 = (dy) .* P11 ./ (AIRFOIL.panelLengths)
 
-    # Amat = zeros(nodeCt, nodeCt)
-    # Amat[1:end-1, 1:end-1] += mat1 .- mat2
     step1mat = mat1 .- mat2
     step1Amat = cat(step1mat, zeros(1, size(step1mat)[1]), dims=1) #row on bottom
     step1Amat = cat(step1Amat, zeros(size(step1Amat)[1], 1), dims=2) #col on right
-
-    # # Debug code
-    # matplot = mat1
-    # plot(eachindex(matplot[:, 1]), matplot[1, :], label="row 0")
-    # plot!(eachindex(matplot[:, 1]), matplot[11, :], label="row 10")
-    # plot!(eachindex(matplot[:, 1]), matplot[end-9, :], label="row -10")
-    # plot!(eachindex(matplot[:, 1]), matplot[end, :], label="row end")
-    # savefig("eta.png")
 
     mat11 = (dx) .* P22 ./ (AIRFOIL.panelLengths)
     mat22 = (dy) .* P12 ./ (AIRFOIL.panelLengths)
@@ -117,6 +107,10 @@ function solve_VPM(Airfoil, Amat, V, chord=1.0, Vref=1.0, hcRatio=50.0)
     RHS = vcat(RHS_noTE, 0.0)
 
     # Airfoil surface vorticity strengths
+    # [A_ij][γ] = [RHS_i] or expanded out
+    #  [               [  γ1
+    # 
+    #   1 0 ... 0 1]     γn+1]
     γi = Amat \ RHS # bottleneck code
 
     # Total circulation for the airfoil

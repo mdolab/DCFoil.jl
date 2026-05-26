@@ -396,15 +396,167 @@ The lifting line of \citet{Phillips2000} is a generalization of Prandtl's liftin
 Specifically, we started from the python code from \citet{Reid2021}, and ported it over to Julia with modifications to support a discrete adjoint.
 
 The section solution in the nonlinear lifting line uses a vortex panel method.
+The panel has a linearly varying vortex strength.
 First, the airfoil is discretized.
 The length of each panel is
 \beq
-\ell_i = \sqrt{\Delta x^2 + \Delta y^2}
+\ell_i = \sqrt{\Delta x_i^2 + \Delta y_i^2}
+\quad \tn{for }i=1, ..., N_p
 \eeq
+where $N_p$ is the number of panels (and control points) and $N_p+1$ is the number of nodes.
+The no-penetration boundary condition is
 \beq
-\mb{A} = \ell_i
+\vec{v}_{i}\cdot \vec{n}_i = 0
+\quad \tn{for } i=1,...,N_p
+\eeq
+applied at all control points.
+The Kutta condition is
+\beq
+\gamma_1 = -\gamma_{N_p+1}
+\eeq
+which gives us the $N_p+1$ equations we need to solve the system.
+The velocity at the control point is the sum of the freestream velocity and the induced velocity from other panels
+\beq
+\vec{v}_i = \vec{v}_\infty + \sum_j^{N_p} \vec{v}_{ji}
 \eeq
 
+At this point, we need to compute an influence matrix that describes how the vortex at one panel influences a point in space $P(x,y)$.
+The velocity at a point in reference space $P(\xi,\eta)$ is
+\beq
+\left\{
+\begin{matrix}
+	v_\xi \\
+	v_\eta
+\end{matrix}
+\right \}
+=
+\frac{1}{2\pi \ell_i}
+\begin{bmatrix}
+	(\ell_i - \xi) \Phi +\eta \Psi                       & \xi\Phi - \eta \Psi           \\
+	\eta \Phi - \left(\ell_i - \xi \right) \Psi - \ell_i & -\eta\Phi - \xi \Psi + \ell_i
+\end{bmatrix}
+\left\{
+\begin{matrix}
+	\gamma_i \\
+	\gamma_{i+1}
+\end{matrix}
+\right \}
+\eeq
+where the angles are
+\beq
+\Phi = \arctan\left(
+\frac{\eta \ell_i}{\eta^2 + \xi^2 - \xi \ell_i}
+\right)\\
+\Psi = \half \ln\left[
+	\frac{\eta^2+\xi^2}{\left(\xi- \ell_i\right)^2 + \eta^2}
+	\right]
+\eeq
+The transformation back to local $x,y$ coordinates is
+\beq
+\left\{
+\begin{matrix}
+	v_x \\
+	v_y
+\end{matrix}
+\right \}
+=
+\frac{1}{\ell_i}\begin{bmatrix}
+	\Delta x & -\Delta y \\
+	\Delta y & \Delta x
+\end{bmatrix}
+\left\{
+\begin{matrix}
+	v_\xi \\
+	v_\eta
+\end{matrix}
+\right \}
+\eeq
+which expanded out into one equation is
+\beq
+\left\{
+\begin{matrix}
+	v_x \\
+	v_y
+\end{matrix}
+\right \}
+=
+\frac{1}{2\pi \ell_i^2}
+\begin{bmatrix}
+	\Delta x & -\Delta y \\
+	\Delta y & \Delta x
+\end{bmatrix}
+\begin{bmatrix}
+	(\ell_i - \xi) \Phi +\eta \Psi                       & \xi\Phi - \eta \Psi           \\
+	\eta \Phi - \left(\ell_i - \xi \right) \Psi - \ell_i & -\eta\Phi - \xi \Psi + \ell_i
+\end{bmatrix}
+\left\{
+\begin{matrix}
+	\gamma_i \\
+	\gamma_{i+1}
+\end{matrix}
+\right \}
+=
+\mb{P}_{ij}
+\left\{
+\begin{matrix}
+	\gamma_i \\
+	\gamma_{i+1}
+\end{matrix}
+\right \}
+\eeq
+These expressions arise because we track vortex strengths at the nodes.
+One panel influence matrix is
+\beq
+\mb{P}_{ji} = \begin{bmatrix}
+	P_{11} & P_{12} \\
+	P_{21} & P_{22}
+\end{bmatrix}
+\eeq
+The main entries of the top level matrix is
+\beq
+A_{ij} &= A_{ij} + \frac{\Delta x_i}{\ell_i} P_{21} -\frac{\Delta y_i}{\ell_i} P_{11} \\
+A_{ij+1} &= A_{ij+1} + \frac{\Delta x_i}{\ell_i}P_{22} - \frac{\Delta y_i}{\ell_i} P_{12} \quad
+\tn{for } i = 1,...,N_p
+\quad \tn{and for } j = 1,...,N_p
+\eeq
+and the resulting linear system is
+\beq
+\underbrace{\begin{bmatrix}
+		A_{ij}                 \\
+		1 & 0 & \cdots & 0 & 1
+	\end{bmatrix}}_{\mb{A}}
+\left\{
+\begin{matrix}
+	\gamma_1     \\
+	\gamma_2     \\
+	\vdots       \\
+	\gamma_{N_p} \\
+	\gamma_{N_{p+1}}
+\end{matrix}
+\right \}
+=
+\left\{
+\begin{matrix}
+	\vec{v}_\infty \frac{1}{\ell_1} \left(\Delta y_1\cos\alpha - \Delta x_1 \sin\alpha\right)             \\
+	\vdots                                                                                                \\
+	\vec{v}_\infty \frac{1}{\ell_{N_p}} \left(\Delta y_{N_p}\cos\alpha - \Delta x_{N_p} \sin\alpha\right) \\
+	0
+\end{matrix}
+\right \}
+\eeq
+Note that $\mb{A}$ only depends on geometry and $\mb{b}$ only depends on velocity and the angle of attack.
+This is nice because you can precompute $\mb{A}$ and then solve for many flow conditions.
+
+The Green function of a 2D vortex placed at $c = a + bi$
+\beq
+\begin{aligned}
+	f(z, t) & =\frac{\Gamma}{2 \pi i} \log (z-c)-\frac{\Gamma}{2 \pi i} \log (z-\bar{c}) + \frac{\Gamma}{\pi i} \mathrm{PV} \int_0^{\infty} \frac{\mathrm{e}^{-i k(z-\bar{c})}}{k-\nu} \diff k
+	- \Gamma e^{-i\nu(z-\bar{c})}
+	\quad \Im c<0
+\end{aligned}
+\eeq
+where the form from \citet[Eq. 13.43]{Wehausen1960} is simplified to the vortex case.
+The first two terms satisfy near field properties, the third, the linearized free surface boundary condition, and the fourth, the radiation condition (I'm pretty sure of this).
 
 \subsubsection{Flap effects}
 The effect of a flap comes from thin airfoil theory and is outlined in \citet{Glauert1924,Glauert1927}.
@@ -2262,9 +2414,11 @@ You do not want to be too specific.
 
 \subsection{AD Packages}
 
-* `AbstractDifferentiation` is a wrapper level tool
-* `Zygote` is an RAD package
-* `ReverseDiff` is another RAD package that is more performant but restrictive on data types
+\begin{itemize}
+	\item `AbstractDifferentiation` is a wrapper level tool
+	\item `Zygote` is an RAD package
+	\item `ReverseDiff` is another RAD package that is more performant but restrictive on data types
+\end{itemize}
 
 \subsection{Performance}
 
@@ -2273,7 +2427,8 @@ You do not want to be too specific.
 * Make use of `similar()` to make uninitialized arrays or `typeof()`
 
 
-The ```Project.toml``` means this is a Julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```. However, in development mode, just go into julia for this directory and type ```] dev .```.
+The ```Project.toml``` means this is a Julia package and can be added with ```Pkg.add("DCFoil"); using DCFoil```.
+However, in development mode, just go into julia for this directory and type ```] dev .```.
 
 \subsection{Package Dependencies and Updating}
 
