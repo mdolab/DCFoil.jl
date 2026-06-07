@@ -162,6 +162,7 @@ end
 function compute_panelMatrix(Airfoil)
     """
     Computes the panel matrix for the VPM
+        I think you need to read Phillip's or Anderson's textbook
     """
 
     nctrl = Airfoil.n - 1
@@ -248,4 +249,118 @@ function compute_sweepCorr(angle, V)
     VinfCorr = Vinf * √(Ca^2 * cos(angle - beta)^2 + Sa^2 * Cb^2) / SaSb
 
     return alphaCorr, VinfCorr
+end
+
+# ==============================================================================
+#                         Chen 2012 vortex method
+# ==============================================================================
+function setup_linsys(xx, yy, control_xy, ν, μ)
+    aij = zeros(length(control_xy) - 1, length(control_xy) - 1)
+
+    # Loop over all panels
+    for (ii, panel) in enumerate(control_xy[:,])
+        zj = panel[XDIM] + panel[YDIM] * im
+        ζj = controlXY[:, ii]
+        zj1 = control_xy[XDIM, ii+1] + control_xy[YDIM, ii+1] * im
+        tj = (zj1 - zj) / abs(zj1 - zj)
+        nj = im * tj
+
+        for jj in 1:Mesh.n
+            # G = compute_DissipativeKelvinGreenVortex(ζj, zj, ν, μ)
+            # Aij = real(G)
+
+            SUM = 0.0
+            for m = 0:M
+                km = kSweep[m]
+                km1 = kSweep[m+1]
+                eⁱ1 = exp(-1im * km * (ζi - conj(zj1)))
+                eⁱ2 = exp(-1im * km * (ζi - conj(zj)))
+                SUM += (eⁱ1 - eⁱ2) * log((km1 - ν + 1im * μ) / (km - ν + 1im * μ))
+            end
+
+            Aij = -1im * conj(tj) * log((ζi - zj1) / (ζi - zj))
+            +1im * tj * (1im * ν - μ) / (1im * ν + μ) * log((ζi - conj(zj1)) / (ζ - zj))
+            -2 * tj * ν / (1im * ν + μ) * SUM
+
+            Bij = -conj(tj) * log((ζi - zj1) / (ζi - zj))
+            +tj * (1im * ν - μ) / (1im * ν + μ) * log((ζi - conj(zj1)) / (ζ - zj))
+            -im * 2 * tj * ν / (1im * ν + μ) * SUM
+
+        end
+
+        bin = zeros(Mesh.n)
+        for jj in 1:Mesh.n
+            bin += real(im * tj) * Bij[:, jj]
+        end
+
+        SUM = 0.0
+        for m = 0:M
+            km = kSweep[m]
+            km1 = kSweep[m+1]
+            eⁱ = exp(-1im * km * (ζi - conj(z1)))
+            SUM += (eⁱ) * log((km1 - ν + 1im * μ) / (km - ν + 1im * μ))
+        end
+        Ci = 1im * (
+            1 / (ζi - z1)
+            + 1 / (ζi - conj(z1))
+            + 2 * im * ν * SUM
+        )
+        # Ai =
+
+        aij[ii, :] = real(Aij)
+        bi[ii] = Uinf * real(bin)
+    end
+    ain1 = -real(Ci)
+
+    return aij, bi, ain1
+end
+
+function solve_gamma(aij, ain1, bi)
+
+    N = length(bi)
+    Aij = zeros(N + 1, N + 1)
+    Bi = zeros(N + 1)
+
+    Aij[1:N, 1:N] = aij
+    Aij[:, N+1] = ain1
+    Aij[N+1, 1] = 1
+    Aij[N+1, N] = 1
+
+    Bi[1:N] = bi
+    Bi[N+1] = -Uinf * (real(t1) - real(tN))
+
+    gammas = Aij \ Bi
+
+    return gammas
+end
+
+"""
+ζ - field point in imaginary units
+z - location of Green function
+ν - nondimensional wave no.
+
+Computes
+G = ln(ζ - z) + νi -μ
+"""
+function compute_DissipativeKelvinGreenVortex(ζ, z, ν, μ)
+
+    function compute_kInt(k)
+        int = exp(-im * k * (ζ - conj(z))) / (k - ν + μ * im)
+        return int
+    end
+
+    dk = 0.01
+    kSweep = 0:dk:100
+    heights = compute_kInt.(kSweep)
+    waveInt = sum(heights * dk)
+
+    # Called F in paper
+    H = -(im * ν - μ) / (im * ν + μ) * log(ζ - conj(z))
+    -2 * im * ν / (im * ν + μ) * waveInt
+
+    Gsource = log(ζ - z) + H
+
+    Gvort = im * Gsource
+
+    return Gvort
 end

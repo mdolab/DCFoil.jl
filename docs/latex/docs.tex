@@ -514,8 +514,8 @@ One panel influence matrix is
 \eeq
 The main entries of the top level matrix is
 \beq
-A_{ij} &= A_{ij} + \frac{\Delta x_i}{\ell_i} P_{21} -\frac{\Delta y_i}{\ell_i} P_{11} \\
-A_{ij+1} &= A_{ij+1} + \frac{\Delta x_i}{\ell_i}P_{22} - \frac{\Delta y_i}{\ell_i} P_{12} \quad
+A_{ij} & = A_{ij} + \frac{\Delta x_i}{\ell_i} P_{21} -\frac{\Delta y_i}{\ell_i} P_{11} \\
+A_{ij+1} & = A_{ij+1} + \frac{\Delta x_i}{\ell_i}P_{22} - \frac{\Delta y_i}{\ell_i} P_{12} \quad
 \tn{for } i = 1,...,N_p
 \quad \tn{and for } j = 1,...,N_p
 \eeq
@@ -547,17 +547,37 @@ and the resulting linear system is
 Note that $\mb{A}$ only depends on geometry and $\mb{b}$ only depends on velocity and the angle of attack.
 This is nice because you can precompute $\mb{A}$ and then solve for many flow conditions.
 
-The Green function of a 2D vortex placed at $c = a + bi$
+The Green function of a 2D vortex placed at $c = a + bi$ with wave number $K = \omega^2/g$ is
 \beq
 \begin{aligned}
-	f(z, t) & =\frac{\Gamma}{2 \pi i} \log (z-c)-\frac{\Gamma}{2 \pi i} \log (z-\bar{c}) + \frac{\Gamma}{\pi i} \mathrm{PV} \int_0^{\infty} \frac{\mathrm{e}^{-i k(z-\bar{c})}}{k-\nu} \diff k
-	- \Gamma e^{-i\nu(z-\bar{c})}
-	\quad \Im c<0
+	f(z, t) & =
+	\frac{\Gamma}{2 \pi i} \log (z-c)
+	-	\frac{\Gamma}{2 \pi i} \log (z-\widebar{c})
+	+ \frac{2\Gamma}{\pi i} \mathrm{PV} \int_0^{\infty} \frac{\mathrm{e}^{-i k(z-\bar{c})}}{k- K } \diff k
+	- \Gamma e^{-i K(z-\bar{c})}
+	\quad \Im( c)<0
 \end{aligned}
 \eeq
 where the form from \citet[Eq. 13.43]{Wehausen1960} is simplified to the vortex case.
 The first two terms satisfy near field properties, the third, the linearized free surface boundary condition, and the fourth, the radiation condition (I'm pretty sure of this).
 
+The equation above is difficult to solve numerically so a derivation by \citet{Chen2012} introduced the dissipative Green function approach.
+The dissipative, free-surface, vortex Green function is evaluated as
+\beq
+f(\zeta) = i \left(\ln \left(\zeta - z\right)
+- \frac{i \nu -\mu}{i \nu + \mu} \ln \left(\zeta - \widebar{z}\right)
+- \frac{2i\nu}{i \nu + \mu} \int_{0}^{\infty}  \frac{e^{-ik\left(\zeta - \widebar{z} \right)}}{k-\nu + i\mu}\diff k
+\right)
+\eeq
+where $\mu$ is a nondimensional dissipation number, $\nu=gc/\Uinf^2$ is the nondimensional wave number
+
+The linear system solved is for the tangential velocities $\gamma$ (I don't like this notation) and the total circulation (even though sources are used, but their strengths are known due to the body boundary condition)
+\beq
+{a_{ij} \gamma_j}
+- a_{i,N+1} \Gamma  =
+b_i
+\eeq
+The vector of unknowns is therefore $[\gamma_1,...,\gamma_N, \Gamma]^\top$
 \subsubsection{Flap effects}
 The effect of a flap comes from thin airfoil theory and is outlined in \citet{Glauert1924,Glauert1927}.
 A parameter $\phi = \cos^{-1}\left(\frac{c_f}{2} -1\right)$ is a parametric variable for flap angle accounting for the length of flap chord $c_f$
