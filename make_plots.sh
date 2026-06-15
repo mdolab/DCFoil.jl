@@ -83,6 +83,23 @@ python ./run_postprocessing.py --cases 2025-01-29_akcabay-swept_cfrp_f15.0_w-15.
 # python ./run_postprocessing.py --cases 2025-01-07_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper
 # python ./run_postprocessing.py --cases 2025-01-15_mothrudder-nofs_cfrp_f0.0 --is_forced --is_paper --is_flutter
 
+# ************************************************
+#     Thesis cases
+# ************************************************
+# opt1
+python read_case.py --cases 2025-06-23-opt-p3-amcopt1 2025-06-23-trim-p123-amctrimMP --base 2025-06-23-trim-p123-amctrimMP --use_serif --shorternames opt1 trim1 --pts 3 --name 2025-06-23-opt-p3-amcopt1 --flutter
+# opt1-fs
+python read_case.py --cases 2025-06-23-opt-p3-amcopt1-fs 2025-06-23-opt-p3-amcopt1 --base 2025-06-23-opt-p3-amcopt1-fs --use_serif --shorternames opt1-fs opt1 --pts 3 --name 2025-06-23-opt-p3-amcopt1-fs --flutter
+# opt2-fs
+python read_case.py --cases 2025-06-24-opt-p3-opt2-fs 2025-06-23-trim-p123-amctrimMP --base 2025-06-23-trim-p123-amctrimMP --use_serif --shorternames opt2-fs trim1 --pts 3 --name 2025-06-24-opt-p3-opt2-fs --flutter
+
+python read_case.py --cases 2025-06-24-opt-p3-opt2 2025-06-24-opt-p3-opt2-fs --base 2025-06-24-opt-p3-opt2-fs --use_serif --shorternames opt2 opt2-fs --pts 3 --name 2025-06-24-opt-p3-opt2 --flutter
+
+python read_case.py --cases 2025-06-25-opt-p123-opt2MP-fs 2025-06-23-trim-p123-amctrimMP --base 2025-06-23-trim-p123-amctrimMP --use_serif --shorternames opt3-fs trim1MP --pts 123 --name 2025-06-25-opt-p123-opt2MP-fs --flutter
+# python read_case.py --cases 2025-06-24-opt-p123-amcopt1MP 2025-06-23-trim-p123-amctrimMP --base 2025-06-23-trim-p123-amctrimMP --use_serif --shorternames opt1 trim1 --pts 3 --name 2025-06-24-opt-p123-amcopt1MP
+# python read_case.py --cases 2025-06-23-opt-p123-amcopt1MP 2025-06-23-trim-p123-amctrimMP --base 2025-06-23-trim-p123-amctrimMP --use_serif --shorternames opt1 trim1 --pts 3 --name 2025-06-23-opt-p123-amcopt1MP
+# python read_case.py --cases 2025-06-23-opt-p3-opt1 2025-06-23-trim-p123-amctrimMP --base 2025-06-23-trim-p123-amctrimMP --use_serif --shorternames opt1 trim1 --pts 3 --name 2025-06-23-opt-p3-opt1
+
 cd ..
 
 # ==============================================================================

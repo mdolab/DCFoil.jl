@@ -413,6 +413,7 @@ def plot_spanwise():
             rhoU = density * Uinf  # rho * U
             if icase == 0:
                 ax.plot(sloc, Lprime, "-", c="k", alpha=0.5, label="Elliptical  distribution")
+                # ax.set_ylim(bottom=0.0, top=18000)
             ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf * rhoU, c=cm[icase])
             # ax.plot(sloc, gamma_s, "-", c="k", alpha=0.5, label="Elliptical lift distribution")
             # ax.plot(aeroNodesXYZ[1, :], circ_dist[nCol // 2 :] * Uinf, "-")
@@ -471,7 +472,7 @@ def plot_spanwise():
                 aeroNodesXYZ[1, :], midchords[1, :idxTip], np.rad2deg(pretwistDist[:idxTip])
             )  # interpolate to match the aero nodes
             # ax.plot(midchords[1,:idxTip], np.rad2deg(pretwistDist[:idxTip]), label="Jig twist (1D props)")
-            ax.plot(aeroNodesXYZ[1, :], pretwistAeroNodes, c=cm[icase], label="Jig twist", alpha=0.5)
+            ax.plot(aeroNodesXYZ[1, :], pretwistAeroNodes, c=cm[icase], label="Jig twist", alpha=0.5, linestyle="--")
             ax.plot(
                 aeroNodesXYZ[1, :],
                 np.rad2deg(displacements_col[4, nCol // 2 :]) + pretwistAeroNodes,
@@ -681,7 +682,7 @@ def plot_spanwiseperiter(case):
             aeroNodesXYZ[1, :], midchords[1, :idxTip], np.rad2deg(pretwistDist[:idxTip])
         )  # interpolate to match the aero nodes
         # ax.plot(midchords[1,:idxTip], np.rad2deg(pretwistDist[:idxTip]), label="Jig twist (1D props)")
-        ax.plot(aeroNodesXYZ[1, :], pretwistAeroNodes, c=cm[0], label="Jig twist", alpha=0.5)
+        ax.plot(aeroNodesXYZ[1, :], pretwistAeroNodes, c=cm[0], label="Jig twist", linestyle="--", alpha=0.5)
         ax.plot(
             aeroNodesXYZ[1, :],
             np.rad2deg(displacements_col[4, nCol // 2 :]) + pretwistAeroNodes,
@@ -1080,7 +1081,7 @@ if __name__ == "__main__":
                             axes,
                             flutterSol=flutterSolDict[key],
                             cm=cm,
-                            # ls=linestyles[ii],
+                            ls=linestyles[ii],
                             alpha=alphas[ii],
                             units=units,
                             # marker="o",
@@ -1100,14 +1101,14 @@ if __name__ == "__main__":
                                 instabFreqTicks.append(instabPt[-1])
 
                     # --- Set limits ---
-                    axes[0, 0].set_xticks([5,25] + instabSpeedTicks)
+                    axes[0, 0].set_xticks([5, 25] + instabSpeedTicks)
                     axes[1, 0].set_yticks([10,50, 100, 200] + instabFreqTicks)
 
-                    gmin = -5
+                    gmin = -10
                     gmax = 1
                     axes[0, 0].set_ylim(top=gmax, bottom=gmin)
                     # axes[0, 0].set_xlim(left=160, right=175)
-                    axes[1, 0].set_ylim(top=20, bottom=0)
+                    axes[1, 0].set_ylim(top=60, bottom=0)
                     axes[1, 1].set_xlim(left=gmin, right=gmax)
 
                     dosave = not not fname

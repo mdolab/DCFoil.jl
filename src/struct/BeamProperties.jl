@@ -155,7 +155,9 @@ end
 
 function analyze_sectionVAM(tragflügelCoords, θf, mode="beam")
     """
-    Apply the variational asymptotic method (VAM) for the Vlasov beam based on Hodges 2006"""
+    Apply the variational asymptotic method (VAM) for the Vlasov beam based on Hodges 2006
+        CURRENTLY IN UTILITY CODE REPO
+    """
     if uppercase(mode) == "BEAM"
         # Beam-specific analysis
     elseif uppercase(mode) == "PLATE"
