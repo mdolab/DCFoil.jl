@@ -2,7 +2,7 @@
 """
 @File          :   xdsm.py
 @Date created  :   2025/01/16
-@Last modified :   2025/01/16
+@Last modified :   2026-06-23
 @Author        :   Galen Ng
 @Desc          :   XDSM diagram
 """
@@ -108,15 +108,16 @@ if __name__ == "__main__":
         x.connect("forcedsolver", "RAD", r"\text{Dynamic states}")
         x.connect("opt", "geo", (r"\text{Geometric}", r"\text{variables}"))
         x.connect("opt", "solver", (r"\text{Flow \&}", r"\text{structural}", r"\text{variables}"))
-        x.connect("solver", "forcedsolver", (r"\text{Linearized quantities}", r"\text{about static equilbrium}"))
-        x.connect("solver", "fluttersolver", (r"\text{Linearized quantities}", r"\text{about static equilbrium}"))
+        x.connect("solver", "forcedsolver", (r"\text{Linearized}", r"\text{quantities}", r"\text{about static}", r"\text{equilbrium}"))
+        x.connect("solver", "fluttersolver", (r"\text{Linearized}", r"\text{quantities}", r"\text{about static}", r"\text{equilbrium}"))
+        # x.connect("solver", "fluttersolver", (r"\text{Linearized quantities}", r"\text{about static equilbrium}"))
         x.connect("opt", "forcedsolver", (r"\text{Flow \&}", r"\text{structural}", r"\text{variables}"))
         x.connect("opt", "fluttersolver", (r"\text{Flow \&}", r"\text{structural}", r"\text{variables}"))
         x.connect("solver", "F", (r"\text{Static hydroelastic}", r"\text{functions}"))
         x.connect("fluttersolver", "F", (r"\text{Flutter}", r"\text{function}"))
-        x.connect("forcedsolver", "F", (r"\text{Forced vibration}", r"\text{functions}"))
-        x.connect("CAD", "G", (r"\text{Static hydroelastic}", r"\text{function derivatives}"))
-        x.connect("RAD", "G", (r"\text{Dynamic hydroelastic}", r"\text{function derivatives}"))
+        x.connect("forcedsolver", "F", (r"\text{Forced}", r"\text{vibration}", r"\text{functions}"))
+        x.connect("CAD", "G", (r"\text{Static}", r"\text{hydroelastic}", r"\text{function}", r"\text{derivatives}"))
+        x.connect("RAD", "G", (r"\text{Dynamic}", r"\text{hydroelastic}", r"\text{function}", r"\text{derivatives}"))
         x.connect("F", "opt", (r"\text{Objectives}", r"\text{\& constraints}"))
         x.connect("G", "opt", (r"\text{Derivatives of}", r"\text{objectives}", r"\text{\& constraints}"))
 

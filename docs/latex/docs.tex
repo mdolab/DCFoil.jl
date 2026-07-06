@@ -550,7 +550,7 @@ This is nice because you can precompute $\mb{A}$ and then solve for many flow co
 The Green function of a 2D vortex placed at $c = a + bi$ with wave number $K = \omega^2/g$ is
 \beq
 \begin{aligned}
-	f(z, t) & =
+	f(z;c) & =
 	\frac{\Gamma}{2 \pi i} \log (z-c)
 	-	\frac{\Gamma}{2 \pi i} \log (z-\widebar{c})
 	+ \frac{2\Gamma}{\pi i} \mathrm{PV} \int_0^{\infty} \frac{\mathrm{e}^{-i k(z-\bar{c})}}{k- K } \diff k
@@ -559,25 +559,240 @@ The Green function of a 2D vortex placed at $c = a + bi$ with wave number $K = \
 \end{aligned}
 \eeq
 where the form from \citet[Eq. 13.43]{Wehausen1960} is simplified to the vortex case.
+This function is evaluated at $z$ for a singularity located at $c$.
 The first two terms satisfy near field properties, the third, the linearized free surface boundary condition, and the fourth, the radiation condition (I'm pretty sure of this).
 
 The equation above is difficult to solve numerically so a derivation by \citet{Chen2012} introduced the dissipative Green function approach.
-The dissipative, free-surface, vortex Green function is evaluated as
+The dissipative, free-surface, vortex Green function $f$ is evaluated as
 \beq
-f(\zeta) = i \left(\ln \left(\zeta - z\right)
+\mcal{G}^s(\zeta;z) & =  \ln \left(\zeta - z\right)
++ \frac{i \nu -\mu}{i \nu + \mu} \ln \left(\zeta - \widebar{z}\right)
++ \frac{2i\nu}{i \nu + \mu} \int_{0}^{\infty}  \frac{e^{-ik\left(\zeta - \widebar{z} \right)}}{k-\nu + i\mu}\diff k
+\\
+\mcal{G}^v(\zeta;z) & =  i \left(\ln \left(\zeta - z\right)
 - \frac{i \nu -\mu}{i \nu + \mu} \ln \left(\zeta - \widebar{z}\right)
 - \frac{2i\nu}{i \nu + \mu} \int_{0}^{\infty}  \frac{e^{-ik\left(\zeta - \widebar{z} \right)}}{k-\nu + i\mu}\diff k
 \right)
+\\
+f(\zeta;z) & = \Re \left(\mcal{G}^v\left(\zeta;z\right)\right)
 \eeq
-where $\mu$ is a nondimensional dissipation number, $\nu=gc/\Uinf^2$ is the nondimensional wave number
+where $\mu$ is a nondimensional dissipation number, $\nu=gc/\Uinf^2$ is the nondimensional wave number, and $k$ are the wave numbers across which to integrate.
 
-The linear system solved is for the tangential velocities $\gamma$ (I don't like this notation) and the total circulation (even though sources are used, but their strengths are known due to the body boundary condition)
+The governing equation solved in the numerical method comes from Green's divergence theorem and the body boundary condition.
 \beq
-{a_{ij} \gamma_j}
+\Re\left(
+\int_{S_b}^{} \pp{\phi(z)}{t} \pp{\mcal{G}^v(\zeta;z)}{\zeta} \diff s_z
+- \Gamma \pp{\mcal{G}^v(\zeta;z_T)}{\zeta}
+\right)
+=
+\Re\left(
+\int_{S_b}^{} U \Re(n) \pp{\mcal{G}^s(\zeta;z)}{\zeta} \diff s_z
+\right)
+\eeq
+
+The linear system solved is for the tangential velocities $\gamma=\partial\phi/\partial t$ (I don't like this notation) and the total circulation
+\beq
+\sum_{j=1}^{N}{a_{ij} \gamma_j}
 - a_{i,N+1} \Gamma  =
 b_i
+\quad \tn{for }
+i=1,...,N
 \eeq
-The vector of unknowns is therefore $[\gamma_1,...,\gamma_N, \Gamma]^\top$
+where
+\beq
+a_{i,j} & = \Re\left(A_{i,j}\right)
+\\
+b_i & = U \Re \left( \sum_{j=1}^{N} \Re\left(i t_j\right)B_{i,j}\right)
+\\
+a_{i,N+1} & = -\Re\left(C_i\right)
+\eeq
+The derivatives of the Green functions come in as (TODO not sure if Bij has typo and should not have negative sign. Probably check these terms)
+\beq
+A_{i,j} = -i \widebar{t}_j \ln \left(\frac{\zeta_i - z_{j+1}}{\zeta_i - z_j}\right)
++ i t_j \frac{i\nu - \mu}{i\nu + \mu}\ln \left(\frac{\zeta_i-\widebar{z}_{j+1}}{\zeta_i - \widebar{z}_j}\right)
+- \frac{2t_j \nu}{i\nu + \mu} \int_{0}^{+ \infty} \frac{e^{-i k \left(\zeta_i - \widebar{z}_{j+1} \right)} - e^{-ik\left(\zeta_i - \widebar{z}_j\right)} }{k-\nu + i \mu} \diff k
+\\
+B_{i,j} = -\widebar{t}_j \ln \left(\frac{\zeta_i - z_{j+1}}{\zeta_i - z_j}\right)
++  t_j \frac{i\nu - \mu}{i\nu + \mu}\ln \left(\frac{\zeta_i-\widebar{z}_{j+1}}{\zeta_i - \widebar{z}_j}\right)
++ i \frac{2t_j \nu}{i\nu + \mu} \int_{0}^{+ \infty} \frac{e^{-i k \left(\zeta_i - \widebar{z}_{j+1} \right)} - e^{-ik\left(\zeta_i - \widebar{z}_j\right)} }{k-\nu + i \mu} \diff k
+\\
+C_i = i \left(
+\frac{1}{\zeta_i - z_1} + \frac{1}{\zeta_i - \widebar{z}_1} + 2i\nu \int_{0}^{\infty}
+\frac{e^{-ik \left(\zeta_i - \widebar{z}_1\right)}}{k- \nu + i\mu} k \diff k
+\right)
+\eeq
+I THINK THEY ARE ACTUALLY
+\beq
+A_{i,j}=\int_0^{\ell_j} \pp{\mcal{G}^v(\zeta_i; z_j + s t_j)}{\zeta} \diff s
+=
+TODO
+\eeq
+The vector of unknowns is therefore $[\gamma_1,...,\gamma_N, \Gamma]^\top$.
+This is an underdetermined system with $N+1$ unknowns so we need one more equation from the Kutta condition.
+The Kutta condition tells us the tangential velocities at the trailing edge are continuous.
+\beq
+\sum_{j=1}^{N} a_{N+1,j} \gamma_j= b_{N+1}
+\eeq
+where
+\beq
+a_{N+1,1} & = a_{N+1,N} = 1
+\\
+b_{N+1} & = -U \Re(t_1) - U \Re(t_N)
+\eeq
+The overall $(N+1)\times (N+1)$ linear system is thus
+\beq
+\begin{bmatrix}
+	a_{11}  & \cdots &        &   & a_{1,N} & a_{1,N+1} \\
+	\vdots  & \ddots                                    \\
+	a_{N,1} & \cdots &        &   & a_{N,N} & a_{N,N+1} \\
+	1       & 0      & \cdots & 0 & 1       & 0
+\end{bmatrix}
+\left\{
+\begin{matrix}
+	\gamma_1 \\
+	\vdots   \\
+	\gamma_N \\
+	\Gamma
+\end{matrix}
+\right\}
+=
+\left\{
+\begin{matrix}
+	b_1    \\
+	\vdots \\
+	b_N    \\
+	b_{N+1}
+\end{matrix}
+\right\}
+\eeq
+
+The dipole approach in \citet{Chen2012a} seems to give a closer physically accurate result so \citet{Chen2012} must have made a typo.
+The total potential is the sum of free stream and a perturbation potential
+\beq
+\Phi = Ux + \phi
+\eeq
+The overall doublet boundary integral equation is
+\beq
+2\pi \Phi + \lim_{\hat{\zeta}\rightarrow \zeta} \int_{S_b}^{} \Phi(z) n \cdot \nabla G(\hat{\zeta},z) \diff s
+- \left(\Phi_+(z_T) - \Phi_-(z_T)\right)
+\\
+\Re\left(i\ln (\zeta - z_T) - i \mcal{F}(\zeta - \widebar{z}_T)
+-i \ln(-t_T)
++ i \frac{i\nu - \mu}{i\nu + \mu} \ln\left(-\widebar{t}_T\right)
+\right)
+=
+2\pi U \xi
+\eeq
+The holomorphic function $\mcal{F}(\zeta-\bar{z})$ is
+\beq
+\mathcal{F}(\zeta-\bar{z})
+=
+\frac{\mathrm{i} \nu-\mu}{\mathrm{i} \nu+\mu} \ln (\zeta-\bar{z})+\frac{2 \mathrm{i} \nu}{\mathrm{i} \nu+\mu}
+\int_0^{+\infty} \frac{\mathrm{e}^{-\mathrm{i} k(\zeta-\bar{z})}}{k-\nu+\mathrm{i} \mu} \mathrm{~d} k
+\eeq
+and the Green function is
+\beq
+G = \Re\left( \ln \left(\zeta-z\right) + \mcal{F}\left(\zeta-\widebar{z}\right)\right)
+\eeq
+When discretized into $N$ panels, it becomes
+\beq
+2\pi \Phi_i + \sum_{j=1}^{N}\Phi_j A_{ij} +
+\left(\Phi_+(z_T) - \Phi_-(z_T)\right)A_i
+=
+2\pi U \xi_i
+\eeq
+or
+\beq
+2\pi \Phi_i + \sum_{j=1}^{N}\Phi_j A_{ij} +
+\left(\Phi_N - \Phi_1\right)A_i
+=
+2\pi U \xi_i
+\eeq
+where
+\beq
+A_{ij}
+&=
+\Re\left(
+\int_j n_j \cdot \nabla G \diff s
+\right)
+=
+\Re
+\left(
+\int_{j}^{}
+\left(
+	-n_j \frac{1}{\zeta-z}
+	-\widebar{n}_j
+	\pp{\mcal{F}\left(\zeta-\widebar{z} \right)}{\widebar{z}}
+	\right)
+\diff s
+\right)
+\\
+&=
+\Re
+\left(
+\int_j - i \frac{1}{\zeta_i - z} \diff z
+-
+\int_j
+-i
+\left(\frac{i \nu - \mu}{i\nu + \mu}\frac{-1}{\zeta - \widebar{z}}
+	+ \frac{- 2 \nu}{i \nu + \mu}
+	\int_{0}^{+\infty}
+	\frac{ke^{-i k(\zeta - \bar{z})}}{k - \nu+\mathrm{i} \mu}
+	\diff k
+	\right)
+\diff \widebar{z}
+\right)
+\\
+&=
+\Re \left(
+i\ln\left(\frac{\zeta_i - z_{j+1}}{\zeta_i - z_j}\right)
++
+i\left(
+	\frac{i\nu - \mu}{i\nu + \mu}
+	\ln \left(\frac{\zeta_i - \widebar{z}_{j+1}}{\zeta_i - \widebar{z}_j}
+	\right)
+	+\frac{2\nu}{i\left(i\nu + \mu\right)}
+	\int_{0}^{+\infty}
+	\frac{e^{-ik \left(\zeta-\widebar{z}_{j+1}\right)} - e^{-ik \left(\zeta-\widebar{z}_{j}\right)} }{ k-\nu + i\mu } \diff k
+	\right)
+\right)
+\\
+&=
+\Re \left(
+i\ln\left(\frac{\zeta_i - z_{j+1}}{\zeta_i - z_j}\right)
++i\frac{i\nu - \mu}{i\nu + \mu}
+\ln \left(\frac{\zeta_i - \widebar{z}_{j+1}}{\zeta_i - \widebar{z}_j}
+\right)
++\frac{2\nu}{i\nu + \mu}
+\int_{0}^{+\infty}
+\frac{e^{-ik \left(\zeta-\widebar{z}_{j+1}\right)} - e^{-ik \left(\zeta-\widebar{z}_{j}\right)} }{ k-\nu + i\mu } \diff k
+\right)
+\eeq
+Double check the $A_{ij}$ math here because now it is oscillatory again.
+
+We used this identity for straight panels
+\beq
+n_j \diff s = i \diff z
+\\
+\widebar{n}_j \diff s = -i \diff \widebar{z}
+\eeq
+
+This other term is
+\beq
+A_i = \Re
+\left(
+i \ln \left(
+\frac{-t_T}{\zeta_i - z_{N+1}}
+\right)
++
+i \frac{i\nu - \mu}{i\nu + \mu}
+\ln\left(\frac{\zeta_i - \widebar{z}_{N+1}}{-\widebar{t}_T}\right)
++
+i \frac{2i \nu}{i\nu + \mu}\int_{0}^{+\infty}
+\frac{e^{-ik \left(\zeta_i - \widebar{z}_{N+1}\right)}}{k - \nu + i\mu}\diff k
+\right)
+\eeq
+
 \subsubsection{Flap effects}
 The effect of a flap comes from thin airfoil theory and is outlined in \citet{Glauert1924,Glauert1927}.
 A parameter $\phi = \cos^{-1}\left(\frac{c_f}{2} -1\right)$ is a parametric variable for flap angle accounting for the length of flap chord $c_f$
