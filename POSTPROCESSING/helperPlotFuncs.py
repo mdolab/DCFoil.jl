@@ -461,6 +461,7 @@ def plot_forced(
     Swave,
     cm,
     alpha,
+    linestyle,
     elem=1,
     case_num=0,
 ):
@@ -568,7 +569,7 @@ def plot_forced(
         label = "$U_{\infty}=$%.1f m/s" % (flowSpeed)
     else:
         label = None
-    ax.plot(fExtSweep, M_wRAO, color=cm, alpha=alpha, label=label)
+    ax.plot(fExtSweep, M_wRAO, color=cm, alpha=alpha, label=label, ls=linestyle)
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     # ax = axes[1, 0]
@@ -599,7 +600,7 @@ def plot_forced(
 
         M_thetaRAO[ii] = meanDef
 
-    ax.plot(fExtSweep, np.rad2deg(M_thetaRAO), color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, np.rad2deg(M_thetaRAO), color=cm, alpha=alpha, ls=linestyle, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     # ax = axes[1, 1]
@@ -632,7 +633,7 @@ def plot_forced(
     LiftRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynLiftRAO):
         LiftRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, LiftRAO, color=cm, alpha=alpha)
+    ax.plot(fExtSweep, LiftRAO, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     # ax.set_xlabel(xLabel)
 
@@ -641,7 +642,7 @@ def plot_forced(
     argLiftRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynLiftRAO):
         argLiftRAO[ii] = np.angle(entry[0] + 1j * entry[1], deg=True)
-    ax.plot(fExtSweep, argLiftRAO, color=cm, alpha=alpha)
+    ax.plot(fExtSweep, argLiftRAO, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_ylim(-angleLim, angleLim)
 
@@ -650,7 +651,7 @@ def plot_forced(
     MomRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynMomentRAO):
         MomRAO[ii] = np.sqrt(entry[0] ** 2 + entry[1] ** 2)
-    ax.plot(fExtSweep, MomRAO, color=cm, alpha=alpha)
+    ax.plot(fExtSweep, MomRAO, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 3]
@@ -658,7 +659,7 @@ def plot_forced(
     argMomRAO = np.zeros_like(fExtSweep)
     for ii, entry in enumerate(dynMomentRAO):
         argMomRAO[ii] = np.angle(entry[0] + 1j * entry[1], deg=True)
-    ax.plot(fExtSweep, argMomRAO, color=cm, alpha=alpha)
+    ax.plot(fExtSweep, argMomRAO, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(yLabel, rotation="horizontal", ha="right", va="center")
     ax.set_ylim(-angleLim, angleLim)
 
@@ -683,7 +684,7 @@ def plot_forced(
 
         M_wtipRAO[ii] = np.sqrt(bendingRAO[-1][0] ** 2 + bendingRAO[-1][1] ** 2)
 
-    ax.plot(fExtSweep, M_wtipRAO, color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, M_wtipRAO, color=cm, alpha=alpha, ls=linestyle, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[-1, 3]
@@ -695,7 +696,7 @@ def plot_forced(
 
         M_thetatipRAO[ii] = np.sqrt(twistingRAO[-1][0] ** 2 + twistingRAO[-1][1] ** 2)
 
-    ax.plot(fExtSweep, np.rad2deg(M_thetatipRAO), color=cm, alpha=alpha, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
+    ax.plot(fExtSweep, np.rad2deg(M_thetatipRAO), color=cm, alpha=alpha, ls=linestyle, label="$U_{\infty}=$%.1f m/s" % (flowSpeed))
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     # ************************************************
@@ -703,17 +704,17 @@ def plot_forced(
     # ************************************************
     ax = axes[-1, 0]
     ylabel = r"$S^+(\omega)$"+"\n"+"[m$^2$-s]"
-    ax.plot(fExtSweep, Swave, color=cm, alpha=alpha )
+    ax.plot(fExtSweep, Swave, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 0]
     ylabel = r"$S_{\overline{w}\overline{w}}^+(\omega)$" + "\n"+ r" [m$^2$-s]"
-    ax.plot(fExtSweep, Swave*M_wRAO**2, color=cm, alpha=alpha)
+    ax.plot(fExtSweep, Swave*M_wRAO**2, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
 
     ax = axes[1, 1]
     ylabel = r"$S_{\overline{\vartheta}\overline{\vartheta}}^+(\omega)$"+"\n"+r"[$\circ^2$-s]"
-    ax.plot(fExtSweep, Swave*np.rad2deg(M_thetaRAO)**2, color=cm, alpha=alpha)
+    ax.plot(fExtSweep, Swave*np.rad2deg(M_thetaRAO)**2, color=cm, alpha=alpha, ls=linestyle)
     ax.set_ylabel(ylabel, rotation="horizontal", ha="right", va="center")
     for ax in axes[1, :].flatten():
         ax.set_xlabel(xLabel)

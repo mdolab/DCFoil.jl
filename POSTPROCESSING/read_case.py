@@ -1246,6 +1246,7 @@ if __name__ == "__main__":
                         Swave,
                         cm[jj],
                         alphas[ii],
+                        linestyles[ii],
                         case_num=ii,
                     )
 
