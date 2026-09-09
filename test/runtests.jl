@@ -32,6 +32,7 @@ nNodesStrut = 2
     @test test_COMP2_stiff() <= 5e-5 # stiffness matrix
     @test test_COMP2_mass() <= 5e-5 # mass matrix
     @test test_FECOMP2() <= 1e-1
+    @test test_FECOMP2_freeFree() <= 1e-6 # free-free beam with inertial relief
 end
 
 @testset "Test hydro" begin

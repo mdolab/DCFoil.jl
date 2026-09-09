@@ -396,7 +396,7 @@ function compute_elem_mass(
     mb = mᵉ * lᵉ / 420
     mt = iᵉ * lᵉ / 6
     ax = 2 * mᵉ * lᵉ / 6
-    bx = mᵉ * lᵉ^2 / 6
+    bx = mᵉ * lᵉ / 6 # consistent axial mass off-diagonal; the earlier mᵉ lᵉ² / 6 had units of kg-m and broke the rigid surge mass
     az = 181 * mᵉ * lᵉ / 462
     bz = 8 * mᵉ * lᵉ / 21
     cz = 5 * mᵉ * lᵉ / 42
