@@ -295,7 +295,74 @@ where $\omega_{\tn{max}}$ is the highest undamped, in-vacuum, natural frequency 
 A few options are available but we typically use the stiffness proportional method ($\alpha=0$) because response frequencies in water tend to be on the lower side;
 we want to avoid artificial overdamping of critical hydroelastic modes with $\omega < \omega_{\tn{max}}$.
 Structural damping is typically small compared to hydrodynamic damping so its main role is as a margin of stability if fluid damping is close to zero, thus accuracy of the structural damping model is not critical.
-% 
+%
+\subsubsection{Boundary conditions and inertial relief}
+%
+The default boundary condition is a clamped root (\texttt{"clamped"}), where the rows and columns of the root node DOFs are deleted from the assembled system before solving.
+A floating hull girder has no support, so we also allow a free--free beam (\texttt{"free-free"}, set with the appendage option \texttt{boundaryCondition}) where no DOFs are deleted.
+The stiffness matrix $\mbf{K}_s$ is then singular with a six-dimensional null space of rigid-body motions, and we solve the static problem with the inertial relief method.
+The applied loads accelerate the body as a rigid body, the resulting inertial loads balance the applied loads, and only the self-equilibrated remainder deforms the structure (\Cref{fig:InertialRelief}).
+\begin{figure}[htb!]
+	\centering
+	\includegraphics[width=\linewidth]{inertialrelief.pdf}
+	\caption{\label{fig:InertialRelief}
+	Inertial relief for a free--free beam under a midship point load: 
+	(a) the applied load on the unsupported beam, 
+	(b) the rigid-body acceleration and the inertial load that balances the applied load, and 
+	(c) the self-equilibrated load deforms the beam about the mean axis.
+	}
+\end{figure}
+
+The rigid-body modes $\mbf{\Phi}_r \in \mathbb{R}^{n \times 6}$ are unit translations along and unit rotations about the beam local axes $\mbf{n}_k = \mbf{T}^{\top} \mbf{e}_k$ (expressed in global coordinates) through a reference point $\mbf{r}_0$, which defaults to the node centroid.
+For node $i$ at $\mbf{r}_i$, the translational DOFs $\delta \mbf{u}_i$ and rotational DOFs $\delta \mbs{\vartheta}_i = [\phi, \theta, \psi]^{\top}$ are
+\be
+& \delta \mbf{u}_i = \mbf{n}_k, & \delta \mbs{\vartheta}_i = \mbf{0} \qquad \tn{(translation along } \mbf{n}_k \tn{)}
+\\
+& \delta \mbf{u}_i = \mbf{n}_k \times \left(\mbf{r}_i - \mbf{r}_0\right), & \delta \mbs{\vartheta}_i = s_k \mbf{n}_k \qquad \tn{(rotation about } \mbf{n}_k \tn{)}
+\ee
+with $s = (1, -1, 1)$ and zero higher-order DOFs $\phi', \theta', \psi'$.
+The sign $s_2 = -1$ arises because $\theta = \partial w / \partial x$ and $\psi = \partial v / \partial x$ are slopes rather than rotation angles, so a rigid rotation about the local $y$-axis is the negative of $\theta$.
+The beam axes are taken from the first element, so the modes are exact for straight beams such as hull girders.
+The unit test checks that $\mbf{K}_s \mbf{\Phi}_r = \mbf{0}$.
+
+Writing the displacements as a rigid-body motion plus an elastic deformation, $\mbf{u} = \mbf{\Phi}_r \mbf{q}_r + \mbf{u}_e$, and neglecting the elastic accelerations in $\mbf{M}_s \ddot{\mbf{u}} + \mbf{K}_s \mbf{u} = \mbf{f}$, premultiplication by $\mbf{\Phi}_r^{\top}$ gives the rigid-body equations of motion
+\be
+\mbf{M}_{rr} \ddot{\mbf{q}}_r = \mbf{\Phi}_r^{\top} \mbf{f}, \qquad \mbf{M}_{rr} = \mbf{\Phi}_r^{\top} \mbf{M}_s \mbf{\Phi}_r
+\ee
+where the $6 \times 6$ rigid-body mass matrix contains the total mass, the first moments of mass about $\mbf{r}_0$, and the inertia tensor.
+The balanced load $\mbf{f} - \mbf{M}_s \mbf{\Phi}_r \ddot{\mbf{q}}_r$ is orthogonal to the rigid-body modes and therefore lies in the range of $\mbf{K}_s$, but the elastic deformation is only unique up to a rigid-body motion.
+We remove this ambiguity with the mean-axis constraint $\mbf{\Phi}_r^{\top} \mbf{M}_s \mbf{u}_e = \mbf{0}$, which states that the elastic deformation carries no linear or angular momentum \citep{Palacios2023a}.
+Both conditions are enforced at once by the bordered system
+\be
+\label{eqn:InertialRelief}
+\begin{bmatrix}
+\mbf{K}_s & \mbf{M}_s \mbf{\Phi}_r \\
+\mbf{\Phi}_r^{\top} \mbf{M}_s & \mbf{0}
+\end{bmatrix}
+\begin{Bmatrix}
+\mbf{u}_e \\ \ddot{\mbf{q}}_r
+\end{Bmatrix}
+=
+\begin{Bmatrix}
+\mbf{f} \\ \mbf{0}
+\end{Bmatrix}
+\ee
+where the Lagrange multipliers are the rigid-body accelerations.
+The bordered matrix is nonsingular when $\mbf{\Phi}_r$ spans the null space of $\mbf{K}_s$ and $\mbf{M}_s$ is positive definite.
+This is the automatic inertial relief of commercial finite element codes (\texttt{INREL=-2} in Nastran) and requires no user-selected support DOFs.
+% TODO: cite Wright and Cooper, Introduction to Aircraft Aeroelasticity and Loads, for the classical inertial relief derivation once a bib entry exists
+
+Gravity is applied as a consistent inertial load
+\be
+\mbf{f}_g = \mbf{M}_s \mbf{a}_g
+\ee
+where $\mbf{a}_g$ holds the gravitational acceleration on the translational DOFs of every node and zeros elsewhere, so the nodal forces and moments are consistent with the mass distribution.
+
+The implementation is verified on a uniform floating beam of mass per length $m$ whose weight $P = m g L$ is balanced by a concentrated buoyancy force at midship, i.e., the hogging condition on a wave crest.
+Each half of the beam is a cantilever from midship under the uniform inertial load $P/L$, so the closed-form relative deflection is $w_{\tn{mid}} - w_{\tn{end}} = P L^3 / (128 EI)$ and the mean-axis constraint gives $w_{\tn{mid}} = P L^3 / (320 EI)$ and $w_{\tn{end}} = -3 P L^3 / (640 EI)$.
+Under gravity alone the beam falls freely with $\ddot{\mbf{q}}_r = \mbf{g}$ and zero elastic deformation.
+The hydroelastic solvers currently assume the clamped boundary condition; extending them to the free--free case adds the six rigid-body unknowns and constraint rows of Equation~\eqref{eqn:InertialRelief} to the residual.
+%
 \subsection{Hydrodynamic loads}
 % 
 \subsubsection{Glauert's steady lifting line}
@@ -2706,7 +2773,10 @@ You will need to set this up in a Linux environment because of the above depende
 
 \subsection{Testing}
 
-Under the `./test/` directory, run \texttt{run\_tests.jl}
+Under the `./test/` directory, run
+```
+runtests.jl
+```
 
 \subsection{Debugging}
 

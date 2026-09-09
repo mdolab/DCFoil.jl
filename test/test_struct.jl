@@ -1000,6 +1000,191 @@ function test_FECOMP2()
     return rel_err
 end
 
+function test_FECOMP2_freeFree()
+    """
+    Test the free-free beam with inertial relief on a floating uniform hull girder
+    Weight comes from the consistent mass matrix and buoyancy is a point force at midship (hogging on a wave crest)
+    Reference solutions are closed-form Euler-Bernoulli results
+    """
+    nNodes = 21 # odd so a midship node exists
+    nNodesStrut = 2
+    L = 1.0 # beam length [m]
+    g = 9.81 # gravity [m/s²]
+
+    appendageParams = Dict(
+        "alfa0" => 0.0, # initial angle of attack [deg]
+        "sweep" => 0.0, # sweep angle [rad]
+        "zeta" => 0.04, # modal damping ratio at first 2 modes
+        "c" => 1 * ones(nNodes), # chord length [m]
+        "s" => L, # semispan [m]
+        "ab" => zeros(nNodes), # dist from midchord to EA [m]
+        "abar" => zeros(nNodes), # nondim dist from midchord to EA [-]
+        "toc" => 1.0 * ones(nNodes), # thickness-to-chord ratio
+        "x_ab" => zeros(nNodes), # static imbalance [m]
+        "x_a" => zeros(nNodes), # nondim static imbalance []
+        "theta_f" => 0.0, # fiber angle global [rad], zero so there is no bend-twist coupling
+        # --- Strut vars ---
+        "rake" => 0.0,
+        "depth0" => 0.1,
+        "beta" => 0.0, # yaw angle wrt flow [deg]
+        "s_strut" => 0.4,
+        "c_strut" => 0.1 * ones(nNodesStrut), # chord length [m]
+        "toc_strut" => 0.12 * ones(nNodesStrut), # thickness-to-chord ratio
+        "ab_strut" => 0 * ones(nNodesStrut), # dist from midchord to EA [m]
+        "x_ab_strut" => 0 * ones(nNodesStrut), # static imbalance [m]
+        "theta_f_strut" => 0.0, # fiber angle global [rad]
+    )
+    hullOptions = Dict(
+        "material" => "test-comp", # preselect from material library
+        "config" => "wing",
+        "boundaryCondition" => "free-free",
+        "nNodes" => nNodes,
+        "nNodeStrut" => nNodesStrut,
+        "xMount" => 0.0,
+    )
+    solverOptions = Dict(
+        "appendageList" => [hullOptions],
+        "Uinf" => 5.0, # free stream velocity [m/s]
+        "rhof" => 1000.0, # fluid density [kg/m³]
+        "use_freeSurface" => false,
+        "run_body" => false,
+        "debug" => false,
+        "use_nlll" => false,
+        "fRange" => [0.0, 10.0],
+        "uRange" => [1.0, 2.0],
+    )
+
+    # Straight beam along the global y-axis so the local z-axis is the global z-axis
+    LECoords::Matrix = transpose(hcat(-ones(10) * 0.5, LinRange(0, L, 10), zeros(10)))
+    TECoords::Matrix = transpose(hcat(ones(10) * 0.5, LinRange(0, L, 10), zeros(10)))
+    nodeConn = zeros(Int64, 2, 9)
+    for ii in 1:9
+        nodeConn[1, ii] = ii
+        nodeConn[2, ii] = ii + 1
+    end
+
+    globalK, globalM, globalF, globalDOFBlankingList, FEMESH, FOIL, STRUT = FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], hullOptions, solverOptions)
+    if !isempty(globalDOFBlankingList)
+        error("free-free boundary condition should not blank any DOFs")
+    end
+    # Concrete types for the eigenvalue solve
+    K = Float64.(globalK)
+    M = Float64.(globalM)
+
+    EI = FOIL.EIₛ[1] # uniform section
+    ms = FOIL.mₛ[1]
+    weight = ms * g * L
+    wScale = weight * L^3 / EI # deflection scale for normalizing the "should be zero" checks
+
+    rigidBodyModes = Float64.(FEMMethods.compute_rigidBodyModes(FEMESH; appendageOptions=hullOptions))
+    Mrr = transpose(rigidBodyModes) * M * rigidBodyModes
+    println("rigid body mass matrix diagonal = \n", diag(Mrr))
+
+    relErrors = Float64[]
+
+    # --- Rigid body modes span the null space of the stiffness matrix (checks the slope sign convention) ---
+    push!(relErrors, norm(K * rigidBodyModes) / norm(K))
+
+    # --- Surge and heave entries of the rigid body mass matrix are the total mass ---
+    push!(relErrors, abs(Mrr[1, 1] - ms * L) / (ms * L))
+    push!(relErrors, abs(Mrr[3, 3] - ms * L) / (ms * L))
+
+    # ---------------------------
+    #   Free fall: gravity only
+    # ---------------------------
+    gravityLoads = FEMMethods.compute_gravityLoads(M, [0.0, 0.0, -g])
+    uFall, accFall = FEMMethods.solve_freeFreeStructure(K, M, gravityLoads, rigidBodyModes)
+    println("free fall accelerations = \n", accFall)
+    push!(relErrors, abs(accFall[3] + g) / g) # heave acceleration is -g
+    push!(relErrors, norm(accFall[[1, 2, 4, 5, 6]]) / g) # no other rigid motion
+    push!(relErrors, norm(uFall) / wScale) # a uniform acceleration field does not deform the beam
+
+    # ---------------------------
+    #   Hogging: weight balanced by midship buoyancy
+    # ---------------------------
+    midNode = (nNodes + 1) ÷ 2
+    buoyancyLoads = zeros(length(gravityLoads))
+    buoyancyLoads[(midNode-1)*NDOF+WIND] = weight
+    uHog, accHog = FEMMethods.solve_freeFreeStructure(K, M, gravityLoads + buoyancyLoads, rigidBodyModes)
+    wMid = uHog[(midNode-1)*NDOF+WIND]
+    wBow = uHog[WIND]
+    wStern = uHog[(nNodes-1)*NDOF+WIND]
+    println("hogging: w_mid = \n", wMid, " [m], w_ends = \n", wBow, " ", wStern, " [m]")
+    # Each half is a cantilever from midship under the uniform inertial load q = P/L so the relative deflection is q(L/2)^4/(8EI)
+    # The mean-axis constraint removes the mass-weighted mean deflection q(L/2)^4/(20EI)
+    refRelative = weight * L^3 / (128 * EI)
+    refMid = weight * L^3 / (320 * EI)
+    refEnd = -3 * weight * L^3 / (640 * EI)
+    push!(relErrors, norm(accHog) / g) # balanced load has no rigid acceleration
+    push!(relErrors, abs((wMid - wBow) - refRelative) / refRelative)
+    push!(relErrors, abs(wMid - refMid) / refMid)
+    push!(relErrors, abs(wBow - refEnd) / abs(refEnd))
+    push!(relErrors, abs(wStern - refEnd) / abs(refEnd))
+    push!(relErrors, norm(transpose(rigidBodyModes) * M * uHog) / (ms * L * wScale)) # mean-axis constraint
+
+    # ---------------------------
+    #   Free-free bending natural frequency and mode shape
+    # ---------------------------
+    eigenSolution = eigen(Symmetric(K), Symmetric(M))
+    perm = sortperm(eigenSolution.values)
+    omegaSquared = eigenSolution.values[perm]
+    modeShapes = eigenSolution.vectors[:, perm]
+    βL = 4.73004074 # first free-free bending root of cos(βL)cosh(βL) = 1
+    omegaBending = βL^2 * sqrt(EI / (ms * L^4)) # first free-free bending mode
+    println("free-free ω² (first 15 modes) =")
+    for (ii, w) in enumerate(omegaSquared[1:15])
+        println("mode $(ii):\t", w, "\trad^2/sec^2")
+    end
+    println("analytic bending ω² = \n", omegaBending^2)
+
+    # --- Analytic first free-free bending mode shape at the nodes ---
+    # φ(x) = cosh(βx) + cos(βx) - σ[sinh(βx) + sin(βx)], σ = [cosh(βL) - cos(βL)] / [sinh(βL) - sin(βL)]
+    # (Blevins, Formulas for Natural Frequency and Mode Shape, Table 8-1, free-free beam)
+    xNodes = FEMESH.mesh[:, FEMMethods.YDIM] # beam is along global y
+    σ = (cosh(βL) - cos(βL)) / (sinh(βL) - sin(βL))
+    ξ = βL .* xNodes ./ L
+    bendingShape = cosh.(ξ) .+ cos.(ξ) .- σ .* (sinh.(ξ) .+ sin.(ξ))
+    bendingShape ./= norm(bendingShape)
+
+    # --- Identify the bending modes by frequency, not index ---
+    # Torsion and axial modes come before bending. The square section has EI == EIIP so the first
+    # chordwise and flapwise bending modes are a degenerate pair and any rotation of the two eigenvectors
+    # within that pair is a valid eigen-solution, so every check below is invariant to that mixing
+    bendingModes = findall(abs.(sqrt.(abs.(omegaSquared)) .- omegaBending) .< 1e-3 * omegaBending)
+    if length(bendingModes) != 2
+        error("expected two bending modes (chordwise and flapwise) near ω = $(omegaBending) rad/s but found modes $(bendingModes)")
+    end
+    println("bending modes are ", bendingModes)
+
+    # The beam is along global y so UIND is the chordwise, VIND the axial, and WIND the flapwise translation
+    planeAmplitudes = zeros(2, 2) # rows are the two modes, columns are the (chordwise, flapwise) modal amplitudes
+    for (jj, mode) in enumerate(bendingModes)
+        ϕ = modeShapes[:, mode]
+        uChord = ϕ[UIND:NDOF:end]
+        vAxial = ϕ[VIND:NDOF:end]
+        wFlap = ϕ[WIND:NDOF:end]
+        twist = ϕ[ΘIND:NDOF:end] # rotation about the beam axis
+        amplitude = sqrt(norm(uChord)^2 + norm(wFlap)^2)
+        planeAmplitudes[jj, :] = [dot(uChord, bendingShape), dot(wFlap, bendingShape)]
+        println("mode $(mode): chordwise amplitude = ", planeAmplitudes[jj, 1], ", flapwise amplitude = ", planeAmplitudes[jj, 2], ", twist content = ", norm(twist) / amplitude, " [rad/m]")
+
+        push!(relErrors, abs(sqrt(omegaSquared[mode]) - omegaBending) / omegaBending)
+        # The translations in each bending plane are a multiple of the analytic free-free bending shape
+        push!(relErrors, norm(wFlap - dot(wFlap, bendingShape) * bendingShape) / amplitude)
+        push!(relErrors, norm(uChord - dot(uChord, bendingShape) * bendingShape) / amplitude)
+        push!(relErrors, norm(vAxial) / amplitude) # no axial motion in a bending mode
+    end
+    # The pair spans both bending planes rather than being two copies of one plane. The mass-normalized
+    # eigenvectors see the same mass per length in u and w so the amplitude matrix is a scaled rotation
+    # with equal singular values
+    singularValues = svdvals(planeAmplitudes)
+    push!(relErrors, abs(1 - singularValues[2] / singularValues[1]))
+
+    println("free-free relative errors = ", relErrors)
+
+    return maximum(relErrors)
+end
+
 function test_fullwing(DVDict, solverOptions)
 
     testAngle = 0.0 # [deg] angle of rotation from default (NONZERO WORKS  )
