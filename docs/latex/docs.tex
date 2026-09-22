@@ -15,6 +15,7 @@
 \usepackage[printonlyused]{acronym} % provides \acronym 
 \usepackage{enumitem}
 \usepackage{listings}
+\usepackage{float}
 
 \graphicspath{{../figures/}}
 
@@ -267,14 +268,14 @@ The sectional mass properties are
 \be
 & m_s & = \int_{0}^{c} \rho \left(Z_u - Z_\ell \right)  dx \doteq \tn{kg-m}^{-1}
 \\
-& I_s & = \int_{0}^{c}\int_{0}^{t_{\tn{max}}} r^2 dm
+& I_s & = \int_{0}^{c}\int_{0}^{t_{\tn{max}}} r^2 \diff m
 \ee
 where we evaluate the integrals numerically.
 
 The sectional geometric properties are\footnote{The torsional constant is NOT the same as the polar moment}
 \be
-& \bar{z} & =\frac{1}{A} \int_0^c \frac{1}{2}\left[Z_u^2-Z_{\ell}^2\right] d x \\
-& I & =\int_0^c \frac{1}{3}\left[\left(Z_u-\bar{z}\right)^3-\left(Z_{\ell}-\bar{z}\right)^3\right] d x \\
+& \bar{z} & =\frac{1}{A} \int_0^c \frac{1}{2}\left[Z_u^2-Z_{\ell}^2\right] \diff x \\
+& I & =\int_0^c \frac{1}{3}\left[\left(Z_u-\bar{z}\right)^3-\left(Z_{\ell}-\bar{z}\right)^3\right] \diff x \\
 & J &= \int \\
 \ee
 and torsional warping resistance due to tension from \citet{LOTTATI1985} is
@@ -283,7 +284,7 @@ S = \int_{-b}^b D_{22} x_a^2 d x, \quad\tn{where } x_a = x - ba
 \ee
 \subsubsection{Structural damping}
 % 
-We use a proportional (Rayleigh) damping model, which is commonly used for multi-DOF structures because of mathematical conveniences
+We use a proportional (Rayleigh) damping model, which is commonly used for multi-\ac{DOF} structures because of mathematical conveniences
 \ben
 \mbf{C_s} = \alpha \mbf{M_s} + \beta \mbf{K_s}.
 \een
@@ -298,11 +299,18 @@ Structural damping is typically small compared to hydrodynamic damping so its ma
 %
 \subsubsection{Boundary conditions and inertial relief}
 %
-The default boundary condition is a clamped root (\texttt{"clamped"}), where the rows and columns of the root node DOFs are deleted from the assembled system before solving.
-A floating hull girder has no support, so we also allow a free--free beam (\texttt{"free-free"}, set with the appendage option \texttt{boundaryCondition}) where no DOFs are deleted.
-The stiffness matrix $\mbf{K}_s$ is then singular with a six-dimensional null space of rigid-body motions, and we solve the static problem with the inertial relief method.
-The applied loads accelerate the body as a rigid body, the resulting inertial loads balance the applied loads, and only the self-equilibrated remainder deforms the structure (\Cref{fig:InertialRelief}).
-\begin{figure}[htb!]
+The default boundary condition is a clamped root (\texttt{"clamped"}), where the rows and columns of the root node \acp{DOF} are deleted from the assembled system before solving.
+A floating hull girder has no support, so we also allow a free--free beam (\texttt{"free-free"}, set with the appendage option \texttt{boundaryCondition}) where no \acp{DOF} are deleted.
+The stiffness matrix $\mbf{K}_s$ is then singular with a six-dimensional null space of rigid-body motions.\footnote{%
+Recall that a null space is the set of all vectors $x$ satisfying $Ax=0$} 
+We solve the static problem with the \emph{inertial relief method} that creates an augmented matrix often referred to as the \emph{bordered stiffness matrix}.
+The applied loads accelerate the body as a rigid body, the resulting inertial loads (the rigid-body d'Alembert forces) balance the applied loads.
+Only the remainder deforms the structure (see diagram in \autoref{fig:InertialRelief}).
+
+If we did not create the augmented matrix, some of the eigenvalues would be zero because $\mb{K}_s$ would be positive semidefinite.
+The zero eigenvalues correspond to the rigid body modes.
+A further discussion of finite element techniques with rigid body modes is in \citet[Sec. 17.3]{Craig2006}.
+\begin{figure}[H]
 	\centering
 	\includegraphics[width=\linewidth]{inertialrelief.pdf}
 	\caption{\label{fig:InertialRelief}
@@ -313,17 +321,18 @@ The applied loads accelerate the body as a rigid body, the resulting inertial lo
 	}
 \end{figure}
 
+TODO: go through this following Craig and Kurdila.
 The rigid-body modes $\mbf{\Phi}_r \in \mathbb{R}^{n \times 6}$ are unit translations along and unit rotations about the beam local axes $\mbf{n}_k = \mbf{T}^{\top} \mbf{e}_k$ (expressed in global coordinates) through a reference point $\mbf{r}_0$, which defaults to the node centroid.
-For node $i$ at $\mbf{r}_i$, the translational DOFs $\delta \mbf{u}_i$ and rotational DOFs $\delta \mbs{\vartheta}_i = [\phi, \theta, \psi]^{\top}$ are
+For node $i$ at $\mbf{r}_i$, the translational \acp{DOF} $\delta \mbf{u}_i=[u, v, w]^\top$ and rotational \acp{DOF} $\delta \mbs{\vartheta}_i = [\phi_i, \theta_i, \psi_i]^{\top}$ are
 \be
 & \delta \mbf{u}_i = \mbf{n}_k, & \delta \mbs{\vartheta}_i = \mbf{0} \qquad \tn{(translation along } \mbf{n}_k \tn{)}
 \\
 & \delta \mbf{u}_i = \mbf{n}_k \times \left(\mbf{r}_i - \mbf{r}_0\right), & \delta \mbs{\vartheta}_i = s_k \mbf{n}_k \qquad \tn{(rotation about } \mbf{n}_k \tn{)}
 \ee
-with $s = (1, -1, 1)$ and zero higher-order DOFs $\phi', \theta', \psi'$.
+with $s = (1, -1, 1)$ and zero higher-order \acp{DOF} $\phi', \theta', \psi'$.
 The sign $s_2 = -1$ arises because $\theta = \partial w / \partial x$ and $\psi = \partial v / \partial x$ are slopes rather than rotation angles, so a rigid rotation about the local $y$-axis is the negative of $\theta$.
-The beam axes are taken from the first element, so the modes are exact for straight beams such as hull girders.
-The unit test checks that $\mbf{K}_s \mbf{\Phi}_r = \mbf{0}$.
+The beam axes are taken from the first element.
+The unit test checks that $\mbf{K}_s \mbf{\Phi}_r = \mbf{0}$ (null space check).
 
 Writing the displacements as a rigid-body motion plus an elastic deformation, $\mbf{u} = \mbf{\Phi}_r \mbf{q}_r + \mbf{u}_e$, and neglecting the elastic accelerations in $\mbf{M}_s \ddot{\mbf{u}} + \mbf{K}_s \mbf{u} = \mbf{f}$, premultiplication by $\mbf{\Phi}_r^{\top}$ gives the rigid-body equations of motion
 \be

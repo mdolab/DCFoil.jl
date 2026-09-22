@@ -71,11 +71,13 @@ using .SolutionConstants: ELEMTYPE
 export init_model, run_model, evalFuncs, evalFuncsSens, RealOrComplex
 
 
+"""
+    setup_model(DVDictList; solverOptions)
+
+Code to make mesh and other things if you're not starting from coordinates.
+Global vars are used in `run_model`.
+"""
 function setup_model(DVDictList; solverOptions)
-    """
-    Code to make mesh and other things if you're not starting from coordinates
-    Global vars are used in run_model
-    """
     # ---------------------------
     #   Default options
     # ---------------------------
@@ -134,10 +136,12 @@ function setup_model(DVDictList; solverOptions)
 
 end
 
+"""
+    set_structDamping(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
+
+Run this routine at the beginning of any dynamic analysis or optimization to fix the damping.
+"""
 function set_structDamping(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
-    """
-    Run this routine at the beginning of any dynamic analysis or optimization to fix the damping
-    """
 
     # FOIL, STRUT, _, FEMESH, _, _, _ = InitModel.init_modelFromCoords(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
     # x_αbVec = appendageParams["x_ab"]
@@ -154,11 +158,13 @@ function set_structDamping(LECoords, TECoords, nodeConn, appendageParams, solver
     return solverOptions
 end
 
+"""
+    init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParamsList)
+
+Things that need to be done before running the model.
+Global vars are used in `run_model`.
+"""
 function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParamsList)
-    """
-    Things that need to be done before running the model.
-    Global vars are used in run_model
-    """
     # ---------------------------
     #   Default options
     # ---------------------------
@@ -224,25 +230,21 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
     println("+-----------------------------------------------------------+")
 end
 
+"""
+    run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Dict(), appendageParamsList)
+
+This call runs DCFoil in three possible solver modes.
+Output is then a dictionary with possibly three keys at most.
+
+# Arguments
+- `appendageParamsList`: list of dictionaries for the appendages
+- `evalFuncsList`: list of cost functions to evaluate
+- `solverOptions`: dictionary of solver options
+
+# Returns
+- `SOLDICT`: dictionary of solutions
+"""
 function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Dict(), appendageParamsList)
-    """
-    This call runs DCFoil in three possible solver modes.
-    Output is then a dictionary with possibly three keys at most.
-
-    Parameters
-    ----------
-    DVDictList : array
-        list of dictionaries for the appendages
-    evalFuncs : array
-        list of cost functions to evaluate
-    solverOptions : dict
-        dictionary of solver options
-
-    Returns
-    -------
-    SOLDICT : dict
-        dictionary of solutions
-    """
     # ==============================================================================
     #                         Introduction
     # ==============================================================================
@@ -343,10 +345,12 @@ function run_model(LECoords, nodeConn, TECoords, evalFuncsList; solverOptions=Di
     return SOLDICT
 end
 
+"""
+    write_solution(SOLDICT, solverOptions, appendageParamsList; callNumber=0)
+
+Actually write solutions to files.
+"""
 function write_solution(SOLDICT, solverOptions, appendageParamsList; callNumber=0)
-    """
-    Actually write solutions to files
-    """
 
     outputDir = solverOptions["outputDir"] * @sprintf("/call_%03d/", callNumber)
 
@@ -388,15 +392,15 @@ end
 # ==============================================================================
 #                         Cost func and sensitivity routines
 # ==============================================================================
-function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsList, solverOptions=Dict())
-    """
-    Common interface to compute cost functions
+"""
+    evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsList, solverOptions=Dict())
 
-    Inputs
-    ------
-    evalFuncs : 1d array
-        List of what cost functions to evaluate
-    """
+Common interface to compute cost functions.
+
+# Arguments
+- `evalFuncsList`: 1d array, list of what cost functions to evaluate
+"""
+function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsList, solverOptions=Dict())
     x = 0.0 # dummy
     evalFuncsDict = Dict()
     # LECoords, nodeConn, TECoords = GridStruct.LEMesh, GridStruct.nodeConn, GridStruct.TEMesh
@@ -464,14 +468,15 @@ function evalFuncs(SOLDICT, LECoords, nodeConn, TECoords, DVDictList, evalFuncsL
 end # evalFuncs
 
 
+"""
+    evalFuncsSens(SOLDICT::AbstractDict, appendageParamsList, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict(); mode="FiDi", CLMain=0.0)
+
+Think of this as the gluing call for getting derivatives for a single cost function at a time.
+"""
 function evalFuncsSens(
     SOLDICT::AbstractDict, appendageParamsList, LECoords, nodeConn, TECoords, evalFuncSensList, solverOptions=Dict();
     mode="FiDi", CLMain=0.0
 )
-    """
-    Think of this as the gluing call for getting derivatives for a single cost function at a time
-
-    """
 
     GridStruct = MeshIO.Grid(LECoords, nodeConn, TECoords)
     # ---------------------------

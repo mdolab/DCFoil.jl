@@ -15,29 +15,28 @@ jobs:
   docs:
     # name: Documentation
     runs-on: ubuntu-latest
-    # permissions:
-    #   actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
-    #   contents: write
-    #   statuses: write
+    permissions:
+      actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      contents: write # deploydocs pushes gh-pages only when GITHUB_REPOSITORY matches the deploydocs repo (gawng fork)
+      statuses: write # deploydocs sets commit statuses
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@latest
+      - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.9.2'
-      # - uses: julia-actions/cache@v2
+          version: '1.11' # must satisfy [compat] julia in Project.toml; matches RunUnitTests.yml
+      - uses: julia-actions/cache@v3
       - name: Configure doc environment
-        shell: julia --project=docs/ --color=yes {0} -e
+        shell: julia --project=docs/ --color=yes {0}
         run: |
           using Pkg
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-docdeploy@v1
-      - name: Build and deploy
+      - name: Build docs
+        # deploydocs() skips deployment on mdolab/DCFoil.jl (repo mismatch) and deploys only on the gawng fork.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # For authentication with GitHub Actions token
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # For authentication with SSH deploy key
-        run: julia --project=docs/ docs/make.jl
+        run: julia --project=docs/ --color=yes docs/make.jl
       # - name: Run doctests
       #   shell: julia --project=docs/ --color=yes {0}
       #   run: |
