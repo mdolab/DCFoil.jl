@@ -11,6 +11,7 @@ Some big picture notes:
 using Test
 using ChainRulesCore
 include("test_struct.jl")
+include("test_vam.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
 
@@ -33,6 +34,17 @@ nNodesStrut = 2
     @test test_COMP2_mass() <= 5e-5 # mass matrix
     @test test_FECOMP2() <= 1e-1
     @test test_FECOMP2_freeFree() <= 1e-6 # free-free beam with inertial relief
+
+    # --- VAM cross-sectional analysis (each returns max error/tolerance) ---
+    @test test_VAM_material_rotation() <= 1.0
+    @test test_VAM_ellipse() <= 1.0 # isotropic ellipse and circle closed forms
+    @test test_VAM_rectangleShear() <= 1.0 # rectangle shear correction factors and torsion constant
+    @test test_VAM_isotropicStrip() <= 1.0 # Hodges (2006) Table 7.9
+    @test test_VAM_compositeStrip() <= 1.0 # Hodges (2006) Tables 7.10 and 7.11
+    @test test_VAM_translationAndLayers() <= 1.0 # reference axis shift and two-layer section
+    @test test_VAM_thinPlateCLT() <= 1.0 # consistency with the CLT beam constants
+    @test test_VAM_NACA0009() <= 1.0 # solid CFRP airfoil section
+    @test test_VAM_adapter() <= 1.0 # BeamProperties adapter to the beam constants
 end
 
 @testset "Test hydro" begin

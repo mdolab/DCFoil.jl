@@ -1228,3 +1228,51 @@ function test_fullwing(DVDict, solverOptions)
 
     u3 = FEMMethods.solve_structure(K, F)
 end
+
+# ==============================================================================
+#                         VAM ADAPTER
+# ==============================================================================
+function test_VAM_adapter()
+    """
+    Check the BeamProperties adapter from the VAM cross-sectional properties to the eight beam
+    constants on a solid CFRP NACA0009 with the elastic axis aft of midchord and a 15 degree
+    fiber angle. Returns the maximum of error / tolerance over all checks (pass when <= 1).
+    """
+    c = 0.1
+    ab = 0.01
+    ρₛ = 1590.0
+    E₁ = 117.8e9
+    E₂ = 13.4e9
+    G₁₂ = 3.9e9
+    ν₁₂ = 0.25
+    theta_f = deg2rad(15)
+    airfoilCoords = FEMMethods.generate_naca4dig(0.09)
+    section = FEMMethods.SectionProperty(c, 0.009, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, airfoilCoords)
+
+    EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ = FEMMethods.analyze_sectionVAM(section; nChord=20, nThick=4)
+    properties = FEMMethods.analyze_sectionVAM_properties(section; nChord=20, nThick=4)
+    condensed = FEMMethods.VAM.condense_axial_stiffness(properties.stiffnessClassical)
+
+    errors = Float64[]
+    relerr(value, reference, tol) = abs(value / reference - 1) / tol
+    # --- Mapping consistency ---
+    push!(errors, relerr(EAₛ, properties.stiffnessClassical[1, 1], 1e-12))
+    push!(errors, relerr(GJₛ, condensed[1, 1], 1e-12))
+    push!(errors, relerr(EIₛ, condensed[2, 2], 1e-12))
+    push!(errors, relerr(EIIPₛ, condensed[3, 3], 1e-12))
+    push!(errors, relerr(Kₛ, -condensed[1, 2], 1e-12))
+    push!(errors, relerr(Sₛ, properties.stiffnessVlasov[5, 5] + EIₛ * ab^2, 1e-12))
+    push!(errors, relerr(mₛ, properties.massPerLength, 1e-12))
+    push!(errors, relerr(Iₛ, properties.momentsOfInertia[1] + properties.momentsOfInertia[2], 1e-12))
+    # --- Geometry from the 50-point generate_naca4dig coordinates (area 0.27% low at the LE) ---
+    push!(errors, relerr(properties.area, 0.0616575 * c^2, 5e-3))
+    xEA = c / 2 + ab
+    push!(errors, abs(properties.centroid[1] - (xEA - 0.4204355 * c)) / (2e-3 * c))
+    push!(errors, abs(properties.centroid[2]) / (1e-8 * c))
+    shearCenterFromLE = (xEA - properties.shearCenter[1]) / c
+    push!(errors, abs(shearCenterFromLE - 0.366) / 0.01)
+    # --- Physical sign: positive fiber angle gives nose-down bend-twist coupling ---
+    push!(errors, Kₛ > 0 ? 0.0 : Inf)
+    push!(errors, mₛ / (ρₛ * properties.area) - 1 > 1e-12 ? Inf : 0.0)
+    return maximum(errors)
+end

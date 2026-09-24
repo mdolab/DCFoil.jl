@@ -201,6 +201,9 @@ The underlying physical models apply to general slender shapes.
 	\acro{RAO}{response amplitude operator}
 	\acro{FRF}{frequency response function}
 	\acro{FEM}{finite element method}
+	\acro{CLT}{classical lamination theory}
+	\acro{VAM}{variational asymptotic method}
+	\acro{VABS}{variational asymptotic beam sectional analysis}
 \end{acronym}
 \clearpage
 %------------------------------------------------------------------------------
@@ -238,14 +241,14 @@ K  = 2c \left(D_{16} - \frac{D_{26}D_{12}}{D_{22}}\right)
 These relations do not restrict chordwise rigidity (camber), but they do assume zero chordwise moment.
 \citet{LOTTATI1985} used the chordwise rigid relations, which simplifies the algebra.
 
-The flexural stiffnesses $D_{ij}$ (6x6 matrix) come via CLT
+The flexural stiffnesses $D_{ij} = \bar{Q}_{ij} t^3 / 12$ ($3\times3$ matrix) come via CLT with the rotated ply stiffnesses
 \begin{align}
-	D_{11} & = Q_{11}m^4 + 2\left( Q_{12}+2Q_{66}\right)n^2m^2 + Q_{22}n^4                               \\
-	D_{22} & = Q_{11}n^4+2\left( Q_{12} + 2Q_{66}\right)n^2m^2 + Q_{22}m^4                               \\
-	D_{66} & = \left(Q_{11} +Q_{22} - 2Q_{12}-2Q_{66}\right)n^2m^2 + Q_{66}\left( n^4 + m^4 \right)      \\
-	D_{12} & = \left(Q_{11} +Q_{22} - 4Q_{66}\right)n^2 m^2 + Q_{12}\left( n^4 + m^4 \right)             \\
-	D_{16} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)n m^3 + \left(Q_{12} - Q_{22} + 2Q_{66}\right) n^3 m \\
-	D_{26} & = \left(Q_{11} +Q_{22} - 2Q_{66}\right)n^3 m + \left(Q_{12} - Q_{22} + 2Q_{66}\right) n m^3
+	\bar{Q}_{11} & = Q_{11}m^4 + 2\left( Q_{12}+2Q_{66}\right)n^2m^2 + Q_{22}n^4                               \\
+	\bar{Q}_{22} & = Q_{11}n^4+2\left( Q_{12} + 2Q_{66}\right)n^2m^2 + Q_{22}m^4                               \\
+	\bar{Q}_{66} & = \left(Q_{11} +Q_{22} - 2Q_{12}-2Q_{66}\right)n^2m^2 + Q_{66}\left( n^4 + m^4 \right)      \\
+	\bar{Q}_{12} & = \left(Q_{11} +Q_{22} - 4Q_{66}\right)n^2 m^2 + Q_{12}\left( n^4 + m^4 \right)             \\
+	\bar{Q}_{16} & = \left(Q_{11} - Q_{12} - 2Q_{66}\right)n m^3 + \left(Q_{12} - Q_{22} + 2Q_{66}\right) n^3 m \\
+	\bar{Q}_{26} & = \left(Q_{11} - Q_{12} - 2Q_{66}\right)n^3 m + \left(Q_{12} - Q_{22} + 2Q_{66}\right) n m^3
 \end{align}
 where
 \be
@@ -282,6 +285,276 @@ and torsional warping resistance due to tension from \citet{LOTTATI1985} is
 \be
 S = \int_{-b}^b D_{22} x_a^2 d x, \quad\tn{where } x_a = x - ba
 \ee
+\subsubsection{Beam parameters via the variational asymptotic method}
+%
+The \ac{CLT} model of \citet{Weisshaar1985} treats the foil as a thin rectangular plate and cannot represent a solid airfoil section, a layup through the thickness, or the true shear and tension centers.
+This section presents a two-dimensional cross-sectional finite element analysis based on the \ac{VAM}, following \citet{Hodges2006}, that returns the classical $4\times4$ stiffness, the generalized Timoshenko $6\times6$ stiffness with shear center, the generalized Vlasov $5\times5$ stiffness, and the $6\times6$ mass matrix of the section.
+The method reproduces \ac{VABS} \citep{Cesnik1997}, the reference sectional analysis code for composite rotor and wing beams, and is implemented in \texttt{src/struct/VAM.jl} with the adapter \texttt{analyze\_sectionVAM} in \texttt{BeamProperties.jl}.
+The beam frame is $x_1$ = span, $x_2$ = chord, and $x_3$ = vertical, with $x_2$ positive toward the \ac{LE} for a starboard wing.
+The beam is assumed prismatic, initially straight, and untwisted, so the initial curvature and twist measures vanish and the metric of the reference line is unity.
+
+The three-dimensional strain field decomposes into a warping part, a classical-strain part, and a warping-gradient part \citep[Eqs.~(3.94)--(3.99)]{Hodges2006}
+\beq
+\Gamma = \Gamma_a w + \Gamma_\varepsilon \bar\varepsilon + \Gamma_\ell w'
+\label{eqn:VAM3DStrain}
+\eeq
+where $\Gamma = [\Gamma_{11},\ 2\Gamma_{12},\ 2\Gamma_{13},\ \Gamma_{22},\ 2\Gamma_{23},\ \Gamma_{33}]^\top$ is the three-dimensional strain, $\bar\varepsilon = [\bar\gamma_{11},\ \bar\kappa_1,\ \bar\kappa_2,\ \bar\kappa_3]^\top$ is the classical extension-twist-bending strain, $w(x_2,x_3)$ is the unknown cross-sectional warping displacement, and $(\,)' = \partial(\,)/\partial x_1$.
+The three operators are
+\beq
+\Gamma_a =
+\begin{bmatrix}
+0 & 0 & 0 \\
+\partial_2 & 0 & 0 \\
+\partial_3 & 0 & 0 \\
+0 & \partial_2 & 0 \\
+0 & \partial_3 & \partial_2 \\
+0 & 0 & \partial_3
+\end{bmatrix}
+,\qquad
+\Gamma_\varepsilon =
+\begin{bmatrix}
+1 & 0 & x_3 & -x_2 \\
+0 & -x_3 & 0 & 0 \\
+0 & x_2 & 0 & 0 \\
+0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0
+\end{bmatrix}
+,\qquad
+\Gamma_\ell =
+\begin{bmatrix}
+\mbf{I}_3 \\ \mbf{0}_3
+\end{bmatrix}
+\label{eqn:VAMGammaOperators}
+\eeq
+with $\Gamma_a$ of size $6\times3$, $\Gamma_\varepsilon$ of size $6\times4$, and $\Gamma_\ell$ of size $6\times3$, and $\partial_2 = \partial/\partial x_2$, $\partial_3 = \partial/\partial x_3$.
+The warping is not unique unless it is constrained against a rigid translation and rotation of the section \citep[Eqs.~(3.102)--(3.104)]{Hodges2006}
+\beq
+\psi =
+\begin{bmatrix}
+1 & 0 & 0 & 0 \\
+0 & 1 & 0 & -x_3 \\
+0 & 0 & 1 & x_2
+\end{bmatrix}
+,\qquad
+\langle w^\top \psi \rangle = \mbf{0}
+\label{eqn:VAMWarpingConstraint}
+\eeq
+where $\psi$ is $3\times4$ and $\langle\,\cdot\,\rangle$ denotes integration over the cross-sectional area.
+
+The strain energy per unit length is the quadratic form
+\beq
+U = \half \langle \Gamma^\top \mbf{D} \Gamma \rangle
+\label{eqn:VAMEnergy}
+\eeq
+where $\mbf{D}$ is the $6\times6$ material stiffness in the beam frame from \autoref{eqn:VAMRotation}.
+The cross section is discretized with structured quadrilateral finite elements and the warping is interpolated as
+\beq
+w(x_2,x_3) = \mbf{S}(x_2,x_3)\, V
+\label{eqn:VAMFEwarp}
+\eeq
+where $V$ collects the three warping \ac{DOF} at every node \citep[Eqs.~(4.39)--(4.43)]{Hodges2006}.
+Substituting \autoref{eqn:VAMFEwarp} into \autoref{eqn:VAMEnergy} gives
+\beq
+2U = V^\top \mbf{E} V + 2 V^\top \mbf{D}_{a\varepsilon} \bar\varepsilon + 2 V^\top \mbf{D}_{a\ell} V' + \bar\varepsilon^\top \mbf{D}_{\varepsilon\varepsilon} \bar\varepsilon + 2 \bar\varepsilon^\top \mbf{D}_{\ell\varepsilon} V' + V'^\top \mbf{D}_{\ell\ell} V'
+\label{eqn:VAMQuadraticForm}
+\eeq
+with $\mbf{E} = \langle \mbf{S}^\top \Gamma_a^\top \mbf{D} \Gamma_a \mbf{S} \rangle$ and the remaining blocks $\mbf{D}_{a\varepsilon}, \mbf{D}_{a\ell}, \mbf{D}_{\varepsilon\varepsilon}, \mbf{D}_{\ell\varepsilon}, \mbf{D}_{\ell\ell}$ assembled the same way from $\Gamma_a, \Gamma_\varepsilon, \Gamma_\ell$.
+The Gram matrix of the shape functions $\mbf{H} = \langle \mbf{S}^\top \mbf{S} \rangle$ does not enter the energy; it only maps the warping constraint of \autoref{eqn:VAMWarpingConstraint} to the nodal values as $V^\top \mbf{H}\Psi = \mbf{0}$, where $\Psi$ holds the nodal values of $\psi$ (exact for Lagrange elements because $\psi$ is linear in $x_2, x_3$).
+
+The zeroth-order (classical) warping and stiffness follow from a Lagrange-multiplier system enforcing the constraint on each of the four unit strain columns \citep[Eqs.~(4.44)--(4.51)]{Hodges2006}
+\beq
+\begin{bmatrix}
+\mbf{E} & \alpha \mbf{H}\Psi \\
+\alpha \Psi^\top \mbf{H} & \mbf{0}
+\end{bmatrix}
+\begin{bmatrix}
+\hat V_0 \\ \Lambda/\alpha
+\end{bmatrix}
+=
+\begin{bmatrix}
+-\mbf{D}_{a\varepsilon} \\ \mbf{0}
+\end{bmatrix}
+\label{eqn:VAMBordered}
+\eeq
+where $\Lambda$ is the Lagrange multiplier and $\alpha = \|\mbf{E}\|_1 / \|\mbf{H}\Psi\|_1$ is a scaling factor on the constraint block so that its entries are of the same order as $\mbf{E}$, which is otherwise ill-conditioned because $\mbf{H}\Psi$ is many orders of magnitude smaller than $\mbf{E}$ in SI units.
+The classical $4\times4$ stiffness is
+\beq
+\bar{\mbf{S}} = \hat V_0^\top \mbf{D}_{a\varepsilon} + \mbf{D}_{\varepsilon\varepsilon}
+\label{eqn:VAMClassicalStiffness}
+\eeq
+giving the classical constitutive law
+\beq
+\begin{Bmatrix} F_1 \\ M_1 \\ M_2 \\ M_3 \end{Bmatrix}
+=
+\bar{\mbf{S}}
+\begin{Bmatrix} \bar\gamma_{11} \\ \bar\kappa_1 \\ \bar\kappa_2 \\ \bar\kappa_3 \end{Bmatrix}
+\label{eqn:VAMClassicalConstitutive}
+\eeq
+with $F_1$ the axial force and $M_1, M_2, M_3$ the twisting and bending moments about the reference line.
+
+A second-order correction captures transverse shear by allowing the warping to depend on the strain gradient, $V = \hat V_0 \bar\varepsilon + V_{1S} \bar\varepsilon'$, so that the energy per unit length becomes \citep[Eqs.~(4.55)--(4.61)]{Hodges2006}
+\beq
+2U = \bar\varepsilon^\top \mbf{A} \bar\varepsilon + 2 \bar\varepsilon^\top \mbf{B} \bar\varepsilon' + \bar\varepsilon'^\top \mbf{C} \bar\varepsilon' + 2 \bar\varepsilon^\top \mbf{D} \bar\varepsilon''
+\label{eqn:VAMSecondOrderEnergy}
+\eeq
+where $\mbf{A} = \bar{\mbf{S}}$ and $\mbf{B}, \mbf{C}, \mbf{D}$ come from substituting $V$ and $V' = \hat V_0 \bar\varepsilon' + V_{1S}\bar\varepsilon''$ into \autoref{eqn:VAMQuadraticForm} and retaining only the $\bar\varepsilon\bar\varepsilon$, $\bar\varepsilon\bar\varepsilon'$, $\bar\varepsilon'\bar\varepsilon'$, and $\bar\varepsilon\bar\varepsilon''$ blocks.
+The correction warping solves a system with the same $\mbf{E}$ matrix, constraints, and factorization as \autoref{eqn:VAMBordered},
+\beq
+\mbf{E} V_{1S} + \mbf{D}_S = \mbf{H}\Psi\Lambda, \qquad \mbf{D}_S = \mbf{D}_{a\ell}\hat V_0 - \mbf{D}_{a\ell}^\top \hat V_0 - \mbf{D}_{\ell\varepsilon}
+\label{eqn:VAMSecondOrderWarping}
+\eeq
+so no new factorization is required.
+
+For a prismatic beam $\bar\varepsilon'' = 0$ so the $\mbf{D}$ block drops out and $\mbf{C}$ alone gives the closed form for the generalized Timoshenko stiffness \citep[Eqs.~(4.94), (4.103)--(4.104)]{Hodges2006}
+\beq
+\mbf{Q} = \begin{bmatrix} 0 & 0 \\ 0 & 0 \\ 0 & -1 \\ 1 & 0 \end{bmatrix}, \qquad
+\mbf{G} = \left(\mbf{Q}^\top \mbf{A}^{-1} \mbf{C} \mbf{A}^{-1} \mbf{Q}\right)^{-1}, \qquad
+\mbf{Y} = \mbf{B}^\top \mbf{A}^{-1} \mbf{Q} \mbf{G}, \qquad
+\mbf{X} = \mbf{A} + \mbf{Y}\mbf{G}^{-1}\mbf{Y}^\top
+\label{eqn:VAMTimoQGYX}
+\eeq
+The $6\times6$ generalized Timoshenko stiffness $\mbf{S}_6$ is assembled from $\mbf{X}$, $\mbf{G}$, and $\mbf{Y}$ in the strain ordering
+\beq
+\varepsilon_6 = \{\ \gamma_{11} \ \ 2\gamma_{12} \ \ 2\gamma_{13} \ \ \kappa_1 \ \ \kappa_2 \ \ \kappa_3\ \}^\top
+\label{eqn:VAMTimoOrdering}
+\eeq
+where $\mbf{X}$ occupies rows and columns $(1,4,5,6)$, $\mbf{G}$ occupies rows and columns $(2,3)$, and $\mbf{Y}$ and $\mbf{Y}^\top$ fill the off-diagonal blocks coupling shear to extension, twist, and bending.
+This closed form is exact only when rows 1--2 of $\mbf{A}^{-1}\mbf{B}\mbf{A}^{-1}\mbf{Q}$ vanish, as for doubly symmetric sections; for a general section it is the same asymptotic fit that \ac{VABS} reports as its generalized Timoshenko model.
+Deleting the shear rows and columns of $\mbf{S}_6^{-1}$ and inverting returns $\bar{\mbf{S}}$, which is checked internally.
+
+The generalized shear center follows from the flexibility $\mbs\Phi = \mbf{S}_6^{-1}$ \citep[Eq.~(4.174)]{Hodges2006}
+\beq
+e_2 = -\frac{\Phi_{34}}{\Phi_{44}}, \qquad e_3 = \frac{\Phi_{24}}{\Phi_{44}}
+\label{eqn:VAMShearCenter}
+\eeq
+The tension center is found from the classical flexibility $\bar{\mbs\Phi} = \bar{\mbf{S}}^{-1}$ by requiring that an axial force through it produce no bending curvature,
+\beq
+\begin{bmatrix} -\bar\Phi_{34} & \bar\Phi_{33} \\ -\bar\Phi_{44} & \bar\Phi_{43} \end{bmatrix}
+\begin{Bmatrix} t_2 \\ t_3 \end{Bmatrix}
+=
+-\begin{Bmatrix} \bar\Phi_{31} \\ \bar\Phi_{41} \end{Bmatrix}
+\label{eqn:VAMTensionCenter}
+\eeq
+
+A generalized Vlasov model adds a restrained-warping \ac{DOF} to capture torsional warping stiffness, following the generalized theory of \citet{Yu2005b}.
+We derive it, rather than quote it, by moving the origin to the shear center of \autoref{eqn:VAMShearCenter}, recomputing the origin-dependent blocks $\mbf{D}_{a\varepsilon}, \mbf{D}_{\varepsilon\varepsilon}, \mbf{D}_{\ell\varepsilon}$ at the shifted origin, and repeating the classical and second-order solves of \autoref{eqn:VAMBordered}--\autoref{eqn:VAMSecondOrderWarping} there.
+Setting $\bar\varepsilon' = \{0\ \ \bar\kappa_1'\ \ 0\ \ 0\}^\top$, so that only the twist rate is retained as a fifth generalized strain, and neglecting the second derivative $\bar\kappa_1''$ together with the other strain derivatives gives the $5\times5$ stiffness
+\beq
+\hat{\mbf{S}} =
+\begin{bmatrix}
+\mbf{A} & \mbf{B}_{:,2} \\
+\mbf{B}_{:,2}^\top & C_{22}
+\end{bmatrix}
+\label{eqn:VAMVlasov}
+\eeq
+in the strain and force ordering $[\bar\gamma_{11},\bar\kappa_1,\bar\kappa_2,\bar\kappa_3,\bar\kappa_1']$ and $[F_1,M_1,M_2,M_3,M_\omega]$, where $M_\omega$ is the bimoment.
+Keeping $C_{22}$ alone reproduces the \ac{VABS} warping rigidity of \citet[Table~7.9]{Hodges2006} and the analytical strip result $E h^3 b^3 / [144 (1-\nu^2)]$ of \citet[Eq.~(7.81)]{Hodges2006} to within $10^{-4}$ and $2\times10^{-3}$; integrating the $\bar\varepsilon^\top \mbf{D} \bar\varepsilon''$ term by parts instead, which would give $C_{22} - 2D_{22}$, is 4\% low for the isotropic strip and becomes negative for layered solid sections, so it is not used.
+The coupling terms $\hat S_{i5}$, $i \le 4$, are boundary terms under the Vlasov assumption of slowly varying $\bar\gamma_{11}, \bar\kappa_2, \bar\kappa_3$, so only $\hat S_{55}$ and the $4\times4$ classical block of \autoref{eqn:VAMVlasov} are verified against reference data and the full $5\times5$ need not be positive definite; \citet{Yu2005b} also note that the Vlasov correction is only significant for thin-walled open sections.
+
+The $6\times6$ mass matrix about the reference axis uses the sectional mass properties $\mu = \langle\rho\rangle$, $\mu\bar x_2 = \langle\rho x_2\rangle$, $\mu\bar x_3 = \langle\rho x_3\rangle$, $i_2 = \langle\rho x_3^2\rangle$, $i_3 = \langle\rho x_2^2\rangle$, and $i_{23} = -\langle\rho x_2 x_3\rangle$ \citep[Eqs.~(5.23), (5.104)]{Hodges2006}
+\beq
+\mbf{M} =
+\begin{bmatrix}
+\mu & 0 & 0 & 0 & \mu\bar x_3 & -\mu\bar x_2 \\
+0 & \mu & 0 & -\mu\bar x_3 & 0 & 0 \\
+0 & 0 & \mu & \mu\bar x_2 & 0 & 0 \\
+0 & -\mu\bar x_3 & \mu\bar x_2 & i_2+i_3 & 0 & 0 \\
+\mu\bar x_3 & 0 & 0 & 0 & i_2 & i_{23} \\
+-\mu\bar x_2 & 0 & 0 & 0 & i_{23} & i_3
+\end{bmatrix}
+\label{eqn:VAMMass}
+\eeq
+ordered on the translational and angular velocities $[V_1,V_2,V_3,\Omega_1,\Omega_2,\Omega_3]$ of the reference line.
+
+The section material model is orthotropic, given as a $6\times6$ stiffness in Hodges' strain ordering $[11,12,13,22,23,33]$ with engineering (doubled) shear strains, built from nine engineering constants per ply.
+The ply stiffness is rotated into the beam frame by a fourth-order tensor transform,
+\beq
+C'_{ijkl} = R_{ia}R_{jb}R_{kc}R_{ld}\,C_{abcd}, \qquad \mbf{R} = [\ \mbf{e}_1\ \ \mbf{e}_2\ \ \mbf{e}_3\ ]
+\label{eqn:VAMRotation}
+\eeq
+where $\mbf{R}$ has the fiber-aligned material axes as its columns, expressed in the beam frame; using $\mbf{R}^\top$ in place of $\mbf{R}$ silently flips the sign of the ply angle.
+The fiber direction rotates from $x_1$ toward $x_2$ about $x_3$ by the ply angle $\theta_f$, with the same sense as the \ac{CLT} rotation of \citet{Weisshaar1985},
+\beq
+\mbf{e}_1 = \cos\theta_f\, \mbf{x}_1 + \sin\theta_f\, \mbf{x}_2, \qquad \mbf{e}_3 = \mbf{x}_3
+\label{eqn:VAMPlyAngle}
+\eeq
+consistent with flat plies lying parallel to the chord plane.
+DCFoil's material inputs are the four transversely isotropic constants $(E_1, E_2, G_{12}, \nu_{12})$, extended to the full orthotropic set by
+\beq
+E_3 = E_2, \qquad G_{13} = G_{12}, \qquad \nu_{13} = \nu_{12}, \qquad G_{23} = \frac{E_2}{2(1+\nu_{23})}
+\label{eqn:VAMTransverseIsotropy}
+\eeq
+where $\nu_{23} = 0.4$ by default; Hodges' Table 7.8 material requires an independent $G_{23}$, so all nine constants are stored internally even though most sections only supply four.
+
+The cross section is discretized with a structured quadrilateral mesh built by a transfinite map between the lower and upper airfoil surfaces at a set of cosine-clustered chordwise stations, which resolves the leading-edge curvature.
+The leading-edge column is collapsed to a single node where the upper and lower surfaces meet, and elements are 9-node Lagrange quadrilaterals integrated with $3\times3$ Gauss quadrature; full-order integration is required because reduced integration introduces spurious zero-energy warping modes that make the bordered system of \autoref{eqn:VAMBordered} singular.
+
+\autoref{tab:VAMMapping} gives the mapping from the VAM section stiffness $\bar{\mbf{S}}$, about the elastic-axis reference line, to DCFoil's eight beam constants.
+\begin{table}[H]
+\centering
+\caption{Mapping from the VAM classical and generalized stiffnesses to DCFoil's beam constants.}
+\label{tab:VAMMapping}
+\begin{tabular}{ll}
+\hline
+DCFoil constant & VAM expression (about the \ac{EA} reference axis) \\
+\hline
+$EA_s$ & $\bar S_{11}$ \\
+$GJ_s$ & $\bar S_{22} - \bar S_{12}^2/\bar S_{11}$ \\
+$EI_s$ (flap, about $x_2$) & $\bar S_{33} - \bar S_{13}^2/\bar S_{11}$ \\
+$EIIP_s$ (chordwise, about $x_3$) & $\bar S_{44} - \bar S_{14}^2/\bar S_{11}$ \\
+$K_s$ (bend-twist coupling) & $-\left(\bar S_{23} - \bar S_{12}\bar S_{13}/\bar S_{11}\right)$ \\
+$S_s$ (warping stiffness) & $\hat S_{55} + EI_s \cdot ab^2$ \\
+$m_s$ & $\mu$ \\
+$I_s$ (polar mass inertia, about the \ac{EA}) & $i_2 + i_3$ \\
+\hline
+\end{tabular}
+\end{table}
+The element has no slot for axial-bending coupling, so $\bar\gamma_{11}$ is condensed out (equivalent to setting $F_1 = 0$) before mapping the $3\times3$ bending-torsion block; without condensation, $\bar S_{44}$ about an axis that is not the tension center carries a spurious parallel-axis term $\bar S_{11}d^2$.
+
+The sign of $K_s$ follows from the plate curvature-strain relations used in the \ac{CLT} model, $w = w_0 + x_2\phi$, so that
+\beq
+\kappa_x = -w_0'' = \bar\kappa_2, \qquad \kappa_{xy} = -2\phi' = -2\bar\kappa_1
+\label{eqn:VAMCurvatureCheck}
+\eeq
+and hence $\bar S_{23} = -2c(D_{16} - D_{12}D_{26}/D_{22})$, which is $-K_s$ of the \ac{CLT} model including its sign; this equivalence is used as a thin-plate consistency check between the two models.
+
+The COMP2 element's warping term can be read two ways.
+Its strain energy contains $EI_s(w-ab\,\phi)''^2 + (S_s - EI_s\,ab^2)\phi''^2$, and $ab$ is the offset between the twist line and the bending line; for a Vlasov beam twisting about the shear center, the element-consistent stiffness is $\hat S_{55} + EI_s e^2$ with $e$ the elastic-axis to shear-center offset, which equals $\hat S_{55} + EI_s\, ab^2$ only when the user's $ab$ is set to that offset, as is the case for the \ac{CLT} plate whose shear center is at midchord.
+The adapter keeps the element-consistent $S_s = \hat S_{55} + EI_s\, ab^2$ convention of \autoref{tab:VAMMapping}, and returns the VAM shear and tension centers so that $ab$ can be set consistently rather than asserting that the two readings coincide.
+The mapping in \autoref{tab:VAMMapping} assumes the starboard-wing sign convention for $x_2$; \texttt{FEMMethods} negates $K_s$ for the port wing as an existing convention.
+
+The implementation is verified against closed-form isotropic ellipse and rectangle sections, the strip tables of \citet[Ch.~7]{Hodges2006} (Tables 7.9--7.11), a translated and a two-layer rectangular section to check reference-axis dependence, a thin-plate comparison against the \ac{CLT} model, and a solid carbon-fiber NACA0009 section.
+The closed-form and \ac{VABS} references are matched to within $10^{-4}$ (strips and the rectangle shear factors) and $10^{-6}$ (ellipse, translation, and two-layer checks) with 9-node elements, and the thin plate agrees with the \ac{CLT} constants to within 0.7\% at $c/t = 200$.
+\autoref{tab:VAMNACA0009} reports the NACA0009 solid-\ac{CFRP} example used as the reference case in this documentation and in the unit tests; at $\theta_f = 0$ the extension and bending stiffnesses equal $E_1$ times the exact area moments of the thickness polynomial to $10^{-6}$, and the torsional stiffness lies within 0.03\% of the Prandtl lower bound $G_{12}\int (t^3/3 - t^3 t'^2/4)\,\diff x$.
+\begin{table}[H]
+\centering
+\caption{VAM beam constants of a solid \ac{CFRP} NACA0009 section (\texttt{cfrp} material, $c = \SI{0.1}{m}$, reference axis at midchord, $40\times8$ nine-node elements). The bending and torsion constants are after axial condensation.}
+\label{tab:VAMNACA0009}
+\begin{tabular}{lll}
+\hline
+Quantity & $\theta_f = 0^\circ$ & $\theta_f = 15^\circ$ \\
+\hline
+$EA_s$ [N] & $7.263\times10^{7}$ & $2.625\times10^{7}$ \\
+$EI_s$ (flap) [N\,m$^2$] & 338.4 & 273.8 \\
+$EIIP_s$ (chordwise) [N\,m$^2$] & 40096 & 14493 \\
+$GJ_s$ [N\,m$^2$] & 44.26 & 118.35 \\
+$K_s$ [N\,m$^2$] & 0 & 133.9 \\
+$\hat S_{55}$ [N\,m$^4$] & 0.1062 & 0.1047 \\
+$m_s$ [kg/m] & 0.9804 & 0.9804 \\
+$I_s$ about midchord [kg\,m] & $6.078\times10^{-4}$ & $6.078\times10^{-4}$ \\
+Shear center from the \ac{LE} & $0.366c$ & $0.366c$ \\
+Tension center from the \ac{LE} & $0.4204c$ & $0.4204c$ \\
+\hline
+\end{tabular}
+\end{table}
+The bend-twist coupling is positive for a positive fiber angle, so an upward tip load produces nose-down twist, consistent with the \ac{CLT} model and the beam element convention.
+
+The model is limited to prismatic, initially straight, and untwisted beams, since the initial curvature and twist terms of \citet{Hodges2006} are not implemented.
+Plies are assumed flat and parallel to the chord plane, so surface-following plies on curved skins are not represented.
+The trapeze effect, the geometric stiffening of a twisted beam under axial load, is not captured because the analysis is linear and prismatic.
+The cross-sectional solve uses a dense direct factorization of the bordered system, which is adequate for the mesh sizes used here (a few thousand warping \ac{DOF}) but does not scale to very fine meshes.
+%
 \subsubsection{Structural damping}
 % 
 We use a proportional (Rayleigh) damping model, which is commonly used for multi-\ac{DOF} structures because of mathematical conveniences

@@ -7,6 +7,10 @@
 
 using Zygote
 
+# Variational asymptotic method cross-sectional analysis (Hodges 2006). The module lands in the
+# namespace that includes this file (FEMMethods and DCFoil), so call it as VAM.<function>.
+include("VAM.jl")
+
 
 struct SectionProperty{TF,TC,T}
     c::TC # chord length
@@ -153,19 +157,74 @@ function compute_section_property(section::SectionProperty, constitutive::String
 
 end
 
-function analyze_sectionVAM(tragflügelCoords, θf, mode="beam")
+function generate_section_mesh(section::SectionProperty; nChord::Int=40, nThick::Int=6, order::Int=2)
     """
-    Apply the variational asymptotic method (VAM) for the Vlasov beam based on Hodges 2006
-        CURRENTLY IN UTILITY CODE REPO
+    Structured quadrilateral mesh of the solid airfoil section for the VAM analysis.
+
+    The unit-chord airfoil coordinates in section.airfoilCoords (counterclockwise from the TE, as
+    from generate_naca4dig) are scaled by the chord. The reference axis is the elastic axis at
+    x_EA = c/2 + ab from the LE, and the beam frame has x2 pointing toward the LE and x3 up.
+    section.t is not used; the thickness comes from the airfoil coordinates.
     """
-    if uppercase(mode) == "BEAM"
-        # Beam-specific analysis
-    elseif uppercase(mode) == "PLATE"
-        # Plate-specific analysis
-    else
-        error("Unsupported mode: $mode. Use 'beam' or 'plate'.")
+    coords = section.airfoilCoords
+    xMin, xMax = extrema(coords[:, 1])
+    if !(xMax - xMin > 0)
+        error("Airfoil coordinates have no chordwise extent; compute_beam's placeholder zeros(20, 2) cannot be used for VAM")
     end
-    return xsectProp
+    c = section.c
+    xEA = c / 2 + section.ab
+    xStations = VAM.cosine_stations(xMin, xMax, order * nChord + 1)
+    zLower, zUpper = VAM.interpolate_airfoil_surfaces(coords, xStations)
+    # x2 = xEA - x decreases along the airfoil, so reverse to ascending x2 for a counterclockwise mesh
+    x2Stations = reverse(xEA .- c .* xStations)
+    mesh = VAM.generate_structured_quad_mesh(x2Stations, reverse(c .* zLower), reverse(c .* zUpper); nThick=nThick, order=order)
+    layup = VAM.uniform_layup(mesh, 1, section.theta_f)
+    return mesh, layup
+end
+
+function convert_to_beam_constants(properties::VAM.CrossSectionProperties, ab)
+    """
+    Map the VAM cross-sectional properties onto the eight constants of the COMP2 beam element.
+
+    The axial strain is condensed out (F1 = 0) because the element has no extension-bending
+    coupling, so the bending stiffnesses are those about the tension center. The bend-twist
+    coupling is K = -S̄23 because the element curvature is w'' while Hodges' κ2 = -w''.
+    The warping stiffness follows the element convention S = Ŝ55 + EI ab², with Ŝ55 about the
+    shear center (see docs.tex, structural model).
+
+    Returns EIₛ, EIₛIP, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ in the order of compute_section_property.
+    """
+    stiffness = properties.stiffnessClassical
+    condensed = VAM.condense_axial_stiffness(stiffness) # [κ1, κ2, κ3]
+    EAₛ = stiffness[1, 1]
+    GJₛ = condensed[1, 1]
+    EIₛ = condensed[2, 2]
+    EIₛIP = condensed[3, 3]
+    Kₛ = -condensed[1, 2]
+    Sₛ = properties.stiffnessVlasov[5, 5] + EIₛ * ab^2
+    mₛ = properties.massPerLength
+    Iₛ = properties.momentsOfInertia[1] + properties.momentsOfInertia[2]
+    return EIₛ, EIₛIP, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
+end
+
+function analyze_sectionVAM_properties(section::SectionProperty; nChord::Int=40, nThick::Int=6, order::Int=2, ν23=0.4)
+    """
+    Full VAM cross-sectional analysis of the airfoil section (Hodges 2006, Ch. 4): classical 4x4,
+    generalized Timoshenko 6x6, generalized Vlasov 5x5, mass matrix, shear and tension centers.
+    The material is transversely isotropic with the 2-3 Poisson ratio ν23 (not in MaterialLibrary).
+    """
+    mesh, layup = generate_section_mesh(section; nChord=nChord, nThick=nThick, order=order)
+    material = VAM.transversely_isotropic_material(section.E₁, section.E₂, section.G₁₂, section.ν₁₂, section.ρₛ; ν23=ν23)
+    return VAM.analyze_cross_section(mesh, layup, [material])
+end
+
+function analyze_sectionVAM(section::SectionProperty; nChord::Int=40, nThick::Int=6, order::Int=2, ν23=0.4)
+    """
+    Beam constants of the airfoil section from the variational asymptotic method, in the order of
+    compute_section_property: EIₛ, EIₛIP, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ.
+    """
+    properties = analyze_sectionVAM_properties(section; nChord=nChord, nThick=nThick, order=order, ν23=ν23)
+    return convert_to_beam_constants(properties, section.ab)
 end
 
 function compute_beam(nNodes::Int64,
