@@ -786,10 +786,3 @@ function transform_euler_ang(phi, theta, psi; rotType=1)
 
     return RMat
 end
-
-
-
-function normalize_3Dvector(r)
-    rhat = r ./ √(r[XDIM]^2 + r[YDIM]^2 + r[ZDIM]^2)
-    return rhat
-end

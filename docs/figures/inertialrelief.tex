@@ -1,0 +1,89 @@
+% Free-free beam with inertial relief (hogging hull girder verification case)
+% Compile standalone: pdflatex inertialrelief.tex -> inertialrelief.pdf, included by ../latex/docs.tex
+\documentclass{article}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc}
+
+\newcommand{\mbf}[1]{\mathbf{#1}}
+\newcommand{\mbs}[1]{\boldsymbol{#1}}
+
+% Tight bounding box around the tikzpicture (same approach as the XDSM figures)
+\usepackage[active,tightpage]{preview}
+\PreviewEnvironment{tikzpicture}
+\setlength{\PreviewBorder}{5pt}
+
+\begin{document}
+\begin{tikzpicture}[
+        >=Latex,
+        beam/.style={line width=2pt, black},
+        ghost/.style={line width=1pt, black!40, dashed},
+        meanaxis/.style={dash dot, gray!80!black, thick},
+        load/.style={->, thick, blue!70!black},
+        inertial/.style={->, thick, red!70!black},
+        lbl/.style={font=\small},
+        panel/.style={font=\small\bfseries, anchor=west},
+        note/.style={font=\small, anchor=west, text width=5.4cm},
+    ]
+    \def\L{8}
+    \def\rowgap{4.3}
+    % Deflected shape about the mean axis: A (2/5 - s), s = xi^2 (6 - 4 xi + xi^2) / 3, xi = |x - L/2| / (L/2)
+    \def\shape#1{1.4*(0.4 - (((abs(#1-4)/4)^2)*(6 - 4*abs(#1-4)/4 + (abs(#1-4)/4)^2))/3)}
+
+    % ---------------- (a) applied load on the free-free beam ----------------
+    \begin{scope}
+        \node[panel] at (-0.3, 2.0) {(a) Free--free beam and applied load $\mbf{f}$};
+        \draw[beam] (0,0) -- (\L,0);
+        \foreach \x in {0,1,...,8} { \fill (\x,0) circle (2.2pt); }
+        % reference point for the rigid body modes
+        \draw[fill=white, thick] (4,0) circle (3.5pt);
+        \node[lbl, above right=2pt] at (4,0) {$\mbf{r}_0$};
+        % applied point load (midship buoyancy)
+        \draw[load] (4,-1.4) -- (4,-0.15) node[lbl, pos=0.3, right] {$P$};
+        % beam local axes in global coordinates
+        \draw[->] (0,-1.3) -- (1,-1.3) node[lbl, right] {$\mbf{n}_1$};
+        \draw[->] (0,-1.3) -- (0,-0.4) node[lbl, above left] {$\mbf{n}_3$};
+        % nodal DOFs: translation at the first node, slope at the second
+        \draw[->, thin] (0,0) -- (0,0.9) node[lbl, above] {$w$};
+        \draw[->, thin] (0.57,0.3) arc (150:30:0.5);
+        \node[lbl, anchor=west] at (1.55,0.55) {$\theta = \partial w / \partial x$};
+        \node[note] at (\L+1.0, 0.3) {No DOFs are blanked, so $\mbf{K}_s$ is singular. 
+        The six rigid-body modes $\mbf{\Phi}_r$ are translations along and rotations about $\mbf{n}_k$ through $\mbf{r}_0$.};
+    \end{scope}
+
+    % ---------------- (b) rigid-body acceleration and inertial load ----------------
+    \begin{scope}[yshift=-\rowgap cm]
+        \node[panel] at (-0.3, 2.0) {(b) Rigid-body acceleration and inertial load};
+        \draw[beam] (0,0) -- (\L,0);
+        \foreach \x in {0,1,...,8} { \fill (\x,0) circle (2.2pt); }
+        \draw[fill=white, thick] (4,0) circle (3.5pt);
+        \draw[load, blue!35] (4,-1.4) -- (4,-0.15) node[lbl, pos=0.3, right, text=blue!35] {$P$};
+        % heave acceleration of the rigid body
+        \draw[inertial, line width=1.6pt] (4,0.15) -- (4,1.6) node[lbl, right] {$\ddot{q}_3 = P / m_{\mathrm{tot}}$};
+        % inertial load opposing the acceleration
+        \foreach \x in {0.25,0.75,...,7.75} { \draw[inertial, thin] (\x,0.75) -- (\x,0.12); }
+        \draw[red!70!black, thin] (0.25,0.75) -- (7.75,0.75);
+        \node[lbl, red!70!black, anchor=south west] at (0.2,0.85) {$-\mbf{M}_s \mbf{\Phi}_r \ddot{\mbf{q}}_r$};
+        \node[note] at (\L+1.0, 0.3) {$\mbf{M}_{rr} \ddot{\mbf{q}}_r = \mbf{\Phi}_r^{\top} \mbf{f}$ with $\mbf{M}_{rr} = \mbf{\Phi}_r^{\top} \mbf{M}_s \mbf{\Phi}_r$. The inertial load, here $-P/L$ per unit length, balances the applied load.};
+    \end{scope}
+
+    % ---------------- (c) elastic deformation about the mean axis ----------------
+    \begin{scope}[yshift=-2*\rowgap cm]
+        \node[panel] at (-0.3, 2.0) {(c) Self-equilibrated load and elastic deformation $\mbf{u}_e$};
+        \draw[meanaxis] (-0.4,0) -- (\L+0.4,0);
+        \node[lbl, gray!80!black, anchor=south west] at (6.1,0.06) {mean axis};
+        \draw[ghost] (0,0) -- (\L,0);
+        \draw[fill=white, thick] (4,0) circle (3.5pt);
+        % hogging deflected shape
+        \draw[beam, blue!70!black] plot[domain=0:8, samples=81, smooth] (\x, {\shape{\x}});
+        \foreach \x in {0,1,...,8} { \fill[blue!70!black] (\x, {\shape{\x}}) circle (2.2pt); }
+        % deflection dimensions
+        \draw[<->, thin] (4.35,0) -- (4.35,{\shape{4.35}});
+        \node[lbl, anchor=south west] at (4.5,0.6) {$w_{\mathrm{mid}} = \dfrac{P L^3}{320 EI}$};
+        \draw[<->, thin] (8.35,0) -- (8.35,{\shape{8}}) node[lbl, midway, right] {$w_{\mathrm{end}} = -\dfrac{3 P L^3}{640 EI}$};
+        \node[note] at (\L+1.0, -1.9) {The bordered system solves $\mbf{K}_s \mbf{u}_e = \mbf{f} - \mbf{M}_s \mbf{\Phi}_r \ddot{\mbf{q}}_r$ with the mean-axis constraint $\mbf{\Phi}_r^{\top} \mbf{M}_s \mbf{u}_e = \mbf{0}$, giving the hogging deformation.};
+    \end{scope}
+\end{tikzpicture}
+\end{document}

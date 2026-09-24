@@ -720,6 +720,10 @@ function get_fixed_dofs(elemType::String, BCCond="clamped"; appendageOptions=Dic
             error("config not recognized")
         end
 
+    elseif BCCond == "free-free"
+        # Nothing is blanked; the singular stiffness matrix is handled by solve_freeFreeStructure()
+        fixedDOFs = Int64[]
+
     else
         error("BCCond not recognized")
     end
@@ -849,14 +853,18 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
     return copy(globalM_z)
 end
 
-function apply_inertialLoad!(globalF; gravityVector=[0.0, 0.0, -9.81])
+function compute_gravityLoads(globalM::AbstractMatrix, gravityVector=[0.0, 0.0, -GRAV])
     """
-    Applies inertial load and modifies globalF
-    TODO: add gravity vector
+    Consistent gravity load vector
+        {f_g} = [M] {a_g}
+    where {a_g} is the uniform gravitational acceleration on the translational DOFs of every node
+    so the nodal forces and moments are consistent with the mass distribution
     """
 
-    println("Adding inertial loads to FEM with gravity vector of", gravityVector)
+    nNodes = size(globalM, 1) ÷ NDOF
+    gravityField = repeat(vcat(gravityVector, zeros(NDOF - 3)), nNodes)
 
+    return globalM * gravityField
 end
 
 function apply_BCs(
@@ -884,6 +892,83 @@ function apply_BCs(
     return newK, newM, newF
 end
 
+function compute_rigidBodyModes(FEMESH::StructMesh; referencePoint=nothing, appendageOptions=Dict("config" => "wing"))
+    """
+    Rigid body modes [Φr] of a straight free-free beam
+        columns 1:3 are unit translations along the beam local axes n_k (expressed in global coordinates)
+        columns 4:6 are unit rotations about n_k through the reference point (default is the node centroid)
+    The rotation DOFs carry signs (1, -1, 1) because θ = ∂w/∂x and ψ = ∂v/∂x are slopes, not rotation angles,
+    so a rotation about the local y-axis is the negative of θ.
+    The higher-order DOFs φ', θ', ψ' are zero for rigid motion.
+    The beam axes are taken from the first element so this is exact for straight (colinear) beams only.
+    """
+
+    coordMat = FEMESH.mesh
+    nNodes = size(coordMat, 1)
+
+    ChainRulesCore.ignore_derivatives() do
+        if appendageOptions["config"] == "t-foil"
+            error("Rigid body modes are only implemented for straight beams")
+        end
+    end
+
+    # --- Beam local axes in global coordinates from the first element ---
+    n1 = FEMESH.elemConn[1, 1]
+    n2 = FEMESH.elemConn[1, 2]
+    dR1 = coordMat[n2, XDIM] - coordMat[n1, XDIM]
+    dR2 = coordMat[n2, YDIM] - coordMat[n1, YDIM]
+    dR3 = coordMat[n2, ZDIM] - coordMat[n1, ZDIM]
+    lᵉ = √(dR1^2 + dR2^2 + dR3^2)
+    T = get_transMat(dR1, dR2, dR3, lᵉ)[1:3, 1:3] # {local} = [T] {global}
+
+    if isnothing(referencePoint)
+        referencePoint = vec(sum(coordMat, dims=1)) / nNodes
+    end
+
+    slopeSigns = [1.0, -1.0, 1.0]
+
+    Φr = zeros(RealOrComplex, NDOF * nNodes, 6)
+    Φr_z = Zygote.Buffer(Φr)
+    Φr_z[:, :] = Φr
+    for ii in 1:nNodes
+        armVec = coordMat[ii, :] - referencePoint
+        idx = (ii - 1) * NDOF
+        for kk in 1:3
+            beamAxis = T[kk, :] # k-th local axis in global coordinates, i.e., [T]ᵀ e_k
+            Φr_z[idx+UIND:idx+WIND, kk] = beamAxis
+            Φr_z[idx+UIND:idx+WIND, 3+kk] = myCrossProd(beamAxis, armVec)
+            Φr_z[idx+ΦIND:idx+ΨIND, 3+kk] = slopeSigns[kk] * beamAxis
+        end
+    end
+
+    return copy(Φr_z)
+end
+
+function solve_freeFreeStructure(K::AbstractMatrix, M::AbstractMatrix, F::AbstractVector, rigidBodyModes::AbstractMatrix)
+    """
+    Solve the free-free structural system with inertial relief
+    The applied loads accelerate the body as a rigid body and the inertial loads [M][Φr]{a} balance them.
+    The elastic deformation comes from the bordered (Lagrange multiplier) system
+        [ [K]        [M][Φr] ] {u}   {F}
+        [ [Φr]ᵀ[M]   [0]     ] {a} = {0}
+    where the second row is the mean-axis constraint [Φr]ᵀ[M]{u} = 0 that makes the deformation unique
+    and the multipliers {a} = ([Φr]ᵀ[M][Φr])⁻¹[Φr]ᵀ{F} are the rigid body accelerations
+    """
+
+    nDOF = size(K, 1)
+    nRigid = size(rigidBodyModes, 2)
+    MΦ = my_matmul(M, rigidBodyModes)
+    Kaug = vcat(hcat(K, MΦ), hcat(transpose(MΦ), zeros(nRigid, nRigid)))
+    Faug = vcat(F, zeros(nRigid))
+
+    sol = inv(Kaug) * Faug # same approach as solve_structure()
+
+    uElastic = sol[1:nDOF]
+    rigidBodyAccelerations = sol[nDOF+1:end]
+
+    return uElastic, rigidBodyAccelerations
+end
+
 function put_BC_back(q, elemType::String, BCType="clamped"; appendageOptions=Dict("config" => "wing"))
     """
     appends the BCs back into the solution
@@ -904,6 +989,8 @@ function put_BC_back(q, elemType::String, BCType="clamped"; appendageOptions=Dic
             println("Not working")
             exit()
         end
+    elseif BCType == "free-free"
+        uSol = q # nothing was blanked
     else
         println("Not working")
     end
@@ -1121,8 +1208,9 @@ function setup_FEBeamFromCoords(
 
     globalK, globalM, globalF = assemble(FEMESH, x_ab, WingStructModel, ELEMTYPE, WingStructModel.constitutive; config=appendageOptions["config"], STRUT=StrutStructModel, x_αb_strut=x_ab_strut, verbose=solverOptions["debug"])
 
-    # Initial guess on unknown deflections (excluding BC nodes)
-    DOFBlankingList = get_fixed_dofs(ELEMTYPE, "clamped"; appendageOptions=appendageOptions)
+    # DOFs removed by the boundary condition ("clamped" root by default, or "free-free" for a floating beam)
+    BCCond = get(appendageOptions, "boundaryCondition", "clamped")
+    DOFBlankingList = get_fixed_dofs(ELEMTYPE, BCCond; appendageOptions=appendageOptions)
 
     return globalK, globalM, globalF, DOFBlankingList, FEMESH, WingStructModel, StrutStructModel
 end
