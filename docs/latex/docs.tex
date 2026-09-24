@@ -310,16 +310,6 @@ Only the remainder deforms the structure (see diagram in \autoref{fig:InertialRe
 If we did not create the augmented matrix, some of the eigenvalues would be zero because $\mb{K}_s$ would be positive semidefinite.
 The zero eigenvalues correspond to the rigid body modes.
 A further discussion of finite element techniques with rigid body modes is in \citet[Sec. 17.3]{Craig2006}.
-\begin{figure}[H]
-	\centering
-	\includegraphics[width=\linewidth]{inertialrelief.pdf}
-	\caption{\label{fig:InertialRelief}
-	Inertial relief for a free--free beam under a midship point load: 
-	(a) the applied load on the unsupported beam, 
-	(b) the rigid-body acceleration and the inertial load that balances the applied load, and 
-	(c) the self-equilibrated load deforms the beam about the mean axis.
-	}
-\end{figure}
 
 TODO: go through this following Craig and Kurdila.
 The rigid-body modes $\mbf{\Phi}_r \in \mathbb{R}^{n \times 6}$ are unit translations along and unit rotations about the beam local axes $\mbf{n}_k = \mbf{T}^{\top} \mbf{e}_k$ (expressed in global coordinates) through a reference point $\mbf{r}_0$, which defaults to the node centroid.
@@ -359,7 +349,6 @@ Both conditions are enforced at once by the bordered system
 where the Lagrange multipliers are the rigid-body accelerations.
 The bordered matrix is nonsingular when $\mbf{\Phi}_r$ spans the null space of $\mbf{K}_s$ and $\mbf{M}_s$ is positive definite.
 This is the automatic inertial relief of commercial finite element codes (\texttt{INREL=-2} in Nastran) and requires no user-selected support DOFs.
-% TODO: cite Wright and Cooper, Introduction to Aircraft Aeroelasticity and Loads, for the classical inertial relief derivation once a bib entry exists
 
 Gravity is applied as a consistent inertial load
 \be
@@ -370,8 +359,18 @@ where $\mbf{a}_g$ holds the gravitational acceleration on the translational DOFs
 The implementation is verified on a uniform floating beam of mass per length $m$ whose weight $P = m g L$ is balanced by a concentrated buoyancy force at midship, i.e., the hogging condition on a wave crest.
 Each half of the beam is a cantilever from midship under the uniform inertial load $P/L$, so the closed-form relative deflection is $w_{\tn{mid}} - w_{\tn{end}} = P L^3 / (128 EI)$ and the mean-axis constraint gives $w_{\tn{mid}} = P L^3 / (320 EI)$ and $w_{\tn{end}} = -3 P L^3 / (640 EI)$.
 Under gravity alone the beam falls freely with $\ddot{\mbf{q}}_r = \mbf{g}$ and zero elastic deformation.
-The hydroelastic solvers currently assume the clamped boundary condition; extending them to the free--free case adds the six rigid-body unknowns and constraint rows of Equation~\eqref{eqn:InertialRelief} to the residual.
+The hydroelastic solvers currently assume the clamped boundary condition; extending them to the free--free case adds the six rigid-body unknowns and constraint rows of \autoref{eqn:InertialRelief} to the residual.
 %
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{inertialrelief.pdf}
+	\caption{\label{fig:InertialRelief}
+	Inertial relief for a free--free beam under a midship point load: 
+	(a) the applied load on the unsupported beam, 
+	(b) the rigid-body acceleration and the inertial load that balances the applied load, and 
+	(c) the self-equilibrated load deforms the beam about the mean axis.
+	}
+\end{figure}
 \subsection{Hydrodynamic loads}
 % 
 \subsubsection{Glauert's steady lifting line}

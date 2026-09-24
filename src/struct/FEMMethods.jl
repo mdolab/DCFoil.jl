@@ -900,7 +900,7 @@ function compute_rigidBodyModes(FEMESH::StructMesh; referencePoint=nothing, appe
     The rotation DOFs carry signs (1, -1, 1) because θ = ∂w/∂x and ψ = ∂v/∂x are slopes, not rotation angles,
     so a rotation about the local y-axis is the negative of θ.
     The higher-order DOFs φ', θ', ψ' are zero for rigid motion.
-    The beam axes are taken from the first element so this is exact for straight (collinear) beams only.
+    The beam axes are taken from the first element so this is exact for straight (colinear) beams only.
     """
 
     coordMat = FEMESH.mesh
