@@ -16,6 +16,7 @@
 \usepackage{enumitem}
 \usepackage{listings}
 \usepackage{float}
+\usepackage{booktabs}
 
 \graphicspath{{../figures/}}
 
@@ -204,6 +205,7 @@ The underlying physical models apply to general slender shapes.
 	\acro{CLT}{classical lamination theory}
 	\acro{VAM}{variational asymptotic method}
 	\acro{VABS}{variational asymptotic beam sectional analysis}
+	\acro{WM}[WM]{Wiener--Milenkovi\'c}
 \end{acronym}
 \clearpage
 %------------------------------------------------------------------------------
@@ -269,7 +271,7 @@ Q_{66} = G_{12}
 The following are numerical methods for computing structural properties of airfoils.
 The sectional mass properties are
 \be
-& m_s & = \int_{0}^{c} \rho \left(Z_u - Z_\ell \right)  dx \doteq \tn{kg-m}^{-1}
+& m_s & = \int_{0}^{c} \rho \left(Z_u - Z_\ell \right)  \diff x \doteq \tn{kg-m}^{-1}
 \\
 & I_s & = \int_{0}^{c}\int_{0}^{t_{\tn{max}}} r^2 \diff m
 \ee
@@ -283,20 +285,21 @@ The sectional geometric properties are\footnote{The torsional constant is NOT th
 \ee
 and torsional warping resistance due to tension from \citet{LOTTATI1985} is
 \be
-S = \int_{-b}^b D_{22} x_a^2 d x, \quad\tn{where } x_a = x - ba
+S = \int_{-b}^b D_{22} x_a^2 \diff x, \quad\tn{where } x_a = x - ba
 \ee
 \subsubsection{Beam parameters via the variational asymptotic method}
 %
 The \ac{CLT} model of \citet{Weisshaar1985} treats the foil as a thin rectangular plate and cannot represent a solid airfoil section, a layup through the thickness, or the true shear and tension centers.
-This section presents a two-dimensional cross-sectional finite element analysis based on the \ac{VAM}, following \citet{Hodges2006}, that returns the classical $4\times4$ stiffness, the generalized Timoshenko $6\times6$ stiffness with shear center, the generalized Vlasov $5\times5$ stiffness, and the $6\times6$ mass matrix of the section.
-The method reproduces \ac{VABS} \citep{Cesnik1997}, the reference sectional analysis code for composite rotor and wing beams, and is implemented in \texttt{src/struct/VAM.jl} with the adapter \texttt{analyze\_sectionVAM} in \texttt{BeamProperties.jl}.
+This section presents a 2D cross-sectional finite element analysis based on the \ac{VAM}, following \citet{Hodges2006}, that returns the classical $4\times4$ stiffness, the generalized Timoshenko $6\times6$ stiffness with shear center, the generalized Vlasov $5\times5$ stiffness, and the $6\times6$ mass matrix of the section.
+The method reproduces \ac{VABS} from \citet{Cesnik1997}, the reference sectional analysis code for composite rotor and wing beams, and is implemented in \texttt{src/struct/VAM.jl}.
 The beam frame is $x_1$ = span, $x_2$ = chord, and $x_3$ = vertical, with $x_2$ positive toward the \ac{LE} for a starboard wing.
 The beam is assumed prismatic, initially straight, and untwisted, so the initial curvature and twist measures vanish and the metric of the reference line is unity.
 
-The three-dimensional strain field decomposes into a warping part, a classical-strain part, and a warping-gradient part \citep[Eqs.~(3.94)--(3.99)]{Hodges2006}
+The 3D strain field is comprised of a warping part, a classical-strain part, and a warping-gradient part \citep[Eqs.~(3.94)--(3.99)]{Hodges2006}
 \beq
-\Gamma = \Gamma_a w + \Gamma_\varepsilon \bar\varepsilon + \Gamma_\ell w'
 \label{eqn:VAM3DStrain}
+\Gamma = 
+\underbrace{\Gamma_a w}_{warping} + \Gamma_\varepsilon \bar\varepsilon + \Gamma_\ell w'
 \eeq
 where $\Gamma = [\Gamma_{11},\ 2\Gamma_{12},\ 2\Gamma_{13},\ \Gamma_{22},\ 2\Gamma_{23},\ \Gamma_{33}]^\top$ is the three-dimensional strain, $\bar\varepsilon = [\bar\gamma_{11},\ \bar\kappa_1,\ \bar\kappa_2,\ \bar\kappa_3]^\top$ is the classical extension-twist-bending strain, $w(x_2,x_3)$ is the unknown cross-sectional warping displacement, and $(\,)' = \partial(\,)/\partial x_1$.
 The three operators are
@@ -496,9 +499,8 @@ The leading-edge column is collapsed to a single node where the upper and lower 
 \caption{Mapping from the VAM classical and generalized stiffnesses to DCFoil's beam constants.}
 \label{tab:VAMMapping}
 \begin{tabular}{ll}
-\hline
 DCFoil constant & VAM expression (about the \ac{EA} reference axis) \\
-\hline
+\midrule
 $EA_s$ & $\bar S_{11}$ \\
 $GJ_s$ & $\bar S_{22} - \bar S_{12}^2/\bar S_{11}$ \\
 $EI_s$ (flap, about $x_2$) & $\bar S_{33} - \bar S_{13}^2/\bar S_{11}$ \\
@@ -507,7 +509,6 @@ $K_s$ (bend-twist coupling) & $-\left(\bar S_{23} - \bar S_{12}\bar S_{13}/\bar 
 $S_s$ (warping stiffness) & $\hat S_{55} + EI_s \cdot ab^2$ \\
 $m_s$ & $\mu$ \\
 $I_s$ (polar mass inertia, about the \ac{EA}) & $i_2 + i_3$ \\
-\hline
 \end{tabular}
 \end{table}
 The element has no slot for axial-bending coupling, so $\bar\gamma_{11}$ is condensed out (equivalent to setting $F_1 = 0$) before mapping the $3\times3$ bending-torsion block; without condensation, $\bar S_{44}$ about an axis that is not the tension center carries a spurious parallel-axis term $\bar S_{11}d^2$.
@@ -554,6 +555,119 @@ The model is limited to prismatic, initially straight, and untwisted beams, sinc
 Plies are assumed flat and parallel to the chord plane, so surface-following plies on curved skins are not represented.
 The trapeze effect, the geometric stiffening of a twisted beam under axial load, is not captured because the analysis is linear and prismatic.
 The cross-sectional solve uses a dense direct factorization of the bordered system, which is adequate for the mesh sizes used here (a few thousand warping \ac{DOF}) but does not scale to very fine meshes.
+%
+\subsubsection{Geometrically exact beam with the VAM section model}
+%
+The \ac{VAM} cross-sectional analysis above returns a generalized Timoshenko $6\times6$ stiffness $\mbf{S}_6$ (\autoref{eqn:VAMTimoOrdering}), a $6\times6$ mass matrix $\mbf{M}$ (\autoref{eqn:VAMMass}), and, optionally, the Vlasov warping rigidity $\hat S_{55}$ (\autoref{eqn:VAMVlasov}); \texttt{src/struct/StrainBeam.jl} consumes these section constants directly in a strain-based (intrinsic), geometrically exact one-dimensional beam model for the nonlinear \emph{static} analysis of a single prismatic member at large deflections and rotations (no dynamics yet).
+
+The continuous theory is the intrinsic formulation of \citet[Ch.~5]{Hodges2006}.
+Writing $F, M$ for the internal force and moment resultants and $\gamma = (\gamma_{11}, 2\gamma_{12}, 2\gamma_{13})$, $\kappa = (\kappa_1,\kappa_2,\kappa_3)$ for the sectional strain and curvature of \autoref{eqn:VAMTimoOrdering}, all expressed in the deformed cross-sectional frame $B$, static equilibrium along the reference line reads
+\beq
+F' + \tilde K F + f &= 0 \\
+M' + \tilde K M + (\tilde e_1 + \tilde\gamma) F + m &= 0
+\label{eqn:StrainBeamEquilibrium}
+\eeq
+where $f, m$ are the distributed force and moment per unit length in $B$, $e_1$ is the reference-line tangent, and $K$ is the reference line's built-in curvature and twist, which for our prismatic, initially straight and untwisted beams reduces to the elastic curvature, $K=\kappa$.
+The companion kinematic relations are
+\beq
+r' &= C^{aB}(e_1+\gamma) \\
+C^{aB\prime} &= -\tilde\kappa\, C^{aB}
+\label{eqn:StrainBeamKinematics}
+\eeq
+with $r$ the reference-line position in the global frame $a$ and $C^{aB}$ the rotation tensor from $B$ to $a$, and the constitutive law is the $6\times6$ of \autoref{eqn:VAMTimoOrdering} inverted,
+\beq
+\begin{Bmatrix}\gamma \\ \kappa\end{Bmatrix} = \mbf{S}_6^{-1}\begin{Bmatrix}F \\ M\end{Bmatrix}
+\label{eqn:StrainBeamConstitutive}
+\eeq
+
+Finite rotations are parameterized with the Wiener--Milenkovi\'c (\ac{WM}) vector $c = 4\tan(\phi/4)\,n$ of a rotation of angle $\phi$ about the unit axis $n$; with $c_0 = 2-c^\top c/8$,
+\beq
+C(c) = \frac{(c_0^2-c^\top c)\mbf{I} + 2cc^\top - 2c_0\tilde c}{(4-c_0)^2}, \qquad
+Q(c) = \frac{(4-c^\top c/4)\mbf{I} - 2\tilde c + cc^\top/2}{(4-c_0)^2}
+\label{eqn:StrainBeamWM}
+\eeq
+give the rotation tensor and the tangent operator relating the parameter rate to the material curvature, $\kappa = C^{ba}Q\,\theta'$; the closed-form inverse
+\beq
+Q^{-1}(c) = \left(1-\frac{c^\top c}{16}\right)\mbf{I} + \frac{\tilde c}{2} + \frac{cc^\top}{8}
+\label{eqn:StrainBeamWMInverse}
+\eeq
+is used directly rather than inverting $Q$ numerically.
+The rational forms of $C$, $Q$, and $Q^{-1}$ are exact for every finite $c$, so the raw nodal parameters represent any rotation below $360^\circ$ ($|c|=4$ is $180^\circ$; the singularity $|c|\to\infty$ sits at $\phi=\pm2\pi$).
+A rotation beyond $180^\circ$ can be mapped onto the equivalent parameters $c^* = -16c/(c^\top c)$ of the same rotation with $|c^*|<4$ \citep{Bauchau2003,Bauchau2011}, but this rescaling is kept as a post-processing utility: the compatibility residuals are written in increments of the stored parameters, so rescaling inside $C$ and $Q$ would make them inconsistent once a node passes $180^\circ$.
+
+\autoref{eqn:StrainBeamEquilibrium}--\autoref{eqn:StrainBeamConstitutive} are discretized with the mixed variational formulation of \citet{Hodges1990}, as used in the GEBT code of \citet{Yu2012GEBT} and following the element and scaling conventions of \texttt{GXBeam.jl} \citep{McDonnell2022}: two-node elements carry element-wise constant $F, M$ in the deformed frame, scaled by a power-of-two factor chosen so the scaled internal loads are of order $100\times$ the mean nonzero compliance entry (for conditioning, following GXBeam), while the nodes carry the displacement $u$ and \ac{WM} rotation parameters $\theta$.
+For an element of length $L$ and undeformed frame $C^{ab}$ (by default the minimal rotation from the global $x$ axis onto the element tangent, which for a beam along $y$ gives $e_2$ toward the leading edge and $e_3$ up; a section normal can be given instead to fix $e_3$), with mean nodal rotation $\theta_e=(\theta_1+\theta_2)/2$ and $C=C(\theta_e)$ so that $C^\top C^{ab}$ maps the element's own deformed-frame components to global components, the element compatibility residuals are
+\beq
+u_2-u_1 &= C^\top C^{ab}\,L(e_1+\gamma) - L\,C^{ab}e_1 \\
+\theta_2-\theta_1 &= Q^{-1}(\theta_e)\,C^{ab}L\kappa
+\label{eqn:StrainBeamCompatibility}
+\eeq
+Point equilibrium balances the external point loads against the resultants that the adjoining elements exert at their end nodes,
+\beq
+F_{\tn{end}} = C^\top C^{ab} F, \qquad
+M_{\tn{end}} = C^\top C^{ab}\left[M \pm \half L(e_1+\gamma)\times F\right]
+\label{eqn:StrainBeamEndLoads}
+\eeq
+the $\pm$ giving the start ($+$) and end ($-$) node values from the element's single constant $F, M$, the half-length term accounting for the constant-load element's own moment about each end.
+Each of the six conjugate pairs $(u_i,F_i)$, $(\theta_i,M_i)$ at a node has either the kinematic quantity prescribed (a clamped root sets all six) or the load prescribed (zero at a free end), with the unknown reaction or displacement solved for in the same state slot; dead loads stay fixed in the global frame while follower loads are rotated by $C^\top$ every iteration.
+Distributed loads are pre-integrated to the two element ends with linear (tent) weights by four-point Gauss--Legendre quadrature before assembly, and each element passes half its own weight (from $\mu=M_{11}$ of \autoref{eqn:VAMMass}) to each node as well.
+The assembled nonlinear system is solved by Newton iteration with a backtracking line search on the residual norm and a Jacobian from forward-mode \ac{AD} (\texttt{ForwardDiff.jl}, checked against a central finite-difference Jacobian), the load stepped from zero to full amplitude in increments halved whenever a step fails to converge; because the compatibility equations use the exact finite-rotation kinematics evaluated at the element midpoint, the discretization is second-order accurate in $L$ even at finite deflection and rotation.
+
+The generalized Vlasov restrained-warping correction of \citet[Eq.~(5)]{Yu2005b} adds one further conjugate pair to the state: the twist rate $\kappa_1$ as an independent field at the nodes and the bimoment $M_\omega$ as a constant field on the elements.
+Only the shear-center modulus $\hat S_{55}$ of \autoref{eqn:VAMVlasov} is used, so the moment equation of \autoref{eqn:StrainBeamEquilibrium} is written for the total moment
+\beq
+M_{\tn{tot}} = M - M_\omega' e_1, \qquad
+M_\omega = \pp{U}{\kappa_1'} = \hat S_{55}\,\kappa_1'
+\label{eqn:StrainBeamBimoment}
+\eeq
+in place of $M$, with boundary conditions $\kappa_1=0$ (no warping) at a clamped end and $M_\omega=0$ (unrestrained) at a free end, exactly like the other conjugate pairs.
+\citet{Yu2005b} give this continuous theory; the mixed finite element for the $(\kappa_1,M_\omega)$ pair below is ours.
+The compatibility residual is the discrete form of the bimoment relation,
+\beq
+\kappa_{1,2}-\kappa_{1,1} = \frac{L\,M_\omega}{\hat S_{55}}
+\label{eqn:StrainBeamWarpingCompatibility}
+\eeq
+With the element's twist rate $\kappa_1$ given (the average of its two nodal values), the $6\times6$ law of \autoref{eqn:StrainBeamConstitutive} is partially inverted for the remaining five strains $[\gamma;\kappa_2;\kappa_3]$ from $[F;M_2;M_3]$ with the $\kappa_1$ column moved to the right-hand side, and the Saint-Venant torque $M_{1,\tn{SV}}$ follows from the same partial inversion; the point equation at the twist-rate node is the bimoment jump
+\beq
+M_\omega' = M_{1,\tn{SV}} - M_{1,\tn{tot}}
+\label{eqn:StrainBeamBimomentJump}
+\eeq
+i.e., the Saint-Venant torque exceeds the total (elastic) torque by the rate of change of the bimoment, discretized as a half-jump split symmetrically between the element's two end nodes exactly as $M_\tn{end}$ is split in \autoref{eqn:StrainBeamEndLoads}.
+
+For a prismatic bar of length $L$, restrained ($\kappa_1(0)=0$) at $x=0$ and free ($M_\omega(L)=0$) at $x=L$ under a tip torque $T$, this theory has the closed form
+\beq
+\theta'(x) = \frac{T}{GJ}\left[1-\frac{\cosh\lambda(L-x)}{\cosh\lambda L}\right], \qquad
+M_\omega(x) = \frac{T}{\lambda}\frac{\sinh\lambda(L-x)}{\cosh\lambda L}, \qquad
+\lambda^2 = \frac{GJ}{\hat S_{55}}
+\label{eqn:StrainBeamRestrainedWarping}
+\eeq
+which we use as the strip check of \citet[Table~7.9]{Hodges2006}: $\lambda=4.255~\tn{in}^{-1}$, and at $L=2~\tn{in}$ the ratio of the tip rotation (integrating $\theta'$ over $[0,L]$) to the unrestrained value $TL/GJ$ is $0.8825$.
+\citet{Yu2005b} caution that this correction is asymptotically justified for thin-walled open sections, where warping restraint is a leading-order effect, and not for solid sections, where it is a higher-order sensitivity; DCFoil's foil sections are solid \ac{CFRP}, so the Vlasov path is offered here as a stiffness sensitivity rather than a validated correction.
+
+The implementation is verified against
+\begin{itemize}[noitemsep]
+	\item \ac{WM} rotation algebra: $C$ matches the axis-angle rotation tensor, $QQ^{-1}=\mbf{I}$, the parameters are recovered from $C$, composition matches the matrix product, and the rescaled representation of a rotation beyond $180^\circ$ is the same rotation;
+	\item the \ac{AD} Jacobian against a central finite-difference Jacobian, with and without the Vlasov pair;
+	\item roll-up of a cantilever under a pure tip moment into a circular arc up to a tip rotation of $288^\circ$ ($M=1.6\pi EI/L$; the full circle is the $360^\circ$ singularity of the parametrization) \citep[Ch.~5]{Hodges2006}, together with mesh convergence confirming the element's second-order accuracy;
+	\item the large-deflection elastica of \citet{Bisshopp1945} at the tip-load parameters $\alpha=1,2,5,10$, including the work--energy balance along the load path;
+	\item the exact linear (small-displacement) limit of the \ac{CFRP} NACA0009 cantilever of \autoref{tab:VAMNACA0009} from its own generalized Timoshenko compliance, its second-order foreshortening, and the coupled bending-twist Euler--Bernoulli closed form, which is 5\% away because of the shear--twist coupling of the $15^\circ$ layup;
+	\item the Vlasov restrained-warping strip of \autoref{eqn:StrainBeamRestrainedWarping};
+	\item frame invariance: rigidly rotating the whole problem leaves the deformed-frame loads, strains, and curvatures unchanged and rotates the displacements with it.
+\end{itemize}
+\autoref{fig:StrainBeamNACA0009} shows the same \ac{CFRP} NACA0009 cantilever of \autoref{tab:VAMNACA0009} under a tip force stepped into the large-deflection regime.
+%
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{strainbeam_naca0009_spanwise.pdf}
+	\caption{\label{fig:StrainBeamNACA0009}
+	Spanwise deflections, twist, curvatures, and internal loads of the \ac{CFRP} NACA0009 cantilever ($c=\SI{0.1}{m}$, span \SI{1}{m}, $15^\circ$ fiber angle) under an upward tip force stepped into the large-deflection regime, nonlinear (this model) vs.\ linear.
+	}
+\end{figure}
+
+The model is nonlinear-static only: the \ac{VAM} $6\times6$ mass matrix is read in but no dynamic (eigenvalue or time-domain) residual is assembled yet.
+Elements are prismatic and initially straight, so a curved or pre-twisted reference line is not represented, and every element chain is a single unbranched beam.
+There is no port-wing mirroring of a starboard section: a full $6\times6$ generalized Timoshenko matrix requires reflecting the section (which changes the sign of every odd-order coupling term consistently), not the sign flip of $K_s$ alone that \texttt{FEMMethods} uses for its $4\times4$ beam (\autoref{tab:VAMMapping}).
+Finally, per \citet{Yu2005b}, the Vlasov correction is retained here only as a stiffness sensitivity, since it is asymptotically justified for thin-walled open sections and DCFoil's foil sections are solid.
 %
 \subsubsection{Structural damping}
 % 
@@ -1812,7 +1926,7 @@ The nonlinear structural analysis solves the residual equations
 \mbf{r}_s(\mbf{u}) = \mbf{0}
 \eeq
 where $\mbf{u}$ is the vector of structural states.
-In our linear beam analysis, $\mbf{r}_s(\mbf{u}) = \mbf{K}_\tn{ss} \mbf{u} - \mbf{f}$, where $\mbf{f}$ is the load vector coming from the flow solver.
+In our linear beam analysis, $\mbf{r}_s(\mbf{u}) = \mbf{K}_\tn{ss} \mbf{u} - \mbf{f}$, where $\mbf{f}$ is the load vector coming from the flow solver; a nonlinear, strain-based geometrically exact beam fed by the same \ac{VAM} section properties is also available for static analysis outside this coupled solve.
 
 The combined solution requires solution of the multidisciplinary system
 \beq

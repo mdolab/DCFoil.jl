@@ -43,6 +43,7 @@ for headerName in [
     "adrules/CustomRules",
     # --- Used in this script ---
     "struct/FEMMethods",
+    "struct/StrainBeam",
     "hydro/HydroStrip",
     "ComputeFunctions",
     "InitModel",
@@ -61,6 +62,7 @@ using .SolveFlutter: SolveFlutter
 using .TecplotIO: TecplotIO
 using .InitModel: InitModel
 using .FEMMethods: FEMMethods
+using .StrainBeam: StrainBeam
 using .CostFunctions: staticCostFuncs, forcedCostFuncs, flutterCostFuncs, allCostFuncs
 using .SolutionConstants: ELEMTYPE
 
