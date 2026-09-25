@@ -35,7 +35,6 @@ nNodesStrut = 2
     @test test_COMP2_mass() <= 5e-5 # mass matrix
     @test test_FECOMP2() <= 1e-1
     @test test_FECOMP2_freeFree() <= 1e-6 # free-free beam with inertial relief
-
     # --- VAM cross-sectional analysis (each returns max error/tolerance) ---
     @test test_VAM_material_rotation() <= 1.0
     @test test_VAM_ellipse() <= 1.0 # isotropic ellipse and circle closed forms
