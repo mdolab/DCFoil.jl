@@ -11,6 +11,8 @@ Some big picture notes:
 using Test
 using ChainRulesCore
 include("test_struct.jl")
+include("test_vam.jl")
+include("test_strainbeam.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
 
@@ -33,6 +35,27 @@ nNodesStrut = 2
     @test test_COMP2_mass() <= 5e-5 # mass matrix
     @test test_FECOMP2() <= 1e-1
     @test test_FECOMP2_freeFree() <= 1e-6 # free-free beam with inertial relief
+    # --- VAM cross-sectional analysis (each returns max error/tolerance) ---
+    @test test_VAM_material_rotation() <= 1.0
+    @test test_VAM_ellipse() <= 1.0 # isotropic ellipse and circle closed forms
+    @test test_VAM_rectangleShear() <= 1.0 # rectangle shear correction factors and torsion constant
+    @test test_VAM_isotropicStrip() <= 1.0 # Hodges (2006) Table 7.9
+    @test test_VAM_compositeStrip() <= 1.0 # Hodges (2006) Tables 7.10 and 7.11
+    @test test_VAM_translationAndLayers() <= 1.0 # reference axis shift and two-layer section
+    @test test_VAM_thinPlateCLT() <= 1.0 # consistency with the CLT beam constants
+    @test test_VAM_NACA0009() <= 1.0 # solid CFRP airfoil section
+    @test test_VAM_adapter() <= 1.0 # BeamProperties adapter to the beam constants
+
+    # --- Geometrically exact strain-based beam (each returns max error/tolerance) ---
+    @test test_StrainBeam_rotations() <= 1.0 # Wiener-Milenkovic algebra
+    @test test_StrainBeam_jacobian() <= 1.0 # ForwardDiff against finite differences
+    @test test_StrainBeam_tipMoment() <= 1.0 # roll-up into a circle (Hodges 2006 Ch. 5)
+    @test test_StrainBeam_tipForce() <= 1.0 # Bisshopp and Drucker (1945) elastica
+    @test test_StrainBeam_linearLimit() <= 1.0 # exact linear limit of the CFRP NACA0009 cantilever
+    @test test_StrainBeam_convergence() <= 1.0 # second-order mesh convergence
+    @test test_StrainBeam_vlasovTorsion() <= 1.0 # restrained-warping torsion of the Hodges Table 7.9 strip
+    @test test_StrainBeam_frameInvariance() <= 1.0 # rigid rotation of the whole problem
+    @test test_StrainBeam_NACA0009() <= 1.0 # CFRP NACA0009 cantilever, spanwise results and figures
 end
 
 @testset "Test hydro" begin
