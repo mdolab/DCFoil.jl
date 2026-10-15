@@ -37,6 +37,7 @@ for headerName in [
     "../hydro/LiftingLine",
     "../io/MeshIO",
     "../io/TecplotIO",
+    "../io/ParaviewIO",
     "../constants/SolutionConstants",
     "../hydro/HydroStrip",
     "../solvers/SolverRoutines",
@@ -437,6 +438,9 @@ function solve_frequencies(LECoords, TECoords, nodeConn, appendageParams::Abstra
         if solverOptions["writeTecplotSolution"]
             write_tecplot_natural(appendageParams, structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, FEMESH.mesh, chordVec, outputDir; solverOptions=solverOptions)
         end
+        if get(solverOptions, "writeParaviewSolution", false)
+            write_paraview_natural(appendageParams, structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol, FEMESH.mesh, chordVec, outputDir; solverOptions=solverOptions)
+        end
     end
 
     return structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol
@@ -459,6 +463,12 @@ function write_solution(FLUTTERSOL, solverOptions, appendageParamsList; callNumb
         STATSOL = STATSOLLIST[iComp]
         FEMESH = STATSOL.FEMESH
         write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    end
+
+    if get(solverOptions, "writeParaviewSolution", false) && solverOptions["run_static"]
+        STATSOL = STATSOLLIST[iComp]
+        FEMESH = STATSOL.FEMESH
+        write_paraview(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
     end
 end
 
@@ -532,6 +542,22 @@ function write_tecplot_natural(DVDict, structNatFreqs, structModeShapes, wetNatF
     General purpose tecplot writer wrapper for modal solution
     """
     write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir; solverOptions=solverOptions)
+
+end
+
+function write_paraview(DVDict, FLUTTERSOL, chords, mesh, outputDir="./OUTPUT/"; solverOptions=Dict())
+    """
+    General purpose paraview writer wrapper for flutter solution
+    """
+    write_hydroelastic_mode_vtk(DVDict, FLUTTERSOL, chords, mesh, outputDir, "mode"; appendageOptions=solverOptions["appendageList"][1])
+
+end
+
+function write_paraview_natural(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir="./OUTPUT/"; solverOptions=Dict())
+    """
+    General purpose paraview writer wrapper for modal solution
+    """
+    write_natural_mode_vtk(DVDict, structNatFreqs, structModeShapes, wetNatFreqs, wetModeShapes, mesh, chords, outputDir; solverOptions=solverOptions)
 
 end
 

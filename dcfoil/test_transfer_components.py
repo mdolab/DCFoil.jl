@@ -4,9 +4,18 @@ Test load and displacement transfer components
 
 import unittest
 import numpy as np
-import openmdao.api as om
 
-from transfer import DisplacementTransfer, LoadTransfer
+# juliacall must be imported before jax (via transfer) or the process crashes
+import juliacall
+
+jl = juliacall.newmodule("DCFoil")
+jl.include("../src/loadtransfer/ldtransfer_om.jl")
+
+import openmdao.api as om
+from openmdao.utils.assert_utils import assert_check_partials
+from omjlcomps import JuliaExplicitComp
+
+from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 
 class TestTransfer(unittest.TestCase):
@@ -280,6 +289,73 @@ class TestTransfer(unittest.TestCase):
 
         # check work conservation
         self.assertAlmostEqual(work_str, work_hydro, places=5)
+
+
+class TestTransferJulia(unittest.TestCase):
+    """
+    Compare the Julia transfer components (src/loadtransfer/ldtransfer_om.jl) against the JAX ones
+    """
+
+    def _geometry(self, config):
+        n_strips = 20
+        theta = np.linspace(0, np.pi, 2 * n_strips + 1)[1::2]
+        collocation_pts = np.zeros((3, n_strips))
+        collocation_pts[0, :] = 0.23 + 0.01 * np.sin(theta)
+        collocation_pts[1, :] = -0.9 * np.cos(theta)
+        collocation_pts[2, :] = 0.02 * np.sin(theta)
+        nodes_y = np.array([0, 0.225, 0.45, 0.675, 0.9, -0.225, -0.45, -0.675, -0.9])
+        if config == "wing":
+            collocation_pts = collocation_pts[:, n_strips // 2 :]
+            nodes_y = nodes_y[:5]
+        nodes = np.zeros((len(nodes_y), 3))
+        nodes[:, 0] = 0.01 * nodes_y
+        nodes[:, 1] = nodes_y
+
+        rng = np.random.default_rng(0)
+        n_node, n_strips = nodes.shape[0], collocation_pts.shape[1]
+        inputs = {
+            "collocationPts": collocation_pts,
+            "nodes": nodes,
+            "deflections": 0.01 * rng.standard_normal(9 * n_node),
+            "forces_hydro": 10 * rng.standard_normal((3, n_strips)),
+            "CL_alpha": 5 + 0.3 * rng.standard_normal(n_strips),
+        }
+        return n_node, n_strips, inputs
+
+    def _build(self, use_julia, config, xMount=0.3):
+        n_node, n_strips, inputs = self._geometry(config)
+        prob = om.Problem(reports=False)
+        if use_julia:
+            disp = JuliaExplicitComp(jlcomp=jl.OMDisplacementTransfer(n_node, n_strips, xMount, config, True))
+            load = JuliaExplicitComp(jlcomp=jl.OMLoadTransfer(n_node, n_strips, xMount, config))
+            cla = JuliaExplicitComp(jlcomp=jl.OMCLaInterpolation(n_node, n_strips))
+        else:
+            disp = DisplacementTransfer(n_node=n_node, n_strips=n_strips, xMount=xMount, config=config)
+            load = LoadTransfer(n_node=n_node, n_strips=n_strips, xMount=xMount, config=config)
+            cla = CLaInterpolation(n_node=n_node, n_strips=n_strips)
+        prob.model.add_subsystem("disp_transfer", disp, promotes=["*"])
+        prob.model.add_subsystem("load_transfer", load, promotes=["*"])
+        prob.model.add_subsystem("cla_interp", cla, promotes=["*"])
+        prob.setup(force_alloc_complex=True)
+        for name, val in inputs.items():
+            prob.set_val(name, val)
+        prob.run_model()
+        return prob
+
+    def _compare(self, config):
+        prob_py = self._build(False, config)
+        prob_jl = self._build(True, config)
+        for name in ["disp_colloc", "loads_str", "CL_alpha_node"]:
+            np.testing.assert_allclose(prob_jl.get_val(name), prob_py.get_val(name), rtol=1e-12, atol=1e-12)
+
+        data = prob_jl.check_partials(method="fd", step=1e-6, form="central", compact_print=True, out_stream=None)
+        assert_check_partials(data, atol=1e-6, rtol=1e-6)
+
+    def test_full_wing(self):
+        self._compare("full-wing")
+
+    def test_wing(self):
+        self._compare("wing")
 
 
 if __name__ == "__main__":

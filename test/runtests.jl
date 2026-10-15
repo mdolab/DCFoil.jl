@@ -15,6 +15,7 @@ include("test_vam.jl")
 include("test_strainbeam.jl")
 include("test_hydro.jl")
 include("test_solvers.jl")
+include("test_ldtransfer.jl")
 
 
 # ==============================================================================
@@ -56,6 +57,16 @@ nNodesStrut = 2
     @test test_StrainBeam_vlasovTorsion() <= 1.0 # restrained-warping torsion of the Hodges Table 7.9 strip
     @test test_StrainBeam_frameInvariance() <= 1.0 # rigid rotation of the whole problem
     @test test_StrainBeam_NACA0009() <= 1.0 # CFRP NACA0009 cantilever, spanwise results and figures
+end
+
+@testset "Test load transfer" begin
+    # --- Load and displacement transfer (each returns max error/tolerance) ---
+    @test test_LDTransfer_forceConsistency() <= 1.0 # nodal forces sum to the hydro forces
+    @test test_LDTransfer_workConservation() <= 1.0 # virtual work is conserved
+    @test test_LDTransfer_nodeCoincident() <= 1.0 # collocation point exactly on a node
+    @test test_LDTransfer_symmetry() <= 1.0 # 'wing' config mirroring and root loads
+    @test test_LDTransfer_claInterp() <= 1.0 # CL_alpha interpolation/extrapolation
+    @test test_LDTransfer_jacobians() <= 1.0 # ForwardDiff against finite differences
 end
 
 @testset "Test hydro" begin

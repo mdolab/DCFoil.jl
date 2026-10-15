@@ -1,6 +1,6 @@
 """
 @File    :   VAM.jl
-@Time    :   2026/09/23
+@Time    :   2026-09-23
 @Author  :   Galen Ng
 @Desc    :   Variational asymptotic method (VAM) cross-sectional analysis of prismatic beams.
              Finite-element dimensional reduction of the 3D elasticity problem over the cross
@@ -35,7 +35,7 @@ export analyze_cross_section, check_timoshenko_consistency
 #                         Materials
 # ==============================================================================
 """
-Orthotropic material with engineering constants in the material frame (1 = fiber).
+Orthotropic material with engineering constants in the material frame (1 = along fiber).
 Poisson ratios follow the convention νij = -εj/εi under uniaxial stress along i.
 """
 struct Material3D{T}
@@ -105,12 +105,17 @@ fiber angle θ measured from x1 toward x2 (rotation about x3, plies parallel to 
 function ply_rotation(θ)
     c = cos(θ)
     s = sin(θ)
-    return [c -s 0; s c 0; 0 0 1]
+    return [
+        c -s 0;
+        s c 0;
+        0 0 1
+    ]
 end
 
 """
 Rotate a 6x6 stiffness (Hodges ordering, engineering strains) from the material frame to the
-beam frame using the fourth-order tensor transformation C'_ijkl = R_ia R_jb R_kc R_ld C_abcd.
+beam frame using the fourth-order tensor transformation 
+    C'_ijkl = R_ia R_jb R_kc R_ld C_abcd.
 The columns of R are the material axes in the beam frame. Because the strains are engineering
 strains, D_IJ = C_ijkl with no extra factors in either direction.
 """
@@ -307,7 +312,7 @@ function quad_shape_functions(order::Int, ξ, η)
     N = zeros(nen)
     dNdξ = zeros(nen)
     dNdη = zeros(nen)
-    for b in 1:order+1, a in 1:order+1
+    for b in 1:(order+1), a in 1:(order+1)
         k = a + (order + 1) * (b - 1)
         N[k] = lξ[a] * lη[b]
         dNdξ[k] = dlξ[a] * lη[b]
@@ -573,8 +578,8 @@ function factorize_bordered_system(E::AbstractMatrix, HΨ::AbstractMatrix)
     T = promote_type(eltype(E), eltype(HΨ), typeof(α))
     bordered = zeros(T, n + nConstraints, n + nConstraints)
     bordered[1:n, 1:n] = E
-    bordered[1:n, n+1:end] = α .* HΨ
-    bordered[n+1:end, 1:n] = α .* transpose(HΨ)
+    bordered[1:n, (n+1):end] = α .* HΨ
+    bordered[(n+1):end, 1:n] = α .* transpose(HΨ)
     return (factorization=lu(bordered), n=n, α=α)
 end
 
@@ -590,7 +595,7 @@ function solve_constrained_warping(borderedSystem, rhs::AbstractMatrix)
     b[1:n, :] = -rhs
     solution = factorization \ b
     V = solution[1:n, :]
-    Λ = solution[n+1:end, :] .* α
+    Λ = solution[(n+1):end, :] .* α
     return V, Λ
 end
 

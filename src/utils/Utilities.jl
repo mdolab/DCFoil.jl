@@ -167,6 +167,7 @@ function set_defaultOptions!(solverOptions)
         "outputDir",
         "debug",
         "writeTecplotSolution",
+        "writeParaviewSolution",
         "gridFile",
         # ************************************************
         #     Flow
@@ -208,6 +209,7 @@ function set_defaultOptions!(solverOptions)
         "./OUTPUT/",
         false,
         false,
+        false, # writeParaviewSolution
         nothing,
         # ************************************************
         #     Flow

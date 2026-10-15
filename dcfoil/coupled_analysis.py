@@ -22,13 +22,11 @@ jl = juliacall.newmodule("DCFoil")
 jl.include("../src/io/MeshIO.jl")  # mesh I/O for reading inputs in
 jl.include("../src/struct/beam_om.jl")  # discipline 1
 jl.include("../src/hydro/liftingline_om.jl")  # discipline 2
-### jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
+jl.include("../src/loadtransfer/ldtransfer_om.jl")  # coupling components
 jl.include("../src/solvers/solveflutter_om.jl")  # discipline 4 flutter solver
 jl.include("../src/solvers/solveforced_om.jl")  # discipline 5 forced solver
 
 from omjlcomps import JuliaExplicitComp, JuliaImplicitComp
-
-from transfer import DisplacementTransfer, LoadTransfer, CLaInterpolation
 
 
 class CoupledAnalysis(om.Group):
@@ -178,11 +176,10 @@ class CoupledAnalysis(om.Group):
             # displacement transfer
             couple.add_subsystem(
                 "disp_transfer",
-                DisplacementTransfer(
-                    n_node=n_node,
-                    n_strips=npt_wing,
-                    xMount=appendageOptions["xMount"],
-                    config=appendageOptions["config"],
+                JuliaExplicitComp(
+                    jlcomp=jl.OMDisplacementTransfer(
+                        n_node, npt_wing, float(appendageOptions["xMount"]), appendageOptions["config"], True
+                    )
                 ),
                 promotes_inputs=["nodes", "deflections", "collocationPts"],
                 promotes_outputs=[("disp_colloc", "displacements_col")],
@@ -216,11 +213,8 @@ class CoupledAnalysis(om.Group):
             # load transfer
             couple.add_subsystem(
                 "load_transfer",
-                LoadTransfer(
-                    n_node=n_node,
-                    n_strips=npt_wing,
-                    xMount=appendageOptions["xMount"],
-                    config=appendageOptions["config"],
+                JuliaExplicitComp(
+                    jlcomp=jl.OMLoadTransfer(n_node, npt_wing, float(appendageOptions["xMount"]), appendageOptions["config"])
                 ),
                 promotes_inputs=[("forces_hydro", "forces_dist"), "collocationPts", "nodes"],
                 promotes_outputs=[("loads_str", "traction_forces")],
@@ -235,7 +229,7 @@ class CoupledAnalysis(om.Group):
             # CL_alpha mapping from flow points to FEM nodes (after hydroelestic loop)
             self.add_subsystem(
                 "CLa_interp",
-                CLaInterpolation(n_node=n_node, n_strips=npt_wing),
+                JuliaExplicitComp(jlcomp=jl.OMCLaInterpolation(n_node, npt_wing)),
                 promotes_inputs=["collocationPts", "nodes", ("CL_alpha", "cla_col")],
                 promotes_outputs=[("CL_alpha_node", "cla")],
             )

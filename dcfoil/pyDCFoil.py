@@ -179,6 +179,7 @@ class DCFOIL:
             "gridFile": None,
             "outputDir": "./OUTPUT/",
             "writeTecplotSolution": True,
+            "writeParaviewSolution": False,
             # ---------------------------
             #   General appendage options
             # ---------------------------

@@ -48,7 +48,7 @@ for headerName in [
     "ComputeFunctions",
     "InitModel",
     "solvers/DCFoilSolution",
-    "io/TecplotIO", "io/MeshIO",
+    "io/TecplotIO", "io/ParaviewIO", "io/MeshIO",
     # "solvers/SolveBodyDynamics"
     "solvers/SolveStatic", "solvers/SolveForced", "solvers/SolveFlutter",
 ]
@@ -212,6 +212,9 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
             if solverOptions["writeTecplotSolution"] && solverOptions["use_nlll"]
                 TecplotIO.write_hydromesh(LLSystem, FlowCond.uvec, outputDir)
             end
+            if solverOptions["writeParaviewSolution"] && solverOptions["use_nlll"]
+                write_hydromesh_vtk(LLSystem, FlowCond.uvec, outputDir)
+            end
         end
 
         push!(FOILList, FOIL)
@@ -221,6 +224,9 @@ function init_model(LECoords, nodeConn, TECoords; solverOptions, appendageParams
 
     # --- Write mesh to tecplot for later visualization ---
     TecplotIO.write_structmesh(FEMESHList, solverOptions, outputDir)
+    if solverOptions["writeParaviewSolution"]
+        write_structmesh_vtk(FEMESHList, solverOptions, outputDir)
+    end
 
     global HULL = HULL
 
@@ -372,6 +378,11 @@ function write_solution(SOLDICT, solverOptions, appendageParamsList; callNumber=
             appendageOptions = solverOptions["appendageList"][iComp]
             appendageParams = appendageParamsList[iComp]
             SolveStatic.write_tecplot(appendageParams, STATSOL, STATSOL.FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
+        end
+        if solverOptions["writeParaviewSolution"]
+            appendageOptions = solverOptions["appendageList"][iComp]
+            appendageParams = appendageParamsList[iComp]
+            write_deflections_vtk(appendageParams, STATSOL, STATSOL.FEMESH, outputDir; appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp)
         end
     end
 

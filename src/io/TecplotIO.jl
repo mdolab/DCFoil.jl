@@ -93,83 +93,61 @@ function transform_airfoil(foilCoords, localChord, pretwist=0.0)
     return foilCoordsXform
 end
 
-function write_airfoils(io, appendageParams::AbstractDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
+function compute_airfoil_sections(appendageParams::AbstractDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
     """
+    Build the airfoil slice drawn at every spanwise node, with the beam states smeared onto the slice points.
+    Shared by the Tecplot and Paraview writers.
+
+    Outputs
+    -------
+    sections : vector of named tuples (name, xyz, u, v, w, phi, theta, psi)
+        xyz is 3 x nAirfoilPts and the states are per airfoil point
     TODO generalize to take in a normal vector in spanwise direction
     """
 
-    function write_slice(io, unode, iairfoilpt, foilCoords, nodeLoc::Vector, dus, dvs, dws)
-        write(io, @sprintf(
-            "%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
-            foilCoords[iairfoilpt, XDIM] + nodeLoc[XDIM],
-            nodeLoc[YDIM],
-            foilCoords[iairfoilpt, YDIM] + nodeLoc[ZDIM],
-            unode[1] + dus[iairfoilpt],
-            unode[2] + dvs[iairfoilpt],
-            unode[3] + dws[iairfoilpt],
-            unode[4],
-            unode[5],
-            unode[6])
+    function make_section(nodeLoc, xyz, ii, dus, dvs, dws)
+        nAirfoilPts = size(xyz)[2]
+        name = @sprintf("Airfoil midchord (%.8f, %.8f, %.8f)", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM])
+        return (
+            name=name,
+            xyz=xyz,
+            u=u[ii] .+ dus,
+            v=v[ii] .+ dvs,
+            w=w[ii] .+ dws,
+            phi=fill(phi[ii], nAirfoilPts),
+            theta=fill(theta[ii], nAirfoilPts),
+            psi=fill(psi[ii], nAirfoilPts),
         )
+    end
+
+    function wing_section(ii, localChord)
+        nodeLoc = mesh[ii, :]
+        foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
+
+        # Get u, v, w based on rotations
+        dws = -foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
+        dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
+        dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
+
+        xyz = permutedims(hcat(
+            foilCoordsXform[:, XDIM] .+ nodeLoc[XDIM],
+            fill(nodeLoc[YDIM], size(foilCoordsXform)[1]),
+            foilCoordsXform[:, YDIM] .+ nodeLoc[ZDIM],
+        ))
+        return make_section(nodeLoc, xyz, ii, dus, dvs, dws)
     end
 
     foilCoords = generate_naca4dig(appendageParams["toc"][1])
     baserake = deg2rad(appendageParams["alfa0"])
     rake = deg2rad(appendageParams["rake"])
+    sections = []
     if appendageOptions["config"] in CONFIGS
         for ii in 1:appendageOptions["nNodes"] # iterate over span
-            nodeLoc = mesh[ii, :]
-            localChord = chords[ii]
-            foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
-
-            # Get u, v, w based on rotations
-            nAirfoilPts = size(foilCoordsXform)[1]
-            # uAirfoil = u[ii] * ones(size(foilCoordsScaled)[1])
-            dws = -foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
-            dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
-            dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
-
-            # --- Header ---
-            write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM]))
-            write(io, @sprintf("NODES = %d, ", nAirfoilPts))
-            write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
-            write(io, "DATAPACKING = POINT\n")
-            # --- Values ---
-            for jj in 1:nAirfoilPts
-                unode = [u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii]]
-                write_slice(io, unode, jj, foilCoordsXform, nodeLoc, dus, dvs, dws)
-            end
-            # --- Connectivities ---
-            for jj in 1:nAirfoilPts-1
-                write(io, @sprintf("%d\t%d\n", jj, jj + 1))
-            end
+            push!(sections, wing_section(ii, chords[ii]))
         end
         if appendageOptions["config"] == "full-wing" || appendageOptions["config"] == "t-foil"
             for ii in appendageOptions["nNodes"]+1:2*appendageOptions["nNodes"]-1 # iterate over span
-                nodeLoc = mesh[ii, :]
-                localChord = chords[ii-appendageOptions["nNodes"]]
-                foilCoordsXform = transform_airfoil(foilCoords, localChord, rake + baserake)
-
-                # Get u, v, w based on rotations
-                nAirfoilPts = size(foilCoordsXform)[1]
-                dws = -foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
-                dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
-                dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
-
-                # --- Header ---
-                write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", nodeLoc[XDIM], nodeLoc[YDIM], nodeLoc[ZDIM]))
-                write(io, @sprintf("NODES = %d, ", nAirfoilPts))
-                write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
-                write(io, "DATAPACKING = POINT\n")
-                # --- Values ---
-                for jj in 1:nAirfoilPts
-                    unode = [u[ii], v[ii], w[ii], phi[ii], theta[ii], psi[ii]]
-                    write_slice(io, unode, jj, foilCoordsXform, nodeLoc, dus, dvs, dws)
-                end
-                # --- Connectivities ---
-                for jj in 1:nAirfoilPts-1
-                    write(io, @sprintf("%d\t%d\n", jj, jj + 1))
-                end
+                push!(sections, wing_section(ii, chords[ii-appendageOptions["nNodes"]]))
             end
         end
 
@@ -182,39 +160,61 @@ function write_airfoils(io, appendageParams::AbstractDict, chords, mesh, u, v, w
                 foilCoordsXform = transform_airfoil(foilCoords, localChord)
 
                 # Get u, v, w based on rotations
-                nAirfoilPts = size(foilCoordsXform)[1]
                 dws = foilCoordsXform[:, XDIM] * sin(theta[ii]) # airfoil twist
                 dvs = foilCoordsXform[:, YDIM] * sin(phi[ii]) # airfoil OOP bend
                 dus = -foilCoordsXform[:, XDIM] * sin(psi[ii]) # airfoil IP bend
 
-                # --- Header ---
-                write(io, @sprintf("ZONE T = \"Airfoil midchord (%.8f, %.8f, %.8f)\" \n", spanLoc[XDIM], spanLoc[YDIM], spanLoc[ZDIM]))
-                write(io, @sprintf("NODES = %d, ", nAirfoilPts))
-                write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
-                write(io, "DATAPACKING = POINT\n")
-                # --- Values ---
-                for jj in 1:nAirfoilPts
-                    # THIS PART CHANGED BECAUSE THE STRUT IS VERTICAL
-                    # Strut rake doesn't really show up in the airfoil drawing
-                    write(io, @sprintf("%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
-                        foilCoordsXform[jj, XDIM] + spanLoc[XDIM],
-                        foilCoordsXform[jj, YDIM],
-                        spanLoc[ZDIM],
-                        u[ii] + dus[jj],
-                        v[ii] + dvs[jj],
-                        w[ii] + dws[jj],
-                        phi[ii],
-                        theta[ii],
-                        psi[ii]))
-                end
-                # --- Connectivities ---
-                for jj in 1:nAirfoilPts-1
-                    write(io, @sprintf("%d\t%d\n", jj, jj + 1))
-                end
+                # THIS PART CHANGED BECAUSE THE STRUT IS VERTICAL
+                # Strut rake doesn't really show up in the airfoil drawing
+                xyz = permutedims(hcat(
+                    foilCoordsXform[:, XDIM] .+ spanLoc[XDIM],
+                    foilCoordsXform[:, YDIM],
+                    fill(spanLoc[ZDIM], size(foilCoordsXform)[1]),
+                ))
+                push!(sections, make_section(spanLoc, xyz, ii, dus, dvs, dws))
             end
         end
     else
         error("Unsupported config: ", appendageOptions["config"])
+    end
+
+    return sections
+end
+
+function write_airfoils(io, appendageParams::AbstractDict, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=Dict("config" => "wing"))
+    """
+    Write one FELINESEG zone per airfoil slice
+    """
+
+    sections = compute_airfoil_sections(appendageParams, chords, mesh, u, v, w, phi, theta, psi; appendageOptions=appendageOptions)
+
+    for section in sections
+        nAirfoilPts = size(section.xyz)[2]
+
+        # --- Header ---
+        write(io, @sprintf("ZONE T = \"%s\" \n", section.name))
+        write(io, @sprintf("NODES = %d, ", nAirfoilPts))
+        write(io, @sprintf("ELEMENTS = %d, ZONETYPE=FELINESEG\n", nAirfoilPts - 1))
+        write(io, "DATAPACKING = POINT\n")
+        # --- Values ---
+        for jj in 1:nAirfoilPts
+            write(io, @sprintf(
+                "%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\t%.16f\n",
+                section.xyz[XDIM, jj],
+                section.xyz[YDIM, jj],
+                section.xyz[ZDIM, jj],
+                section.u[jj],
+                section.v[jj],
+                section.w[jj],
+                section.phi[jj],
+                section.theta[jj],
+                section.psi[jj])
+            )
+        end
+        # --- Connectivities ---
+        for jj in 1:nAirfoilPts-1
+            write(io, @sprintf("%d\t%d\n", jj, jj + 1))
+        end
     end
 end
 # ==============================================================================
@@ -474,6 +474,65 @@ function write_modeheader(io, frequency, nNode)
     write(io, "DATAPACKING = POINT\n")
 end
 
+function extract_hydroelastic_modeshape(R_eigs_r, R_eigs_i, mm, qq, nNode, nMeshNode=nNode)
+    """
+    Magnitude of the complex hydroelastic eigenvector at each beam node for mode 'mm' and flow condition 'qq'.
+    The eigenvector has no BC so a zero is put in front for the clamped root node.
+
+    Outputs
+    -------
+    u, v, w, phi, theta, psi : nodal vectors of length nNode
+    """
+    nDOFPerNode = 9
+
+    u = zeros(nNode)
+    v = zeros(nNode)
+    w = zeros(nNode)
+    phi = zeros(nNode)
+    theta = zeros(nNode)
+    psi = zeros(nNode)
+
+    # with zero in the front
+    u_r = [0; R_eigs_r[1:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    u_i = [0; R_eigs_i[1:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    v_r = [0; R_eigs_r[2:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    v_i = [0; R_eigs_i[2:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    w_r = [0; R_eigs_r[3:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    w_i = [0; R_eigs_i[3:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    phi_r = [0; R_eigs_r[4:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    phi_i = [0; R_eigs_i[4:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    theta_r = [0; R_eigs_r[5:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    theta_i = [0; R_eigs_i[5:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    psi_r = [0; R_eigs_r[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    psi_i = [0; R_eigs_i[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
+    for ii in 1:nMeshNode
+        u[ii] = √(u_r[ii]^2 + u_i[ii]^2)
+        v[ii] = √(v_r[ii]^2 + v_i[ii]^2)
+        w[ii] = √(w_r[ii]^2 + w_i[ii]^2)
+        phi[ii] = √(phi_r[ii]^2 + phi_i[ii]^2)
+        theta[ii] = √(theta_r[ii]^2 + theta_i[ii]^2)
+        psi[ii] = √(psi_r[ii]^2 + psi_i[ii]^2)
+    end
+
+    return u, v, w, phi, theta, psi
+end
+
+function extract_natural_modeshape(modeShape, nNode)
+    """
+    Slice a natural mode shape (BC already put back) into nodal displacements and rotations
+    """
+    nDOFPerNode = 9
+
+    u = modeShape[1:nDOFPerNode:nNode*nDOFPerNode]
+    v = modeShape[2:nDOFPerNode:nNode*nDOFPerNode]
+    w = modeShape[3:nDOFPerNode:nNode*nDOFPerNode]
+    phi = modeShape[4:nDOFPerNode:nNode*nDOFPerNode]
+    theta = modeShape[5:nDOFPerNode:nNode*nDOFPerNode]
+    psi = modeShape[6:nDOFPerNode:nNode*nDOFPerNode]
+
+    return u, v, w, phi, theta, psi
+end
+
 function write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir::String, basename="mode"; appendageOptions=Dict("config" => "wing"))
     """
     Write the mode shape to tecplot
@@ -530,27 +589,7 @@ function write_hydroelastic_mode(DVDict, FLUTTERSOL, chords, mesh, outputDir::St
                     end
                 elseif ndims(mesh) == 2 # 1D beam in 3D space
                     dim = 1 # iterate over the first dimension
-                    # with zero in the front
-                    u_r = [0; R_eigs_r[1:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    u_i = [0; R_eigs_i[1:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    v_r = [0; R_eigs_r[2:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    v_i = [0; R_eigs_i[2:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    w_r = [0; R_eigs_r[3:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    w_i = [0; R_eigs_i[3:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    phi_r = [0; R_eigs_r[4:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    phi_i = [0; R_eigs_i[4:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    theta_r = [0; R_eigs_r[5:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    theta_i = [0; R_eigs_i[5:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    psi_r = [0; R_eigs_r[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    psi_i = [0; R_eigs_i[6:nDOFPerNode:nNode*nDOFPerNode, mm, qq]]
-                    for ii in 1:size(mesh)[dim]
-                        u[ii] = √(u_r[ii]^2 + u_i[ii]^2)
-                        v[ii] = √(v_r[ii]^2 + v_i[ii]^2)
-                        w[ii] = √(w_r[ii]^2 + w_i[ii]^2)
-                        phi[ii] = √(phi_r[ii]^2 + phi_i[ii]^2)
-                        theta[ii] = √(theta_r[ii]^2 + theta_i[ii]^2)
-                        psi[ii] = √(psi_r[ii]^2 + psi_i[ii]^2)
-                    end
+                    u, v, w, phi, theta, psi = extract_hydroelastic_modeshape(R_eigs_r, R_eigs_i, mm, qq, nNode, size(mesh)[dim])
                 end
                 # --- Write them ---
                 for ii in 1:size(mesh)[dim]
@@ -615,13 +654,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # --- Store displacements ---
         if ndims(mesh) == 2 # 1D beam in 3D space
             dim = 1 # iterate over the first dimension
-            # with zero in the front
-            u = modeShape[1:nDOFPerNode:nNode*nDOFPerNode]
-            v = modeShape[2:nDOFPerNode:nNode*nDOFPerNode]
-            w = modeShape[3:nDOFPerNode:nNode*nDOFPerNode]
-            phi = modeShape[4:nDOFPerNode:nNode*nDOFPerNode]
-            theta = modeShape[5:nDOFPerNode:nNode*nDOFPerNode]
-            psi = modeShape[6:nDOFPerNode:nNode*nDOFPerNode]
+            u, v, w, phi, theta, psi = extract_natural_modeshape(modeShape, nNode)
         end
         # --- Write them ---
         for ii in 1:size(mesh)[dim]
@@ -671,13 +704,7 @@ function write_natural_mode(DVDict, structNatFreqs, structModeShapes, wetNatFreq
         # --- Store displacements ---
         if ndims(mesh) == 2 # 1D beam in 3D space
             dim = 1 # iterate over the first dimension
-            # with zero in the front
-            u = modeShape[1:nDOFPerNode:nNode*nDOFPerNode]
-            v = modeShape[2:nDOFPerNode:nNode*nDOFPerNode]
-            w = modeShape[3:nDOFPerNode:nNode*nDOFPerNode]
-            phi = modeShape[4:nDOFPerNode:nNode*nDOFPerNode]
-            theta = modeShape[5:nDOFPerNode:nNode*nDOFPerNode]
-            psi = modeShape[6:nDOFPerNode:nNode*nDOFPerNode]
+            u, v, w, phi, theta, psi = extract_natural_modeshape(modeShape, nNode)
         end
         # --- Write them ---
         for ii in 1:size(mesh)[dim]

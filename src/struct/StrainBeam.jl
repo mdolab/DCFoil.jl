@@ -1,12 +1,12 @@
 # --- Julia 1.11---
 """
 @File    :   StrainBeam.jl
-@Time    :   2026/09/24
+@Time    :   2026-10-13
 @Author  :   Galen Ng
 @Desc    :   Geometrically exact, strain-based nonlinear static beam model fed by the VAM section
              properties. The 1D theory is the intrinsic formulation of Hodges (2006) "Nonlinear
              Composite Beam Theory" Ch. 5 with the mixed variational discretization of Hodges (1990)
-             as used in GEBT (Yu and Blair 2012): two-node elements carrying constant internal loads
+             as used in geometrically exact beam theory (GEBT) (Yu and Blair 2012): two-node elements carrying constant internal loads
              F, M in the deformed frame and nodes carrying displacements u and Wiener-Milenkovic
              rotation parameters θ. The generalized Vlasov restrained-warping term of Yu, Hodges,
              Volovoi and Fuchs (2005) is included as one extra conjugate pair (twist rate κ1 at the

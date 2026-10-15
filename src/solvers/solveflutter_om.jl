@@ -107,6 +107,9 @@ function OpenMDAOCore.compute!(self::OMFlutter, inputs, outputs)
     FEMESH, LLSystem, FlowCond, uRange, b_ref, chordVec, abVec, x_αbVec, ebVec, Λ, FOIL, dim, N_R, N_MAX_Q_ITER, nModes, CONSTANTS, debug = SolveFlutter.setup_solverOM(displacements_col, LECoords, TECoords, nodeConn, appendageParams, solverOptions)
     outputDir = solverOptions["outputDir"] * "/pkFlutter/"
     SolveFlutter.write_tecplot(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    if get(solverOptions, "writeParaviewSolution", false)
+        SolveFlutter.write_paraview(appendageParams, FLUTTERSOL, FEMESH.chord, FEMESH.mesh, outputDir; solverOptions=solverOptions)
+    end
     structNatFreqs, structModeShapes_sol, wetNatFreqs, wetModeShapes_sol = SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, solverOptions, appendageOptions)
 
     return nothing

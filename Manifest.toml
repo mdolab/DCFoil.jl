@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.5"
+julia_version = "1.11.9"
 manifest_format = "2.0"
-project_hash = "9839f464900e5f04c1e7086e7acb6ef2bfcece01"
+project_hash = "0abd39390efb1df82c6016e0a22f5ae82d4127be"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -831,6 +831,12 @@ git-tree-sha1 = "321ccef73a96ba828cd51f2ab5b9f917fa73945a"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.41.0+0"
 
+[[deps.LightXML]]
+deps = ["Libdl", "XML2_jll"]
+git-tree-sha1 = "aa971a09f0f1fe92fe772713a564aa48abe510df"
+uuid = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
+version = "0.9.3"
+
 [[deps.LinearAlgebra]]
 deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -1473,6 +1479,11 @@ git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 version = "0.2.0"
 
+[[deps.VTKBase]]
+git-tree-sha1 = "c2d0db3ef09f1942d08ea455a9e252594be5f3b6"
+uuid = "4004b06d-e244-455f-a6ce-a5f9919cc534"
+version = "1.0.1"
+
 [[deps.Vulkan_Loader_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Wayland_jll", "Xorg_libX11_jll", "Xorg_libXrandr_jll", "xkbcommon_jll"]
 git-tree-sha1 = "2f0486047a07670caad3a81a075d2e518acc5c59"
@@ -1496,6 +1507,12 @@ deps = ["Unicode"]
 git-tree-sha1 = "71142739e695823729a335e9bc124ef41ec1433a"
 uuid = "b8c1c048-cf81-46c6-9da0-18c1d99e41f2"
 version = "1.0.1"
+
+[[deps.WriteVTK]]
+deps = ["Base64", "CodecZlib", "FillArrays", "LightXML", "TranscodingStreams", "VTKBase"]
+git-tree-sha1 = "073f2ae23cc1aa11510772d4c156435cdb8d7087"
+uuid = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+version = "1.22.0"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]
