@@ -10,7 +10,7 @@ module SolveBodyDynamics
     
 # --- PACKAGES ---
 using LinearAlgebra
-using FiniteDifferences, Zygote
+using FiniteDifferences
 using Printf
 
 # --- DCFoil modules ---
@@ -142,7 +142,7 @@ function compute_∂r∂u(deltaC, mode="FiDi")
         ∂r∂u = FiniteDifferences.jacobian(compute_residuals, deltaC)
     elseif mode == "RAD"
         # This is a tuple
-        ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
+        ∂r∂u = rd_jacobian(compute_residuals, structuralStates)
     elseif mode == "analytic"
         error("Not implemented yet")
     else

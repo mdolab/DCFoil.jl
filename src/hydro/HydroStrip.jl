@@ -19,7 +19,6 @@ module HydroStrip
 using SpecialFunctions
 using LinearAlgebra
 using Statistics
-using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using Printf, DelimitedFiles
 using Plots
@@ -677,12 +676,12 @@ function build_fluidMat(AEROMESH, FOIL, LLSystem, clαVec, ϱ, dim, Λ, U∞, ω
 
     """
     # --- Initialize global matrices ---
-    globalMf_z = Zygote.Buffer(zeros(dim, dim))
-    globalCf_r_z = Zygote.Buffer(zeros(dim, dim))
-    globalCf_i_z = Zygote.Buffer(zeros(dim, dim))
-    globalKf_r_z = Zygote.Buffer(zeros(dim, dim))
-    globalKf_i_z = Zygote.Buffer(zeros(dim, dim))
-    # Zygote initialization
+    adDeps = (AEROMESH, FOIL, LLSystem, clαVec, ϱ, Λ, U∞, ω, FlowCond)
+    globalMf_z = ad_buffer(zeros(dim, dim), adDeps...)
+    globalCf_r_z = ad_buffer(zeros(dim, dim), adDeps...)
+    globalCf_i_z = ad_buffer(zeros(dim, dim), adDeps...)
+    globalKf_r_z = ad_buffer(zeros(dim, dim), adDeps...)
+    globalKf_i_z = ad_buffer(zeros(dim, dim), adDeps...)
     globalMf_z[:, :] = zeros(dim, dim)
     globalCf_r_z[:, :] = zeros(dim, dim)
     globalCf_i_z[:, :] = zeros(dim, dim)
@@ -1282,7 +1281,7 @@ function get_strip_vecs(
     nStrips = size(aeroMesh)[1]
 
     stripVecs = zeros(Float64, nStrips, 3)
-    stripVecs_z = Zygote.Buffer(stripVecs)
+    stripVecs_z = ad_buffer(stripVecs, aeroMesh)
     stripVecs_z[:, :] = stripVecs
     nElemWing = solverOptions["nNodes"] - 1
     if haskey(solverOptions, "nNodeStrut")
@@ -1331,11 +1330,12 @@ function compute_genHydroLoadsMatrices(kMax, nk, U∞, b_ref, dim, AEROMESH, Λ,
     kSweep = vcat([1e-13], kMax .* cubicDist)
 
     # --- Loop over reduced frequencies ---
-    Cf_r_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
-    Cf_i_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
-    Kf_r_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
-    Kf_i_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
-    Mf_sweep_z = Zygote.Buffer(zeros(dim, dim, nk))
+    adDeps = (kMax, U∞, b_ref, AEROMESH, Λ, FOIL, LLSystem, claVec, rhof, FlowCond)
+    Cf_r_sweep_z = ad_buffer(zeros(dim, dim, nk), adDeps...)
+    Cf_i_sweep_z = ad_buffer(zeros(dim, dim, nk), adDeps...)
+    Kf_r_sweep_z = ad_buffer(zeros(dim, dim, nk), adDeps...)
+    Kf_i_sweep_z = ad_buffer(zeros(dim, dim, nk), adDeps...)
+    Mf_sweep_z = ad_buffer(zeros(dim, dim, nk), adDeps...)
     ii = 1
     for k in kSweep
         ω = k * U∞ * (cos(Λ)) / b_ref
@@ -1377,19 +1377,19 @@ function interpolate_influenceCoeffs(k, k_sweep, Ar_sweep_r, Ar_sweep_i, Nmr::In
     kDiff = k .- k_sweep
 
     # Find where the sign changes for the interpolation
-    b1, b2 = find_signChange(ChainRulesCore.ignore_derivatives(kDiff))
+    b1, b2 = find_signChange(nograd(kDiff))
     # Based on the pk equation we are solving it depends how we handle k=0
     if (pkEqnType == "hassig" || pkEqnType == "ng")
         # Use the lagrange interpolation (L for linear)
-        x0L::Vector{Number} = vcat(k_sweep[b1], k_sweep[b2]) # somehow this line is adding a lot to the time
+        x0L = [k_sweep[b1], k_sweep[b2]]
 
         # This unravels to keep computations in the stack, not the heap
 
-        y0L::Array{Number} = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
-        Ar_r = lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        y0L = cat(Ar_sweep_r[:, :, b1], Ar_sweep_r[:, :, b2], dims=3)
+        Ar_r = lagrangeArrInterp(nograd(x0L), y0L, Nmr, Nmr, 2, k)
 
         y0L = cat(Ar_sweep_i[:, :, b1], Ar_sweep_i[:, :, b2], dims=3)
-        Ar_i = lagrangeArrInterp(ChainRulesCore.ignore_derivatives(x0L), y0L, Nmr, Nmr, 2, k)
+        Ar_i = lagrangeArrInterp(nograd(x0L), y0L, Nmr, Nmr, 2, k)
 
 
     elseif (pkEqnType == "rodden") # TODO: get to work with other equation types

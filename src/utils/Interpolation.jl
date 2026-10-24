@@ -61,7 +61,7 @@ function lagrangeArrInterp(xj, yj, m::Int64, n::Int64, d::Int64, x)
     # ---------------------------
     #   Method 3
     # ---------------------------
-    yout = lagrangeArrInterp_differentiable(xj, yj, m, n, d, x)
+    yout = rd_rrule(lagrangeArrInterp_differentiable, xj, yj, m, n, d, x)
     y = reshape(yout, m, n)
 
     return y
@@ -311,7 +311,7 @@ end
 
 
 # The following functions are based off of Andrew Ning's publicly available akima spline code
-# Except the derivatives are generated implicitly using Zygote RAD
+# Except the derivatives are generated implicitly using RAD
 function setup_akima(npt, xpt, ypt, Δx)
     """
     Setup for the akima spline
@@ -332,13 +332,13 @@ function setup_akima(npt, xpt, ypt, Δx)
     # x---x---o--....--o---x---x
     # estimate             estimate
 
-    # Zygote buffers
-    p0_z = Zygote.Buffer(p0)
-    p1_z = Zygote.Buffer(p1)
-    p2_z = Zygote.Buffer(p2)
-    p3_z = Zygote.Buffer(p3)
-    t_z = Zygote.Buffer(t)
-    m_z = Zygote.Buffer(m)
+    # AD-safe work arrays
+    p0_z = ad_buffer(p0, xpt, ypt)
+    p1_z = ad_buffer(p1, xpt, ypt)
+    p2_z = ad_buffer(p2, xpt, ypt)
+    p3_z = ad_buffer(p3, xpt, ypt)
+    t_z = ad_buffer(t, xpt, ypt)
+    m_z = ad_buffer(m, xpt, ypt)
 
     # --- Compute segment slopes ---
     for ii in 1:npt-1
@@ -397,11 +397,12 @@ function interp_akima(npt, n, x, xpt, p0, p1, p2, p3,
     dydx = zeros(n)
     dydxpt = zeros(n, npt)
     dydypt = zeros(n, npt)
-    # Zygote buffers
-    y_z = Zygote.Buffer(y)
-    dydx_z = Zygote.Buffer(dydx)
-    dydxpt_z = Zygote.Buffer(dydxpt)
-    dydypt_z = Zygote.Buffer(dydypt)
+    # AD-safe work arrays
+    deps = (x, xpt, p0, p1, p2, p3, dp0dxpt, dp1dxpt, dp2dxpt, dp3dxpt, dp0dypt, dp1dypt, dp2dypt, dp3dypt)
+    y_z = ad_buffer(y, deps...)
+    dydx_z = ad_buffer(dydx, deps...)
+    dydxpt_z = ad_buffer(dydxpt, deps...)
+    dydypt_z = ad_buffer(dydypt, deps...)
 
 
     # --- Interpolate at each point ---
@@ -458,15 +459,13 @@ function do_linear_interp(xpt, ypt, xqvec)
     """
     npt = length(xpt)
     n = length(xqvec)
-    y = zeros(Real, n)
-    y_z = Zygote.Buffer(y)
+    y = zeros(ad_eltype(xpt, ypt, xqvec), n)
     if length(xpt) != length(ypt)
         println("xpt length: ", length(xpt))
         println("ypt length: ", length(ypt))
         throw(ArgumentError("xpt and ypt must be the same length"))
     end
-    loop_interp!(y_z, xpt, ypt, xqvec, n, npt)
-    y = copy(y_z)
+    loop_interp!(y, xpt, ypt, xqvec, n, npt)
     if n == 1 # need it returned as a float
         return y[1]
     else

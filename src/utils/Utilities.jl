@@ -9,8 +9,9 @@
 
 using FLOWMath: abs_cs_safe
 using LinearAlgebra
-using Zygote
 using ChainRulesCore
+
+include("../adrules/ReverseDiffRules.jl")
 
 
 function unpack_dvdict(DVDict::AbstractDict)
@@ -128,11 +129,9 @@ function unpack_appendageParams(appendageParams, appendageOptions)
     else
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
-        toc::Vector{RealOrComplex} = appendageParams["toc"]
-        # ab::Vector{Real} = appendageParams["ab"]
-        # x_ab::Vector{Real} = appendageParams["x_ab"]
-        abar::Vector{Real} = appendageParams["abar"]
-        x_a::Vector{Real} = appendageParams["x_a"]
+        toc = appendageParams["toc"]
+        abar = appendageParams["abar"]
+        x_a = appendageParams["x_a"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -310,17 +309,14 @@ function cross3D(arr1, arr2)
     @assert size(arr2, 1) == 3
     M, N = size(arr1, 2), size(arr1, 3)
 
-    arr1crossarr2 = zeros(Real, 3, M, N)
-    # arr1crossarr2 = zeros(DTYPE, 3, M, N) # doesn't actually affect the result
-    arr1crossarr2_z = Zygote.Buffer(arr1crossarr2)
+    arr1crossarr2 = zeros(ad_eltype(arr1, arr2), 3, M, N)
 
     for jj in 1:M
         for kk in 1:N
-            # arr1crossarr2_z[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
-            arr1crossarr2_z[:, jj, kk] = myCrossProd(arr1[:, jj, kk], arr2[:, jj, kk])
+            # arr1crossarr2[:, jj, kk] = cross(arr1[:, jj, kk], arr2[:, jj, kk])
+            arr1crossarr2[:, jj, kk] = myCrossProd(arr1[:, jj, kk], arr2[:, jj, kk])
         end
     end
-    arr1crossarr2 = copy(arr1crossarr2_z)
 
     return arr1crossarr2
 

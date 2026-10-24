@@ -380,7 +380,7 @@ SolveFlutter.solve_frequencies(LECoords, TECoords, nodeConn, appendageParams, so
 dfdx_rad = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="RAD")
 dfdx_fd = SolveFlutter.evalFuncsSens(evalFuncsSensList, appendageParams, GridStruct, displacementsCol, claVecMod, solverOptions; mode="FiDi")
 
-dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+dIdxDV = LiftingLine.rd_gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
         SolveFlutter.cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
     ptVec,
     displacementsCol,
@@ -409,7 +409,7 @@ SolveFlutter.compute_pkFlutterAnalysis(
     uRange, FEMESH.mesh, FEMESH.elemConn, b_ref, Λ, chordVec, abVec, ebVec, FOIL, dim, N_R, DOFBlankingList, FEMESH.idxTip, N_MAX_Q_ITER, nModes, CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], CONSTANTS.Cmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]], LLSystem, claVecMod, FlowCond;
     solverOptions=solverOptions, appendageOptions=appendageOptions
 )
-using ReverseDiff, AbstractDifferentiation, Zygote
+using ReverseDiff, AbstractDifferentiation
 backend = AbstractDifferentiation.ReverseDiffBackend()
 dfdx = AbstractDifferentiation.gradient(backend, (x) ->
         SolveFlutter.cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVecMod, x, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=true),
@@ -464,9 +464,9 @@ function test_func(ptVec, nodeConn, displacementsCol, claVec, theta_f, toc, alfa
     return gvib_bend
     # return real.(SOL.Zdeflection[1,1:9]) # good now 
 end
-using Zygote, ReverseDiff
+using ReverseDiff
 
-dfdx = Zygote.jacobian((xpt, xcla) -> test_func(xpt, GridStruct.nodeConn, displacementsCol, xcla, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions),
+dfdx = LiftingLine.rd_jacobian((xpt, xcla) -> test_func(xpt, GridStruct.nodeConn, displacementsCol, xcla, appendageParams["theta_f"], appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions),
     ptVec,
     claVecMod
 )
@@ -498,7 +498,7 @@ ans = test_func(ptVec, GridStruct.nodeConn, displacementsCol, claVecMod, appenda
 # )
 
 idxTip = FEMMethods.get_tipnode(LECoords)
-dfdx, = Zygote.jacobian((x) ->
+dfdx, = LiftingLine.rd_jacobian((x) ->
         FEMMethods.compute_1DPropsFromGrid(x, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)[5],
     LECoords,
 )
@@ -512,7 +512,7 @@ dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
 # ************************************************
 midchords, chordLengths, spanwiseVectors, sweepAng, pretwistDist = FEMMethods.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 FEMMethods.make_FEMeshFromCoords(midchords, nodeConn, idxTip, appendageParams, appendageOptions)
-dfdx, = Zygote.jacobian((x) ->
+dfdx, = LiftingLine.rd_jacobian((x) ->
         FEMMethods.make_FEMeshFromCoords(x, nodeConn, idxTip, appendageParams, appendageOptions)[1],
     midchords
 )
@@ -522,7 +522,7 @@ dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
 )
 
 FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, TECoords, [appendageParams], appendageOptions, solverOptions)
-dfdx, = Zygote.jacobian((x) ->
+dfdx, = LiftingLine.rd_jacobian((x) ->
         FEMMethods.setup_FEBeamFromCoords(LECoords, nodeConn, x, [appendageParams], appendageOptions, solverOptions)[1],
     TECoords
 )
@@ -535,8 +535,8 @@ dfdx_fd, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) ->
 
 
 # Full test
-@time dfdx = Zygote.gradient((x1, x2) ->
-    # @profview dfdx = Zygote.gradient((x1, x2) ->
+@time dfdx = LiftingLine.rd_gradient((x1, x2) ->
+    # @profview dfdx = LiftingLine.rd_gradient((x1, x2) ->
         SolveFlutter.cost_funcsFromDVsOM(x1, nodeConn, displacementsCol, claVecMod, x2, appendageParams["toc"], appendageParams["alfa0"], appendageParams, solverOptions; return_all=false),
     ptVec,
     appendageParams["theta_f"],

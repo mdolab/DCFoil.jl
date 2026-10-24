@@ -669,7 +669,6 @@ function test_hydrofoilWaveLoads()
     save("test_waveSpectrum.jld2", "omegaSweep", omegaSweep, "encounter", we, "k", kRedSweep, "HwSk", HwSk, "HwCk", HwCk, "HwQS", HwQS, "Swave_bs", Swave_bs, "Swave_pm", Swave_pm, "SliftSk", SliftSk, "SliftCk", SliftCk, "SliftQS", SliftQS)
 
 end
-using Zygote
 # test_hydrofoilWaveLoads()
 # ==============================================================================
 #                         Test lifting line code

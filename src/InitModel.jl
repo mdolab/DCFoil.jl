@@ -39,8 +39,8 @@ function init_static(
   # ---------------------------
   #   Geometry
   # ---------------------------
-  eb::Vector{RealOrComplex} = 0.25 * chordLengths .+ ab
-  t::Vector{RealOrComplex} = toc .* chordLengths
+  eb = 0.25 * chordLengths .+ ab
+  t = toc .* chordLengths
 
   # ---------------------------
   #   Structure

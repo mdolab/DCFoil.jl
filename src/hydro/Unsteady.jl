@@ -8,6 +8,7 @@
 
 # --- PACKAGES ---
 using SpecialFunctions
+using ChainRulesCore: ChainRulesCore, NoTangent
 
 function compute_theodorsen(k::Number)
     """
@@ -30,6 +31,9 @@ function compute_theodorsen(k::Number)
         ans = [1.0, 0.0]
         return ans
     end
+
+    # ReverseDiff cannot go through besselk of a complex argument, so use the rrule below
+    is_tracked(k) && return rd_rrule(compute_theodorsen, k)
 
     # # Hankel functions (Hᵥ² = 𝙹ᵥ - i𝚈ᵥ) of the second kind with order `ν`
     # H₀²ᵣ = besselj0(k)
@@ -54,6 +58,40 @@ function compute_theodorsen(k::Number)
     return ans
 end
 
+function compute_dbesselk01dk(k)
+    """
+    K₀(ik), K₁(ik) and their derivatives wrt real k
+    using dK₀/dz = -K₁ and dK₁/dz = -(K₀ + K₂)/2 with z = ik
+    """
+    z = 1im * k
+    K₀ = besselk(0, z)
+    K₁ = besselk(1, z)
+    K₂ = besselk(2, z)
+    dK₀dk = 1im * (-K₁)
+    dK₁dk = 1im * (-0.5 * (K₀ + K₂))
+
+    return K₀, K₁, dK₀dk, dK₁dk
+end
+
+function ChainRulesCore.rrule(::typeof(compute_theodorsen), k::Real)
+    """
+    Reverse rule for Theodorsen's function C(k) = K₁ / (K₁ + K₀)
+    """
+    y = compute_theodorsen(k)
+
+    function theodorsen_pullback(ȳ)
+        if k < 1.11e-16
+            return NoTangent(), zero(k)
+        end
+        K₀, K₁, dK₀dk, dK₁dk = compute_dbesselk01dk(k)
+        dCkdk = (dK₁dk * K₀ - K₁ * dK₀dk) / (K₁ + K₀)^2
+        kb = ȳ[1] * real(dCkdk) + ȳ[2] * imag(dCkdk)
+        return NoTangent(), kb
+    end
+
+    return y, theodorsen_pullback
+end
+
 function compute_sears(k)
     """
     Sears transfer function for an airfoil subject to sinusoidal gusts.
@@ -75,6 +113,12 @@ function compute_sears(k)
     # H12 = H₁²ᵣ + 1im * H₁²ᵢ
     # Sk = 2 * 1im / (π * k) / (H12 + 1im * H02)
 
+    # ReverseDiff cannot go through besselk of a complex argument, so use the real-valued rrule below
+    if is_tracked(k)
+        SkRI = rd_rrule(compute_searsRealImag, k)
+        return [SkRI[1] + 1im * SkRI[2], SkRI[3] + 1im * SkRI[4]]
+    end
+
     # Modified Bessel functions of the second kind
     K₁ = besselk(1, 1im * k)
     K₀ = besselk(0, 1im * k)
@@ -87,6 +131,32 @@ function compute_sears(k)
     ans = [Sk, S0k]
 
     return ans
+end
+
+function compute_searsRealImag(k)
+    """
+    Sears function split into real and imag parts [Sk_r, Sk_i, S0k_r, S0k_i]
+    """
+    Sk, S0k = compute_sears(k)
+    return [real(Sk), imag(Sk), real(S0k), imag(S0k)]
+end
+
+function ChainRulesCore.rrule(::typeof(compute_searsRealImag), k::Real)
+    """
+    Reverse rule for the Sears function Sk = 1 / (ik (K₁ + K₀)) and S0k = exp(-ik) Sk
+    """
+    y = compute_searsRealImag(k)
+
+    function sears_pullback(ȳ)
+        K₀, K₁, dK₀dk, dK₁dk = compute_dbesselk01dk(k)
+        Sk = 1 / (1im * k) / (K₁ + K₀)
+        dSkdk = -Sk * (1 / k + (dK₁dk + dK₀dk) / (K₁ + K₀))
+        dS0kdk = exp(-1im * k) * (-1im * Sk + dSkdk)
+        kb = ȳ[1] * real(dSkdk) + ȳ[2] * imag(dSkdk) + ȳ[3] * real(dS0kdk) + ȳ[4] * imag(dS0kdk)
+        return NoTangent(), kb
+    end
+
+    return y, sears_pullback
 end
 
 function compute_pade(k)
@@ -337,15 +407,12 @@ function compute_gustLoadSears(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordLength
 
     bi = 0.5 * chordLengths
     
-    S0k = zeros(ComplexF64, size(claVec)...)
-    S0k_z = Zygote.Buffer(S0k)
-    S0k_z[:] = S0k
+    S0k = zeros(ad_complextype(kf), size(claVec)...)
 
     for (ii, kk) in enumerate(kf)
         Skvec = compute_sears(kk)
-        S0k_z[ii] = Skvec[2]
+        S0k[ii] = Skvec[2]
     end
-    S0k = copy(S0k_z)
 
     # Circulatory
     Lc = 0.5 * ϱ * Uinf * waveCoeff .* chordLengths .* claVec .* S0k
@@ -362,7 +429,7 @@ function compute_gustLoadTheodorsen(kf, Uinf, ϱ, w_e, waveCoeff, claVec, chordL
     """
 
     bi = 0.5 * chordLengths
-    Ck = zeros(ComplexF64, size(claVec)...)
+    Ck = zeros(ad_complextype(kf), size(claVec)...)
 
     for (ii, kk) in enumerate(kf)
         Ckvec = compute_theodorsen(kk)

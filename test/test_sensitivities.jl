@@ -2,13 +2,14 @@
 Test derivative routines with super basic tests
 """
 
-using FiniteDifferences, Zygote, Enzyme
+using FiniteDifferences
 using Plots
 using Printf
 using LinearAlgebra
 using JLD2
 
 for headerName in [
+    "../src/adrules/ReverseDiffRules",
     "../src/solvers/SolverRoutines"
 ]
     include("$(headerName).jl")
@@ -23,7 +24,7 @@ function test_hydromass()
     b = 2.0
     ab = 3.0
 
-    derivs = Zygote.jacobian((x1, x2) -> HydroStrip.compute_node_mass(x1, x2, rho_f),
+    derivs = rd_jacobian((x1, x2) -> HydroStrip.compute_node_mass(x1, x2, rho_f),
         b, ab)
 
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> HydroStrip.compute_node_mass(x, ab, rho_f),
@@ -60,8 +61,9 @@ function test_hydrodamp()
         return imag(Cf)
     end
 
-    derivs = Zygote.jacobian((x1, x2, x3, x4) -> my_compute_node_damp(x1, b, x2, x3, U∞, Λ, rho_f, x4),
-        clalfa, eb, ab, Ck)
+    # Ck is complex so it is not an AD input here (ReverseDiff is real-only)
+    derivs = rd_jacobian((x1, x2, x3) -> my_compute_node_damp(x1, b, x2, x3, U∞, Λ, rho_f, Ck),
+        clalfa, eb, ab)
 
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_node_damp(x, b, eb, ab, U∞, Λ, rho_f, Ck),
         clalfa)
@@ -88,7 +90,7 @@ function test_interp()
     yVec, _, _ = HydroStrip.compute_glauert_circ(mesh[end], ones(length(mesh)), deg2rad(1), 1.0)
     xq = 0.5
 
-    derivs = Zygote.jacobian((x1, x2, x3) -> Interpolation.do_linear_interp(x1, x2, x3),
+    derivs = rd_jacobian((x1, x2, x3) -> Interpolation.do_linear_interp(x1, x2, x3),
         mesh, yVec, xq)
 
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> Interpolation.do_linear_interp(x, yVec, xq),
@@ -139,10 +141,9 @@ function test_hydroderiv(DVDict, solverOptions)
 
 
     # --- AD ---
-    derivs = Zygote.jacobian((x1, x2, x3, x4, x5) -> my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω),
+    derivs = rd_jacobian((x1, x2, x3, x4, x5) -> my_compute_AICs(dim, x1, x2, x3, x4, x5, FOIL, U∞, ω),
         mesh, Λ, chordVec, abVec, ebVec)
 
-    Enzyme.jacobian(Reverse, my_compute_AICs, dim, mesh, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω)
 
     # --- FD ---
     fdderivs1, = FiniteDifferences.jacobian(central_fdm(3, 1), (x) -> my_compute_AICs(dim, x, Λ, chordVec, abVec, ebVec, FOIL, U∞, ω),
@@ -290,9 +291,9 @@ function test_theodorsenDeriv()
         push!(datai3, datum3[2])
         # derivAD = ForwardDiff.derivative(HydroStrip.compute_theodorsen, k)
         # derivFD = FiniteDifferences.forward_fdm(2, 1)(HydroStrip.compute_theodorsen, k)
-        derivAD, = Zygote.jacobian(HydroStrip.compute_pade, k)
-        derivFD, = Zygote.jacobian(HydroStrip.compute_fraccalc, k)
-        derivRD, = Zygote.jacobian(HydroStrip.compute_theodorsen, k)
+        derivAD, = rd_jacobian(HydroStrip.compute_pade, k)
+        derivFD, = rd_jacobian(HydroStrip.compute_fraccalc, k)
+        derivRD, = rd_jacobian(HydroStrip.compute_theodorsen, k)
         push!(dADr, derivAD[1])
         push!(dADi, derivAD[2])
         push!(dFDr, derivFD[1])

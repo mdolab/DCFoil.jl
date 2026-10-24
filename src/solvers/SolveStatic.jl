@@ -16,7 +16,6 @@ export solveFromDVs
 # --- PACKAGES ---
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
-using Zygote
 using ReverseDiff, ForwardDiff
 using ChainRulesCore
 using LinearAlgebra
@@ -28,7 +27,7 @@ using Printf, DelimitedFiles
 
 
 # --- DCFoil modules ---
-using ..DCFoil: RealOrComplex, DTYPE
+using ..DCFoil: RealOrComplex, DTYPE, rd_gradient, rd_jacobian
 using ..InitModel
 using ..Preprocessing
 using ..FEMMethods: FEMMethods, StructMesh
@@ -444,7 +443,7 @@ function cost_funcsFromPtVec(
     DVDictList=[], CLMain=0.0
 )
     """
-    Do primal solve with function signature compatible with Zygote
+    Do primal solve with function signature compatible with reverse AD
     """
 
     LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
@@ -572,9 +571,8 @@ function evalFuncsSens(
             funcsSensOut[evalFuncSensKey] = funcsSens
         end
 
-    elseif uppercase(mode) == "RAD" #RAD the whole thing # BUSTED with mutating arrays :(
-        backend = AD.ZygoteBackend()
-        funcsSens, = AD.gradient(backend, (x) -> cost_funcsFromPtVec(
+    elseif uppercase(mode) == "RAD" #RAD the whole thing
+        funcsSens, = rd_gradient((x) -> cost_funcsFromPtVec(
                 x, nodeConn, DVDict, iComp, solverOptions, evalFuncSens;
                 DVDictList=appendageParamsList, CLMain=CLMain),
             ptVec)
@@ -758,9 +756,7 @@ function compute_∂f∂x(
         end
 
     elseif uppercase(mode) == "RAD" # WORKS BUT BUGGING WITH NANs prob from lifting line
-        backend = AD.ZygoteBackend()
-        ∂f∂xPt, = AD.gradient(
-            backend,
+        ∂f∂xPt, = rd_gradient(
             x -> get_evalFunc(costFunc, SOL.structStates, SOL, x, nodeConn, appendageParams;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain),
             ptVec,
@@ -839,11 +835,11 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
 
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-        toc::Vector{RealOrComplex} = appendageParams["toc"]
-        ab::Vector{RealOrComplex} = appendageParams["ab"]
-        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
-        a::Vector{RealOrComplex} = appendageParams["abar"]
-        x_a::Vector{RealOrComplex} = appendageParams["x_a"]
+        toc = appendageParams["toc"]
+        ab = appendageParams["ab"]
+        x_ab = appendageParams["x_ab"]
+        a = appendageParams["abar"]
+        x_a = appendageParams["x_a"]
 
         # WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
         midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
@@ -868,11 +864,11 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
     function dragCostFuncFromXpt(SOL, ptVec, nodeConn, appendageParams, appendageOptions, solverOptions)
         LECoords, TECoords = Utilities.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
-        toc::Vector{RealOrComplex} = appendageParams["toc"]
-        ab::Vector{RealOrComplex} = appendageParams["ab"]
-        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
-        a::Vector{RealOrComplex} = appendageParams["abar"]
-        x_a::Vector{RealOrComplex} = appendageParams["x_a"]
+        toc = appendageParams["toc"]
+        ab = appendageParams["ab"]
+        x_ab = appendageParams["x_ab"]
+        a = appendageParams["abar"]
+        x_a = appendageParams["x_a"]
 
         # WING, STRUT = FEMMethods.init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, appendageParams["theta_f"], appendageParams["toc_strut"], appendageParams["ab_strut"], appendageParams["theta_f_strut"], appendageParams, appendageOptions, solverOptions)
 
@@ -910,10 +906,7 @@ function compute_∂costFunc∂Xpt(costFunc, SOL, ptVec, nodeConn, appendagePara
         #dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="FiDi")
         dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="ADJOINT") # DIRECT and ADJOINT agree and are good
         #dcdidXpt = HydroStrip.compute_dcdidXpt(ptVec, nodeConn, appendageParams, appendageOptions, solverOptions; mode="DIRECT")
-        # backend = AD.ForwardDiffBackend()
-        backend = AD.ZygoteBackend()
-
-        ddragbuildupdxpt, = AD.jacobian(backend, x -> dragCostFuncFromXpt(
+        ddragbuildupdxpt, = rd_jacobian(x -> dragCostFuncFromXpt(
                 SOL, x, nodeConn, appendageParams, appendageOptions, solverOptions),
             ptVec)
         # println(" cdw grad\n", reshape(ddragbuildupdxpt[1, :], 3, length(ptVec) ÷ 3))
@@ -1016,9 +1009,7 @@ function compute_∂f∂u(
         ∂f∂u = reshape(∂f∂fstatic, 1, length(∂f∂fstatic)) * dfstaticdu + reshape(∂f∂udirect, 1, length(∂f∂udirect))
 
     elseif uppercase(mode) == "RAD" # works
-        backend = AD.ZygoteBackend()
-        ∂f∂u, = AD.gradient(
-            backend,
+        ∂f∂u, = rd_gradient(
             u -> get_evalFunc(
                 costFunc, u, SOL, ptVec, nodeConn, appendageParams;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, DVDictList=DVDictList, iComp=iComp, CLMain=CLMain
@@ -1164,9 +1155,7 @@ function compute_∂r∂x(
     elseif uppercase(mode) == "FAD" # this is fked
         error("Not implemented")
     elseif uppercase(mode) == "RAD" # WORKS
-        backend = AD.ZygoteBackend()
-        ∂r∂xPt, = AD.jacobian(
-            backend,
+        ∂r∂xPt, = rd_jacobian(
             x -> SolveStatic.compute_residualsFromCoords(
                 u,
                 x,
@@ -1222,9 +1211,7 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
             ptVec,
         )
     elseif uppercase(mode) == "RAD"
-        backend = AD.ReverseDiffBackend()
-        ∂KssU∂x, = AD.jacobian(
-            backend,
+        ∂KssU∂x, = rd_jacobian(
             x -> compute_KssU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
             ptVec,
         )
@@ -1257,11 +1244,11 @@ function compute_KssU(u, xVec, nodeConn, idxTip, appendageOptions, appendagePara
         α₀ = appendageParams["alfa0"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
-        toc::Vector{RealOrComplex} = appendageParams["toc"]
-        ab::Vector{RealOrComplex} = appendageParams["ab"]
-        x_ab::Vector{RealOrComplex} = appendageParams["x_ab"]
-        a::Vector{RealOrComplex} = appendageParams["abar"]
-        x_a::Vector{RealOrComplex} = appendageParams["x_a"]
+        toc = appendageParams["toc"]
+        ab = appendageParams["ab"]
+        x_ab = appendageParams["x_ab"]
+        a = appendageParams["abar"]
+        x_a = appendageParams["x_a"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -1345,9 +1332,9 @@ function compute_dfhydrostaticdXpt(structStates, ptVec, nodeConn, appendageOptio
             α₀ = appendageParams["alfa0"]
             rake = appendageParams["rake"]
             # span = appendageParams["s"] * 2
-            toc::Vector{Real} = appendageParams["toc"]
-            ab::Vector{Real} = appendageParams["ab"]
-            x_ab::Vector{Real} = appendageParams["x_ab"]
+            toc = appendageParams["toc"]
+            ab = appendageParams["ab"]
+            x_ab = appendageParams["x_ab"]
             zeta = appendageParams["zeta"]
             theta_f = appendageParams["theta_f"]
             beta = appendageParams["beta"]
@@ -1441,9 +1428,9 @@ function compute_KffU(structStates, ptVec, nodeConn, appendageOptions, appendage
         α₀ = appendageParams["alfa0"]
         rake = appendageParams["rake"]
         # span = appendageParams["s"] * 2
-        toc::Vector{Real} = appendageParams["toc"]
-        ab::Vector{Real} = appendageParams["ab"]
-        x_ab::Vector{Real} = appendageParams["x_ab"]
+        toc = appendageParams["toc"]
+        ab = appendageParams["ab"]
+        x_ab = appendageParams["x_ab"]
         zeta = appendageParams["zeta"]
         theta_f = appendageParams["theta_f"]
         beta = appendageParams["beta"]
@@ -1493,9 +1480,9 @@ function compute_Kff(ptVec, nodeConn, appendageOptions, appendageParams, solverO
 
     midchords, chordLengths, spanwiseVectors, Λ, pretwistDist = Preprocessing.compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendageOptions=appendageOptions, appendageParams=appendageParams)
 
-    toc::Vector{Real} = appendageParams["toc"]
-    ab::Vector{Real} = appendageParams["ab"]
-    x_ab::Vector{Real} = appendageParams["x_ab"]
+    toc = appendageParams["toc"]
+    ab = appendageParams["ab"]
+    x_ab = appendageParams["x_ab"]
     zeta = appendageParams["zeta"]
     theta_f = appendageParams["theta_f"]
     toc_strut = appendageParams["toc_strut"]
@@ -1552,18 +1539,12 @@ function compute_∂r∂u(
     elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
         # NOTE: a little slow but it is accurate
         # This is a tuple
-        backend = AD.ZygoteBackend()
-        ∂r∂u, = AD.jacobian(
-            backend,
+        ∂r∂u, = rd_jacobian(
             x -> compute_residualsFromCoords(
                 x, xLE, xTE, nodeConn, appendageParamsList;
                 appendageOptions=appendageOptions, solverOptions=solverOptions, iComp=iComp
             ),
             structuralStates)
-        # ∂r∂u = Zygote.jacobian(compute_residuals, structuralStates)
-
-        # elseif uppercase(mode) == "RAD" # Reverse automatic differentiation
-        #     ∂r∂u = ReverseDiff.jacobian(compute_residuals, structuralStates)
 
     elseif uppercase(mode) == "CS" # Complex step
 

@@ -81,7 +81,7 @@ function naca_mesh(c, toc, nChord, nThick; order=2)
 end
 
 # DCFoil "cfrp" constants from MaterialLibrary.jl
-const CFRP = transversely_isotropic_material(117.8e9, 13.4e9, 3.9e9, 0.25, 1590.0)
+const CFRP = VAM.transversely_isotropic_material(117.8e9, 13.4e9, 3.9e9, 0.25, 1590.0)
 
 """
 Beam constants of a thin plate c x t from the classical lamination theory formulas used in

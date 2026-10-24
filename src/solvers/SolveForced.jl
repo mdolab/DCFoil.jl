@@ -14,9 +14,10 @@ Frequency domain hydroelastic solver
 # --- PACKAGES ---
 using LinearAlgebra, Statistics
 using JSON
-using Zygote, FiniteDifferences, ReverseDiff, ForwardDiff
+using FiniteDifferences, ReverseDiff, ForwardDiff
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using ChainRulesCore: ChainRulesCore
+using ChainRules: ChainRules # rrule for the linear solve used through rd_rrule
 using FileIO
 
 # --- DCFoil modules ---
@@ -41,6 +42,7 @@ end
 using .FEMMethods
 using .LiftingLine
 using .HydroStrip
+using .LiftingLine: rd_jacobian, rd_rrule, nograd, ad_buffer, ad_complextype # reverse AD helpers from utils/Utilities
 
 # ==============================================================================
 #                         COMMON VARIABLES
@@ -103,18 +105,6 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
     # H(ω)
     DeflectionFRF = zeros(Float64, length(fSweep), length(u) - length(DOFBlankingList))
 
-    # --- Zygote buffers ---
-    ũout_z = Zygote.Buffer(ũout)
-    LiftDyn_z = Zygote.Buffer(LiftDyn) # will divide by Aw later
-    MomDyn_z = Zygote.Buffer(MomDyn) # will divide by Aw later
-    DeflectionRAO_z = Zygote.Buffer(DeflectionRAO)
-    ũout_z[:, :] = ũout
-    LiftDyn_z[:] = LiftDyn
-    MomDyn_z[:] = MomDyn
-    GenXferFcn_z = Zygote.Buffer(GenXferFcn)
-    GenXferFcn_z[:, :, :] = GenXferFcn
-    DeflectionRAO_z[:, :] = DeflectionRAO
-
     dim = NDOF * (size(FEMESH.elemConn)[1] + 1)
     Ms = CONSTANTS.Mmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
     Ks = CONSTANTS.Kmat[1:end.∉[DOFBlankingList], 1:end.∉[DOFBlankingList]]
@@ -126,6 +116,15 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
     globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep = HydroStrip.compute_genHydroLoadsMatrices(
         maxK, nK, FlowCond.Uinf, b_ref, dim, FEMESH, LLSystem.sweepAng, FOIL, LLSystem, claVec, FlowCond.rhof, FlowCond, ELEMTYPE;
         appendageOptions=appendageOptions, solverOptions=solverOptions)
+
+    # --- AD-safe work arrays ---
+    # The states and deflection RAO carry derivatives, the lift, moment and transfer function are outputs only
+    TC = ad_complextype(Ms, Ks, Cs, globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep, extForceVec, b_ref, FlowCond.Uinf)
+    ũout_z = zeros(TC, size(ũout))
+    LiftDyn_z = LiftDyn # will divide by Aw later
+    MomDyn_z = MomDyn # will divide by Aw later
+    DeflectionRAO_z = zeros(TC, size(DeflectionRAO))
+    GenXferFcn_z = GenXferFcn
 
     # ************************************************
     #     For every frequency, solve the system
@@ -159,25 +158,22 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
         D_r = -1 * ω^2 * (Ms + Mf) + ω * (-Cf_i) + Ks + Kf_r
         D_i = ω * (Cs + Cf_r) + Kf_i
 
-        D = D_r + 1im * D_i
-        # diff = D - Ddiff # should be zero
-        # println(maximum(abs.(diff))) # should be zero
-
-
         # ---------------------------
         #   Solve for dynamic states
         # ---------------------------
-        fextω_r = real.(extForceVec[f_ctr, :])
-        fextω_i = imag.(extForceVec[f_ctr, :])
-        fextω = fextω_r + 1im * fextω_i # complex force vector
-        H = inv(D) # system transfer function matrix for a force
-        # H_r, H_i = cmplxInverse(D_r, D_i, dim - length(DOFBlankingList)) # system transfer function matrix for a force
-        # H = H_r + 1im * H_i # complex transfer function matrix
-        # qSol = real(H * extForceVec)
-        qSol = H * fextω[1:end.∉[DOFBlankingList]]
+        fextω_r = real.(extForceVec[f_ctr, :])[1:end.∉[DOFBlankingList]]
+        fextω_i = imag.(extForceVec[f_ctr, :])[1:end.∉[DOFBlankingList]]
+        # (D_r + i D_i)(q_r + i q_i) = f_r + i f_i solved as a real block system so reverse AD stays real
+        nq = length(fextω_r)
+        Dblock = [D_r -D_i; D_i D_r]
+        qBlock = rd_rrule(\, Dblock, vcat(fextω_r, fextω_i))
+        qSol = qBlock[1:nq] + 1im * qBlock[nq+1:end]
         ũSol, _ = FEMMethods.put_BC_back(qSol, ELEMTYPE)
         # uSol = real(ũSol)
-        uSol = abs.(ũSol) # proper way to do it
+        uSol = abs.(nograd(ũSol)) # proper way to do it (only used for the lift and moment outputs, and |0| has a NaN derivative)
+
+        # System transfer function matrix for a force (output only)
+        H = inv(nograd(D_r) + 1im * nograd(D_i))
 
         # Deformations when subjected to the wave amplitude of 1m at all frequencies...not very realistic
         ũout_z[f_ctr, :] = ũSol
@@ -189,7 +185,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
 
         ChainRulesCore.ignore_derivatives() do # this makes it so you cannot compute derivatives of the lift or moment RAO
 
-            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, fullAIC, alfa0, rake, DOFBlankingList, CONSTANTS.downwashAngles, ELEMTYPE;
+            fDynamic, L̃, M̃ = HydroStrip.integrate_hydroLoads(uSol, nograd(fullAIC), nograd(alfa0), nograd(rake), DOFBlankingList, CONSTANTS.downwashAngles, ELEMTYPE;
                 appendageOptions=appendageOptions, solverOptions=solverOptions)
 
             # --- Store total force and tip deflection values ---
@@ -197,7 +193,8 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
             MomDyn_z[f_ctr] = M̃
 
             if f_ctr % 10 == 1 # header every 10 iterations
-                print_vibration_text(f_ctr, Aw[f_ctr], f, k0, abs(L̃), abs(M̃), abs(ũSol[end-NDOF+WIND]), abs(ũSol[end-NDOF+ΘIND]))
+                ũSolVal = nograd(ũSol)
+                print_vibration_text(f_ctr, nograd(Aw[f_ctr]), f, nograd(k0), abs(L̃), abs(M̃), abs(ũSolVal[end-NDOF+WIND]), abs(ũSolVal[end-NDOF+ΘIND]))
             end
         end
 
@@ -216,7 +213,7 @@ function solveFromCoords(FEMESH, b_ref, chordVec, claVec, abVec, ebVec, Λ, alfa
         end
     end
 
-    # --- Copy back from Zygote buffer ---
+    # --- Copy back from work arrays ---
     ũout = copy(ũout_z)
     LiftDyn = copy(LiftDyn_z)
     MomDyn = copy(MomDyn_z)
@@ -264,12 +261,12 @@ function compute_fextwave(headingAngle, ωRange, AEROMESH, chordVec, clαVec, Fl
     fAey, mAey, Aw = compute_waveloads(chordVec, FlowCond.Uinf, FlowCond.rhof, ωe, ωRange, Awsig, FlowCond.depth, stripWidths, clαVec)
     
     ChainRulesCore.ignore_derivatives() do
-        indx = argmax(abs.(fAey[:,1])) # find the max wave force
-        println("Max wave force at ω0 = $(ωRange[indx]/2π) Hz, fAey = $(abs.(fAey[indx,1])) N")
+        fAeyVal = nograd(fAey)
+        indx = argmax(abs.(fAeyVal[:, 1])) # find the max wave force
+        println("Max wave force at ω0 = $(ωRange[indx]/2π) Hz, fAey = $(abs.(fAeyVal[indx,1])) N")
     end
-    extForceVec = zeros(ComplexF64, length(ωRange), length(spanLocs) * NDOF)
-    extForceVec_z = Zygote.Buffer(extForceVec)
-    extForceVec_z[:, :] = extForceVec
+    extForceVec = zeros(ad_complextype(fAey, mAey), length(ωRange), length(spanLocs) * NDOF)
+    extForceVec_z = extForceVec
 
     # --- Populate the force vector ---
     # println("shape:$(size(fAey))")
@@ -382,6 +379,8 @@ function compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, theta
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
+    # Work on a copy so reverse AD does not leave tracked values in the caller's dictionary
+    appendageParams = copy(appendageParams)
     appendageParams["theta_f"] = theta_f
     appendageParams["toc"] = toc
     appendageParams["alfa0"] = alfa0
@@ -404,7 +403,7 @@ function compute_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, theta
         error("$(waveSpectrum) wave spectrum not implemented")
     end
 
-    gvib_bend, gvib_twist = compute_PSDArea(SOL.Zdeflection, SOL.fSweep, b_ref, ChainRulesCore.ignore_derivatives(Swave))
+    gvib_bend, gvib_twist = compute_PSDArea(SOL.Zdeflection, SOL.fSweep, b_ref, nograd(Swave))
 
     ksbend, kstwist = compute_dynDeflectionPk(SOL.dynStructStates, solverOptions)
 
@@ -437,7 +436,7 @@ function evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, so
 
 
     if uppercase(mode) == "RAD"
-        dIdxDV = Zygote.jacobian((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+        dIdxDV = rd_jacobian((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
                 compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
             ptVec,
             displacementsCol,
@@ -446,15 +445,6 @@ function evalFuncsSens(appendageParams, GridStruct, displacementsCol, claVec, so
             appendageParams["toc"],
             appendageParams["alfa0"])
 
-
-        # dIdxDV = ReverseDiff.jacobian((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
-        #         compute_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
-        #     ptVec,
-        #     displacementsCol,
-        #     claVec,
-        #     appendageParams["theta_f"],
-        #     appendageParams["toc"],
-        #     appendageParams["alfa0"])
     elseif uppercase(mode) == "FIDI"
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
 

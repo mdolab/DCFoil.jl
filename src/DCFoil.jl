@@ -45,7 +45,6 @@ for headerName in [
     "struct/FEMMethods",
     "struct/StrainBeam",
     "hydro/HydroStrip",
-    "ComputeFunctions",
     "InitModel",
     "solvers/DCFoilSolution",
     "io/TecplotIO", "io/ParaviewIO", "io/MeshIO",

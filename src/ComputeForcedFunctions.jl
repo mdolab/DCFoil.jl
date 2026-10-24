@@ -76,9 +76,9 @@ function compute_dynDeflectionPk(dynStructStates, solverOptions)
     dynTwisting = real.(dynTheta) .^ 2 + imag.(dynTheta) .^ 2 # twisting shape squared
 
     ksTmpBend = zeros(size(dynBending, 1))
-    ksTmpBend_z = Zygote.Buffer(ksTmpBend)
+    ksTmpBend_z = ad_buffer(ksTmpBend, dynBending)
     ksTmpTwist = zeros(size(dynBending, 1))
-    ksTmpTwist_z = Zygote.Buffer(ksTmpTwist)
+    ksTmpTwist_z = ad_buffer(ksTmpTwist, dynTwisting)
 
     for (ifreq, dynBω) in enumerate(eachrow(dynBending)) # loop over frequencies
 

@@ -15,8 +15,6 @@ r ( u_s ) = K u_s - f and f is the vector of traction forces with direct depende
     span derivative may result in array size being wrong
     NaN shows up in structural matrices that breaks the solve
     This NaN originates from the mesh generation routine most likely
-    Zygote Buffer data types suck and you should find a more stable way.
-    I initialized the mesh properly in the Buffer but it still broke
 """
 
 
@@ -42,7 +40,6 @@ end
 
 # --- PACKAGES ---
 using AbstractDifferentiation: AbstractDifferentiation as AD
-using Zygote
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives
 using DelimitedFiles
 using LinearAlgebra
@@ -215,10 +212,10 @@ function make_componentMesh(
         nNodeTot = 2 * nElem + nElStrut + 1
         nElemTot = 2 * nElem + nElStrut
     end
-    mesh = zeros(Real, nNodeTot, 3)
+    mesh = zeros(ad_eltype(span, spanStrut, transMat), nNodeTot, 3)
     elemConn = zeros(Int64, nElemTot, 2)
 
-    mesh_z = Zygote.Buffer(mesh)
+    mesh_z = mesh
     # mesh_z[:, :] .= mesh
     # elemConn_z[:, :] .= elemConn
     # The transformation matrix is good
@@ -227,8 +224,7 @@ function make_componentMesh(
     # println("")
     mesh, elemConn = fill_mesh(mesh_z, elemConn, transMat, span, nElem; config=config, nElStrut=nElStrut, spanStrut=spanStrut)
 
-    mesh_z = Zygote.Buffer(mesh)
-    mesh_z[:, :] = mesh
+    mesh_z = copy(mesh)
     if config == "t-foil"
         for inode in 1:nNodeTot
             mesh_z[inode, ZDIM] = mesh_z[inode, ZDIM] - spanStrut # translate
@@ -504,27 +500,18 @@ function assemble(StructMesh, x_αbVec,
     nElem = size(StructMesh.elemConn)[1]
     nNodes = nElem + 1
     # These need to be complex step-able
-    globalK = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
-    globalM = zeros(RealOrComplex, NDOF * (nNodes), NDOF * (nNodes))
-    globalF = zeros(RealOrComplex, NDOF * (nNodes))
+    TA = ad_eltype(StructMesh, FOIL, STRUT, abVec, x_αbVec, ab_strut, x_αb_strut)
+    globalK = zeros(TA, NDOF * (nNodes), NDOF * (nNodes))
+    globalM = zeros(TA, NDOF * (nNodes), NDOF * (nNodes))
+    globalF = zeros(TA, NDOF * (nNodes))
     # Note: sparse arrays does not work through Zygote without some workarounds (that I haven't figured out yet)
     # globalK::SparseMatrixCSC{Float64,Int64} = spzeros(nnd * (nNodes), nnd * (nNodes))
 
     # ************************************************
     #     Element loop
     # ************************************************
-    # --- Zygote buffer initializations ---
-    globalK_z = Zygote.Buffer(globalK)
-    globalM_z = Zygote.Buffer(globalM)
-    globalF_z = Zygote.Buffer(globalF)
-    globalK_z[:, :] = globalK
-    globalM_z[:, :] = globalM
-    globalF_z[:] = globalF
-    populate_matrices!(globalK_z, globalM_z, globalF_z, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
+    populate_matrices!(globalK, globalM, globalF, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
         config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
-    globalK = copy(globalK_z)
-    globalM = copy(globalM_z)
-    globalF = copy(globalF_z)
     # --- Other way ---
     # populate_matrices!(globalK, globalM, globalF, nElem, StructMesh, FOIL, STRUT, abVec, x_αbVec;
     #     config=config, constitutive=constitutive, verbose=verbose, elemType=elemType, ab_strut=ab_strut, x_αb_strut=x_αb_strut)
@@ -809,7 +796,7 @@ function apply_tip_mass(globalM, mass, inertia, elemLength, x_αbBulb, transMat,
     inertia: moment of inertia of the tip about C.G. [kg-m^2]
     """
 
-    globalM_z = Zygote.Buffer(globalM)
+    globalM_z = ad_buffer(globalM, mass, inertia, elemLength, x_αbBulb, transMat)
     globalM_z[:, :] = globalM
     # TODO: unit test for the tip mass, verification case from Eirikur's thesis?
     if elemType == "bend-twist"
@@ -927,9 +914,8 @@ function compute_rigidBodyModes(FEMESH::StructMesh; referencePoint=nothing, appe
 
     slopeSigns = [1.0, -1.0, 1.0]
 
-    Φr = zeros(RealOrComplex, NDOF * nNodes, 6)
-    Φr_z = Zygote.Buffer(Φr)
-    Φr_z[:, :] = Φr
+    Φr = zeros(ad_eltype(coordMat, referencePoint), NDOF * nNodes, 6)
+    Φr_z = Φr
     for ii in 1:nNodes
         armVec = coordMat[ii, :] - referencePoint
         idx = (ii - 1) * NDOF
@@ -941,7 +927,7 @@ function compute_rigidBodyModes(FEMESH::StructMesh; referencePoint=nothing, appe
         end
     end
 
-    return copy(Φr_z)
+    return Φr
 end
 
 function solve_freeFreeStructure(K::AbstractMatrix, M::AbstractMatrix, F::AbstractVector, rigidBodyModes::AbstractMatrix)
@@ -1021,8 +1007,8 @@ function init_staticStruct(LECoords, TECoords, nodeConn, toc, ab, theta_f, toc_s
     # ---------------------------
     #   Geometry
     # ---------------------------
-    eb::typeof(ab) = 0.25 * chordLengths .+ ab
-    t::typeof(toc) = toc .* chordLengths
+    eb = 0.25 * chordLengths .+ ab
+    t = toc .* chordLengths
 
     # ---------------------------
     #   Structure
@@ -1308,9 +1294,7 @@ function compute_∂KssU∂x(structStates, ptVec, nodeConn, appendageOptions, ap
             ptVec,
         )
     elseif uppercase(mode) == "RAD"
-        backend = AD.ReverseDiffBackend()
-        ∂KssU∂x, = AD.jacobian(
-            backend,
+        ∂KssU∂x, = rd_jacobian(
             x -> compute_KssU(structStates, x, nodeConn, appendageOptions, appendageParams, solverOptions),
             ptVec,
         )
@@ -1435,9 +1419,7 @@ function compute_∂r∂x(
     elseif uppercase(mode) == "FAD" # this is fked
         error("Not implemented")
     elseif uppercase(mode) == "RAD" # WORKS
-        backend = AD.ZygoteBackend()
-        ∂r∂xPt, = AD.jacobian(
-            backend,
+        ∂r∂xPt, = rd_jacobian(
             x -> compute_residualsFromCoords(
                 allStructStates,
                 x,
@@ -1525,10 +1507,7 @@ function compute_∂nodes∂x(ptVec, nodeConn, appendageParamsList, appendageOpt
         end
 
     elseif uppercase(mode) == "RAD"
-        backend = AD.ZygoteBackend()
-        backend = AD.ReverseDiffBackend()
-        ∂nodes∂xPt, = AD.jacobian(
-            backend,
+        ∂nodes∂xPt, = rd_jacobian(
             x -> compute_nodes(x),
             ptVec, # compute deriv at this DV
         )

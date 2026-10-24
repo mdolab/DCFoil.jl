@@ -32,7 +32,7 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     #     Compute 1D quantities
     # ************************************************
     # Midchords
-    midchords = compute_midchords(LECoords, TECoords)
+    midchords = rd_rrule(compute_midchords, LECoords, TECoords)
 
     # About midchord
     # spanwiseVectors = zeros(Real, 3, size(nodeConn)[2])
@@ -93,12 +93,13 @@ function compute_1DPropsFromGrid(LECoords, TECoords, nodeConn, idxTip; appendage
     # s_loc = LECoords[YDIM, 1:idxTip]
     s_loc = midchords[YDIM, 1:idxTip]
 
-    chordLengths = compute_chordLengths(LECoords[XDIM, :], TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :])
+    chordLengths = rd_rrule(compute_chordLengths, LECoords[XDIM, :], TECoords[XDIM, :], LECoords[YDIM, :], TECoords[YDIM, :], LECoords[ZDIM, :], TECoords[ZDIM, :])
     # How is this line giving NaNs?
     chordLengthsWork_interp = do_linear_interp(s_loc, chordLengths[1:idxTip], s_loc_q)
 
     # This is for half of the wing
-    chordLengthsWork = vcat(chordLengths[1], chordLengthsWork_interp, chordLengths[idxTip])
+    # Scalars wrapped in vectors so this stays a plain vcat under ReverseDiff (a bare TrackedReal makes it a TrackedArray)
+    chordLengthsWork = vcat([chordLengths[1]], chordLengthsWork_interp, [chordLengths[idxTip]])
 
     # qtrChordWork = Interpolation.do_linear_interp(s_loc, qtrChords, s_loc_q)
     # println("chords: ", chordLengthsWork)
@@ -155,7 +156,7 @@ function compute_chordLengths(xLE, xTE, yLE, yTE, zLE, zTE)
     # This is a 3 x NPT matrix
 
     # Chord lengths
-    chordLengths = zeros(Real, size(chordVectors)[2])
+    chordLengths = zeros(ad_eltype(chordVectors), size(chordVectors)[2])
     for ii in eachindex(eachcol(chordVectors))
         chordLengths[ii] = √(chordVectors[XDIM, ii] .^ 2 + chordVectors[YDIM, ii] .^ 2 + chordVectors[ZDIM, ii] .^ 2)
     end
@@ -285,16 +286,15 @@ function compute_ACSweep(LECoords, TECoords, nodeConn, idxTip, e=0.25)
 
     # Compute the angle
     # --- Vectorized ---
-    sweepAngles = zeros(Real, size(dxVec))
-    sweepAngles_z = Zygote.Buffer(sweepAngles)
+    sweepAngles = zeros(ad_eltype(dxVec, dyVec), size(dxVec))
     for (ii, dy) in enumerate(dyVec)
         if real(dy) < 0.0
-            sweepAngles_z[ii] = atan_cs_safe(dxVec[ii], -dy)
+            sweepAngles[ii] = atan_cs_safe(dxVec[ii], -dy)
         else
-            sweepAngles_z[ii] = atan_cs_safe(dxVec[ii], dy)
+            sweepAngles[ii] = atan_cs_safe(dxVec[ii], dy)
         end
     end
-    sweepAngle = copy(sweepAngles_z)
+    sweepAngle = sweepAngles
     # dx = qtrChord[XDIM, idxTip] - qtrChord[XDIM, 1]
     # dy = qtrChord[YDIM, idxTip] - qtrChord[XDIM, 1]
     # # println("dx: $(dx), dy: $(dy)")

@@ -6,6 +6,7 @@
 .CondaPkg/
 *.html
 *openmdao*
+**.sql
 
 # Results
 OUTPUT/

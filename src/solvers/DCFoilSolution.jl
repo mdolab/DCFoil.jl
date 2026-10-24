@@ -18,15 +18,16 @@ struct StaticSolution{TF}
     STRUT::DynamicFoil#{TF,TI,TA}
 end
 
-struct ForcedVibSolution{TF,TC}
+struct ForcedVibSolution{TF,TC,TO}
     # fSweep::Vector{TF} # forcing frequency sweep [Hz]
     fSweep::StepRangeLen{TF} # forcing frequency sweep [Hz]
     dynStructStates::Matrix{TC} # dynamic state variables (nfreq, u)
     Awave::Vector{TF} # wave amplitudes
     Zdeflection::Matrix{TC} # deflection RAO
-    Zlift::Vector{TC} # lift forces RAO
-    Zmom::Vector{TC} # moments RAO
-    RAO::Array{TC,3} # RAOs (nFreq, nDOF, nDOF) in the sens of deflection output from an input force, this is more of a general xfer fcn
+    # The fields below are outputs only (no derivatives) so they keep a plain complex type TO
+    Zlift::Vector{TO} # lift forces RAO
+    Zmom::Vector{TO} # moments RAO
+    RAO::Array{TO,3} # RAOs (nFreq, nDOF, nDOF) in the sens of deflection output from an input force, this is more of a general xfer fcn
 end
 
 struct BodyStaticSolution{TF,TA<:AbstractVector{TF}}

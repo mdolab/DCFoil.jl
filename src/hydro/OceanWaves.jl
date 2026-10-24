@@ -89,10 +89,12 @@ function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, s
     # In other words, the transfer function of 1m input wave to load output
 
     nStrip = length(chordLengths)
-    fAey = zeros(ComplexF64, length(freqspan), nStrip)
-    mAey = zeros(ComplexF64, length(freqspan), nStrip)
-    fAey_z = Zygote.Buffer(fAey)
-    mAey_z = Zygote.Buffer(mAey)
+    # Wave loads depend on the chord and lift slope, so they carry derivatives
+    TC = ad_complextype(chordLengths, Uinf, ϱ, ω_e, h, stripWidths, claVec)
+    fAey = zeros(TC, length(freqspan), nStrip)
+    mAey = zeros(TC, length(freqspan), nStrip)
+    fAey_z = fAey
+    mAey_z = mAey
 
     bi = 0.5 * chordLengths
 
@@ -132,8 +134,6 @@ function compute_waveloads(chordLengths, Uinf, ϱ, ω_e, freqspan, waveamp, h, s
         end
     end
 
-    fAey = copy(fAey_z)
-    mAey = copy(mAey_z)
 
     if debug
         p1 = plot(freqspan, ampDist, ylims=(0, :auto), xlims=(0, 2))
@@ -204,6 +204,7 @@ function compute_encounterFreq(β, ω_wave::AbstractVector, Ufwd)
     ωₑ : 
         encounter frequency [rad/s]
     """
+    ω_wave = collect(ω_wave) # a range times a tracked speed does not work with reverse AD
     ωₑ = (1 .- Ufwd * ω_wave * cos(β) / GRAV) .* ω_wave
 
     return ωₑ

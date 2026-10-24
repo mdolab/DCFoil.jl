@@ -28,7 +28,7 @@ using LinearAlgebra
 using Statistics
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent, @ignore_derivatives
-using Zygote, ReverseDiff, ForwardDiff
+using ReverseDiff, ForwardDiff
 using FiniteDifferences
 using PythonCall
 using Printf
@@ -493,8 +493,6 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
     # Where the 2D VPM comes into play
     Airfoils = Vector(undef, npt_wing)
     AirfoilInfluences = Vector(undef, npt_wing)
-    Airfoils_z = Zygote.Buffer(Airfoils)
-    AirfoilInfluences_z = Zygote.Buffer(AirfoilInfluences)
     for (ii, sweep) in enumerate(localSweepsCtrl)
 
         twistAngle = rotationDisplacementsCtrl[YDIM, ii] + preTwistCtrl[ii]
@@ -512,13 +510,9 @@ function setup(Uvec, sweepAng, rootChord, taperRatio, midchords, displacements::
 
         # Pass in copies because this routine was modifying the input
         Airfoil, Airfoil_influences = setup_VPM(copy(airfoil_xy_rot[XDIM, :]), copy(airfoil_xy_rot[YDIM, :]), copy(airfoil_ctrl_xy_rot), sweep)
-        Airfoils_z[ii] = Airfoil
-        AirfoilInfluences_z[ii] = Airfoil_influences
-        # Airfoils[ii] = Airfoil
-        # AirfoilInfluences[ii] = Airfoil_influences
+        Airfoils[ii] = Airfoil
+        AirfoilInfluences[ii] = Airfoil_influences
     end
-    Airfoils = copy(Airfoils_z)
-    AirfoilInfluences = copy(AirfoilInfluences_z)
 
     # # List comprehension version
     # Airfoils, AirfoilInfluences = [ setup_VPM(copy(airfoil_xy[XDIM, :]), copy(airfoil_xy[YDIM, :]), copy(airfoil_ctrl_xy), sweep) for sweep in localSweepsCtrl]
@@ -1029,11 +1023,10 @@ function compute_outputs(Gconv, TV_influence, FlowCond, LLMesh, LLNLParams)
     # uicrossζi = -cross.(eachcol(ui), eachcol(ζi))
     # uicrossζi = hcat(uicrossζi...) # now it's a (3, npt) matrix
 
-    uicrossζi_z = Zygote.Buffer(zeros(Number, 3, LLMesh.npt_wing))
+    uicrossζi = zeros(ad_eltype(ui, ζi), 3, LLMesh.npt_wing)
     for ii in 1:LLMesh.npt_wing
-        uicrossζi_z[:, ii] = -myCrossProd(ui[:, ii], ζi[:, ii])
+        uicrossζi[:, ii] = -myCrossProd(ui[:, ii], ζi[:, ii])
     end
-    uicrossζi = copy(uicrossζi_z)
 
     coeff = 2.0 / LLMesh.SRef
     NondimForces = coeff * (uicrossζi .* Gi) .* dAi
@@ -1185,7 +1178,7 @@ function compute_LLresiduals(G; solverParams=nothing)
     # println("chords:", LLSystem.localChordsCtrl)
     # println("hcRatio: ", hcRatio)
 
-    c_l::Vector{Number} = [
+    c_l = [
         solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[1]
         for (ii, V_local) in enumerate(eachcol(Ui))
     ] # remember to only grab CL out of VPM solve
@@ -1353,25 +1346,22 @@ function compute_LLresJacobian(Gi; solverParams, mode="Analytic")
 
         dh = 1e-4
         ∂r∂G = zeros(DTYPE, length(Gi), length(Gi))
-        ∂r∂G_z = Zygote.Buffer(∂r∂G)
         r_i = compute_LLresiduals(Gi; solverParams=solverParams)
         for ii in eachindex(Gi)
             ChainRulesCore.ignore_derivatives(Gi[ii] += dh)
             r_f = compute_LLresiduals(Gi; solverParams=solverParams)
             ChainRulesCore.ignore_derivatives(Gi[ii] -= dh)
             # ∂r∂G[:, ii] = (r_f - r_i) / dh
-            ∂r∂G_z[:, ii] = (r_f - r_i) / dh
+            ∂r∂G[:, ii] = (r_f - r_i) / dh
             # println("r:")
             # println(r_f)
             # println("r_i:")
             # println(r_i)
         end
-        # J = ∂r∂G
-        J = copy(∂r∂G_z)
-    elseif mode == "RAD" # not working
+        J = ∂r∂G
+    elseif mode == "RAD"
 
-        backend = AD.ZygoteBackend()
-        J, = AD.jacobian(backend, x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
+        J, = rd_jacobian(x -> compute_LLresiduals(x; solverParams=solverParams), Gi)
 
     else
         println("Mode not implemented yet")
@@ -1448,9 +1438,7 @@ function compute_∂I∂G(Gconv, LLMesh, FlowCond, LLNLParams, solverOptions, ap
         backend = AD.FiniteDifferencesBackend(forward_fdm(2, 1))
         ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
     elseif uppercase(mode) == "RAD" # with the number of outputs, this is not really worth it. Untested
-        backend = AD.ReverseDiffBackend()
-        backend = AD.ZygoteDiffBackend()
-        ∂I∂G, = AD.jacobian(backend, x -> compute_outputsFromGConv(x), Gconv)
+        ∂I∂G, = rd_jacobian(x -> compute_outputsFromGConv(x), Gconv)
     end
 
     return ∂I∂G
@@ -1536,11 +1524,9 @@ function compute_∂r∂Xpt(Gconv, ptVec, nodeConn, displCol, appendageParams, a
             ptVecCS[ii] -= 1im * dh
             ∂r∂Xpt[:, ii] = imag(resVec_f) / dh
         end
-    elseif uppercase(mode) == "RAD" # It's broken
+    elseif uppercase(mode) == "RAD"
 
-        backend = AD.ReverseDiffBackend() # stack overflow errors?
-        # backend = AD.ZygoteBackend() # Broken and does not work without buffering over VPM solve
-        ∂r∂Xpt, = AD.jacobian(backend, x -> compute_resFromXpt(x), ptVec)
+        ∂r∂Xpt, ∂r∂Xdispl = rd_jacobian((xPt, xDisplCol) -> compute_resFromXpt(xPt, xDisplCol), ptVec, displVec)
 
     elseif uppercase(mode) == "FAD"
 
@@ -1641,11 +1627,8 @@ function compute_∂I∂Xpt(Gconv::AbstractVector, ptVec, nodeConn, displCol, ap
             ∂I∂Xpt[:, ii] = imag(f_f) / dh
         end
 
-    elseif uppercase(mode) == "RAD" # not working
-        backend = AD.ReverseDiffBackend()
-        # backend = AD.ZygoteBackend()
-        ∂I∂Xpt, = AD.jacobian(backend, x -> compute_OutputFromXpt(x), ptVec)
-        println("shape", size(∂I∂Xpt))
+    elseif uppercase(mode) == "RAD"
+        ∂I∂Xpt, ∂I∂Xdispl = rd_jacobian((xPt, xDispl) -> compute_OutputFromXpt(xPt, xDispl), ptVec, displVec)
     elseif uppercase(mode) == "FAD"
         backend = AD.ForwardDiffBackend()
 
@@ -1710,10 +1693,8 @@ function compute_∂collocationPt∂Xpt(ptVec, nodeConn, displCol, appendagePara
             ptVecCS[ii] -= 1im * dh
             ∂collocationPt∂Xpt[:, ii] = imag(resVec_f) / dh
         end
-    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to a few sec in pure Fidi julia
-        # backend = AD.ReverseDiffBackend()
-        backend = AD.ZygoteBackend()
-        ∂collocationPt∂Xpt, = AD.jacobian(backend, x -> compute_collocationFromXpt(x), ptVec)
+    elseif uppercase(mode) == "RAD"
+        ∂collocationPt∂Xpt, = rd_jacobian(x -> compute_collocationFromXpt(x), ptVec)
 
     elseif uppercase(mode) == "FAD" # use this, same speed as Fidi
         backend = AD.ForwardDiffBackend()
@@ -1779,10 +1760,8 @@ function compute_∂collocationPt∂displCol(ptVec, nodeConn, displCol, appendag
 
         end
         # end
-    elseif uppercase(mode) == "RAD" # This takes nearly 15 seconds compared to a few sec in pure Fidi julia
-        # backend = AD.ReverseDiffBackend()
-        backend = AD.ZygoteBackend()
-        ∂collocationPt∂displCol, = AD.jacobian(backend, x -> compute_collocationFromdisplCol(x), displVec)
+    elseif uppercase(mode) == "RAD"
+        ∂collocationPt∂displCol, = rd_jacobian(x -> compute_collocationFromdisplCol(x), displVec)
 
     elseif uppercase(mode) == "FAD" # use this, same speed as Fidi
         backend = AD.ForwardDiffBackend()
@@ -1854,18 +1833,17 @@ function compute_straightSemiinfinite(startpt, endvec, pt, rc)
     denominator = (4π * r1mag .* (r1mag .- r1dotuinf))
     denominator = reshape(denominator, 1, size(denominator)...)
 
-    influence = numerator ./ denominator
+    # A zero denominator would give NaN/Inf, use 0.0 there instead (a plain division would also put NaN in the reverse AD partials)
+    influence = safe_divide.(numerator, denominator)
 
-    # Replace NaNs and Infs with 0.0
-    ChainRulesCore.ignore_derivatives() do
-        influence = replace(influence, NaN => 0.0)
-        influence = replace(influence, Inf => 0.0)
-        influence = replace(influence, -Inf => 0.0)
-    end
+    # Replace any remaining NaNs and Infs with 0.0 (zero derivative there too)
+    influence = map(x -> isfinite(x) ? x : zero(x), influence)
 
 
     return influence
 end
+
+safe_divide(num, den) = iszero(den) ? zero(num) : num / den
 
 function compute_straightSegment(startpt, endpt, pt, rc)
     """
@@ -1924,15 +1902,11 @@ function compute_straightSegment(startpt, endpt, pt, rc)
     # Reshape the denominator to have the same dimensions as the influence    
     denominator = reshape(denominator, 1, size(denominator)...)
 
-    influence = numerator ./ denominator
+    # A zero denominator would give NaN/Inf, use 0.0 there instead (a plain division would also put NaN in the reverse AD partials)
+    influence = safe_divide.(numerator, denominator)
 
-    # Replace NaNs and Infs with 0.0
-    # Cannot keep in ignore derivatives block
-    ChainRulesCore.ignore_derivatives() do
-        influence = replace(influence, NaN => 0.0)
-        influence = replace(influence, Inf => 0.0)
-        influence = replace(influence, -Inf => 0.0)
-    end
+    # Replace any remaining NaNs and Infs with 0.0 (zero derivative there too)
+    influence = map(x -> isfinite(x) ? x : zero(x), influence)
 
     return influence
 end
@@ -2045,12 +2019,10 @@ function compute_cm_LE(G; solverParams=nothing)
     #     for (ii, V_local) in enumerate(eachcol(Ui))
     # ] # remember to only grab CM out of VPM solve
 
-    c_m_z = Zygote.Buffer(zeros(size(Airfoils)))
-    c_m_z = [
+    c_m = [
         solve_VPM(Airfoils[ii], AirfoilInfluences[ii], V_local, 1.0, FlowCond.Uinf, hcRatio[ii])[2]
         for (ii, V_local) in enumerate(eachcol(Ui))
     ] # remember to only grab CM out of VPM solve
-    c_m = copy(c_m_z)
 
     return c_m
 end

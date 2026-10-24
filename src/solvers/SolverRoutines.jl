@@ -11,7 +11,6 @@ In julia, the chainrules rrule is '_b'
 
 # --- PACKAGES ---
 # using LinearAlgebra
-# using Zygote
 using ChainRulesCore: ChainRulesCore, NoTangent, ZeroTangent
 # using FLOWMath: abs_cs_safe, atan_cs_safe
 # using Printf
@@ -676,15 +675,10 @@ function argmax2d(A)
     ncol = size(A)[2]
 
     locs = zeros(Int64, ncol)
-    locs_z = Zygote.Buffer(locs)
 
     for col in 1:ncol
-        locs_z[col] = argmax(A[:, col])
+        locs[col] = argmax(A[:, col])
     end
-    locs = copy(locs_z)
-
-    # # List comprehension to avoid Zygote.Buffer
-    # locs = argmax(A[:, col] for col in 1:ncol)
 
     return locs
 
@@ -746,16 +740,14 @@ function ipack1d(A, mask, nFlow)
 
     nTrue = count1d(mask)
     B = zeros(Int64, nFlow)
-    B_z = Zygote.Buffer(B)
 
     nFound = 0
     for ii in eachindex(A)
         if mask[ii]
             nFound += 1
-            B_z[nFound] = A[ii]
+            B[nFound] = A[ii]
         end
     end
-    B = copy(B_z)
 
     return B, nFound
 end # ipack1d

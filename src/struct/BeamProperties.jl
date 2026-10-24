@@ -5,17 +5,15 @@
 @Desc    :   Module for computing sectional properties of composite beams or reading from FEM file
 """
 
-using Zygote
-
 # Variational asymptotic method cross-sectional analysis (Hodges 2006). The module lands in the
 # namespace that includes this file (FEMMethods and DCFoil), so call it as VAM.<function>.
 include("VAM.jl")
 
 
-struct SectionProperty{TF,TC,T}
+struct SectionProperty{TF,TC,T,TA}
     c::TC # chord length
     t::T # thickness (only needed if not using an airfoil section)
-    ab::TF # dist from midchord to EA, +ve for EA aft
+    ab::TA # dist from midchord to EA, +ve for EA aft (own type since it is a design variable)
     ρₛ::TF # density
     E₁::TF # Young's modulus in-plane fiber longitudinal direction (x)
     E₂::TF # Young's modulus in-plane fiber normal direction (y)
@@ -231,53 +229,31 @@ function compute_beam(nNodes::Int64,
     chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f,
     constitutive::String; solverOptions=nothing
 )
-    EIₛ = zeros(RealOrComplex, nNodes)
-    Kₛ = zeros(RealOrComplex, nNodes)
-    GJₛ = zeros(RealOrComplex, nNodes)
-    Sₛ = zeros(RealOrComplex, nNodes)
-    Iₛ = zeros(RealOrComplex, nNodes)
-    mₛ = zeros(RealOrComplex, nNodes)
-    # --- Loop over the span ---
-    EI_z = Zygote.Buffer(EIₛ)
-    EIIP_z = Zygote.Buffer(EIₛ)
-    EA_z = Zygote.Buffer(EIₛ)
-    K_z = Zygote.Buffer(Kₛ)
-    GJ_z = Zygote.Buffer(GJₛ)
-    S_z = Zygote.Buffer(Sₛ)
-    I_z = Zygote.Buffer(Iₛ)
-    m_z = Zygote.Buffer(mₛ)
-    EI_z[:] = EIₛ
-    EIIP_z[:] = EIₛ
-    EA_z[:] = EIₛ
-    K_z[:] = Kₛ
-    GJ_z[:] = GJₛ
-    S_z[:] = Sₛ
-    I_z[:] = Iₛ
-    m_z[:] = mₛ
+    TA = ad_eltype(chord, t, ab, ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f)
+    EIₛ = zeros(TA, nNodes)
+    EIIPₛ = zeros(TA, nNodes)
+    EAₛ = zeros(TA, nNodes)
+    Kₛ = zeros(TA, nNodes)
+    GJₛ = zeros(TA, nNodes)
+    Sₛ = zeros(TA, nNodes)
+    Iₛ = zeros(TA, nNodes)
+    mₛ = zeros(TA, nNodes)
 
+    # --- Loop over the span ---
     for ii in 1:nNodes
         section = SectionProperty(chord[ii], t[ii], ab[ii], ρₛ, E₁, E₂, G₁₂, ν₁₂, theta_f, zeros(20, 2))
 
         # TODO: should probably redo this to be element-based, not node-based
         EI, EIIP, K, GJ, S, EA, I, m = compute_section_property(section, constitutive; solverOptions=solverOptions)
-        EI_z[ii] = EI
-        EIIP_z[ii] = EIIP
-        K_z[ii] = K
-        GJ_z[ii] = GJ
-        S_z[ii] = S
-        EA_z[ii] = EA
-        I_z[ii] = I
-        m_z[ii] = m
+        EIₛ[ii] = EI
+        EIIPₛ[ii] = EIIP
+        Kₛ[ii] = K
+        GJₛ[ii] = GJ
+        Sₛ[ii] = S
+        EAₛ[ii] = EA
+        Iₛ[ii] = I
+        mₛ[ii] = m
     end
-
-    EIₛ = copy(EI_z)
-    EIIPₛ = copy(EIIP_z)
-    EAₛ = copy(EA_z)
-    Kₛ = copy(K_z)
-    GJₛ = copy(GJ_z)
-    Sₛ = copy(S_z)
-    Iₛ = copy(I_z)
-    mₛ = copy(m_z)
 
     return EIₛ, EIIPₛ, Kₛ, GJₛ, Sₛ, EAₛ, Iₛ, mₛ
 end

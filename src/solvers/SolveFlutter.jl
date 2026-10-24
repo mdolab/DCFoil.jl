@@ -26,7 +26,6 @@ using FileIO
 # Differentiation
 using AbstractDifferentiation: AbstractDifferentiation as AD
 using FiniteDifferences
-using Zygote
 using ReverseDiff: ReverseDiff
 using ChainRulesCore: ChainRulesCore, @ignore_derivatives # this is an extremely weird bug that none of the code wrapped in @ignore_derivatives is evaluated
 
@@ -793,7 +792,7 @@ function print_flutter_text(nFlow, dynPTmp, U∞, nCorr, nCorrNewModes, NTotalMo
         println("+--------+-------------------+----------------+---------+-------+---------------+------------------+----------+")
     else
         println(@sprintf("|  %04d  | %17.2f | %14.4f | %7.4f |   %03d |        %03d    |            %03d   |       %d  |",
-            nFlow, dynPTmp * 1e-3, U∞, U∞ * 1.94384, nCorr, nCorrNewModes, NTotalModesFound, isFailed))
+            nFlow, nograd(dynPTmp) * 1e-3, nograd(U∞), nograd(U∞) * 1.94384, nCorr, nCorrNewModes, NTotalModesFound, isFailed))
     end
 
 end
@@ -929,23 +928,23 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     # maxK = 180.0 # max reduced frequency k to search (pesky moth and 0.9m semispan case with high k
 
 
-    # --- Zygote buffers ---
-    p_r_z = Zygote.Buffer(p_r)
-    p_i_z = Zygote.Buffer(p_i)
+    # --- AD-safe work arrays ---
+    adDeps = (vel, b_ref, Λ, chordVec, abVec, ebVec, FOIL, Mmat, Kmat, Cmat, LLSystem, claVec, FlowCond)
+    p_r_z = ad_buffer(p_r, adDeps...)
+    p_i_z = ad_buffer(p_i, adDeps...)
     p_r_z[:, :] = p_r
     p_i_z[:, :] = p_i
-    true_eigs_r_z = Zygote.Buffer(true_eigs_r)
-    true_eigs_i_z = Zygote.Buffer(true_eigs_i)
+    true_eigs_r_z = ad_buffer(true_eigs_r, adDeps...)
+    true_eigs_i_z = ad_buffer(true_eigs_i, adDeps...)
     true_eigs_r_z[:, :] = true_eigs_r
     true_eigs_i_z[:, :] = true_eigs_i
-    R_eigs_r_tmp_z = Zygote.Buffer(R_eigs_r_tmp)
-    R_eigs_i_tmp_z = Zygote.Buffer(R_eigs_i_tmp)
+    R_eigs_r_tmp_z = ad_buffer(R_eigs_r_tmp, adDeps...)
+    R_eigs_i_tmp_z = ad_buffer(R_eigs_i_tmp, adDeps...)
     R_eigs_r_tmp_z[:, :, :] = R_eigs_r_tmp
     R_eigs_i_tmp_z[:, :, :] = R_eigs_i_tmp
-    flowHistory_z = Zygote.Buffer(flowHistory)
+    flowHistory_z = ad_buffer(flowHistory, adDeps...)
     flowHistory_z[:, :] = flowHistory
-    iblank_z = Zygote.Buffer(iblank)
-    iblank_z[:, :] = iblank
+    iblank_z = copy(iblank)
     while (nFlow <= N_MAX_Q_ITER)
 
         # --- Flow condition header printout ---
@@ -1012,7 +1011,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             corr = zeros(size(old_r)[2])
             newModesIdx = zeros(Int64, size(old_r)[2])
             ChainRulesCore.ignore_derivatives() do
-                corr, m, newModesIdx, nCorr, nCorrNewModes = compute_correlationMetrics(old_r, old_i, new_r, new_i, p_old_i, p_new_i; nFlow=nFlow, debug=debug)
+                corr, m, newModesIdx, nCorr, nCorrNewModes = compute_correlationMetrics(nograd(old_r), nograd(old_i), nograd(new_r), nograd(new_i), nograd(p_old_i), nograd(p_new_i); nFlow=nFlow, debug=debug)
             end
 
             # --- Check if eigenvalue jump is too big ---
@@ -1021,10 +1020,11 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
             eigScale = √(dynPTmp / flowHistory_z[nFlow-1, 3]) # This is a velocity scale
 
 
-            # Compute difference between old and new modes 
-            inner = (p_r_z[m[1:nCorr, 1], nFlow-1] - p_cross_r[m[1:nCorr, 2]] .* eigScale) .^ 2 +
-                    (p_i_z[m[1:nCorr, 1], nFlow-1] - p_cross_i[m[1:nCorr, 2]] .* eigScale) .^ 2
-            tmp_z = Zygote.Buffer(tmp)
+            # Compute difference between old and new modes
+            # Control flow only so no derivatives (√ of a zero jump would also put Inf in the reverse AD partials)
+            inner = (nograd(p_r_z[m[1:nCorr, 1], nFlow-1]) - nograd(p_cross_r[m[1:nCorr, 2]]) .* nograd(eigScale)) .^ 2 +
+                    (nograd(p_i_z[m[1:nCorr, 1], nFlow-1]) - nograd(p_cross_i[m[1:nCorr, 2]]) .* nograd(eigScale)) .^ 2
+            tmp_z = ad_buffer(tmp, inner)
             tmp_z[:] = tmp
             tmp_z[1:nCorr] = .√(inner)
             tmp = copy(tmp_z)
@@ -1276,9 +1276,9 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
     # We reduced the problem size using
     # {u} ≈ Qr * {q}
     # where {q} was the retained generalized coordinates
-    # --- Zygote buffers ---
-    R_eigs_r_z = Zygote.Buffer(R_eigs_r)
-    R_eigs_i_z = Zygote.Buffer(R_eigs_i)
+    # --- AD-safe work arrays ---
+    R_eigs_r_z = ad_buffer(R_eigs_r, Qr, R_eigs_r_tmp)
+    R_eigs_i_z = ad_buffer(R_eigs_i, Qr, R_eigs_i_tmp)
     R_eigs_r_z[:, :, :] = R_eigs_r
     R_eigs_i_z[:, :, :] = R_eigs_i
     for qq in 1:N_MAX_Q_ITER
@@ -1293,7 +1293,7 @@ function compute_pkFlutterAnalysis(vel, structMesh, elemConn, b_ref, Λ, chordVe
         end
     end
 
-    # --- Copy back from zygote buffer ---
+    # --- Copy back from work arrays ---
     R_eigs_r = copy(R_eigs_r_z)
     R_eigs_i = copy(R_eigs_i_z)
 
@@ -1474,11 +1474,12 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     R_eigs_r = zeros(Float64, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
     R_eigs_i = zeros(Float64, 2 * Nr, 2 * Nr, N_MAX_K_ITER)
     k_history = zeros(Float64, N_MAX_K_ITER)
-    p_eigs_r_z = Zygote.Buffer(p_eigs_r)
-    p_eigs_i_z = Zygote.Buffer(p_eigs_i)
-    R_eigs_r_z = Zygote.Buffer(R_eigs_r)
-    R_eigs_i_z = Zygote.Buffer(R_eigs_i)
-    k_history_z = Zygote.Buffer(k_history)
+    adDeps = (globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_sweep, kSweep, b_ref, Λ, U∞, MM, KK, CC, Qr)
+    p_eigs_r_z = ad_buffer(p_eigs_r, adDeps...)
+    p_eigs_i_z = ad_buffer(p_eigs_i, adDeps...)
+    R_eigs_r_z = ad_buffer(R_eigs_r, adDeps...)
+    R_eigs_i_z = ad_buffer(R_eigs_i, adDeps...)
+    k_history_z = copy(k_history) # k is not a design variable
 
 
     p_diff_max = 0.2 # maximum allowed change in poles btwn two steps
@@ -1491,10 +1492,10 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
     # --- Determine Δk ---
     Δk = 0.0
     ChainRulesCore.ignore_derivatives() do
-        omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM .+ Mf, Nr)
+        omegaSquared, _ = FEMMethods.compute_eigsolve(nograd(KK), nograd(MM .+ Mf), Nr)
         # println("Wetted natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
         # println(real.(omegaSquared))
-        kwetted = .√(omegaSquared) * b_ref / (U∞)
+        kwetted = .√(omegaSquared) * nograd(b_ref) / nograd(U∞)
         Δk = minimum(kwetted) * 0.2 # 20% of the minimum wetted natural frequency
         # omegaSquared, _ = FEMMethods.compute_eigsolve(KK, MM, Nr)
         # println("Dry natural frequencies: $(.√(omegaSquared) ./ (2π)) Hz")
@@ -1555,7 +1556,7 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
             # Rows are old eigenvector number and columns are new eigenvector number
             # corr = compute_correlationMatrix(R_eigs_r[:, :, ik-1], R_eigs_i[:, :, ik-1], R_aa_r, R_aa_i)
             ChainRulesCore.ignore_derivatives() do
-                corr = compute_correlationMatrix(R_eigs_r_z[:, :, ik-1], R_eigs_i_z[:, :, ik-1], R_aa_r, R_aa_i)
+                corr = compute_correlationMatrix(nograd(R_eigs_r_z[:, :, ik-1]), nograd(R_eigs_i_z[:, :, ik-1]), nograd(R_aa_r), nograd(R_aa_i))
                 # Determine location of new eigenvectors
                 idxs = argmax2d(transpose(corr))
             end
@@ -1571,7 +1572,8 @@ function sweep_kCrossings(globalMf, Cf_r_sweep, Cf_i_sweep, Kf_r_sweep, Kf_i_swe
             R_aa_i = R_aa_i_tmp[:, idxs]
 
             # --- If too big of jump, back up on 'k' ---
-            tmp_p_diff = .√((p_eigs_r_z[:, ik-1] - p_r) .^ 2 + (p_eigs_i_z[:, ik-1] - p_i) .^ 2)
+            # Control flow only so no derivatives (√ of a zero jump would also put Inf in the reverse AD partials)
+            tmp_p_diff = .√((nograd(p_eigs_r_z[:, ik-1]) - nograd(p_r)) .^ 2 + (nograd(p_eigs_i_z[:, ik-1]) - nograd(p_i)) .^ 2)
             p_diff = maximum(real(tmp_p_diff))
 
             # # MAYBE DEBUG THE k jump here
@@ -1666,11 +1668,11 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
     p_cross_i = zeros(Float64, 2 * dim * 5)
     R_cross_r = zeros(Float64, 2 * dim, 2 * dim * 5)
     R_cross_i = zeros(Float64, 2 * dim, 2 * dim * 5)
-    # --- Good practice Zygote initializations ---
-    p_cross_r_z = Zygote.Buffer(p_cross_r)
-    p_cross_i_z = Zygote.Buffer(p_cross_i)
-    R_cross_r_z = Zygote.Buffer(R_cross_r)
-    R_cross_i_z = Zygote.Buffer(R_cross_i)
+    # --- AD-safe work arrays ---
+    p_cross_r_z = ad_buffer(p_cross_r, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i)
+    p_cross_i_z = ad_buffer(p_cross_i, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i)
+    R_cross_r_z = ad_buffer(R_cross_r, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i)
+    R_cross_i_z = ad_buffer(R_cross_i, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i)
     p_cross_r_z[:] = p_cross_r
     p_cross_i_z[:] = p_cross_i
     R_cross_r_z[:, :] = R_cross_r
@@ -1747,7 +1749,7 @@ function extract_kCrossings(dim, p_eigs_r, p_eigs_i, R_eigs_r, R_eigs_i, k_histo
             end
         end
     end
-    # --- Final Zygote copies ---
+    # --- Final copies ---
     p_cross_r = copy(p_cross_r_z)
     p_cross_i = copy(p_cross_i_z)
     R_cross_r = copy(R_cross_r_z)
@@ -1891,13 +1893,11 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     end
 
 
-    # --- Invert the complex matrix and solve ---
-    A = A_r + 1im * A_i
-    B = B_r + 1im * B_i
-    Ainv = inv(A)
-    FlutterMat = Ainv * B
-    FlutterMat_r = real(FlutterMat)
-    FlutterMat_i = imag(FlutterMat)
+    # --- Invert the matrix and solve ---
+    # A_i is always zero so A^-1 B stays split into real and imag parts (keeps reverse AD real)
+    Ainv = inv(A_r)
+    FlutterMat_r = Ainv * B_r
+    FlutterMat_i = Ainv * B_i
     # Or the broken apart way here
     # Ainv_r, Ainv_i = SolverRoutines.cmplxInverse(A_r, A_i, 2 * dim)
     # FlutterMat_r, FlutterMat_i = SolverRoutines.cmplxMatmult(Ainv_r, Ainv_i, B_r, B_i)
@@ -1905,7 +1905,7 @@ function solve_eigenvalueProblem(pkEqnType, dim, b, U∞, Λ, Mf, Cf_r, Cf_i, Kf
     # --- Compute the eigenvalues ---
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb(FlutterMat_r, FlutterMat_i, 2 * dim)
     # p_r, p_i, _, _, R_aa_r, R_aa_i = SolverRoutines.cmplxStdEigValProb_fad(FlutterMat_r, FlutterMat_i, 2 * dim)
-    y = cmplxStdEigValProb2(FlutterMat_r, FlutterMat_i, 2 * dim)
+    y = rd_rrule(cmplxStdEigValProb2, FlutterMat_r, FlutterMat_i, 2 * dim)
     n = 2 * dim
     p_r = y[1:n]
     p_i = y[n+1:2*n]
@@ -1975,7 +1975,7 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     # This variable stores the aggregated damping for every mode
     # It mutates in the for loop below so we need to use 'Buffer' and work with that variable instead
     ksTmp = zeros(Float64, NTotalModesFound)
-    ksTmp_z = Zygote.Buffer(ksTmp)
+    ksTmp_z = ad_buffer(ksTmp, p_r)
 
     # TODO: safety window
     # G = zeros(Float64, nFlow)
@@ -1984,7 +1984,7 @@ function postprocess_damping(N_MAX_Q_ITER, flowHistory, NTotalModesFound, nFlow,
     # end
 
     pmG = zeros(Float64, NTotalModesFound, nFlow)
-    pmG_z = Zygote.Buffer(pmG)
+    pmG_z = ad_buffer(pmG, p_r)
     pmG_z[1:NTotalModesFound, 1:nFlow] = p_r[1:NTotalModesFound, 1:nFlow]
     pmGTmp = zeros(Float64, nFlow) # working pmG for the mode
 
@@ -2120,6 +2120,8 @@ function cost_funcsFromDVsOM(ptVec, nodeConn, displacements_col, claVec, theta_f
 
     LECoords, TECoords = LiftingLine.repack_coords(ptVec, 3, length(ptVec) ÷ 3)
 
+    # Work on a copy so reverse AD does not leave tracked values in the caller's dictionary
+    appendageParams = copy(appendageParams)
     appendageParams["theta_f"] = theta_f
     appendageParams["toc"] = toc
     appendageParams["alfa0"] = alfa0
@@ -2183,14 +2185,8 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
                     appendageParams["toc"],
                     appendageParams["alfa0"])
 
-            elseif uppercase(mode) == "RAD" # use automatic differentiation via Zygote
-                # backend = AD.ZygoteBackend()
-
-                # AD backend was screwing up the output so use Zygote directly
-                # dIdxDV = Zygote.gradient((xpt, xalpha, xtheta, xtoc) ->
-                #         cost_funcsFromCoordsDVs(xpt, nodeConn, xalpha, xtheta, xtoc, appendageParams, solverOptions), ptVec, appendageParams["alfa0"], appendageParams["theta_f"], appendageParams["toc"])
-
-                dIdxDV = Zygote.gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
+            elseif uppercase(mode) == "RAD" # use reverse automatic differentiation via ReverseDiff
+                dIdxDV = rd_gradient((xpt, xdispl, xcla, xtheta, xtoc, xalpha) ->
                         cost_funcsFromDVsOM(xpt, nodeConn, xdispl, xcla, xtheta, xtoc, xalpha, appendageParams, solverOptions),
                     ptVec,
                     displacementsCol,
@@ -2199,16 +2195,6 @@ function evalFuncsSens(evalFuncsSensList, appendageParams::AbstractDict, GridStr
                     appendageParams["toc"],
                     appendageParams["alfa0"],
                 )
-
-                # --- In the future, reverse diff would be better and faster, but for now it doesn't work ---
-                # backend = AD.ReverseDiffBackend()
-                # # There's a weird quirk here with ReverseDiff that the input val has to be the copy of it b/c I guess ReverseDiff modifies the dictionary in place if you do not pass in the copy
-                # theta_val = copy(appendageParams["theta_f"])
-                # toc_val = copy(appendageParams["toc"])
-                # alfa0_val = copy(appendageParams["alfa0"])
-
-                # dIdxDV = AD.gradient(backend, (xtheta, xalpha) ->
-                #         cost_funcsFromDVsOM(ptVec, nodeConn, displacementsCol, claVec, xtheta, toc_val, xalpha, appendageParams, solverOptions), theta_val, alfa0_val)
 
             elseif uppercase(mode) == "FAD"
                 error("FAD not implemented yet")
